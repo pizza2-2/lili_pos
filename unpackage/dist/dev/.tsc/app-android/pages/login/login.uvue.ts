@@ -1,0 +1,148 @@
+import { accountLogin, getProfile, ProfileResponse } from '@/pkg/api/modules/login'
+	import { clearAuthState, setAuthToken, setAuthUserInfo } from '@/store/auth'
+
+	
+const __sfc__ = defineComponent({
+  __name: 'login',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+	const username = ref('733063605')
+	const password = ref('Luochaowei88')
+	const showPassword = ref(false)
+	const isSubmitting = ref(false)
+
+	function togglePassword() {
+		showPassword.value = !showPassword.value
+	}
+
+	function buildDisplayName(profile: ProfileResponse): string {
+		if (profile.name != '') {
+			return profile.name
+		}
+		if (profile.first_name != '' || profile.last_name != '') {
+			return profile.first_name + profile.last_name
+		}
+		return profile.username
+	}
+
+	async function handleLogin() {
+		if (isSubmitting.value) {
+			return
+		}
+		if (username.value == '') {
+			uni.showToast({ title: '请输入账号', icon: 'none' })
+			return
+		}
+		if (password.value == '') {
+			uni.showToast({ title: '请输入密码', icon: 'none' })
+			return
+		}
+
+		isSubmitting.value = true
+		try {
+			const loginRes = await accountLogin({
+				username: username.value,
+				password: password.value
+			})
+
+			setAuthToken(loginRes.token_type + ' ' + loginRes.access_token)
+
+			const profile = await getProfile()
+			setAuthUserInfo({
+				id: profile.id,
+				name: buildDisplayName(profile),
+				avatar: ''
+			})
+
+			uni.showToast({ title: '登录成功', icon: 'success' })
+			setTimeout(() => {
+				uni.switchTab({
+					url: '/pages/tabbar/products'
+				})
+			}, 300)
+	} catch (error) {
+		clearAuthState()
+		let message = '登录失败'
+		if (error != null) {
+			const errorText = JSON.stringify(error)
+			if (errorText != null && errorText != '') {
+				const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/login/login.uvue:109")
+				if (parsedError != null) {
+					const rawMessage = parsedError!['message']
+					if (rawMessage != null) {
+						const parsedMessage = rawMessage as string
+						if (parsedMessage != '') {
+							message = parsedMessage
+						}
+					}
+				}
+				if (message == '登录失败') {
+					message = errorText
+				}
+			}
+		}
+			uni.showToast({
+				title: message,
+				icon: 'none'
+			})
+		} finally {
+			isSubmitting.value = false
+		}
+	}
+
+return (): any | null => {
+
+  return _cE("view", _uM({ class: "container" }), [
+    _cE("view", _uM({ class: "status-bar-space" })),
+    _cE("view", _uM({ class: "login-card" }), [
+      _cE("view", _uM({ class: "logo-area" }), [
+        _cE("view", _uM({ class: "logo-circle" }), [
+          _cE("text", _uM({ class: "logo-text" }), "Hi")
+        ]),
+        _cE("text", _uM({ class: "app-name" }), "欢迎回来"),
+        _cE("text", _uM({ class: "app-desc" }), "请登录以继续")
+      ]),
+      _cE("view", _uM({ class: "input-wrap" }), [
+        _cE("text", _uM({ class: "input-icon" }), "👤"),
+        _cE("input", _uM({
+          class: "input",
+          type: "text",
+          placeholder: "请输入账号",
+          "placeholder-style": "color: #bbbbbb;",
+          modelValue: unref(username),
+          onInput: ($event: UniInputEvent) => {trySetRefValue(username, $event.detail.value)}
+        }), null, 40 /* PROPS, NEED_HYDRATION */, ["modelValue"])
+      ]),
+      _cE("view", _uM({ class: "input-wrap" }), [
+        _cE("text", _uM({ class: "input-icon" }), "🔒"),
+        _cE("input", _uM({
+          class: "input",
+          type: unref(showPassword) ? 'text' : 'password',
+          placeholder: "请输入密码",
+          "placeholder-style": "color: #bbbbbb;",
+          modelValue: unref(password),
+          onInput: ($event: UniInputEvent) => {trySetRefValue(password, $event.detail.value)}
+        }), null, 40 /* PROPS, NEED_HYDRATION */, ["type", "modelValue"]),
+        _cE("text", _uM({
+          class: "eye-icon",
+          onClick: togglePassword
+        }), _tD(unref(showPassword) ? '👁️' : '👁️‍🗨️'), 1 /* TEXT */)
+      ]),
+      _cE("button", _uM({
+        class: _nC(unref(isSubmitting) ? 'btn btn-primary btn-primary-disabled' : 'btn btn-primary'),
+        disabled: unref(isSubmitting),
+        onClick: handleLogin
+      }), [
+        _cE("text", _uM({ class: "btn-text" }), _tD(unref(isSubmitting) ? '登录中...' : '登录'), 1 /* TEXT */)
+      ], 10 /* CLASS, PROPS */, ["disabled"])
+    ])
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesLoginLoginStyles = [_uM([["container", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#f5f7fa"], ["justifyContent", "center"], ["alignItems", "center"], ["paddingTop", 15], ["paddingRight", 15], ["paddingBottom", 15], ["paddingLeft", 15]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT], ["width", "100%"]]))], ["login-card", _pS(_uM([["width", "100%"], ["backgroundColor", "#ffffff"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["paddingTop", 30], ["paddingRight", 20], ["paddingBottom", 30], ["paddingLeft", 20]]))], ["logo-area", _pS(_uM([["alignItems", "center"], ["marginBottom", 25]]))], ["logo-circle", _pS(_uM([["width", 60], ["height", 60], ["backgroundColor", "#07c160"], ["borderTopLeftRadius", 30], ["borderTopRightRadius", 30], ["borderBottomRightRadius", 30], ["borderBottomLeftRadius", 30], ["justifyContent", "center"], ["alignItems", "center"], ["marginBottom", 12]]))], ["logo-text", _pS(_uM([["fontSize", 20], ["color", "#ffffff"], ["fontWeight", "bold"]]))], ["app-name", _pS(_uM([["fontSize", 20], ["color", "#333333"], ["fontWeight", "bold"], ["marginBottom", 5]]))], ["app-desc", _pS(_uM([["fontSize", 13], ["color", "#999999"]]))], ["input-wrap", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["backgroundColor", "#f8f9fa"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["paddingTop", 0], ["paddingRight", 15], ["paddingBottom", 0], ["paddingLeft", 15], ["marginBottom", 10], ["height", 45]]))], ["input-icon", _pS(_uM([["fontSize", 14], ["marginRight", 8]]))], ["input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"], ["height", 45]]))], ["eye-icon", _pS(_uM([["fontSize", 14], ["paddingTop", 5], ["paddingRight", 5], ["paddingBottom", 5], ["paddingLeft", 5]]))], ["btn", _pS(_uM([["width", "100%"], ["height", 45], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["marginBottom", 10]]))], ["btn-primary", _pS(_uM([["backgroundColor", "#2b85e4"], ["marginTop", 5]]))], ["btn-primary-disabled", _pS(_uM([["opacity", 0.7]]))], ["btn-text", _pS(_uM([["fontSize", 15], ["color", "#ffffff"], ["fontWeight", "400"]]))]])]

@@ -1,0 +1,236 @@
+<template>
+	<view class="container">
+		<view class="status-bar-space"></view>
+		<view class="login-card">
+			<view class="logo-area">
+				<view class="logo-circle">
+					<text class="logo-text">Hi</text>
+				</view>
+				<text class="app-name">欢迎回来</text>
+				<text class="app-desc">请登录以继续</text>
+			</view>
+
+			<view class="input-wrap">
+				<text class="input-icon">👤</text>
+				<input
+					class="input"
+					type="text"
+					placeholder="请输入账号"
+					placeholder-style="color: #bbbbbb;"
+					v-model="username"
+				/>
+			</view>
+
+			<view class="input-wrap">
+				<text class="input-icon">🔒</text>
+				<input
+					class="input"
+					:type="showPassword ? 'text' : 'password'"
+					placeholder="请输入密码"
+					placeholder-style="color: #bbbbbb;"
+					v-model="password"
+				/>
+				<text class="eye-icon" @click="togglePassword">
+					{{ showPassword ? '👁️' : '👁️‍🗨️' }}
+				</text>
+			</view>
+
+			<button :class="isSubmitting ? 'btn btn-primary btn-primary-disabled' : 'btn btn-primary'" :disabled="isSubmitting" @tap="handleLogin">
+				<text class="btn-text">{{ isSubmitting ? '登录中...' : '登录' }}</text>
+			</button>
+		</view>
+	</view>
+</template>
+
+<script setup>
+	import { accountLogin, getProfile, ProfileResponse } from '@/pkg/api/modules/login'
+	import { clearAuthState, setAuthToken, setAuthUserInfo } from '@/store/auth'
+
+	const username = ref('733063605')
+	const password = ref('Luochaowei88')
+	const showPassword = ref(false)
+	const isSubmitting = ref(false)
+
+	function togglePassword() {
+		showPassword.value = !showPassword.value
+	}
+
+	function buildDisplayName(profile: ProfileResponse): string {
+		if (profile.name != '') {
+			return profile.name
+		}
+		if (profile.first_name != '' || profile.last_name != '') {
+			return profile.first_name + profile.last_name
+		}
+		return profile.username
+	}
+
+	async function handleLogin() {
+		if (isSubmitting.value) {
+			return
+		}
+		if (username.value == '') {
+			uni.showToast({ title: '请输入账号', icon: 'none' })
+			return
+		}
+		if (password.value == '') {
+			uni.showToast({ title: '请输入密码', icon: 'none' })
+			return
+		}
+
+		isSubmitting.value = true
+		try {
+			const loginRes = await accountLogin({
+				username: username.value,
+				password: password.value
+			})
+
+			setAuthToken(loginRes.token_type + ' ' + loginRes.access_token)
+
+			const profile = await getProfile()
+			setAuthUserInfo({
+				id: profile.id,
+				name: buildDisplayName(profile),
+				avatar: ''
+			})
+
+			uni.showToast({ title: '登录成功', icon: 'success' })
+			setTimeout(() => {
+				uni.switchTab({
+					url: '/pages/tabbar/products'
+				})
+			}, 300)
+	} catch (error) {
+		clearAuthState()
+		let message = '登录失败'
+		if (error != null) {
+			const errorText = JSON.stringify(error)
+			if (errorText != null && errorText != '') {
+				const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+				if (parsedError != null) {
+					const rawMessage = parsedError!['message']
+					if (rawMessage != null) {
+						const parsedMessage = rawMessage as string
+						if (parsedMessage != '') {
+							message = parsedMessage
+						}
+					}
+				}
+				if (message == '登录失败') {
+					message = errorText
+				}
+			}
+		}
+			uni.showToast({
+				title: message,
+				icon: 'none'
+			})
+		} finally {
+			isSubmitting.value = false
+		}
+	}
+</script>
+
+<style>
+.container {
+	flex: 1;
+	background-color: #f5f7fa;
+	justify-content: center;
+	align-items: center;
+	padding: 15px;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+	width: 100%;
+}
+
+.login-card {
+	width: 100%;
+	background-color: #ffffff;
+	border-radius: 12px;
+	padding: 30px 20px;
+}
+
+.logo-area {
+	align-items: center;
+	margin-bottom: 25px;
+}
+
+.logo-circle {
+	width: 60px;
+	height: 60px;
+	background-color: #07c160;
+	border-radius: 30px;
+	justify-content: center;
+	align-items: center;
+	margin-bottom: 12px;
+}
+
+.logo-text {
+	font-size: 20px;
+	color: #ffffff;
+	font-weight: bold;
+}
+
+.app-name {
+	font-size: 20px;
+	color: #333333;
+	font-weight: bold;
+	margin-bottom: 5px;
+}
+
+.app-desc {
+	font-size: 13px;
+	color: #999999;
+}
+
+.input-wrap {
+	flex-direction: row;
+	align-items: center;
+	background-color: #f8f9fa;
+	border-radius: 22px;
+	padding: 0 15px;
+	margin-bottom: 10px;
+	height: 45px;
+}
+
+.input-icon {
+	font-size: 14px;
+	margin-right: 8px;
+}
+
+.input {
+	flex: 1;
+	font-size: 14px;
+	color: #333333;
+	height: 45px;
+}
+
+.eye-icon {
+	font-size: 14px;
+	padding: 5px;
+}
+
+.btn {
+	width: 100%;
+	height: 45px;
+	border-radius: 22px;
+	margin-bottom: 10px;
+}
+
+.btn-primary {
+	background-color: #2b85e4;
+	margin-top: 5px;
+}
+
+.btn-primary-disabled {
+	opacity: 0.7;
+}
+
+.btn-text {
+	font-size: 15px;
+	color: #ffffff;
+	font-weight: 400;
+}
+</style>

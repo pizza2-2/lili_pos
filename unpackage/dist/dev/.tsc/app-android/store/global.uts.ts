@@ -1,0 +1,100 @@
+// import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'	//请求应用升级更新
+
+export const isAgreePrivacyState = ref(false)	//用户是否同意了隐私政策
+
+// 监听用户同意隐私政策状态的变化
+watch(
+	() : boolean => isAgreePrivacyState.value,
+	(newVal: boolean) => {
+		//使用推送或其它包括调用手机信息等api，要在这里处理
+		if(newVal){
+			// 用户同意隐私政策，则进行后续操作，建议使用setTimeout延时执行
+			// setTimeout(() => {
+				// ...其它操作
+				
+				__f__('log','at store/global.uts:15',"初始化推送")
+				
+				// uni-app客户端获取push客户端标记
+				uni.getPushClientId({
+					success: (res) => {
+						let push_clientid = res.cid
+						__f__('log','at store/global.uts:21','客户端推送标识:',push_clientid)
+					},
+					fail(err) {
+						__f__('log','at store/global.uts:24',err)
+					}
+				})
+				
+				// 安卓设置渠道
+
+				const manager = uni.getPushChannelManager()
+				manager.setPushChannel({
+					channelId: "channel-id",
+					channelDesc: "通知渠道描述",
+					enableLights: true,
+					enableVibration: true,
+					importance: 4,
+					lockscreenVisibility: 1
+				} as SetPushChannelOptions)
+
+				
+				uni.onPushMessage((res) => {
+					__f__('log','at store/global.uts:42',"收到推送消息：",res) //监听推送消息
+					if (res.type == "receive") {
+						//应用从推送服务器接收到推送消息事件
+						if (uni.getAppAuthorizeSetting().notificationAuthorized == "authorized") {	// 判断是否拥有推送权限
+							__f__('log','at store/global.uts:46',"推送权限已开")
+						    uni.createPushMessage({
+						        title: res.data['title'] as string | null,
+						        content: res.data['content'] as string,
+						        cover: true,
+						        channelId: "channel-id",
+						        when: Date.now() + 10000,
+						        icon: "/static/logo.png",
+						        sound: "system",
+						        delay: 1,
+						        payload: {
+									pkey: "pvalue1"
+						        },
+
+
+
+
+						        category: "IM",
+
+						        success(res) {
+									__f__('log','at store/global.uts:66',"res: " + res);
+									uni.hideToast()
+									uni.showToast({
+										title: "创建本地通知消息成功"
+									})
+						        },
+						        fail(e) {
+									__f__('log','at store/global.uts:73',"fail :" + e);
+									uni.hideToast()
+									uni.showToast({
+										title: "创建本地通知消息失败",
+										icon: "error"
+									})
+						        }
+						    })
+						} else {
+						    uni.showToast({
+						        title: "请在设置中开启通知权限",
+						        icon: "error"
+						    })
+						}
+					}else if(res.type == "click"){
+						//从系统推送服务点击消息启动应用事件
+					}
+					
+					
+				})
+				
+				// checkUpdate()	//请求应用升级更新
+				
+			// },100)
+		}
+	},
+	{immediate:true}
+)

@@ -1,0 +1,402 @@
+<template>
+	<view v-if="renderVisible" class="lp-root" :style="rootStyle">
+		<view class="lp-mask" @click="handleMaskClick"></view>
+		<view class="lp-panel" :style="panelStyle">
+			<view v-if="showCloseIconValue" class="lp-close" @click="handleCloseIcon">
+				<text class="lp-close-text">×</text>
+			</view>
+
+			<view class="lp-header">
+				<text class="lp-title">{{ currentTitle }}</text>
+			</view>
+
+			<view class="lp-body">
+				<slot>
+					<text v-if="currentContent != ''" class="lp-content">{{ currentContent }}</text>
+				</slot>
+			</view>
+
+			<view class="lp-footer">
+				<view v-if="auxiliaryTextValue != ''" class="lp-btn lp-btn-gap-right lp-btn-light" @click="handleAuxiliary">
+					<text class="lp-btn-light-text">{{ auxiliaryTextValue }}</text>
+				</view>
+				<view :class="auxiliaryTextValue != '' ? 'lp-btn lp-btn-gap-right lp-btn-light' : 'lp-btn lp-btn-light'" @click="handleCancel">
+					<text class="lp-btn-light-text">{{ cancelTextValue }}</text>
+				</view>
+				<view :class="confirmDangerValue ? 'lp-btn lp-btn-danger' : 'lp-btn lp-btn-primary'" @click="handleConfirm">
+					<text class="lp-btn-primary-text">{{ confirmTextValue }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type Props = {
+	visible?: boolean
+	title?: string
+	content?: string
+	cancelText?: string
+	confirmText?: string
+	auxiliaryText?: string
+	width?: string
+	zIndex?: number
+	closeOnMask?: boolean
+	showCloseIcon?: boolean
+	confirmDanger?: boolean
+	autoClose?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	visible: false,
+	title: '提示',
+	content: '',
+	cancelText: '取消',
+	confirmText: '确定',
+	auxiliaryText: '',
+	width: '620rpx',
+	zIndex: 999,
+	closeOnMask: false,
+	showCloseIcon: false,
+	confirmDanger: false,
+	autoClose: true,
+})
+
+const emit = defineEmits<{
+	(e: 'update:visible', value: boolean): void
+	(e: 'open'): void
+	(e: 'close', action: string): void
+	(e: 'cancel'): void
+	(e: 'confirm'): void
+	(e: 'auxiliary'): void
+	(e: 'action', action: string): void
+}>()
+
+const renderVisible = ref<boolean>(props.visible)
+const currentTitle = ref<string>(props.title)
+const currentContent = ref<string>(props.content)
+const cancelTextValue = ref<string>(props.cancelText)
+const confirmTextValue = ref<string>(props.confirmText)
+const auxiliaryTextValue = ref<string>(props.auxiliaryText)
+const panelStyle = ref<string>('')
+const rootStyle = ref<string>('')
+const closeOnMaskValue = ref<boolean>(props.closeOnMask)
+const showCloseIconValue = ref<boolean>(props.showCloseIcon)
+const confirmDangerValue = ref<boolean>(props.confirmDanger)
+const autoCloseValue = ref<boolean>(props.autoClose)
+
+function syncStyle() {
+	panelStyle.value = `width:${props.width};`
+	rootStyle.value = `z-index:${props.zIndex};`
+}
+
+function readString(config: UTSJSONObject, key: string, fallback: string) : string {
+	const value = config[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function readBoolean(config: UTSJSONObject, key: string, fallback: boolean) : boolean {
+	const value = config[key]
+	if (value == null) return fallback
+	return value as boolean
+}
+
+function applyBaseProps() {
+	currentTitle.value = props.title
+	currentContent.value = props.content
+	cancelTextValue.value = props.cancelText
+	confirmTextValue.value = props.confirmText
+	auxiliaryTextValue.value = props.auxiliaryText
+	closeOnMaskValue.value = props.closeOnMask
+	showCloseIconValue.value = props.showCloseIcon
+	confirmDangerValue.value = props.confirmDanger
+	autoCloseValue.value = props.autoClose
+}
+
+function applyConfig(config: UTSJSONObject | null) {
+	applyBaseProps()
+	if (config == null) return
+	currentTitle.value = readString(config, 'title', currentTitle.value)
+	currentContent.value = readString(config, 'content', currentContent.value)
+	cancelTextValue.value = readString(config, 'cancelText', cancelTextValue.value)
+	confirmTextValue.value = readString(config, 'confirmText', confirmTextValue.value)
+	auxiliaryTextValue.value = readString(config, 'auxiliaryText', auxiliaryTextValue.value)
+	closeOnMaskValue.value = readBoolean(config, 'closeOnMask', closeOnMaskValue.value)
+	showCloseIconValue.value = readBoolean(config, 'showCloseIcon', showCloseIconValue.value)
+	confirmDangerValue.value = readBoolean(config, 'confirmDanger', confirmDangerValue.value)
+	autoCloseValue.value = readBoolean(config, 'autoClose', autoCloseValue.value)
+}
+
+function changeVisible(value: boolean) {
+	renderVisible.value = value
+	emit('update:visible', value)
+	if (value) {
+		emit('open')
+	}
+}
+
+function open(config: UTSJSONObject | null = null) {
+	applyConfig(config)
+	changeVisible(true)
+}
+
+function openSaveConfirm(config: UTSJSONObject | null = null) {
+	const defaultConfig: UTSJSONObject = {
+		title: '是否保存',
+		content: '当前内容已修改，是否保存后再退出？',
+		auxiliaryText: '退出',
+		cancelText: '取消保存',
+		confirmText: '保存',
+		showCloseIcon: false,
+		closeOnMask: false,
+		confirmDanger: false,
+		autoClose: true,
+	}
+	if (config != null) {
+		for (var key in config) {
+			defaultConfig[key] = config[key]
+		}
+	}
+	open(defaultConfig)
+}
+
+function close(action: string = 'close') {
+	changeVisible(false)
+	emit('action', action)
+	emit('close', action)
+}
+
+function handleCancel() {
+	emit('cancel')
+	if (autoCloseValue.value) {
+		close('cancel')
+	}
+}
+
+function handleConfirm() {
+	emit('confirm')
+	if (autoCloseValue.value) {
+		close('confirm')
+	}
+}
+
+function handleAuxiliary() {
+	emit('auxiliary')
+	if (autoCloseValue.value) {
+		close('auxiliary')
+	}
+}
+
+function handleMaskClick() {
+	if (!closeOnMaskValue.value) return
+	close('mask')
+}
+
+function handleCloseIcon() {
+	close('icon')
+}
+
+watch(
+	() : boolean => props.visible,
+	(newValue: boolean) => {
+		renderVisible.value = newValue
+	}
+)
+
+watch(
+	() : string => props.title,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.content,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.cancelText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.confirmText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.auxiliaryText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.width,
+	() => {
+		syncStyle()
+	}
+)
+
+watch(
+	() : number => props.zIndex,
+	() => {
+		syncStyle()
+	}
+)
+
+onMounted(() => {
+	applyBaseProps()
+	syncStyle()
+})
+
+defineExpose({
+	open,
+	openSaveConfirm,
+	close,
+})
+</script>
+
+<style>
+.lp-root {
+	position: fixed;
+	top: 0px;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	align-items: center;
+	justify-content: center;
+	padding-left: 24px;
+	padding-right: 24px;
+}
+
+.lp-mask {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	background-color: rgba(15, 23, 42, 0.48);
+}
+
+.lp-panel {
+	position: relative;
+	background-color: #FFFFFF;
+	border-radius: 24px;
+	padding-top: 28px;
+	padding-left: 24px;
+	padding-right: 24px;
+	padding-bottom: 20px;
+}
+
+.lp-close {
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	width: 28px;
+	height: 28px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 14px;
+	background-color: #F3F4F6;
+}
+
+.lp-close-text {
+	font-size: 18px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.lp-header {
+	align-items: center;
+	padding-right: 36px;
+}
+
+.lp-title {
+	font-size: 18px;
+	line-height: 26px;
+	color: #0F172A;
+	font-weight: 600;
+	text-align: center;
+}
+
+.lp-body {
+	min-height: 56px;
+	padding-top: 16px;
+	padding-bottom: 24px;
+	align-items: center;
+	justify-content: center;
+}
+
+.lp-content {
+	font-size: 15px;
+	line-height: 23px;
+	color: #475569;
+	text-align: center;
+}
+
+.lp-footer {
+	flex-direction: row;
+}
+
+.lp-btn {
+	flex: 1;
+	height: 44px;
+	border-radius: 14px;
+	align-items: center;
+	justify-content: center;
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.lp-btn-gap-right {
+	margin-left: 12px;
+}
+
+.lp-btn-light {
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.lp-btn-primary {
+	background-color: #0F172A;
+}
+
+.lp-btn-danger {
+	background-color: #DC2626;
+}
+
+.lp-btn-light-text {
+	font-size: 15px;
+	line-height: 15px;
+	color: #334155;
+	font-weight: 500;
+}
+
+.lp-btn-primary-text {
+	font-size: 15px;
+	line-height: 15px;
+	color: #FFFFFF;
+	font-weight: 600;
+}
+</style>

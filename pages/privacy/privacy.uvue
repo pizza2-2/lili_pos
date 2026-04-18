@@ -1,0 +1,104 @@
+<template>
+	<view class="dialog-container wh100 flexc flex-jc-c flex-ai-c">
+		<view class="dialog-content br-20">
+			<view class="w100 flex-jc-c flex-ai-c bg-white">
+				<image class="mt-40" src="@/static/logo.png" style="width: 60px;height: 60px;"></image>
+			</view>
+			<text class="ta-c pt-40 fs-40 color-black bg-white">个人信息保护指引</text>
+			<scroll-view class="flex1 pt-20 p-x-40 bg-white" style="align-content: center;" show-scrollbar="false">
+				<text>
+					<text class="color-grey">欢迎使用Hello uni-app x，我们将通过</text>
+					<text class="privacy-href" @click="hrefClick(hrefLicense)">《用户服务协议》</text>
+					<text class="color-grey">及相关个人信息处理规则帮助你了解应用如何收集、处理个人信息。根据《常见类型移动互联网应用程序必要个人信息范围规定》，应用在演示 uni-app x 能力时仅收集、处理相关必要个人信息及数据。我们通过</text>
+					<text class="privacy-href" @click="hrefClick(hrefPrivacy)">《隐私政策》</text>
+					<text class="color-grey">帮助你全面了解我们的服务及收集、处理个人信息的详细情况。</text>
+				</text>
+			</scroll-view>
+			<button class="button" @click="reject">不同意</button>
+			<button class="button" type="primary" open-type="agreePrivacyAuthorization" @click="agree">同意</button>
+		</view>
+	</view>
+</template>
+
+<script setup>
+	import { isAgreePrivacyState } from '@/store/global'
+	
+	const hrefLicense = ref('https://dcloud.io/license/DCloud.html') 			//请自行修改为自己的链接
+	const hrefPrivacy = ref('https://dcloud.io/license/hello-uni-app-x.html') 	//请自行修改为自己的链接
+	const currentInstance = getCurrentInstance()
+	// 同意
+	function agree() {
+		// 更新同意隐私政策状态,（解决安卓端不同意隐私政策退出应用再重新打开，uni.onPrivacyAuthorizationChange监听不到）
+		isAgreePrivacyState.value = true
+		// 关闭此弹窗
+		uni.closeDialogPage({
+			dialogPage: currentInstance?.proxy?.$page
+		})
+	}
+	// 拒绝
+	function reject() {
+		uni.showModal({
+			content: "不同意《用户协议》和《隐私政策》将无法使用我们的应用。同意后可继续使用。",
+			cancelText: "退出应用",
+			cancelColor: "#c0c0c0",
+			confirmText: "前往同意政策",
+			confirmColor: "#007aff",
+			success:(res) => {
+				if(res.cancel){
+					console.log("退出")
+					// 重置未同意状态
+					uni.resetPrivacyAuthorization()
+					uni.exit()	//退出应用，可根据实际情况决定是否退出。如果不退出则重新调用系统权限需重新弹窗。
+				}
+			}
+		})
+	}
+	// 跳转 webview 页面查看协议
+	function hrefClick(href : string) {
+		uni.navigateTo({
+			url:"/pages/webview/webview"+"?url="+href
+		})
+	}
+	
+	// 安卓和鸿蒙阻止页面返回
+	onBackPress(() : boolean | null => {
+		return true
+	})
+
+</script>
+
+<style>
+	.dialog-container {
+		background-color: rgba(0, 0, 0, 0.3);
+	}
+
+	.dialog-content {
+		height: 55%;
+		width: 80%;
+	}
+
+	.button {
+		border-radius: 0px;
+		border: 0px none;
+		font-size: 15px;
+		color: lightgrey;
+		text-align: center;
+		line-height: 40px;
+	}
+
+	.button-hover1 {
+		color: black;
+		background-color: #fff;
+	}
+
+	.button-hover2 {
+		color: black;
+		background-color: royalblue;
+	}
+
+	.privacy-href {
+		color: cadetblue;
+		font-weight: bold;
+		text-decoration-line: underline;
+	}
+</style>

@@ -1,0 +1,287 @@
+<template>
+	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
+		<view class="page">
+			<view class="status-bar-space"></view>
+
+			<view class="header">
+				<view class="user">
+					<view class="avatar">
+						<text class="avatar-text">{{ avatarText }}</text>
+					</view>
+					<text class="user-name">{{ displayName }}</text>
+				</view>
+
+				<view class="info">
+					<view class="info-item info-item-gap">
+						<text class="info-value">{{ useDaysText }}</text>
+						<text class="info-label">使用天数</text>
+					</view>
+					<view class="info-item">
+						<text class="info-value">{{ entryCountText }}</text>
+						<text class="info-label">记账笔数</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="menu">
+				<view
+					v-for="(item, index) in menus"
+					:key="item.id"
+					:class="index < menus.length - 1 ? 'menu-item menu-item-border' : 'menu-item'"
+					@click="handleMenuClick(item)"
+				>
+					<view class="menu-icon-wrap">
+						<text :class="item.tone == 'danger' ? 'menu-icon menu-icon-danger' : 'menu-icon'">{{ item.icon }}</text>
+					</view>
+					<text :class="item.tone == 'danger' ? 'menu-text menu-text-danger' : 'menu-text'">{{ item.name }}</text>
+					<text v-if="item.arrow" class="menu-arrow">›</text>
+				</view>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { authState, clearAuthState } from '@/store/auth'
+
+type MenuItem = {
+	id: number
+	name: string
+	icon: string
+	key: string
+	arrow: boolean
+	tone?: string
+}
+
+const menus = ref<MenuItem[]>([
+	{ id: 1, name: '账本管理', icon: '☰', key: 'book', arrow: true },
+	{ id: 2, name: '联系客服', icon: '✆', key: 'service', arrow: true },
+	{ id: 3, name: '分享应用', icon: '⇪', key: 'share', arrow: false },
+	{ id: 4, name: '添加桌面', icon: '⊞', key: 'desktop', arrow: false },
+	{ id: 5, name: '退出登录', icon: '⎋', key: 'logout', arrow: false, tone: 'danger' },
+])
+
+const isLogin = computed(() : boolean => {
+	return authState.token != ''
+})
+
+const displayName = computed(() : string => {
+	if (authState.userInfo != null && authState.userInfo.name != '') {
+		return authState.userInfo.name
+	}
+	return '易师傅'
+})
+
+const avatarText = computed(() : string => {
+	const name = displayName.value
+	if (name == '') return '易'
+	return name.substring(0, 1)
+})
+
+const useDaysText = computed(() : string => {
+	if (!isLogin.value) return '0'
+	return '12'
+})
+
+const entryCountText = computed(() : string => {
+	if (!isLogin.value) return '0'
+	return '43'
+})
+
+function handleLogout() {
+	if (!isLogin.value) {
+		uni.navigateTo({
+			url: '/pages/login/login',
+		})
+		return
+	}
+
+	uni.showModal({
+		title: '提示',
+		content: '确定退出登录吗？',
+		success: (res) => {
+			if (!res.confirm) return
+			clearAuthState()
+			uni.showToast({
+				title: '已退出登录',
+				icon: 'success',
+			})
+			setTimeout(() => {
+				uni.navigateTo({
+					url: '/pages/login/login',
+				})
+			}, 300)
+		},
+	})
+}
+
+function handleMenuClick(item: MenuItem) {
+	if (item.key == 'logout') {
+		handleLogout()
+		return
+	}
+
+	if (item.key == 'book') {
+		uni.showToast({
+			title: '账本管理待接入',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (item.key == 'service') {
+		uni.showToast({
+			title: '联系客服待接入',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (item.key == 'share') {
+		uni.showToast({
+			title: '分享应用待接入',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (item.key == 'desktop') {
+		uni.showToast({
+			title: '添加桌面待接入',
+			icon: 'none',
+		})
+	}
+}
+</script>
+
+<style>
+.page-scroll {
+	background-color: #F5F5F5;
+}
+
+.page {
+	background-color: #F5F5F5;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+	background-color: #3C9BFD;
+}
+
+.header {
+	background-color: #3C9BFD;
+	padding-bottom: 30px;
+}
+
+.user {
+	align-items: center;
+	padding-top: 12px;
+}
+
+.avatar {
+	width: 80px;
+	height: 80px;
+	border-radius: 40px;
+	background-color: rgba(255, 255, 255, 0.3);
+	align-items: center;
+	justify-content: center;
+}
+
+.avatar-text {
+	font-size: 28px;
+	line-height: 28px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.user-name {
+	color: #FFFFFF;
+	font-size: 14px;
+	line-height: 20px;
+	margin-top: 10px;
+}
+
+.info {
+	flex-direction: row;
+	margin-top: 30px;
+}
+
+.info-item {
+	flex: 1;
+	align-items: center;
+}
+
+.info-item-gap {
+	border-right-width: 1px;
+	border-right-style: solid;
+	border-right-color: rgba(255, 255, 255, 0.18);
+}
+
+.info-value {
+	color: #FFFFFF;
+	font-size: 24px;
+	line-height: 28px;
+	font-weight: bold;
+}
+
+.info-label {
+	color: #FFFFFF;
+	font-size: 12px;
+	line-height: 18px;
+	margin-top: 8px;
+}
+
+.menu {
+	background-color: #FFFFFF;
+	margin-top: 12px;
+}
+
+.menu-item {
+	height: 56px;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+
+.menu-item-border {
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F0F0F0;
+}
+
+.menu-icon-wrap {
+	width: 28px;
+	align-items: center;
+	justify-content: center;
+}
+
+.menu-icon {
+	font-size: 18px;
+	line-height: 18px;
+	color: #3C9BFD;
+}
+
+.menu-icon-danger {
+	color: #F04438;
+}
+
+.menu-text {
+	flex: 1;
+	font-size: 14px;
+	line-height: 20px;
+	color: #444444;
+	padding-left: 10px;
+}
+
+.menu-text-danger {
+	color: #F04438;
+}
+
+.menu-arrow {
+	font-size: 18px;
+	line-height: 18px;
+	color: #BDBDBD;
+}
+</style>

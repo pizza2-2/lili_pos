@@ -1,0 +1,459 @@
+<template>
+	<view class="lp-root">
+		<view v-if="imageList.length > 0" class="lp-list">
+			<view
+				v-for="(item, index) in imageList"
+				:key="item + '-' + index"
+				class="lp-item"
+				:style="itemStyle"
+				@click="openPreview(index)"
+			>
+				<image class="lp-image" :style="imageStyle" :src="item" mode="aspectFill"></image>
+			</view>
+		</view>
+		<view v-else class="lp-empty">
+			<text class="lp-empty-text">{{ props.emptyText }}</text>
+		</view>
+
+		<view v-if="previewVisible" class="lp-preview">
+			<view class="lp-topbar">
+				<view class="lp-topbar-button" @click="closePreview">
+					<text class="lp-topbar-button-text">关闭</text>
+				</view>
+				<text class="lp-indicator">{{ indicatorText }}</text>
+			</view>
+
+			<view class="lp-swiper-wrap">
+				<swiper
+					class="lp-swiper"
+					:current="currentIndex"
+					:circular="imageList.length > 1"
+					@change="handleSwiperChange"
+				>
+					<swiper-item v-for="(item, index) in imageList" :key="'preview-' + item + '-' + index">
+						<view class="lp-slide">
+							<image class="lp-preview-image" :src="item" mode="aspectFit"></image>
+						</view>
+					</swiper-item>
+				</swiper>
+			</view>
+
+			<view class="lp-actionbar">
+				<view v-if="imageList.length > 1" class="lp-action" @click="showPrevious">
+					<text class="lp-action-text">上一张</text>
+				</view>
+				<view v-if="props.enableSave" class="lp-action" @click="saveCurrentImage">
+					<text class="lp-action-text">保存</text>
+				</view>
+				<view v-if="props.enableShare" class="lp-action" @click="shareCurrentImage">
+					<text class="lp-action-text">分享</text>
+				</view>
+				<view v-if="imageList.length > 1" class="lp-action" @click="showNext">
+					<text class="lp-action-text">下一张</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref, watch } from 'vue'
+
+type Props = {
+	images?: string[]
+	initialIndex?: number
+	visible?: boolean
+	thumbSize?: number
+	radius?: number
+	gap?: number
+	enableSave?: boolean
+	enableShare?: boolean
+	emptyText?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	images: () : string[] => [],
+	initialIndex: 0,
+	visible: false,
+	thumbSize: 72,
+	radius: 12,
+	gap: 12,
+	enableSave: true,
+	enableShare: true,
+	emptyText: '暂无图片',
+})
+
+const emit = defineEmits<{
+	(e: 'preview', payload: UTSJSONObject): void
+	(e: 'close', payload: UTSJSONObject): void
+	(e: 'save', payload: UTSJSONObject): void
+	(e: 'share', payload: UTSJSONObject): void
+	(e: 'update:visible', value: boolean): void
+	(e: 'update:index', value: number): void
+}>()
+
+const imageList = ref<string[]>([])
+const currentIndex = ref<number>(0)
+const previewVisible = ref<boolean>(false)
+
+const itemStyle = computed<string>(() : string => {
+	return 'width:' + props.thumbSize + 'px;height:' + props.thumbSize + 'px;margin-right:' + props.gap + 'px;margin-bottom:' + props.gap + 'px;border-radius:' + props.radius + 'px;'
+})
+
+const imageStyle = computed<string>(() : string => {
+	return 'border-radius:' + props.radius + 'px;'
+})
+
+const indicatorText = computed<string>(() : string => {
+	if (imageList.value.length == 0) {
+		return '0 / 0'
+	}
+	return '' + (currentIndex.value + 1) + ' / ' + imageList.value.length
+})
+
+function cloneStringArray(list: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < list.length; i++) {
+		result.push(list[i])
+	}
+	return result
+}
+
+function clampIndex(index: number, length: number) : number {
+	if (length <= 0) {
+		return 0
+	}
+	if (index < 0) {
+		return 0
+	}
+	if (index >= length) {
+		return length - 1
+	}
+	return index
+}
+
+function syncImages(list: string[]) {
+	imageList.value = cloneStringArray(list)
+	currentIndex.value = clampIndex(currentIndex.value, imageList.value.length)
+}
+
+function buildPayload(action: string, path: string) : UTSJSONObject {
+	return {
+		action: action,
+		index: currentIndex.value,
+		path: path,
+		list: cloneStringArray(imageList.value),
+	} as UTSJSONObject
+}
+
+function getCurrentImagePath() : string {
+	if (imageList.value.length == 0) {
+		return ''
+	}
+	if (currentIndex.value < 0 || currentIndex.value >= imageList.value.length) {
+		return ''
+	}
+	return imageList.value[currentIndex.value]
+}
+
+function isRemotePath(path: string) : boolean {
+	return path.startsWith('http://') || path.startsWith('https://')
+}
+
+function withLocalImagePath(path: string, actionName: string, next: (localPath: string) => void) {
+	if (path == '') {
+		uni.showToast({
+			title: '图片地址无效',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (!isRemotePath(path)) {
+		next(path)
+		return
+	}
+
+	uni.showLoading({
+		title: actionName == 'share' ? '准备分享' : '保存中',
+		mask: true,
+	})
+
+	uni.downloadFile({
+		url: path,
+		success: (res) => {
+			uni.hideLoading()
+			if (res.statusCode == 200) {
+				next(res.tempFilePath)
+				return
+			}
+			uni.showToast({
+				title: actionName == 'share' ? '下载后分享失败' : '下载失败',
+				icon: 'none',
+			})
+		},
+		fail: () => {
+			uni.hideLoading()
+			uni.showToast({
+				title: actionName == 'share' ? '分享失败' : '保存失败',
+				icon: 'none',
+			})
+		},
+	})
+}
+
+function openPreview(index: number) {
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+	currentIndex.value = index
+	previewVisible.value = true
+	emit('update:index', currentIndex.value)
+	emit('update:visible', true)
+	const currentPath = getCurrentImagePath()
+	emit('preview', buildPayload('preview', currentPath))
+}
+
+function closePreview() {
+	const currentPath = getCurrentImagePath()
+	previewVisible.value = false
+	emit('update:visible', false)
+	emit('close', buildPayload('close', currentPath))
+}
+
+function handleSwiperChange(event: SwiperChangeEvent) {
+	currentIndex.value = event.detail.current
+	emit('update:index', currentIndex.value)
+}
+
+function showPrevious() {
+	if (imageList.value.length <= 1) {
+		return
+	}
+	if (currentIndex.value <= 0) {
+		currentIndex.value = imageList.value.length - 1
+		return
+	}
+	currentIndex.value = currentIndex.value - 1
+}
+
+function showNext() {
+	if (imageList.value.length <= 1) {
+		return
+	}
+	if (currentIndex.value >= imageList.value.length - 1) {
+		currentIndex.value = 0
+		return
+	}
+	currentIndex.value = currentIndex.value + 1
+}
+
+function saveCurrentImage() {
+	const currentPath = getCurrentImagePath()
+	withLocalImagePath(currentPath, 'save', (localPath: string) => {
+		uni.saveImageToPhotosAlbum({
+			filePath: localPath,
+			success: () => {
+				uni.showToast({
+					title: '已保存到相册',
+					icon: 'success',
+				})
+				emit('save', buildPayload('save', currentPath))
+			},
+			fail: () => {
+				uni.showToast({
+					title: '保存失败',
+					icon: 'none',
+				})
+			},
+		})
+	})
+}
+
+function shareCurrentImage() {
+	const currentPath = getCurrentImagePath()
+	withLocalImagePath(currentPath, 'share', (localPath: string) => {
+		uni.shareWithSystem({
+			type: 'image',
+			imagePaths: [localPath],
+			success: () => {
+				emit('share', buildPayload('share', currentPath))
+			},
+			fail: () => {
+				uni.setClipboardData({
+					data: currentPath,
+					success: () => {
+						uni.showToast({
+							title: '当前平台暂不支持系统分享，已复制图片地址',
+							icon: 'none',
+						})
+						emit('share', buildPayload('share', currentPath))
+					},
+					fail: () => {
+						uni.showToast({
+							title: '当前平台暂不支持分享',
+							icon: 'none',
+						})
+					},
+				})
+			},
+		})
+	})
+}
+
+watch(
+	() : string[] => props.images,
+	(newVal: string[]) => {
+		syncImages(newVal)
+	}
+)
+
+watch(
+	() : number => props.initialIndex,
+	(newVal: number) => {
+		currentIndex.value = clampIndex(newVal, imageList.value.length)
+	}
+)
+
+watch(
+	() : boolean => props.visible,
+	(newVal: boolean) => {
+		previewVisible.value = newVal
+	}
+)
+
+syncImages(props.images)
+currentIndex.value = clampIndex(props.initialIndex, imageList.value.length)
+previewVisible.value = props.visible
+</script>
+
+<style>
+.lp-root {
+	width: 100%;
+}
+
+.lp-list {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.lp-item {
+	overflow: hidden;
+	background-color: #F3F4F6;
+}
+
+.lp-image {
+	width: 100%;
+	height: 100%;
+}
+
+.lp-empty {
+	width: 100%;
+	padding-top: 16px;
+	padding-bottom: 16px;
+	align-items: center;
+	justify-content: center;
+	background-color: #F8FAFC;
+	border-radius: 12px;
+}
+
+.lp-empty-text {
+	font-size: 14px;
+	color: #64748B;
+}
+
+.lp-preview {
+	position: fixed;
+	left: 0px;
+	right: 0px;
+	top: 0px;
+	bottom: 0px;
+	background-color: rgba(0, 0, 0, 0.96);
+	z-index: 9999;
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+.lp-topbar {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.lp-topbar-button {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	background-color: rgba(255, 255, 255, 0.14);
+	border-radius: 999px;
+}
+
+.lp-topbar-button-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+
+.lp-indicator {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+
+.lp-swiper-wrap {
+	flex: 1;
+}
+
+.lp-swiper {
+	flex: 1;
+}
+
+.lp-slide {
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	padding-left: 20px;
+	padding-right: 20px;
+	padding-top: 120px;
+	padding-bottom: 140px;
+}
+
+.lp-preview-image {
+	width: 100%;
+	height: 100%;
+}
+
+.lp-actionbar {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 28px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+.lp-action {
+	min-width: 88px;
+	margin-left: 6px;
+	margin-right: 6px;
+	margin-top: 6px;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 255, 255, 0.14);
+	border-radius: 999px;
+}
+
+.lp-action-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+</style>

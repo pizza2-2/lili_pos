@@ -1,0 +1,1031 @@
+<template>
+	<view class="lul-root">
+		<view v-if="loading" class="lul-state-card">
+			<view class="lul-loading-dot"></view>
+			<text class="lul-state-title">{{ loadingText }}</text>
+			<text class="lul-state-desc">请稍候，列表正在更新。</text>
+		</view>
+
+		<view v-else-if="items.length == 0" class="lul-state-card">
+			<view class="lul-empty-badge">
+				<text class="lul-empty-badge-text">{{ emptyIcon }}</text>
+			</view>
+			<text class="lul-state-title">{{ emptyText }}</text>
+			<text class="lul-state-desc">当前没有可展示的数据。</text>
+		</view>
+
+		<view v-else class="lul-list">
+			<view
+				v-for="(item, itemIndex) in items"
+				:key="itemKey(item, itemIndex)"
+				:class="isSelected(item) ? 'lul-card lul-card-selected' : 'lul-card'"
+				@click="handleItemClick(item)"
+			>
+				<view class="lul-card-top">
+					<view class="lul-card-top-left">
+						<view v-if="selectionMode" class="lul-check-wrap" @click.stop="toggleSelection(item)">
+							<view :class="isSelected(item) ? 'lul-check lul-check-active' : 'lul-check'">
+								<text v-if="isSelected(item)" class="lul-check-icon">✓</text>
+							</view>
+						</view>
+
+						<view v-if="showImage && firstImage(item) != ''" class="lul-cover-wrap">
+							<image class="lul-cover" :src="firstImage(item)" mode="aspectFill" @click.stop="openPreview(item, 0)"></image>
+							<view v-if="imageCount(item) > 1" class="lul-cover-count">
+								<text class="lul-cover-count-text">+{{ imageCount(item) - 1 }}</text>
+							</view>
+						</view>
+
+						<view class="lul-main">
+							<view class="lul-headline-row">
+								<view class="lul-title-wrap">
+									<text v-if="titleField != ''" class="lul-title">{{ fieldText(item, titleField) }}</text>
+									<text v-if="subtitleField != '' && fieldText(item, subtitleField) != ''" class="lul-subtitle">{{ fieldText(item, subtitleField) }}</text>
+								</view>
+								<view v-if="showMenu" class="lul-menu-wrap" @click.stop="handleMenu(item)">
+									<text class="lul-menu-icon">⋯</text>
+								</view>
+								<view v-if="showChevron" class="lul-chevron-wrap">
+									<text class="lul-chevron">›</text>
+								</view>
+							</view>
+
+							<view v-if="tagList(item).length > 0" class="lul-tags">
+								<view
+									v-for="(tag, tagIndex) in tagList(item)"
+									:key="tag + '-' + tagIndex"
+									:class="tagClass(tag)"
+								>
+									<text :class="tagTextClass(tag)">{{ tag }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+
+					<view v-if="fields.length > 0" class="lul-fields">
+						<view
+							v-for="(field, fieldIndex) in fields"
+							:key="fieldKey(field, fieldIndex)"
+							class="lul-field-chip"
+						>
+							<text v-if="fieldIcon(field) != ''" class="lul-field-icon">{{ fieldIcon(field) }}</text>
+							<text v-if="fieldLabel(field) != ''" class="lul-field-label">{{ fieldLabel(field) }}</text>
+							<text class="lul-field-value">{{ displayField(item, field) }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view v-if="showPagination" class="lul-pagination">
+				<view class="lul-pagination-summary">
+					<text class="lul-pagination-summary-text">共 {{ totalCountText }} 条</text>
+					<text class="lul-pagination-summary-text">第 {{ currentPageText }} / {{ totalPagesText }} 页</text>
+				</view>
+				<view class="lul-pagination-actions">
+					<view :class="canGoPrev() ? 'lul-page-btn' : 'lul-page-btn lul-page-btn-disabled'" @click="goPrevPage">
+						<text :class="canGoPrev() ? 'lul-page-btn-text' : 'lul-page-btn-text lul-page-btn-text-disabled'">上一页</text>
+					</view>
+					<view :class="canGoNext() ? 'lul-page-btn lul-page-btn-primary' : 'lul-page-btn lul-page-btn-primary lul-page-btn-disabled-primary'" @click="goNextPage">
+						<text :class="canGoNext() ? 'lul-page-btn-text lul-page-btn-text-light' : 'lul-page-btn-text lul-page-btn-text-disabled-light'">下一页</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<lili-preview
+			:images="previewImages"
+			:initialIndex="previewIndex"
+			:visible="previewVisible"
+			:enableSave="enablePreviewSave"
+			:enableShare="enablePreviewShare"
+			@update:visible="handlePreviewVisibleChange"
+			@update:index="handlePreviewIndexChange"
+			@preview="handlePreviewOpen"
+			@close="handlePreviewClose"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+type Props = {
+	items?: UTSJSONObject[]
+	keyField?: string
+	titleField?: string
+	subtitleField?: string
+	imageField?: string
+	imageListField?: string
+	showImage?: boolean
+	fields?: UTSJSONObject[]
+	tagField?: string
+	tagColorMap?: UTSJSONObject
+	showActions?: boolean
+	actions?: UTSJSONObject[]
+	selectionMode?: boolean
+	selectedItems?: string[]
+	loading?: boolean
+	loadingText?: string
+	emptyText?: string
+	emptyIcon?: string
+	showChevron?: boolean
+	showMenu?: boolean
+	menuActions?: UTSJSONObject[]
+	showPagination?: boolean
+	currentPage?: number
+	totalPages?: number
+	totalCount?: number
+	enablePreviewSave?: boolean
+	enablePreviewShare?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	items: () : UTSJSONObject[] => [],
+	keyField: 'id',
+	titleField: 'title',
+	subtitleField: '',
+	imageField: 'image',
+	imageListField: 'images',
+	showImage: true,
+	fields: () : UTSJSONObject[] => [],
+	tagField: 'tags',
+	tagColorMap: () : UTSJSONObject => ({
+		进行中: 'info',
+		已完成: 'success',
+		已取消: 'danger',
+		待处理: 'warning',
+		草稿: 'muted',
+		启用: 'success',
+		禁用: 'danger',
+		新品: 'violet',
+		热销: 'warning',
+		推荐: 'info',
+	}),
+	showActions: false,
+	actions: () : UTSJSONObject[] => [
+		{ key: 'detail', text: '详情', icon: '⌕', tone: 'info' } as UTSJSONObject,
+		{ key: 'edit', text: '编辑', icon: '✎', tone: 'success' } as UTSJSONObject,
+	],
+	selectionMode: false,
+	selectedItems: () : string[] => [],
+	loading: false,
+	loadingText: '加载中...',
+	emptyText: '暂无数据',
+	emptyIcon: '◌',
+	showChevron: true,
+	showMenu: false,
+	menuActions: () : UTSJSONObject[] => [],
+	showPagination: false,
+	currentPage: 1,
+	totalPages: 1,
+	totalCount: 0,
+	enablePreviewSave: true,
+	enablePreviewShare: true,
+})
+
+const emit = defineEmits<{
+	(e: 'item-click', payload: UTSJSONObject): void
+	(e: 'action', payload: UTSJSONObject): void
+	(e: 'update:selectedItems', payload: string[]): void
+	(e: 'selection-change', payload: string[]): void
+	(e: 'image-preview', payload: UTSJSONObject): void
+	(e: 'preview-close', payload: UTSJSONObject): void
+	(e: 'menu', payload: UTSJSONObject): void
+	(e: 'page-change', payload: UTSJSONObject): void
+}>()
+
+const previewImages = ref<string[]>([])
+const previewIndex = ref<number>(0)
+const previewVisible = ref<boolean>(false)
+const previewItem = ref<UTSJSONObject | null>(null)
+
+function stringValue(value: any | null) : string {
+	if (value == null) return ''
+	return '' + value
+}
+
+function safeCurrentPage() : number {
+	if (props.currentPage <= 0) return 1
+	return props.currentPage
+}
+
+function safeTotalPages() : number {
+	if (props.totalPages <= 0) return 1
+	return props.totalPages
+}
+
+function safeTotalCount() : number {
+	if (props.totalCount < 0) return 0
+	return props.totalCount
+}
+
+const currentPageText = computed<string>(() : string => {
+	return '' + safeCurrentPage()
+})
+
+const totalPagesText = computed<string>(() : string => {
+	return '' + safeTotalPages()
+})
+
+const totalCountText = computed<string>(() : string => {
+	return '' + safeTotalCount()
+})
+
+function objectField(obj: UTSJSONObject, key: string) : any | null {
+	return obj[key]
+}
+
+function fieldText(item: UTSJSONObject, path: string) : string {
+	if (path == '') return ''
+	let current: any | null = item
+	const parts = path.split('.')
+	for (let i = 0; i < parts.length; i++) {
+		if (current == null) return ''
+		const currentObj = current as UTSJSONObject
+		current = currentObj[parts[i]]
+	}
+	return stringValue(current)
+}
+
+function fieldLabel(field: UTSJSONObject) : string {
+	return stringValue(field['label'])
+}
+
+function fieldIcon(field: UTSJSONObject) : string {
+	return stringValue(field['icon'])
+}
+
+function fieldType(field: UTSJSONObject) : string {
+	return stringValue(field['type'])
+}
+
+function fieldKey(field: UTSJSONObject, index: number) : string {
+	const key = stringValue(field['key'])
+	if (key != '') return key
+	return 'field-' + index
+}
+
+function actionKey(action: UTSJSONObject, index: number) : string {
+	const key = stringValue(action['key'])
+	if (key != '') return key
+	return 'action-' + index
+}
+
+function actionText(action: UTSJSONObject) : string {
+	return stringValue(action['text'])
+}
+
+function menuText(action: UTSJSONObject) : string {
+	return stringValue(action['text'])
+}
+
+function actionIcon(action: UTSJSONObject) : string {
+	return stringValue(action['icon'])
+}
+
+function actionTone(action: UTSJSONObject) : string {
+	const tone = stringValue(action['tone'])
+	if (tone != '') return tone
+	return 'info'
+}
+
+function stringArrayContains(list: string[], value: string) : boolean {
+	for (let i = 0; i < list.length; i++) {
+		if (list[i] == value) {
+			return true
+		}
+	}
+	return false
+}
+
+function displayField(item: UTSJSONObject, field: UTSJSONObject) : string {
+	const raw = fieldText(item, stringValue(field['key']))
+	const type = fieldType(field)
+	if (type == 'price') {
+		if (raw == '') return ''
+		return '¥ ' + raw
+	}
+	if (type == 'status') {
+		return raw
+	}
+	return raw
+}
+
+function itemId(item: UTSJSONObject) : string {
+	return fieldText(item, props.keyField)
+}
+
+function itemKey(item: UTSJSONObject, index: number) : string {
+	const key = itemId(item)
+	if (key != '') return key
+	return 'item-' + index
+}
+
+function isSelected(item: UTSJSONObject) : boolean {
+	const id = itemId(item)
+	if (id == '') return false
+	for (let i = 0; i < props.selectedItems.length; i++) {
+		if (props.selectedItems[i] == id) {
+			return true
+		}
+	}
+	return false
+}
+
+function toggleSelection(item: UTSJSONObject) {
+	const id = itemId(item)
+	if (id == '') return
+	const nextSelected: string[] = []
+	let removed = false
+	for (let i = 0; i < props.selectedItems.length; i++) {
+		const current = props.selectedItems[i]
+		if (current == id) {
+			removed = true
+			continue
+		}
+		nextSelected.push(current)
+	}
+	if (!removed) {
+		nextSelected.push(id)
+	}
+	emit('update:selectedItems', nextSelected)
+	emit('selection-change', nextSelected)
+}
+
+function handleItemClick(item: UTSJSONObject) {
+	if (props.selectionMode) {
+		toggleSelection(item)
+		return
+	}
+	emit('item-click', item)
+}
+
+function imageListFromItem(item: UTSJSONObject) : string[] {
+	const images: string[] = []
+	const mainImage = fieldText(item, props.imageField)
+	if (mainImage != '') {
+		images.push(mainImage)
+	}
+	if (props.imageListField != '') {
+		const raw = objectField(item, props.imageListField)
+		if (raw != null) {
+			if (raw instanceof Array) {
+				const list = raw as Array<any>
+				for (let i = 0; i < list.length; i++) {
+					const imageUrl = stringValue(list[i])
+					if (imageUrl != '' && !stringArrayContains(images, imageUrl)) {
+						images.push(imageUrl)
+					}
+				}
+			} else {
+				const text = stringValue(raw)
+				if (text != '') {
+					const parts = text.split(',')
+					for (let i = 0; i < parts.length; i++) {
+						const imageUrl = parts[i].trim()
+						if (imageUrl != '' && !stringArrayContains(images, imageUrl)) {
+							images.push(imageUrl)
+						}
+					}
+				}
+			}
+		}
+	}
+	return images
+}
+
+function firstImage(item: UTSJSONObject) : string {
+	const list = imageListFromItem(item)
+	if (list.length == 0) return ''
+	return list[0]
+}
+
+function imageCount(item: UTSJSONObject) : number {
+	return imageListFromItem(item).length
+}
+
+function openPreview(item: UTSJSONObject, index: number) {
+	const list = imageListFromItem(item)
+	if (list.length == 0) return
+	previewImages.value = list
+	previewIndex.value = index
+	previewVisible.value = true
+	previewItem.value = item
+}
+
+function handlePreviewVisibleChange(value: boolean) {
+	previewVisible.value = value
+}
+
+function handlePreviewIndexChange(value: number) {
+	previewIndex.value = value
+}
+
+function handlePreviewOpen(payload: UTSJSONObject) {
+	emit('image-preview', {
+		item: previewItem.value,
+		preview: payload,
+	} as UTSJSONObject)
+}
+
+function handlePreviewClose(payload: UTSJSONObject) {
+	emit('preview-close', {
+		item: previewItem.value,
+		preview: payload,
+	} as UTSJSONObject)
+	previewItem.value = null
+}
+
+function tagList(item: UTSJSONObject) : string[] {
+	const result: string[] = []
+	if (props.tagField == '') return result
+	const raw = objectField(item, props.tagField)
+	if (raw == null) return result
+	if (raw instanceof Array) {
+		const list = raw as Array<any>
+		for (let i = 0; i < list.length; i++) {
+			const tag = stringValue(list[i])
+			if (tag != '') {
+				result.push(tag)
+			}
+		}
+		return result
+	}
+	const text = stringValue(raw)
+	if (text == '') return result
+	const parts = text.split(',')
+	for (let i = 0; i < parts.length; i++) {
+		const tag = parts[i].trim()
+		if (tag != '') {
+			result.push(tag)
+		}
+	}
+	return result
+}
+
+function toneForTag(tag: string) : string {
+	const mapped = objectField(props.tagColorMap, tag)
+	const mappedText = stringValue(mapped)
+	if (mappedText != '') return mappedText
+	if (tag.indexOf('完成') >= 0 || tag.indexOf('成功') >= 0 || tag.indexOf('启用') >= 0) return 'success'
+	if (tag.indexOf('取消') >= 0 || tag.indexOf('失败') >= 0 || tag.indexOf('禁用') >= 0) return 'danger'
+	if (tag.indexOf('待') >= 0 || tag.indexOf('预警') >= 0 || tag.indexOf('热销') >= 0) return 'warning'
+	if (tag.indexOf('新品') >= 0 || tag.indexOf('推荐') >= 0) return 'violet'
+	return 'info'
+}
+
+function tagClass(tag: string) : string {
+	const tone = toneForTag(tag)
+	return 'lul-tag lul-tag-' + tone
+}
+
+function tagTextClass(tag: string) : string {
+	const tone = toneForTag(tag)
+	return 'lul-tag-text lul-tag-text-' + tone
+}
+
+function actionClass(action: UTSJSONObject) : string {
+	return 'lul-action lul-action-' + actionTone(action)
+}
+
+function actionTextClass(action: UTSJSONObject) : string {
+	return 'lul-action-text lul-action-text-' + actionTone(action)
+}
+
+function actionIconClass(action: UTSJSONObject) : string {
+	return 'lul-action-icon lul-action-text-' + actionTone(action)
+}
+
+function handleAction(item: UTSJSONObject, action: UTSJSONObject) {
+	emit('action', {
+		item: item,
+		action: action,
+	} as UTSJSONObject)
+}
+
+function handleMenu(item: UTSJSONObject) {
+	if (props.menuActions.length == 0) {
+		return
+	}
+
+	const itemList: string[] = []
+	for (let i = 0; i < props.menuActions.length; i++) {
+		itemList.push(menuText(props.menuActions[i]))
+	}
+
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const selectedIndex = res.tapIndex
+			if (selectedIndex < 0 || selectedIndex >= props.menuActions.length) {
+				return
+			}
+			emit('menu', {
+				item: item,
+				action: props.menuActions[selectedIndex],
+				index: selectedIndex,
+			} as UTSJSONObject)
+		},
+	})
+}
+
+function canGoPrev() : boolean {
+	return safeCurrentPage() > 1
+}
+
+function canGoNext() : boolean {
+	return safeCurrentPage() < safeTotalPages()
+}
+
+function emitPageChange(page: number) {
+	emit('page-change', {
+		page: page,
+		currentPage: safeCurrentPage(),
+		totalPages: safeTotalPages(),
+		totalCount: safeTotalCount(),
+	} as UTSJSONObject)
+}
+
+function goPrevPage() {
+	if (!canGoPrev()) {
+		return
+	}
+	emitPageChange(safeCurrentPage() - 1)
+}
+
+function goNextPage() {
+	if (!canGoNext()) {
+		return
+	}
+	emitPageChange(safeCurrentPage() + 1)
+}
+</script>
+
+<style>
+.lul-root {
+	width: 100%;
+}
+
+.lul-list {
+	width: 100%;
+}
+
+.lul-card {
+	background-color: #FFFFFF;
+	border-radius: 22px;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 16px;
+	padding-bottom: 16px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E7ECF3;
+}
+
+.lul-card-selected {
+	background-color: #F8FBFF;
+	border-color: #7CC4FF;
+}
+
+.lul-card-top {
+	width: 100%;
+}
+
+.lul-card-top-left {
+	flex-direction: row;
+}
+
+.lul-check-wrap {
+	width: 32px;
+	padding-top: 6px;
+	align-items: flex-start;
+}
+
+.lul-check {
+	width: 22px;
+	height: 22px;
+	border-radius: 11px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5E1;
+	align-items: center;
+	justify-content: center;
+	background-color: #FFFFFF;
+}
+
+.lul-check-active {
+	border-color: #0F172A;
+	background-color: #0F172A;
+}
+
+.lul-check-icon {
+	font-size: 12px;
+	line-height: 12px;
+	color: #FFFFFF;
+}
+
+.lul-cover-wrap {
+	width: 88px;
+	height: 88px;
+	border-radius: 18px;
+	overflow: hidden;
+	background-color: #E2E8F0;
+	position: relative;
+	margin-right: 14px;
+}
+
+.lul-cover {
+	width: 88px;
+	height: 88px;
+}
+
+.lul-cover-count {
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	padding-left: 7px;
+	padding-right: 7px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: rgba(15, 23, 42, 0.72);
+}
+
+.lul-cover-count-text {
+	font-size: 11px;
+	line-height: 11px;
+	color: #FFFFFF;
+}
+
+.lul-main {
+	flex: 1;
+}
+
+.lul-headline-row {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.lul-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.lul-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: 700;
+}
+
+.lul-subtitle {
+	font-size: 13px;
+	line-height: 19px;
+	color: #64748B;
+	margin-top: 4px;
+}
+
+.lul-menu-wrap {
+	width: 28px;
+	height: 28px;
+	border-radius: 14px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+}
+
+.lul-menu-icon {
+	font-size: 18px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.lul-chevron-wrap {
+	width: 20px;
+	align-items: flex-end;
+	padding-top: 2px;
+}
+
+.lul-chevron {
+	font-size: 18px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.lul-tags {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 12px;
+}
+
+.lul-tag {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 999px;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.lul-tag-info {
+	background-color: #E0F2FE;
+}
+
+.lul-tag-success {
+	background-color: #DCFCE7;
+}
+
+.lul-tag-warning {
+	background-color: #FEF3C7;
+}
+
+.lul-tag-danger {
+	background-color: #FEE2E2;
+}
+
+.lul-tag-violet {
+	background-color: #EDE9FE;
+}
+
+.lul-tag-muted {
+	background-color: #E2E8F0;
+}
+
+.lul-tag-text {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: 700;
+}
+
+.lul-tag-text-info {
+	color: #0369A1;
+}
+
+.lul-tag-text-success {
+	color: #15803D;
+}
+
+.lul-tag-text-warning {
+	color: #B45309;
+}
+
+.lul-tag-text-danger {
+	color: #B91C1C;
+}
+
+.lul-tag-text-violet {
+	color: #6D28D9;
+}
+
+.lul-tag-text-muted {
+	color: #475569;
+}
+
+.lul-fields {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #E7ECF3;
+}
+
+.lul-field-chip {
+	flex-direction: row;
+	align-items: center;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+	border-radius: 12px;
+	background-color: #F8FAFC;
+	margin-right: 8px;
+	margin-top: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.lul-field-icon {
+	font-size: 12px;
+	line-height: 12px;
+	color: #64748B;
+	margin-right: 4px;
+}
+
+.lul-field-label {
+	font-size: 12px;
+	line-height: 12px;
+	color: #64748B;
+	margin-right: 4px;
+}
+
+.lul-field-value {
+	font-size: 12px;
+	line-height: 12px;
+	color: #0F172A;
+	font-weight: 700;
+}
+
+.lul-actions {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 14px;
+}
+
+.lul-action {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-radius: 14px;
+	margin-right: 10px;
+	margin-top: 8px;
+	border-width: 1px;
+	border-style: solid;
+}
+
+.lul-action-info {
+	background-color: #F8FAFC;
+	border-color: #BFDBFE;
+}
+
+.lul-action-success {
+	background-color: #F0FDF4;
+	border-color: #BBF7D0;
+}
+
+.lul-action-warning {
+	background-color: #FFF7ED;
+	border-color: #FED7AA;
+}
+
+.lul-action-danger {
+	background-color: #FEF2F2;
+	border-color: #FECACA;
+}
+
+.lul-action-icon {
+	font-size: 12px;
+	line-height: 12px;
+	margin-right: 4px;
+}
+
+.lul-action-text {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: 700;
+}
+
+.lul-action-text-info {
+	color: #1D4ED8;
+}
+
+.lul-action-text-success {
+	color: #15803D;
+}
+
+.lul-action-text-warning {
+	color: #C2410C;
+}
+
+.lul-action-text-danger {
+	color: #B91C1C;
+}
+
+.lul-state-card {
+	background-color: #FFFFFF;
+	border-radius: 22px;
+	padding-top: 34px;
+	padding-bottom: 34px;
+	padding-left: 20px;
+	padding-right: 20px;
+	align-items: center;
+	justify-content: center;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E7ECF3;
+}
+
+.lul-empty-badge {
+	width: 56px;
+	height: 56px;
+	border-radius: 28px;
+	background-color: #F1F5F9;
+	align-items: center;
+	justify-content: center;
+}
+
+.lul-empty-badge-text {
+	font-size: 24px;
+	line-height: 24px;
+	color: #64748B;
+}
+
+.lul-loading-dot {
+	width: 18px;
+	height: 18px;
+	border-radius: 9px;
+	background-color: #0F172A;
+}
+
+.lul-state-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: 700;
+	margin-top: 14px;
+}
+
+.lul-state-desc {
+	font-size: 13px;
+	line-height: 19px;
+	color: #64748B;
+	margin-top: 6px;
+}
+
+.lul-pagination {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 14px;
+	padding-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E7ECF3;
+}
+
+.lul-pagination-summary {
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+.lul-pagination-summary-text {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.lul-pagination-actions {
+	flex-direction: row;
+	margin-top: 12px;
+}
+
+.lul-page-btn {
+	flex: 1;
+	height: 38px;
+	border-radius: 12px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+}
+
+.lul-page-btn-primary {
+	background-color: #0F172A;
+	border-color: #0F172A;
+	margin-left: 10px;
+}
+
+.lul-page-btn-disabled {
+	background-color: #F8FAFC;
+	border-color: #E5E7EB;
+}
+
+.lul-page-btn-disabled-primary {
+	background-color: #CBD5E1;
+	border-color: #CBD5E1;
+}
+
+.lul-page-btn-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #334155;
+	font-weight: 700;
+}
+
+.lul-page-btn-text-light {
+	color: #FFFFFF;
+}
+
+.lul-page-btn-text-disabled {
+	color: #94A3B8;
+}
+
+.lul-page-btn-text-disabled-light {
+	color: #E2E8F0;
+}
+
+</style>

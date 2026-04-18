@@ -1,0 +1,271 @@
+import { isAgreePrivacyState } from '@/store/global'
+/* 
+注意，下面这段判断安卓平台的代码，是因为官方插件目前只支持安卓平台
+*/
+// #ifdef APP-ANDROID
+import { registerRequestPermissionTipsListener,unregisterRequestPermissionTipsListener,setRequestPermissionTips } from "@/uni_modules/uni-registerRequestPermissionTips"
+
+// 拒绝授权的timeNumber分钟内不再请求权限授权，而是弹窗引导打开系统设置，根据实际情况自行修改
+const timeNumber = ref<number>(15)
+// 记录当前拒绝定位请求的时间戳
+const disAllowLocation = ref<number>(0)
+// 记录当前拒绝相机请求的时间戳
+const disAllowCamera = ref<number>(0)
+// 记录当前拒绝相册请求的时间戳
+const disAllowAlbum = ref<number>(0)
+// ...其它权限拒绝请求的时间戳
+
+//安卓系统权限提示
+var PermissionTips = {}
+PermissionTips["android.permission.ACCESS_COARSE_LOCATION"] = "<h1>定位权限说明</h1><p style=\"color:#cccccc\">为了提供您所在区域的信息服务，我们需要获取您设备所在区域信息。以便于向您展示商品信息。</p>"
+PermissionTips["android.permission.ACCESS_FINE_LOCATION"] = "<h1>定位权限说明</h1><p style=\"color:#cccccc\">为了提供您所在区域的信息服务，我们需要获取您设备所在区域信息。以便于向您展示商品信息。</p>"
+PermissionTips["android.permission.CAMERA"] = "<h1>相机权限说明</h1><p style=\"color:#cccccc\">便于您使用该功能上传您的照片用于更换头像、扫码、拍照，发布商品等场景</p>"
+PermissionTips["android.permission.READ_EXTERNAL_STORAGE"] = "<h1>相册权限说明</h1><p style=\"color:#cccccc\">便于您使用该功能上传您的照片/图片/视频及用于更换头像、拍照，发布商品等场景中读取相册和文件内容</p>"
+PermissionTips["android.permission.WRITE_EXTERNAL_STORAGE"] = "<h1>相册权限说明</h1><p style=\"color:#cccccc\">便于您使用该功能上传您的照片/图片/视频及用于更换头像、拍照，发布商品等场景中写入相册和文件内容</p>"
+PermissionTips["android.permission.CALL_PHONE"] = "<h1>电话权限说明</h1><p style=\"color:#cccccc\">为了您能和商家客户进行电话通话，我们需要获取您拨打电话的权限。</p>"
+//...安卓权限列表可参考文档(https://uniapp.dcloud.net.cn/tutorial/app-permission-android.html)
+
+// 全局注册和监听系统权限申请
+export function registerOSPermission(){
+	setRequestPermissionTips(PermissionTips)
+	registerRequestPermissionTipsListener({
+		onComplete: (e) => {
+			for (var k in PermissionTips) {
+				// 用户拒绝了权限的申请
+				if (e[k] == "denied") {
+					// 判断如果是拒绝的系统定位。则做一些处理。其它权限同理。这里存储为变量了，可以自行改为本地存储
+					if(k == "android.permission.ACCESS_COARSE_LOCATION" || k == "android.permission.ACCESS_FINE_LOCATION"){
+						disAllowLocation.value = new Date().getTime();	//存储下当前的时间戳
+					}else if(k == "android.permission.CAMERA"){
+						disAllowCamera.value = new Date().getTime();	//存储下当前的时间戳
+					}else if(k == "android.permission.READ_EXTERNAL_STORAGE" || k == "android.permission.android.permission.WRITE_EXTERNAL_STORAGE"){
+						disAllowAlbum.value = new Date().getTime();		//存储下当前的时间戳
+					}
+					// ...其它权限判定
+				}
+			}
+		}
+	})
+}
+
+// 取消全局监听os权限
+export function unregisterOSPermission(){
+	unregisterRequestPermissionTipsListener(null)
+}
+// #endif
+
+// 系统定位请求权限
+export function getLocationAsync():Promise<GetLocationSuccess> {
+	return new Promise((resolve, reject) => {
+		// 判断用户是否同意《隐私政策》。考虑业务用户不同意未退出应用的情况。重新弹窗
+		if(isAgreePrivacyState.value == false){
+			// 用户未同意隐私政策则弹出“个人信息保护指引”提示框
+			uni.openDialogPage({
+				url: '/pages/privacy/privacy',  // 修改为应用中定义的页面地址
+			})
+			reject(new Error('未同意《隐私政策》，不能使用此功能！'))
+			return
+		}
+		// 如果是安卓系统，判断拒绝的时间。(iOS 和 鸿蒙 拒绝后不会再重新获取权限，需要用户手动到设置页面打开)
+		// #ifdef APP-ANDROID
+		if (disAllowLocation.value != 0 ){
+			// 获取 APP 授权设置 https://doc.dcloud.net.cn/uni-app-x/api/get-app-authorize-setting.html
+			const res = uni.getAppAuthorizeSetting();
+			// 判断是否已授权定位 处理用户在系统设置页面开启权限的情况
+			if (res.locationAuthorized != "authorized"){
+				var newDate = new Date().getTime()
+				// 判断拒绝的时间是否已过15分钟，未过15分钟则引导用户去系统设置。已过15分钟则再次请求定位
+				if (Math.abs(newDate - disAllowLocation.value) <= timeNumber.value * 60 * 1000 ){
+					uni.showModal({
+						content: "定位权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+					reject({})
+					return
+				}
+			}
+		}
+		// #endif
+
+		uni.getLocation({
+			type: 'wgs84',
+			success: (res: GetLocationSuccess) => {
+				// #ifdef APP-ANDROID
+				disAllowLocation.value = 0
+				// #endif
+				resolve(res)
+			},
+			fail: (err: IGetLocationFail) => {
+				console.log("获取定位错误："+err)
+				if(err.errCode == 1505003 || err.errCode == 1505004){
+					uni.showModal({
+						content: "定位权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+				}else{
+					uni.showToast({
+						title: err.errCode + err.errMsg,
+						icon: "none"
+					})
+				}
+				reject(err)
+			}
+		})
+	})
+}
+
+// 相机请求权限
+export function getCameraAsync(sizeType:string[] = ['original','compressed']):Promise<ChooseImageSuccess> {
+	return new Promise((resolve, reject) => {
+		// 判断用户是否同意《隐私政策》。考虑业务用户不同意未退出应用的情况。重新弹窗
+		if(isAgreePrivacyState.value == false){
+			// 用户未同意隐私政策则弹出“个人信息保护指引”提示框
+			uni.openDialogPage({
+				url: '/pages/privacy/privacy',  // 修改为应用中定义的页面地址
+			})
+			reject(new Error('未同意《隐私政策》，不能使用此功能！'))
+			return
+		}
+		// 如果是安卓系统，判断拒绝的时间。(iOS 和 鸿蒙 拒绝后不会再重新获取权限，需要用户手动到设置页面打开)
+		// #ifdef APP-ANDROID
+		if (disAllowCamera.value != 0 ){
+			// 获取 APP 授权设置 https://doc.dcloud.net.cn/uni-app-x/api/get-app-authorize-setting.html
+			const res = uni.getAppAuthorizeSetting();
+			// 判断是否已授权定位 处理用户在系统设置页面开启权限的情况
+			if (res.cameraAuthorized != "authorized"){
+				var newDate = new Date().getTime()
+				// 判断拒绝的时间是否已过15分钟，未过15分钟则引导用户去系统设置。已过15分钟则再次请求定位
+				if (Math.abs(newDate - disAllowCamera.value) <= timeNumber.value * 60 * 1000 ){
+					uni.showModal({
+						content: "相机权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+					reject({})
+					return
+				}
+			}
+		}
+		// #endif
+	
+		uni.chooseImage({
+			albumMode:'system',
+			sizeType:sizeType,
+			sourceType:['camera'],
+			success: (res: ChooseImageSuccess) => {
+				// #ifdef APP-ANDROID
+				disAllowCamera.value = 0
+				// #endif
+				resolve(res)
+			},
+			fail: (err: IMediaError) => {
+				console.log("相机拍照错误：",err.errCode,err.errMsg)
+				if(err.errCode == 1101005){
+					uni.showModal({
+						content: "相机权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+				}else{
+					uni.showToast({
+						title: err.errCode + err.errMsg,
+						icon: "none"
+					})
+				}
+				reject(err)
+			}
+		})
+	})
+}
+
+// 相册请求权限
+export function getAlbumAsync(count:number = 1,sizeType:string[] = ['original','compressed']):Promise<ChooseImageSuccess> {
+	return new Promise((resolve, reject) => {
+		// 判断用户是否同意《隐私政策》。考虑业务用户不同意未退出应用的情况。重新弹窗
+		if(isAgreePrivacyState.value == false){
+			// 用户未同意隐私政策则弹出“个人信息保护指引”提示框
+			uni.openDialogPage({
+				url: '/pages/privacy/privacy',  // 修改为应用中定义的页面地址
+			})
+			reject(new Error('未同意《隐私政策》，不能使用此功能！'))
+			return
+		}
+		// 如果是安卓系统，判断拒绝的时间。(iOS 和 鸿蒙 拒绝后不会再重新获取权限，需要用户手动到设置页面打开)
+		// #ifdef APP-ANDROID
+		if (disAllowAlbum.value != 0 ){
+			// 获取 APP 授权设置 https://doc.dcloud.net.cn/uni-app-x/api/get-app-authorize-setting.html
+			const res = uni.getAppAuthorizeSetting();
+			// 判断是否已授权定位 处理用户在系统设置页面开启权限的情况
+			if (res.albumAuthorized != "authorized"){
+				var newDate = new Date().getTime()
+				// 判断拒绝的时间是否已过15分钟，未过15分钟则引导用户去系统设置。已过15分钟则再次请求定位
+				if (Math.abs(newDate - disAllowAlbum.value) <= timeNumber.value * 60 * 1000 ){
+					uni.showModal({
+						content: "相册权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+					reject({})
+					return
+				}
+			}
+		}
+		// #endif
+	
+		uni.chooseImage({
+			albumMode:'system',
+			count:count,
+			sizeType:sizeType,
+			sourceType:['album'],
+			success: (res: ChooseImageSuccess) => {
+				// #ifdef APP-ANDROID
+				disAllowAlbum.value = 0
+				// #endif
+				resolve(res)
+			},
+			fail: (err: IMediaError) => {
+				console.log("获取相册错误：",err.errCode,err.errMsg)
+				if(err.errCode == 1101005){
+					uni.showModal({
+						content: "相册权限已经被拒绝，请前往设置中开启",
+						confirmText:"前往设置",
+						success:(res) => {
+							if(res.confirm){
+								uni.openAppAuthorizeSetting({ })
+							}
+						}
+					})
+				}else{
+					uni.showToast({
+						title: err.errCode + err.errMsg,
+						icon: "none"
+					})
+				}
+				reject(err)
+			}
+		})
+	})
+}
+// ...其它请求权限

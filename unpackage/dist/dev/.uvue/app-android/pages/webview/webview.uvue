@@ -1,0 +1,28 @@
+const __sfc__ = defineComponent({
+    __name: 'webview',
+    setup(__props) {
+        const __ins = getCurrentInstance()!;
+        const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+        const _cache = __ins.renderCache;
+        const src = ref<string>('');
+        //网络地址页面加载进度条样式，设置为 false 时表示不显示加载进度条。
+        const webview_styles = { __$originalPosition: new UTSSourceMapPosition("webview_styles", "pages/webview/webview.uvue", 9, 8),
+            progress: {
+                color: '#FF3333'
+            }
+        } as UTSJSONObject;
+        onLoad((event: OnLoadOptions) => {
+            src.value = event["url"] as string;
+        });
+        return (): any | null => {
+            return _cE("web-view", _uM({
+                id: "web-view",
+                src: unref(src),
+                "webview-styles": webview_styles
+            }), null, 8 /* PROPS */, ["src"]);
+        };
+    }
+});
+export default __sfc__;
+const GenPagesWebviewWebviewStyles = [];
+//# sourceMappingURL=webview.uvue.map

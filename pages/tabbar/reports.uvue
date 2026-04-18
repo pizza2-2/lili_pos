@@ -1,0 +1,136 @@
+<template>
+	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
+		<view class="page">
+			<view class="status-bar-space"></view>
+			<view class="hero">
+				<text class="hero-title">报表</text>
+				<text class="hero-desc">查看门店核心经营指标与趋势。</text>
+			</view>
+
+			<view class="card">
+				<text class="card-label">今日销售额</text>
+				<text class="card-value">¥ 12,860.00</text>
+			</view>
+
+			<view class="stats-row">
+				<view class="stat-card stat-gap-right">
+					<text class="stat-label">订单数</text>
+					<text class="stat-value">128</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">客单价</text>
+					<text class="stat-value">¥ 100.47</text>
+				</view>
+			</view>
+
+			<view class="card">
+				<text class="card-label">说明</text>
+				<text class="card-desc">后续可以接经营报表、收银汇总、时段分析和员工业绩。</text>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+</script>
+
+<style>
+.page-scroll {
+	background-color: #F6F7FB;
+}
+
+.page {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-bottom: 24px;
+	background-color: #F6F7FB;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+}
+
+.hero {
+	background-color: #0F172A;
+	border-radius: 20px;
+	padding: 20px;
+}
+
+.hero-title {
+	font-size: 24px;
+	line-height: 30px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.hero-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #CBD5E1;
+	margin-top: 8px;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	margin-top: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.card-label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.card-value {
+	font-size: 28px;
+	line-height: 34px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-top: 10px;
+}
+
+.card-desc {
+	font-size: 15px;
+	line-height: 22px;
+	color: #475569;
+	margin-top: 10px;
+}
+
+.stats-row {
+	flex-direction: row;
+	margin-top: 14px;
+}
+
+.stat-card {
+	flex: 1;
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.stat-gap-right {
+	margin-right: 12px;
+}
+
+.stat-label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.stat-value {
+	font-size: 22px;
+	line-height: 28px;
+	color: #111827;
+	font-weight: bold;
+	margin-top: 10px;
+}
+</style>

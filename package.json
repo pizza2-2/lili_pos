@@ -1,0 +1,25 @@
+{
+    "id": "yw-preview",
+    "name": "图片预览组件",
+    "displayName": "图片预览组件",
+    "version": "v1.0.1",
+    "description": "多图预览，缩放",
+    "keywords": [
+        "图片预览"
+    ],
+    "dcloudext": {
+        "type": "component-vue",
+        "sale": {
+            "regular": {
+                "price": "0.00"
+            },
+            "sourcecode": {
+                "price": "0.00"
+            }
+        }
+    },
+    "uni_modules": {
+        "dependencies": [],
+        "encrypt": []
+    }
+}

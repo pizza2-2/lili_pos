@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "env": {
+    "compilerVersion": "4.87"
+  },
+  "files": {
+    "utssdk/app-android/index.uts": {
+      "md5": "74de612e66f9514f2142ed86686b72aa"
+    },
+    "utssdk/interface.uts": {
+      "md5": "9ea37d02881a45c98410e9e913811526"
+    },
+    "package.json": {
+      "md5": "86219e08dcf6565cda7c04c3dcde96a9"
+    },
+    "utssdk/app-android/AndroidManifest.xml": {
+      "md5": "cf857a1b6e0cbb80c543ae9a8faf2d40"
+    },
+    "utssdk/app-android/config.json": {
+      "md5": "643b2980a54aaca20ecd07d593fb4099"
+    },
+    "utssdk/app-android/res/anim/popupwindow_enter.xml": {
+      "md5": "f198c859de0d759ada725448d27ad2d5"
+    },
+    "utssdk/app-android/res/anim/popupwindow_exit.xml": {
+      "md5": "d10997057313c1750142f37f2016301b"
+    },
+    "utssdk/app-android/res/drawable/dcloud_permission_background.xml": {
+      "md5": "2c0da97c93a16d13d99686918165f390"
+    }
+  }
+}

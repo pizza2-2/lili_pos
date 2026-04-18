@@ -1,0 +1,90 @@
+<script lang="uts">
+	import { isAgreePrivacyState } from '@/store/global'
+	import { getAuthStateByStorageSync } from '@/store/auth'
+	import { routerPermission,removeRouterPermission } from '@/pkg/router/permission'	//路由拦截
+	
+	// #ifdef APP-ANDROID
+	import { registerOSPermission,unregisterOSPermission } from '@/pkg/util/osPermission'	//系统权限申请相关
+	// #endif
+	
+	// #ifdef APP-ANDROID || APP-HARMONY
+	let firstBackTime = 0
+	// #endif
+
+	export default {
+		onLaunch: function () {
+			console.log('App Launch')
+			
+			// #ifdef APP-ANDROID
+			registerOSPermission()  	//全局注册监听系统权限申请
+			// #endif
+			getAuthStateByStorageSync() //同步从本地存储中获取authState的值
+			routerPermission()			//添加路由拦截权限
+			
+			// #ifdef APP
+			// 监听同意隐私政策状态变化
+			uni.onPrivacyAuthorizationChange((res)=>{
+			    //更新同意隐私政策状态
+				isAgreePrivacyState.value = !res.needAuthorization
+			})
+			// 获取是否同意隐私政策
+			uni.getPrivacySetting({
+				success(res){
+					// 注意iOS首次启动将不会弹隐私政策窗口（苹果上架对首次进入app弹窗没有要求）
+					if(res.needAuthorization){
+						isAgreePrivacyState.value = false	// 用户未同意隐私政策
+						// 用户未同意隐私政策则弹出“个人信息保护指引”提示框
+						uni.openDialogPage({
+							url: '/pages/privacy/privacy',  // 修改为应用中定义的页面地址
+						})
+					}else{
+						isAgreePrivacyState.value = true	// 用户已同意隐私政策
+					}
+				}
+			})
+			// #endif
+		},
+		onShow: function (options: OnShowOptions) {
+			console.log('App Show')
+			
+			console.log(options)	//这里可以实现跳转打开此app，进入指定页面。
+		},
+		onHide: function () {
+			console.log('App Hide')
+		},
+		// #ifdef APP-ANDROID || APP-HARMONY
+		onLastPageBackPress: function () {
+			console.log('App LastPageBackPress')
+			if (firstBackTime == 0) {
+				uni.showToast({
+					title: '再按一次退出应用',
+					position: 'bottom',
+				})
+				firstBackTime = Date.now()
+				setTimeout(() => {
+					firstBackTime = 0
+				}, 2000)
+			} else if (Date.now() - firstBackTime < 2000) {
+				firstBackTime = Date.now()
+				uni.exit()
+			}
+		},
+		// #endif
+		onError: function(err: any){
+			console.log(err)	//监听全局错误，可以在这里实现错误上报
+		},
+		onExit: function () {
+			console.log('App Exit')
+			
+			// #ifdef APP-ANDROID
+			unregisterOSPermission()  // 取消全局监听os权限
+			// #endif
+			removeRouterPermission()	//移除路由拦截权限
+		},
+	}
+</script>
+
+<style>
+	/*每个页面公共css */
+	@import "pkg/style/app.css";
+</style>

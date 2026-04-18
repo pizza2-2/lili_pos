@@ -1,0 +1,11 @@
+export function toWebview(data: UTSJSONObject) {
+	let params = '?'
+	data.toMap().forEach(function(value:any | null,key:string){
+		params += key + '=' + value
+		params += '&'
+	});
+	params = params.substring(0, params.length - 1);
+	uni.navigateTo({
+		url: "/pages/webview/webview" + params
+	})
+}

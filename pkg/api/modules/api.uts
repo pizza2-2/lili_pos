@@ -1,0 +1,34 @@
+import { request } from '../index.uts'
+
+// 定义数据类型
+export type PluginType = {
+	plugin_id: number;
+	plugin_name: string;
+	plugin_img_link: string;
+	plugin_intro: string;
+	is_paid: number;
+	collection_count: number;
+	support_count: number;
+	buy_count: number;
+	download_count: number;
+	score: number;
+	rater_count: number;
+	tags: string[];
+	category_level1_name: string;
+	category_level2_name: string;
+	update_date: string;
+	author_avatar_link: string;
+	author_name: string;
+}
+
+// 封装api接口
+export function getPluginList(data:UTSJSONObject): Promise<PluginType[]>{
+	return request('plugin/uniappx-plugin-list', 'GET', data,true) as Promise<PluginType[]>
+}
+
+//其它接口...或者可以在modules文件夹中创建更多的uts文件，这样代码结构更清晰
+
+// // 封装api接口
+// export function getPluginList(data:UTSJSONObject): Promise<PluginType[]>{
+// 	return request<PluginType[]>('plugin/uniappx-plugin-list', 'GET', data,true)
+// }

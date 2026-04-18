@@ -1,0 +1,662 @@
+// base64加密
+export function fcBase64Encode(str: string): string {
+    let keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let i = 0;
+
+    // 转换为 UTF-8 字节数组 (优化版)
+    const bytes: number[] = [];
+    for (let pos = 0; pos < str.length; pos++) {
+        let code = str.charCodeAt(pos)!;
+        
+        // 基本平面字符 (U+0000 ~ U+D7FF 和 U+E000 ~ U+FFFF)
+        if (code < 0xd800 || code >= 0xe000) {
+            if (code < 0x80) {
+                bytes.push(code);
+            } else if (code < 0x800) {
+                bytes.push(0xc0 | (code >> 6));
+                bytes.push(0x80 | (code & 0x3f));
+            } else {
+                bytes.push(0xe0 | (code >> 12));
+                bytes.push(0x80 | ((code >> 6) & 0x3f));
+                bytes.push(0x80 | (code & 0x3f));
+            }
+        }
+        // 代理对处理 (U+D800 ~ U+DBFF 为高代理，U+DC00 ~ U+DFFF 为低代理)
+        else if (code >= 0xd800 && code < 0xdc00) {
+            if (++pos < str.length) {
+                let trail = str.charCodeAt(pos);
+                if (trail != null && trail >= 0xdc00 && trail < 0xe000) {
+                    code = 0x10000 + ((code - 0xd800) << 10) + (trail! - 0xdc00);
+                    bytes.push(0xf0 | (code >> 18));
+                    bytes.push(0x80 | ((code >> 12) & 0x3f));
+                    bytes.push(0x80 | ((code >> 6) & 0x3f));
+                    bytes.push(0x80 | (code & 0x3f));
+                } else {
+                    // 无效代理对，回退并添加替换字符
+                    pos--;
+                    bytes.push(0xef, 0xbf, 0xbd); // U+FFFD
+                }
+            } else {
+                // 单独的高代理，添加替换字符
+                bytes.push(0xef, 0xbf, 0xbd); // U+FFFD
+            }
+        }
+        // 单独的低代理 (无效)
+        else {
+            bytes.push(0xef, 0xbf, 0xbd); // U+FFFD
+        }
+    }
+
+    // Base64 编码处理
+    while (i < bytes.length) {
+        const chr1 = bytes[i++];
+        const chr2 = i < bytes.length ? bytes[i++] : NaN;
+        const chr3 = i < bytes.length ? bytes[i++] : NaN;
+
+        const enc1 = chr1 >> 2;
+        const enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        const enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        const enc4 = chr3 & 63;
+
+        output += keyStr.charAt(enc1) +
+                  keyStr.charAt(enc2) +
+                  keyStr.charAt(isNaN(chr2) ? 64 : enc3) +
+                  keyStr.charAt(isNaN(chr3) ? 64 : enc4);
+    }
+
+    return output;
+}
+
+// base64解密
+export function fcBase64Decode(base64Str: string): string {
+    let keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let output = "";
+    let bytes: number[] = [];
+    let i = 0;
+    
+    // 移除所有非Base64字符
+    let cleanInput = "";
+    for (let j = 0; j < base64Str.length; j++) {
+        let char = base64Str.charAt(j);
+        if (keyStr.indexOf(char) != -1) {
+            cleanInput += char;
+        }
+    }
+    
+    // Base64 解码处理
+    while (i < cleanInput.length) {
+        let enc1 = keyStr.indexOf(cleanInput.charAt(i++));
+        let enc2 = keyStr.indexOf(cleanInput.charAt(i++));
+        let enc3 = i < cleanInput.length ? keyStr.indexOf(cleanInput.charAt(i++)) : 64;
+        let enc4 = i < cleanInput.length ? keyStr.indexOf(cleanInput.charAt(i++)) : 64;
+        
+        let byte1 = (enc1 << 2) | (enc2 >> 4);
+        let byte2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        let byte3 = ((enc3 & 3) << 6) | enc4;
+        
+        bytes.push(byte1);
+        if (enc3 != 64) {
+            bytes.push(byte2);
+        }
+        if (enc4 != 64) {
+            bytes.push(byte3);
+        }
+    }
+    
+    // UTF-8 解码
+    let pos = 0;
+    while (pos < bytes.length) {
+        let byte1 = bytes[pos++];
+        
+        // 单字节字符 (0xxxxxxx)
+        if (byte1 < 0x80) {
+            output += String.fromCharCode(byte1);
+        } 
+        // 双字节字符 (110xxxxx)
+        else if (byte1 >= 0xC0 && byte1 < 0xE0) {
+            let byte2 = bytes[pos++];
+            if (pos <= bytes.length) {
+                let code = ((byte1 & 0x1F) << 6) | (byte2 & 0x3F);
+                output += String.fromCharCode(code);
+            }
+        } 
+        // 三字节字符 (1110xxxx)
+        else if (byte1 >= 0xE0 && byte1 < 0xF0) {
+            let byte2 = bytes[pos++];
+            let byte3 = bytes[pos++];
+            if (pos <= bytes.length) {
+                let code = ((byte1 & 0x0F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F);
+                
+                // 处理代理对
+                if (code >= 0xD800 && code <= 0xDBFF) {
+                    let byte4 = bytes[pos++];
+                    let byte5 = bytes[pos++];
+                    let byte6 = bytes[pos++];
+                    if (pos <= bytes.length) {
+                        let code2 = ((byte4 & 0x0F) << 12) | ((byte5 & 0x3F) << 6) | (byte6 & 0x3F);
+                        code = 0x10000 + (((code & 0x3FF) << 10) | (code2 & 0x3FF));
+                    }
+                }
+                output += String.fromCharCode(code);
+            }
+        } 
+        // 四字节字符 (11110xxx)
+        else if (byte1 >= 0xF0) {
+            let byte2 = bytes[pos++];
+            let byte3 = bytes[pos++];
+            let byte4 = bytes[pos++];
+            if (pos <= bytes.length) {
+                let code = ((byte1 & 0x07) << 18) | ((byte2 & 0x3F) << 12) | ((byte3 & 0x3F) << 6) | (byte4 & 0x3F);
+                
+                // 转换为代理对表示
+                if (code > 0xFFFF) {
+                    let high = 0xD800 + (((code - 0x10000) >> 10) & 0x3FF);
+                    let low = 0xDC00 + (code & 0x3FF);
+                    output += String.fromCharCode(high, low);
+                } else {
+                    output += String.fromCharCode(code);
+                }
+            }
+        }
+    }
+    
+    return output;
+}
+
+// md5 32位小写字母加密
+export function fcMD5(str: string): string {
+    // 初始化MD5变量（小端序）
+    let a0: number = 0x67452301;
+    let b0: number = 0xefcdab89;
+    let c0: number = 0x98badcfe;
+    let d0: number = 0x10325476;
+
+    // MD5常量表
+    const K: number[] = [
+        0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
+        0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+        0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+        0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+        0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
+        0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+        0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
+        0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+        0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+        0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+        0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
+        0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+        0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
+        0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+        0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+        0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+    ];
+
+    // 移位量
+    const s: number[] = [
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+        6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+    ];
+
+    // 循环左移函数
+    const rotateLeft = (x: number, n: number): number => {
+        return (x << n) | (x >>> (32 - n));
+    };
+
+    // 将字符串转换为UTF-8字节数组
+    const bytes: number[] = [];
+    for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i);
+        if (code == null) {
+            continue;
+        }
+        
+        if (code < 0x80) {
+            bytes.push(code);
+        } else if (code < 0x800) {
+            bytes.push(0xc0 | (code >> 6));
+            bytes.push(0x80 | (code & 0x3f));
+        } else if (code < 0xd800 || code >= 0xe000) {
+            bytes.push(0xe0 | (code >> 12));
+            bytes.push(0x80 | ((code >> 6) & 0x3f));
+            bytes.push(0x80 | (code & 0x3f));
+        } else {
+            i++;
+            let next = str.charCodeAt(i);
+            if (next == null) {
+                continue;
+            }
+            code = 0x10000 + (((code & 0x3ff) << 10) | (next & 0x3ff));
+                bytes.push(0xf0 | (code >> 18));
+                bytes.push(0x80 | ((code >> 12) & 0x3f));
+                bytes.push(0x80 | ((code >> 6) & 0x3f));
+                bytes.push(0x80 | (code & 0x3f));
+            }
+        }
+
+    // 添加填充位 (1后面跟着0)
+    const originalBitLength = bytes.length * 8;
+    bytes.push(0x80);
+    while ((bytes.length % 64) != 56) {
+        bytes.push(0x00);
+    }
+
+    // 添加原始长度（小端序，64位）
+    const lengthBits = [
+        originalBitLength & 0xff,
+        (originalBitLength >>> 8) & 0xff,
+        (originalBitLength >>> 16) & 0xff,
+        (originalBitLength >>> 24) & 0xff,
+        0, 0, 0, 0  // 高32位设为0
+    ];
+    
+    for (const bit of lengthBits) {
+        bytes.push(bit);
+    }
+
+    // 处理512位(64字节)的块
+    for (let i = 0; i < bytes.length; i += 64) {
+        const block = bytes.slice(i, i + 64);
+        const words: number[] = [];
+        
+        // 将字节块转换为16个32位字（小端序）
+        for (let j = 0; j < 64; j += 4) {
+            words.push(
+                block[j] |
+                (block[j + 1] << 8) |
+                (block[j + 2] << 16) |
+                (block[j + 3] << 24)
+            );
+        }
+
+        let A = a0;
+        let B = b0;
+        let C = c0;
+        let D = d0;
+
+        // MD5主循环
+        for (let j = 0; j < 64; j++) {
+            let F: number, g: number;
+            
+            if (j < 16) {
+                F = (B & C) | ((~B) & D);
+                g = j;
+            } else if (j < 32) {
+                F = (D & B) | ((~D) & C);
+                g = (5 * j + 1) % 16;
+            } else if (j < 48) {
+                F = B ^ C ^ D;
+                g = (3 * j + 5) % 16;
+            } else {
+                F = C ^ (B | (~D));
+                g = (7 * j) % 16;
+            }
+
+            // 确保32位
+            F = F >>> 0;
+            
+            // 核心MD5运算
+            const temp = D;
+            D = C;
+            C = B;
+            
+            // 计算新的B值
+            const T = (A + F + K[j] + words[g]) >>> 0;
+            const rotated = rotateLeft(T, s[j]);
+            B = (B + rotated) >>> 0;
+            A = temp;
+        }
+
+        // 更新状态
+        a0 = (a0 + A) >>> 0;
+        b0 = (b0 + B) >>> 0;
+        c0 = (c0 + C) >>> 0;
+        d0 = (d0 + D) >>> 0;
+    }
+
+    // 转换为小端序字节
+    const resultBytes = [
+        a0 & 0xff, (a0 >>> 8) & 0xff, (a0 >>> 16) & 0xff, (a0 >>> 24) & 0xff,
+        b0 & 0xff, (b0 >>> 8) & 0xff, (b0 >>> 16) & 0xff, (b0 >>> 24) & 0xff,
+        c0 & 0xff, (c0 >>> 8) & 0xff, (c0 >>> 16) & 0xff, (c0 >>> 24) & 0xff,
+        d0 & 0xff, (d0 >>> 8) & 0xff, (d0 >>> 16) & 0xff, (d0 >>> 24) & 0xff
+    ];
+
+    // 转换为十六进制字符串（小写）
+    let hash = "";
+    for (const byte of resultBytes) {
+        const hex = byte.toString(16);
+        hash += hex.length == 1 ? "0" + hex : hex;
+    }
+
+    return hash;
+}
+
+// sha1 加密
+export function fcSHA1(input: string): string {
+
+	// 循环左移函数
+	function rotateLeft(value: number, shift: number): number {
+		return ((value << shift) | (value >>> (32 - shift))) >>> 0;
+	}
+	
+    // 初始化哈希值
+    let h0: number = 0x67452301;
+    let h1: number = 0xEFCDAB89;
+    let h2: number = 0x98BADCFE;
+    let h3: number = 0x10325476;
+    let h4: number = 0xC3D2E1F0;
+
+    // 将字符串转换为UTF-8字节数组
+    const bytes: number[] = [];
+    for (let i = 0; i < input.length; i++) {
+        const charCode = input.charCodeAt(i);
+        if (charCode == null) {
+            continue;
+        }
+        
+        if (charCode < 0x80) {
+            bytes.push(charCode);
+        } else if (charCode < 0x800) {
+            bytes.push(0xC0 | (charCode >> 6));
+            bytes.push(0x80 | (charCode & 0x3F));
+        } else if (charCode < 0xD800 || charCode >= 0xE000) {
+            bytes.push(0xE0 | (charCode >> 12));
+            bytes.push(0x80 | ((charCode >> 6) & 0x3F));
+            bytes.push(0x80 | (charCode & 0x3F));
+        } else {
+            i++;
+            const nextChar = input.charCodeAt(i);
+            if (nextChar != null) {
+                const code = 0x10000 + (((charCode & 0x3FF) << 10) | (nextChar & 0x3FF));
+                bytes.push(0xF0 | (code >> 18));
+                bytes.push(0x80 | ((code >> 12) & 0x3F));
+                bytes.push(0x80 | ((code >> 6) & 0x3F));
+                bytes.push(0x80 | (code & 0x3F));
+            }
+        }
+    }
+
+    // 获取原始位长度
+    const bitLength = bytes.length * 8;
+
+    // 添加填充位 (1后面跟着0)
+    bytes.push(0x80);
+    while ((bytes.length % 64) != 56) {
+        bytes.push(0x00);
+    }
+
+    // 添加原始长度（大端序）
+    const lengthBytes = [
+        (bitLength >>> 24) & 0xFF,
+        (bitLength >>> 16) & 0xFF,
+        (bitLength >>> 8) & 0xFF,
+        bitLength & 0xFF
+    ];
+    
+    // 添加8字节长度（64位）
+    for (let i = 0; i < 8; i++) {
+        if (i < 4) {
+            bytes.push(0x00); // 高32位设为0
+        } else {
+            bytes.push(lengthBytes[i - 4]);
+        }
+    }
+
+    // 处理512位(64字节)的块
+    for (let chunkStart = 0; chunkStart < bytes.length; chunkStart += 64) {
+        const chunk = bytes.slice(chunkStart, chunkStart + 64);
+        
+        // 将块分成16个32位字（大端序）
+        const words: number[] = [];
+        for (let i = 0; i < 16; i++) {
+            const offset = i * 4;
+            words.push(
+                (chunk[offset] << 24) |
+                (chunk[offset + 1] << 16) |
+                (chunk[offset + 2] << 8) |
+                chunk[offset + 3]
+            );
+        }
+        
+        // 扩展消息到80个字
+        for (let i = 16; i < 80; i++) {
+            const word = words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16];
+            words.push(rotateLeft(word, 1));
+        }
+        
+        // 初始化工作变量
+        let a = h0;
+        let b = h1;
+        let c = h2;
+        let d = h3;
+        let e = h4;
+        
+        // 主循环
+        for (let i = 0; i < 80; i++) {
+            let f: number;
+            let k: number;
+            
+            if (i < 20) {
+                f = (b & c) | ((~b) & d);
+                k = 0x5A827999;
+            } else if (i < 40) {
+                f = b ^ c ^ d;
+                k = 0x6ED9EBA1;
+            } else if (i < 60) {
+                f = (b & c) | (b & d) | (c & d);
+                k = 0x8F1BBCDC;
+            } else {
+                f = b ^ c ^ d;
+                k = 0xCA62C1D6;
+            }
+            
+            // 确保32位
+            f = f >>> 0;
+            
+            // 计算临时值
+            const temp = (rotateLeft(a, 5) + f + e + k + words[i]) >>> 0;
+            
+            // 更新工作变量
+            e = d;
+            d = c;
+            c = rotateLeft(b, 30);
+            b = a;
+            a = temp;
+        }
+        
+        // 更新哈希值
+        h0 = (h0 + a) >>> 0;
+        h1 = (h1 + b) >>> 0;
+        h2 = (h2 + c) >>> 0;
+        h3 = (h3 + d) >>> 0;
+        h4 = (h4 + e) >>> 0;
+    }
+    
+    // 生成最终哈希值
+    const resultBytes = [
+        (h0 >>> 24) & 0xFF, (h0 >>> 16) & 0xFF, (h0 >>> 8) & 0xFF, h0 & 0xFF,
+        (h1 >>> 24) & 0xFF, (h1 >>> 16) & 0xFF, (h1 >>> 8) & 0xFF, h1 & 0xFF,
+        (h2 >>> 24) & 0xFF, (h2 >>> 16) & 0xFF, (h2 >>> 8) & 0xFF, h2 & 0xFF,
+        (h3 >>> 24) & 0xFF, (h3 >>> 16) & 0xFF, (h3 >>> 8) & 0xFF, h3 & 0xFF,
+        (h4 >>> 24) & 0xFF, (h4 >>> 16) & 0xFF, (h4 >>> 8) & 0xFF, h4 & 0xFF
+    ];
+    
+    // 转换为十六进制字符串（小写）
+    let hash = "";
+    for (const byte of resultBytes) {
+        const hex = byte.toString(16);
+        hash += hex.length == 1 ? "0" + hex : hex;
+    }
+    
+    return hash;
+}
+
+// sha256 加密
+export function fcSHA256(input: string): string {
+	// 右循环移位函数
+	function rightRotate(value: number, shift: number): number {
+		return ((value >>> shift) | (value << (32 - shift))) >>> 0;
+	}
+	
+    // 初始化哈希值（前8个质数的平方根的小数部分的前32位）
+    const K: number[] = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 
+        0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+        0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+        0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+        0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+        0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+        0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+        0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ];
+    
+    // 初始化哈希值
+    let H: number[] = [
+        0x6a09e667 as number, 0xbb67ae85 as number, 0x3c6ef372 as number, 0xa54ff53a as number,
+        0x510e527f as number, 0x9b05688c as number, 0x1f83d9ab as number, 0x5be0cd19 as number
+    ];
+    
+    // 将字符串转换为UTF-8字节数组
+    const bytes: number[] = [];
+    for (let i = 0; i < input.length; i++) {
+        const charCode = input.charCodeAt(i);
+        if (charCode == null) {
+            continue;
+        }
+        
+        if (charCode < 0x80) {
+            bytes.push(charCode);
+        } else if (charCode < 0x800) {
+            bytes.push(0xC0 | (charCode >> 6));
+            bytes.push(0x80 | (charCode & 0x3F));
+        } else if (charCode < 0xD800 || charCode >= 0xE000) {
+            bytes.push(0xE0 | (charCode >> 12));
+            bytes.push(0x80 | ((charCode >> 6) & 0x3F));
+            bytes.push(0x80 | (charCode & 0x3F));
+        } else {
+            i++;
+            const nextChar = input.charCodeAt(i);
+            if (nextChar != null) {
+                const code = 0x10000 + (((charCode & 0x3FF) << 10) | (nextChar & 0x3FF));
+                bytes.push(0xF0 | (code >> 18));
+                bytes.push(0x80 | ((code >> 12) & 0x3F));
+                bytes.push(0x80 | ((code >> 6) & 0x3F));
+                bytes.push(0x80 | (code & 0x3F));
+            }
+        }
+    }
+
+    // 获取原始位长度
+    const bitLength = bytes.length * 8;
+
+    // 添加填充位 (1后面跟着0)
+    bytes.push(0x80);
+    while ((bytes.length % 64) != 56) {
+        bytes.push(0x00);
+    }
+
+    // 添加原始长度（大端序）
+    const lengthBytes = [
+        (bitLength >>> 24) & 0xFF,
+        (bitLength >>> 16) & 0xFF,
+        (bitLength >>> 8) & 0xFF,
+        bitLength & 0xFF
+    ];
+    
+    // 添加8字节长度（64位）
+    for (let i = 0; i < 8; i++) {
+        if (i < 4) {
+            bytes.push(0x00); // 高32位设为0
+        } else {
+            bytes.push(lengthBytes[i - 4]);
+        }
+    }
+
+    // 处理512位(64字节)的块
+    for (let chunkStart = 0; chunkStart < bytes.length; chunkStart += 64) {
+        const chunk = bytes.slice(chunkStart, chunkStart + 64);
+        
+        // 将块分成16个32位字（大端序）
+        const words: number[] = [];
+        for (let i = 0; i < 16; i++) {
+            const offset = i * 4;
+            words.push(
+                (chunk[offset] << 24) |
+                (chunk[offset + 1] << 16) |
+                (chunk[offset + 2] << 8) |
+                chunk[offset + 3]
+            );
+        }
+        
+        // 扩展消息到64个字
+        for (let i = 16; i < 64; i++) {
+            const s0 = rightRotate(words[i-15], 7) ^ rightRotate(words[i-15], 18) ^ (words[i-15] >>> 3);
+            const s1 = rightRotate(words[i-2], 17) ^ rightRotate(words[i-2], 19) ^ (words[i-2] >>> 10);
+            words.push((words[i-16] + s0 + words[i-7] + s1) >>> 0);
+        }
+        
+        // 初始化工作变量
+        let a = H[0];
+        let b = H[1];
+        let c = H[2];
+        let d = H[3];
+        let e = H[4];
+        let f = H[5];
+        let g = H[6];
+        let h = H[7];
+        
+        // 主循环
+        for (let i = 0; i < 64; i++) {
+            const S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+            const ch = (e & f) ^ ((~e) & g);
+            const temp1 = (h + S1 + ch + K[i] + words[i]) >>> 0;
+            const S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+            const maj = (a & b) ^ (a & c) ^ (b & c);
+            const temp2 = (S0 + maj) >>> 0;
+            
+            h = g;
+            g = f;
+            f = e;
+            e = (d + temp1) >>> 0;
+            d = c;
+            c = b;
+            b = a;
+            a = (temp1 + temp2) >>> 0;
+        }
+        
+        // 更新哈希值
+        H[0] = (H[0] + a) >>> 0;
+        H[1] = (H[1] + b) >>> 0;
+        H[2] = (H[2] + c) >>> 0;
+        H[3] = (H[3] + d) >>> 0;
+        H[4] = (H[4] + e) >>> 0;
+        H[5] = (H[5] + f) >>> 0;
+        H[6] = (H[6] + g) >>> 0;
+        H[7] = (H[7] + h) >>> 0;
+    }
+    
+    // 生成最终哈希值
+    let hash = "";
+    for (let i = 0; i < H.length; i++) {
+        const part = H[i];
+        hash += 
+            ((part >>> 24) & 0xFF).toString(16).padStart(2, '0') +
+            ((part >>> 16) & 0xFF).toString(16).padStart(2, '0') +
+            ((part >>> 8) & 0xFF).toString(16).padStart(2, '0') +
+            (part & 0xFF).toString(16).padStart(2, '0');
+    }
+    
+    return hash;
+}
+

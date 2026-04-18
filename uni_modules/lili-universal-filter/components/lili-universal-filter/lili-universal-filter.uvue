@@ -1,0 +1,340 @@
+<template>
+	<view class="uf-root" :style="rootStyle">
+		<view class="uf-bar">
+			<view v-if="showBack || showHome" class="uf-segment-group uf-segment-group-left">
+				<view v-if="showBack" :class="showBack && showHome ? 'uf-segment uf-segment-split' : 'uf-segment'" @click="handleBack">
+					<text class="uf-segment-icon">←</text>
+				</view>
+				<view v-if="showHome" class="uf-segment" @click="handleHome">
+					<text class="uf-segment-icon">⌂</text>
+				</view>
+			</view>
+
+			<view v-if="showSearch" class="uf-search-wrap">
+				<view class="uf-search-box">
+					<view v-if="showScan" class="uf-scan-btn" @click="handleScan">
+						<text class="uf-scan-icon">▣</text>
+					</view>
+					<input
+						class="uf-search-input"
+						v-model="inputValue"
+						:placeholder="searchPlaceholder"
+						@input="onSearchInput"
+						@confirm="onSearchConfirm"
+						confirm-type="search"
+					/>
+					<view v-if="inputValue != ''" class="uf-clear-btn" @click="clearSearch">
+						<text class="uf-clear-icon">×</text>
+					</view>
+				</view>
+			</view>
+
+			<view v-else class="uf-title-wrap">
+				<text class="uf-title">{{ title }}</text>
+			</view>
+
+			<view v-if="showFilter || showMenu" class="uf-segment-group uf-segment-group-right">
+				<view v-if="showFilter" :class="showFilter && showMenu ? 'uf-segment uf-segment-split uf-segment-dark' : 'uf-segment uf-segment-dark'" @click="handleFilter">
+					<text class="uf-segment-text-light">{{ filterText }}</text>
+					<view v-if="filterActive" class="uf-dot"></view>
+				</view>
+				<view v-if="showMenu" class="uf-segment uf-segment-dark" @click="handleMenu">
+					<text class="uf-segment-icon-light">≡</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type Props = {
+	title?: string
+	searchPlaceholder?: string
+	searchValue?: string
+	showBack?: boolean
+	showSearch?: boolean
+	showFilter?: boolean
+	showHome?: boolean
+	showMenu?: boolean
+	showScan?: boolean
+	filterActive?: boolean
+	filterText?: string
+	fixed?: boolean
+	backgroundColor?: string
+	homePath?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	title: '',
+	searchPlaceholder: '请输入搜索内容',
+	searchValue: '',
+	showBack: false,
+	showSearch: true,
+	showFilter: false,
+	showHome: false,
+	showMenu: false,
+	showScan: false,
+	filterActive: false,
+	filterText: '筛选',
+	fixed: true,
+	backgroundColor: '#FFFFFF',
+	homePath: '/pages/tabbar/products',
+})
+
+const emit = defineEmits<{
+	(e: 'back'): void
+	(e: 'home'): void
+	(e: 'menu'): void
+	(e: 'filter'): void
+	(e: 'scan'): void
+	(e: 'searchInput', value: string): void
+	(e: 'searchConfirm', value: string): void
+	(e: 'searchClear'): void
+}>()
+
+const statusBarHeight = ref<number>(0)
+const inputValue = ref<string>(props.searchValue)
+const rootStyle = ref<string>('')
+
+function syncRootStyle() {
+	const positionStyle = props.fixed ? 'position:sticky;top:0;' : ''
+	rootStyle.value = `padding-top:${statusBarHeight.value}px;background-color:${props.backgroundColor};${positionStyle}`
+}
+
+function updateStatusBarHeight() {
+	const info = uni.getWindowInfo()
+	statusBarHeight.value = info.statusBarHeight
+	syncRootStyle()
+}
+
+function eventValueToString(e: UTSJSONObject) : string {
+	const detail = e["detail"]
+	if (detail == null) return ''
+	const detailObj = detail as UTSJSONObject
+	const value = detailObj["value"]
+	if (value == null) return ''
+	return '' + value
+}
+
+function onSearchInput(e: UTSJSONObject) {
+	emit('searchInput', inputValue.value != '' ? inputValue.value : eventValueToString(e))
+}
+
+function onSearchConfirm(e: UTSJSONObject) {
+	emit('searchConfirm', inputValue.value != '' ? inputValue.value : eventValueToString(e))
+}
+
+function clearSearch() {
+	inputValue.value = ''
+	emit('searchClear')
+}
+
+function handleBack() {
+	emit('back')
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.reLaunch({
+				url: props.homePath,
+			})
+		},
+	})
+}
+
+function handleHome() {
+	emit('home')
+	uni.reLaunch({
+		url: props.homePath,
+	})
+}
+
+function handleFilter() {
+	emit('filter')
+}
+
+function handleMenu() {
+	emit('menu')
+}
+
+function handleScan() {
+	emit('scan')
+}
+
+watch(
+	() : string => props.searchValue,
+	(newVal: string) => {
+		if (newVal != inputValue.value) {
+			inputValue.value = newVal
+		}
+	}
+)
+
+watch(
+	() : string => props.backgroundColor,
+	() => {
+		syncRootStyle()
+	}
+)
+
+watch(
+	() : boolean => props.fixed,
+	() => {
+		syncRootStyle()
+	}
+)
+
+onMounted(() => {
+	updateStatusBarHeight()
+})
+</script>
+
+<style>
+.uf-root {
+	z-index: 90;
+	background-color: #FFFFFF;
+	border-bottom-width: 1px;
+	border-bottom-color: #EEF1F5;
+	border-bottom-style: solid;
+}
+
+.uf-bar {
+	height: 56px;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.uf-segment-group {
+	height: 34px;
+	flex-direction: row;
+	align-items: center;
+	border-radius: 17px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	overflow: hidden;
+}
+
+.uf-segment-group-left {
+	margin-right: 8px;
+}
+
+.uf-segment-group-right {
+	margin-left: 8px;
+}
+
+.uf-segment {
+	min-width: 34px;
+	height: 34px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding-left: 10px;
+	padding-right: 10px;
+}
+
+.uf-segment-split {
+	border-right-width: 1px;
+	border-right-color: rgba(148, 163, 184, 0.32);
+	border-right-style: solid;
+}
+
+.uf-segment-dark {
+	background-color: #0F172A;
+}
+
+.uf-segment-icon {
+	font-size: 15px;
+	color: #1F2937;
+	line-height: 15px;
+}
+
+.uf-segment-icon-light {
+	font-size: 15px;
+	color: #FFFFFF;
+	line-height: 15px;
+}
+
+.uf-search-wrap {
+	flex: 1;
+}
+
+.uf-search-box {
+	height: 40px;
+	flex-direction: row;
+	align-items: center;
+	border-radius: 20px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding-left: 12px;
+	padding-right: 10px;
+}
+
+.uf-scan-btn {
+	width: 24px;
+	height: 24px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12px;
+	background-color: #E2E8F0;
+	margin-right: 8px;
+}
+
+.uf-scan-icon {
+	font-size: 12px;
+	color: #334155;
+	line-height: 12px;
+}
+
+.uf-search-input {
+	flex: 1;
+	height: 40px;
+	font-size: 14px;
+	color: #1F2937;
+	padding-right: 6px;
+}
+
+.uf-clear-btn {
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12px;
+	background-color: #D8DEE6;
+}
+
+.uf-clear-icon {
+	font-size: 14px;
+	color: #536171;
+	line-height: 14px;
+}
+
+.uf-title-wrap {
+	flex: 1;
+	justify-content: center;
+}
+
+.uf-title {
+	font-size: 17px;
+	font-weight: bold;
+	color: #111827;
+}
+
+.uf-segment-text-light {
+	font-size: 12px;
+	color: #FFFFFF;
+}
+
+.uf-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background-color: #FB7185;
+	margin-left: 5px;
+}
+</style>

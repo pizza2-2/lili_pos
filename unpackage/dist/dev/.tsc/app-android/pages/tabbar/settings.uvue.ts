@@ -1,0 +1,149 @@
+type MenuItem = { __$originalPosition?: UTSSourceMapPosition<"MenuItem", "pages/tabbar/settings.uvue", 34, 6>;
+	label: string
+	icon: string
+	path: string | null
+	action: string
+	disabled: boolean
+}
+
+type MenuGroup = { __$originalPosition?: UTSSourceMapPosition<"MenuGroup", "pages/tabbar/settings.uvue", 42, 6>;
+	label: string
+	rows: MenuItem[][]
+}
+
+
+const __sfc__ = defineComponent({
+  __name: 'settings',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const groups = ref<MenuGroup[]>([
+	{
+		label: '常用页面',
+		rows: [
+			[
+				{ label: '供应商', icon: '◫', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+				{ label: '商品', icon: '□', path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
+				{ label: '我的', icon: '◉', path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
+				{ label: '隐私', icon: '◎', path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+			],
+		],
+	},
+	{
+		label: '门店配置',
+		rows: [
+			[
+				{ label: '收银台', icon: '¤', path: null, action: 'todo', disabled: true },
+				{ label: '打印机', icon: '▣', path: null, action: 'todo', disabled: true },
+				{ label: '支付', icon: '¥', path: null, action: 'todo', disabled: true },
+				{ label: '权限', icon: '⌂', path: null, action: 'todo', disabled: true },
+			],
+		],
+	},
+	{
+		label: '系统工具',
+		rows: [
+			[
+				{ label: '同步', icon: '↻', path: null, action: 'todo', disabled: true },
+				{ label: '更新', icon: '↑', path: null, action: 'todo', disabled: true },
+				{ label: '日志', icon: '≡', path: null, action: 'todo', disabled: true },
+				{ label: '分享', icon: '⇪', path: null, action: 'todo', disabled: true },
+			],
+		],
+	},
+])
+
+function handleTap(item: MenuItem) {
+	if (item.disabled) {
+		uni.showToast({
+			title: '该功能正在开发中',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (item.action == 'switchTab' && item.path != null) {
+		uni.switchTab({
+			url: item.path,
+		})
+		return
+	}
+
+	if (item.action == 'navigateTo' && item.path != null) {
+		uni.navigateTo({
+			url: item.path,
+		})
+	}
+}
+
+function showSizeTip() {
+	uni.showToast({
+		title: '字号设置待接入',
+		icon: 'none',
+	})
+}
+
+function showLocaleTip() {
+	uni.showToast({
+		title: '语言设置待接入',
+		icon: 'none',
+	})
+}
+
+function getGroupCount(group: MenuGroup): number {
+	let count = 0
+	for (let rowIndex = 0; rowIndex < group.rows.length; rowIndex += 1) {
+		count += group.rows[rowIndex].length
+	}
+	return count
+}
+
+return (): any | null => {
+
+  return _cE("scroll-view", _uM({
+    class: "page-scroll",
+    style: _nS(_uM({"flex":"1"})),
+    direction: "vertical"
+  }), [
+    _cE("view", _uM({ class: "page" }), [
+      _cE("view", _uM({ class: "status-bar-space" })),
+      _cE("view", _uM({ class: "topbar" }), [
+        _cE("text", _uM({ class: "page-title" }), "功能菜单")
+      ]),
+      _cE("view", _uM({ class: "content" }), [
+        _cE(Fragment, null, RenderHelpers.renderList(unref(groups), (group, __key, __index, _cached): any => {
+          return _cE("view", _uM({
+            key: group.label,
+            class: "group"
+          }), [
+            _cE("text", _uM({ class: "group-label" }), _tD(group.label) + "（" + _tD(getGroupCount(group)) + "）", 1 /* TEXT */),
+            _cE(Fragment, null, RenderHelpers.renderList(group.rows, (row, __key, __index, _cached): any => {
+              return _cE("view", _uM({
+                key: row[0].label,
+                class: "grid-row"
+              }), [
+                _cE(Fragment, null, RenderHelpers.renderList(row, (item, index, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: item.label,
+                    class: _nC(index != 3 ? 'grid-item grid-item-gap' : 'grid-item'),
+                    onClick: () => {handleTap(item)}
+                  }), [
+                    _cE("text", _uM({ class: "grid-icon" }), _tD(item.icon), 1 /* TEXT */),
+                    _cE("text", _uM({ class: "grid-text" }), _tD(item.label), 1 /* TEXT */)
+                  ], 10 /* CLASS, PROPS */, ["onClick"])
+                }), 128 /* KEYED_FRAGMENT */)
+              ])
+            }), 128 /* KEYED_FRAGMENT */)
+          ])
+        }), 128 /* KEYED_FRAGMENT */)
+      ])
+    ])
+  ], 4 /* STYLE */)
+}
+}
+
+})
+export default __sfc__
+const GenPagesTabbarSettingsStyles = [_uM([["page-scroll", _pS(_uM([["backgroundColor", "#F7F7F7"]]))], ["page", _pS(_uM([["backgroundColor", "#F7F7F7"], ["paddingBottom", 20]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT]]))], ["topbar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12]]))], ["brand-box", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["brand-text", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["color", "#111827"], ["fontWeight", "bold"]]))], ["page-title", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 16], ["lineHeight", "20px"], ["color", "#111827"], ["fontWeight", "bold"], ["marginLeft", 8]]))], ["action-button", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["action-button-gap", _pS(_uM([["marginRight", 12], ["backgroundColor", "#64748B"]]))], ["action-icon", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["content", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12]]))], ["group", _pS(_uM([["marginBottom", 24]]))], ["group-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginLeft", 8], ["marginBottom", 8]]))], ["grid-row", _pS(_uM([["flexDirection", "row"], ["marginBottom", 8]]))], ["grid-item", _pS(_uM([["width", "23%"], ["height", 70], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["paddingTop", 18]]))], ["grid-item-gap", _pS(_uM([["marginRight", "2.6666%"]]))], ["grid-icon", _pS(_uM([["fontSize", 18], ["lineHeight", "18px"], ["color", "#111827"]]))], ["grid-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#111827"], ["textAlign", "center"], ["marginTop", 8]]))]])]

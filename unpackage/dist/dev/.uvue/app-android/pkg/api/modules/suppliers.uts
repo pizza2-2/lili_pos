@@ -1,0 +1,198 @@
+import { baseUrl, request } from '../index.uts';
+export type SupplierListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+};
+export type SupplierMediaFile = {
+    id: string;
+    company: number;
+    original_filename: string;
+    file_type: string;
+    file_type_display: string;
+    mime_type: string;
+    file_size: number;
+    file_size_display: string;
+    file_url: string;
+    thumbnail_url: string;
+    signed_url: string;
+    signed_thumbnail_url: string;
+    object_id: string;
+    is_deleted: boolean;
+    created_at: string;
+    updated_at: string;
+};
+export type SupplierItem = {
+    id: number;
+    code: string;
+    name: string;
+    address: string;
+    phone: string;
+    contact: string;
+    description: string | null;
+    total_amount: string;
+    arrears_amount: string;
+    paid_amount: number;
+    is_active: boolean;
+    files_count: number;
+    company_infos: UTSJSONObject[];
+    is_deleted: boolean;
+    created_at: string;
+    updated_at: string;
+    media_files: SupplierMediaFile[];
+};
+export type SupplierListResponse = {
+    results: SupplierItem[];
+    count: number;
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+};
+function buildListQuery(data: SupplierListQuery): UTSJSONObject {
+    const query = {
+        page: data.page,
+        page_size: data.page_size
+    } as UTSJSONObject;
+    if (data.search != null && data.search != '') {
+        query['search'] = data.search;
+    }
+    return query;
+}
+function normalizeServerUrl(url: string): string {
+    if (url == '') {
+        return '';
+    }
+    if (url.startsWith('http://localhost:8000')) {
+        return baseUrl + url.substring('http://localhost:8000'.length);
+    }
+    if (url.startsWith('https://localhost:8000')) {
+        return baseUrl + url.substring('https://localhost:8000'.length);
+    }
+    if (url.startsWith('http://127.0.0.1:8000')) {
+        return baseUrl + url.substring('http://127.0.0.1:8000'.length);
+    }
+    if (url.startsWith('https://127.0.0.1:8000')) {
+        return baseUrl + url.substring('https://127.0.0.1:8000'.length);
+    }
+    return url;
+}
+function normalizeSupplierList(data: SupplierListResponse): SupplierListResponse {
+    for (let supplierIndex = 0; supplierIndex < data.results.length; supplierIndex += 1) {
+        const supplier = data.results[supplierIndex];
+        for (let mediaIndex = 0; mediaIndex < supplier.media_files.length; mediaIndex += 1) {
+            const mediaFile = supplier.media_files[mediaIndex];
+            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url);
+            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url);
+            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url);
+            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url);
+        }
+    }
+    return data;
+}
+function intValue(value: any | null): number {
+    if (value == null) {
+        return 0;
+    }
+    const text = '' + value;
+    if (text == '') {
+        return 0;
+    }
+    const parsed = parseInt(text);
+    if (isNaN(parsed)) {
+        return 0;
+    }
+    return parsed;
+}
+function buildSupplierListResponse(raw: any, query: SupplierListQuery): SupplierListResponse {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null) {
+        throw new Error('供应商列表响应解析失败');
+    }
+    let paginationObject: UTSJSONObject | null = null;
+    const rawPagination = rawObject!['pagination'];
+    if (rawPagination != null) {
+        const paginationText = JSON.stringify(rawPagination);
+        if (paginationText != null && paginationText != '') {
+            paginationObject = JSON.parseObject<UTSJSONObject>(paginationText);
+        }
+    }
+    let results: SupplierItem[] = [];
+    const rawResults = rawObject!['results'];
+    if (rawResults != null) {
+        const resultText = JSON.stringify(rawResults);
+        const parsedResults = resultText == null || resultText == '' ? null : JSON.parseArray<SupplierItem>(resultText);
+        if (parsedResults != null) {
+            results = parsedResults!;
+        }
+    }
+    let totalCount = intValue(rawObject!['count']);
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject!['total']);
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject!['total_count']);
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject['total']);
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject['count']);
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length;
+    }
+    let currentPage = intValue(rawObject!['page']);
+    if (currentPage <= 0) {
+        currentPage = intValue(rawObject!['current_page']);
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue(paginationObject['page']);
+    }
+    if (currentPage <= 0) {
+        currentPage = query.page;
+    }
+    let pageSize = intValue(rawObject!['page_size']);
+    if (pageSize <= 0) {
+        pageSize = intValue(rawObject!['per_page']);
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue(paginationObject['page_size']);
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue(paginationObject['per_page']);
+    }
+    if (pageSize <= 0) {
+        pageSize = query.page_size;
+    }
+    let totalPages = intValue(rawObject!['total_pages']);
+    if (totalPages <= 0) {
+        totalPages = intValue(rawObject!['num_pages']);
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject['total_pages']);
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject['num_pages']);
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize);
+    }
+    if (totalPages <= 0) {
+        totalPages = 1;
+    }
+    return {
+        results: results,
+        count: totalCount,
+        total_count: totalCount,
+        total_pages: totalPages,
+        current_page: currentPage,
+        page_size: pageSize,
+    } as SupplierListResponse;
+}
+export async function getSupplierList(data: SupplierListQuery): Promise<SupplierListResponse> {
+    const raw = await request('/api/procurement/suppliers/', 'GET', buildListQuery(data), true);
+    return normalizeSupplierList(buildSupplierListResponse(raw, data));
+}
+//# sourceMappingURL=suppliers.uts.map

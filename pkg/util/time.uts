@@ -1,0 +1,182 @@
+/**
+ * 格式化时间为北京时间（UTC+8）
+ * @param date 日期对象、时间戳（10位/13位）或日期字符串
+ * @param format 格式字符串（默认为"YYYY-MM-DD HH:mm:ss"）
+ * @returns 格式化后的北京时间字符串
+ */
+export function fcTimeFormat(date: Date | number | string, format: string = "YYYY-MM-DD HH:mm:ss"): string {
+  // 统一处理输入为时间戳（毫秒）
+  let timestamp: number;
+  
+  if (date instanceof Date) {
+    timestamp = date.getTime();
+  } else if (typeof date == 'string') {
+    // 处理常见日期字符串格式
+    timestamp = new Date(date).getTime();
+  } else {
+    // 处理时间戳（10位或13位）
+    const numStr = date.toString();
+    timestamp = numStr.length == 10 ? date * 1000 : date;
+  }
+  
+  // 转换为北京时间（UTC+8）注意：JavaScript的Date对象基于UTC，需加上8小时（28800000毫秒）得到北京时间
+  const beijingTimestamp = timestamp + 8 * 3600 * 1000;
+  const beijingDate = new Date(beijingTimestamp);
+  
+  // 获取北京时间的各组件
+  const year = beijingDate.getUTCFullYear();
+  const month = beijingDate.getUTCMonth() + 1; // 月份从0开始
+  const day = beijingDate.getUTCDate();
+  const hours = beijingDate.getUTCHours();
+  const minutes = beijingDate.getUTCMinutes();
+  const seconds = beijingDate.getUTCSeconds();
+  const milliseconds = beijingDate.getUTCMilliseconds();
+  
+  // 辅助函数：数字补零
+  const pad = (num: number, size: number): string => {
+    return num.toString().padStart(size, '0');
+  };
+  
+  // 获取月份名称
+  function getMonthName(month: number, full: boolean): string {
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    
+    const shortNames = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+    
+    return full ? monthNames[month - 1] : shortNames[month - 1];
+  }
+  
+  // 获取星期名称
+  function getDayOfWeek(date: Date, full: boolean): string {
+    const dayNames = [
+      "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+    ];
+    
+    const shortNames = [
+      "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+    ];
+    
+    // 注意：getUTCDay() 返回的是UTC星期，0=周日
+    return full ? dayNames[date.getUTCDay()] : shortNames[date.getUTCDay()];
+  }
+  
+  // 按优先级替换格式占位符（避免YYYY被YY先替换）
+  return format
+    .replace(/YYYY/g, year.toString())
+    .replace(/YY/g, year.toString().slice(-2))
+    .replace(/MMMM/g, getMonthName(month, true))
+    .replace(/MMM/g, getMonthName(month, false))
+    .replace(/MM/g, pad(month, 2))
+    .replace(/M/g, month.toString())
+    .replace(/DDDD/g, getDayOfWeek(beijingDate, true))
+    .replace(/DDD/g, getDayOfWeek(beijingDate, false))
+    .replace(/DD/g, pad(day, 2))
+    .replace(/D/g, day.toString())
+    .replace(/HH/g, pad(hours, 2))
+    .replace(/H/g, hours.toString())
+    .replace(/hh/g, pad(hours % 12 == 0 ? 12 : hours % 12, 2))  // 12小时制
+    .replace(/h/g, (hours % 12 == 0 ? 12 : hours % 12).toString())
+    .replace(/mm/g, pad(minutes, 2))
+    .replace(/m/g, minutes.toString())
+    .replace(/ss/g, pad(seconds, 2))
+    .replace(/s/g, seconds.toString())
+    .replace(/SSS/g, pad(milliseconds, 3))
+    .replace(/SS/g, pad(Math.floor(milliseconds / 10), 2))
+    .replace(/S/g, Math.floor(milliseconds / 100).toString())
+    .replace(/A/g, hours >= 12 ? 'PM' : 'AM')
+    .replace(/a/g, hours >= 12 ? 'pm' : 'am');
+}
+
+/**
+ * 获取某个时间前后n秒的时间戳
+ * @param second 相差的秒，为负数是获取前n秒时间戳，为正数是获取后n秒时间戳，例如-5就是前5秒。10就是后10秒
+ * @param date 日期对象、时间戳（10位/13位）或日期字符串
+ * @returns 计算后的时间戳
+ */
+export function fcTimeOffsetSecond(second: number, date: Date | number | string = new Date()): number {
+
+	if (typeof date == 'string') {
+	  // 处理常见日期字符串格式
+	  date = new Date(date);
+	} else if (typeof date == 'number') {
+		// 处理时间戳（10位或13位）
+		const numStr = date.toString();
+		var timestamp = numStr.length == 10 ? date * 1000 : date;
+		date = new Date(timestamp);
+	}
+	
+	// 计算时间偏移 1秒 = 1000毫秒
+	const offsetMilliseconds = second * 1000;
+	
+	// 创建新日期对象并应用偏移
+	const resultDate = new Date(date.getTime() + offsetMilliseconds);
+	
+	// 返回时间戳（毫秒级）
+	return resultDate.getTime();
+}
+
+/**
+ * 将分钟转换为秒
+ * @param minutes 分钟数（可以是小数，如 0.5 表示 30 秒，但会四舍五入）
+ * @returns 秒数（整数）
+ */
+export function fcTimeM2S(minutes: number): number {
+	return Math.round(minutes * 60); //转换为秒（1分钟 = 60秒）并四舍五入到整数
+}
+
+/**
+ * 将小时转换为秒
+ * @param hours 小时数（可以是小数，如 0.5 表示 30 分钟，但会四舍五入）
+ * @returns 秒数（整数）
+ */
+export function fcTimeH2S(hours: number): number {
+	return Math.round(hours * 3600); // 转换为秒（1小时 = 3600秒）并四舍五入到整数
+}
+
+/**
+ * 将日转换为秒
+ * @param days 日数（可以是小数，如 0.5 表示 12 小时，但会四舍五入）
+ * @returns 秒数（整数）
+ */
+export function fcTimeD2S(days: number): number {
+  return Math.round(days * 86400);	//转换为秒（1日 = 86400秒）并四舍五入到整数
+}
+
+/**
+ * 获取两个时间相差的秒数
+ * @param date1 日期对象、时间戳（10位/13位）或日期字符串
+ * @param date2 日期对象、时间戳（10位/13位）或日期字符串，默认当前时间
+ * @returns 计算后的两个相差秒数，正数和负数
+ */
+export function fcTimeSubSecond(date1: Date | number | string, date2: Date | number | string = new Date()): number {
+	
+	if (date1 instanceof Date) {
+		date1 = date1.getTime();
+	} else if (typeof date1 == 'string') {
+		// 处理常见日期字符串格式
+		date1 = new Date(date1).getTime();
+	} else if (typeof date1 == 'number') {
+		// 处理时间戳（10位或13位）
+		const numStr = date1.toString();
+		date1 = numStr.length == 10 ? date1 * 1000 : date1;
+	}
+	
+	if (date2 instanceof Date) {
+		date2 = date2.getTime();
+	} else if (typeof date2 == 'string') {
+		// 处理常见日期字符串格式
+		date2 = new Date(date2).getTime();
+	} else if (typeof date2 == 'number') {
+		// 处理时间戳（10位或13位）
+		const numStr = date2.toString();
+		date2 = numStr.length == 10 ? date2 * 1000 : date2;
+	}
+	
+	return Math.round((date1 - date2) / 1000);
+}

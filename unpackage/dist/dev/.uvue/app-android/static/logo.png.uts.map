@@ -1,0 +1,1 @@
+{"version":3,"file":"logo.png.uts","sourceRoot":"","sources":["static/logo.png.ts"],"names":[],"mappings":"AAAA,eAAe,kBAAkB,CAAA","sourcesContent":["export default \"/static/logo.png\""]}

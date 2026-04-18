@@ -1,0 +1,245 @@
+<template>
+	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
+		<view class="page">
+			<view class="status-bar-space"></view>
+
+			<view class="topbar">
+
+				<text class="page-title">功能菜单</text>
+
+			</view>
+
+			<view class="content">
+				<view v-for="group in groups" :key="group.label" class="group">
+					<text class="group-label">{{ group.label }}（{{ getGroupCount(group) }}）</text>
+
+					<view v-for="row in group.rows" :key="row[0].label" class="grid-row">
+						<view
+							v-for="(item, index) in row"
+							:key="item.label"
+							:class="index != 3 ? 'grid-item grid-item-gap' : 'grid-item'"
+							@click="handleTap(item)"
+						>
+							<text class="grid-icon">{{ item.icon }}</text>
+							<text class="grid-text">{{ item.label }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+type MenuItem = {
+	label: string
+	icon: string
+	path: string | null
+	action: string
+	disabled: boolean
+}
+
+type MenuGroup = {
+	label: string
+	rows: MenuItem[][]
+}
+
+const groups = ref<MenuGroup[]>([
+	{
+		label: '常用页面',
+		rows: [
+			[
+				{ label: '供应商', icon: '◫', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+				{ label: '商品', icon: '□', path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
+				{ label: '我的', icon: '◉', path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
+				{ label: '隐私', icon: '◎', path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+			],
+		],
+	},
+	{
+		label: '门店配置',
+		rows: [
+			[
+				{ label: '收银台', icon: '¤', path: null, action: 'todo', disabled: true },
+				{ label: '打印机', icon: '▣', path: null, action: 'todo', disabled: true },
+				{ label: '支付', icon: '¥', path: null, action: 'todo', disabled: true },
+				{ label: '权限', icon: '⌂', path: null, action: 'todo', disabled: true },
+			],
+		],
+	},
+	{
+		label: '系统工具',
+		rows: [
+			[
+				{ label: '同步', icon: '↻', path: null, action: 'todo', disabled: true },
+				{ label: '更新', icon: '↑', path: null, action: 'todo', disabled: true },
+				{ label: '日志', icon: '≡', path: null, action: 'todo', disabled: true },
+				{ label: '分享', icon: '⇪', path: null, action: 'todo', disabled: true },
+			],
+		],
+	},
+])
+
+function handleTap(item: MenuItem) {
+	if (item.disabled) {
+		uni.showToast({
+			title: '该功能正在开发中',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (item.action == 'switchTab' && item.path != null) {
+		uni.switchTab({
+			url: item.path,
+		})
+		return
+	}
+
+	if (item.action == 'navigateTo' && item.path != null) {
+		uni.navigateTo({
+			url: item.path,
+		})
+	}
+}
+
+function showSizeTip() {
+	uni.showToast({
+		title: '字号设置待接入',
+		icon: 'none',
+	})
+}
+
+function showLocaleTip() {
+	uni.showToast({
+		title: '语言设置待接入',
+		icon: 'none',
+	})
+}
+
+function getGroupCount(group: MenuGroup): number {
+	let count = 0
+	for (let rowIndex = 0; rowIndex < group.rows.length; rowIndex += 1) {
+		count += group.rows[rowIndex].length
+	}
+	return count
+}
+</script>
+
+<style>
+.page-scroll {
+	background-color: #F7F7F7;
+}
+
+.page {
+	background-color: #F7F7F7;
+	padding-bottom: 20px;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+}
+
+.topbar {
+	flex-direction: row;
+	align-items: center;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+}
+
+.brand-box {
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	background-color: #FFFFFF;
+	align-items: center;
+	justify-content: center;
+}
+
+.brand-text {
+	font-size: 16px;
+	line-height: 16px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.page-title {
+	flex: 1;
+	font-size: 16px;
+	line-height: 20px;
+	color: #111827;
+	font-weight: bold;
+	margin-left: 8px;
+}
+
+.action-button {
+	width: 32px;
+	height: 32px;
+	border-radius: 16px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-button-gap {
+	margin-right: 12px;
+	background-color: #64748B;
+}
+
+.action-icon {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+
+.content {
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.group {
+	margin-bottom: 24px;
+}
+
+.group-label {
+	font-size: 12px;
+	line-height: 18px;
+	color: #94A3B8;
+	margin-left: 8px;
+	margin-bottom: 8px;
+}
+
+.grid-row {
+	flex-direction: row;
+	margin-bottom: 8px;
+}
+
+.grid-item {
+	width: 23%;
+	height: 70px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+	align-items: center;
+	padding-top: 18px;
+}
+
+.grid-item-gap {
+	margin-right: 2.6666%;
+}
+
+.grid-icon {
+	font-size: 18px;
+	line-height: 18px;
+	color: #111827;
+}
+
+.grid-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #111827;
+	text-align: center;
+	margin-top: 8px;
+}
+</style>

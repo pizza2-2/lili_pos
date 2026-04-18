@@ -1,0 +1,38 @@
+export const updateTime = ref(0)	//记录获取版本更新时间
+export const pushTime = ref(0)		//记录获取发送推送时间
+
+// 本地存储
+export function setUpdateTime(val:number){
+	updateTime.value = val
+	uni.setStorage({
+		key: 'updateTimeKey',
+		data: val.toString()
+	});
+}
+
+export function setPushTime(val:number){
+	pushTime.value = val
+	uni.setStorage({
+		key: 'pushTimeKey',
+		data: val.toString()
+	});
+}
+
+// 本地获取
+export function getUpdateTime(){
+	let updateTimeString = uni.getStorageSync('updateTimeKey') as string
+	if(updateTimeString == ""){
+		updateTime.value = 0
+	}else{
+		updateTime.value = parseInt(updateTimeString)
+	}
+}
+
+export function getPushTime(){
+	let pushTimeString = uni.getStorageSync('pushTimeKey') as string
+	if(pushTimeString == ""){
+		pushTime.value = 0
+	}else{
+		pushTime.value = parseInt(pushTimeString)
+	}
+}

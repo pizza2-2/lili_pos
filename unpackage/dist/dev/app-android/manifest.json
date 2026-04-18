@@ -1,0 +1,36 @@
+{
+  "id": "__UNI__1CE1B14",
+  "name": "LILI_POS",
+  "description": "uniapp-x快速开发框架，使用uniCloud版本",
+  "version": {
+    "name": "1.0.0",
+    "code": "100"
+  },
+  "uni-app-x": {
+    "compilerVersion": "4.87"
+  },
+  "app-android": {
+    "distribute": {
+      "modules": {
+        "uni-location": {
+          "system": {}
+        }
+      },
+      "icons": {
+        "hdpi": "package/72x72.png",
+        "xhdpi": "package/96x96.png",
+        "xxhdpi": "package/144x144.png",
+        "xxxhdpi": "package/192x192.png"
+      },
+      "splashScreens": {
+        "default": {}
+      },
+      "abiFilters": [
+        "armeabi-v7a",
+        "arm64-v8a",
+        "x86",
+        "x86_64"
+      ]
+    }
+  }
+}

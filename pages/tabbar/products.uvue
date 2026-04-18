@@ -1,0 +1,89 @@
+<template>
+	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
+		<view class="page">
+			<view class="status-bar-space"></view>
+			<view class="hero">
+				<text class="hero-title">商品</text>
+				<text class="hero-desc">商品管理、筛选组件和弹窗组件都可以从这里继续接业务。</text>
+			</view>
+
+			<view class="card">
+				<text class="card-label">当前模块</text>
+				<text class="card-value">商品中心</text>
+				<text class="card-desc">这里作为底部导航首页，后续可继续接商品列表、分类、库存和价格体系。</text>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+</script>
+
+<style>
+.page-scroll {
+	background-color: #F6F7FB;
+}
+
+.page {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-bottom: 24px;
+	background-color: #F6F7FB;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+}
+
+.hero {
+	background-color: #14532D;
+	border-radius: 20px;
+	padding: 20px;
+}
+
+.hero-title {
+	font-size: 24px;
+	line-height: 30px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.hero-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #DCFCE7;
+	margin-top: 8px;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	margin-top: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.card-label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.card-value {
+	font-size: 24px;
+	line-height: 30px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-top: 10px;
+}
+
+.card-desc {
+	font-size: 15px;
+	line-height: 22px;
+	color: #475569;
+	margin-top: 10px;
+}
+
+</style>

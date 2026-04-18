@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(find C:\\\\Users\\\\LENOVO\\\\Desktop\\\\testSDK\\\\LILI_POS *)"
+    ]
+  }
+}

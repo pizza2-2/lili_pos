@@ -1,0 +1,298 @@
+<template>
+	<view class="lu-root">
+		<view class="lu-list">
+			<view
+				v-for="(item, index) in imageList"
+				:key="item + '-' + index"
+				class="lu-item"
+				@click="handlePreview(index)"
+			>
+				<image class="lu-image" :src="item" mode="aspectFill"></image>
+				<view v-if="!props.disabled" class="lu-delete" @click.stop="handleDelete(index)">
+					<text class="lu-delete-text">×</text>
+				</view>
+			</view>
+
+			<view
+				v-if="!props.disabled && imageList.length < props.max"
+				class="lu-item lu-item-add"
+				@click="handleChoose"
+			>
+				<text class="lu-add-icon">+</text>
+				<text class="lu-add-text">{{ props.uploadText }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type Props = {
+	modelValue?: string[]
+	action?: string
+	name?: string
+	headers?: UTSJSONObject
+	formData?: UTSJSONObject
+	max?: number
+	disabled?: boolean
+	previewEnabled?: boolean
+	uploadText?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	modelValue: () : string[] => [],
+	action: '',
+	name: 'file',
+	headers: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	},
+	formData: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	},
+	max: 9,
+	disabled: false,
+	previewEnabled: true,
+	uploadText: '上传图片',
+})
+
+const emit = defineEmits<{
+	(e: 'update:modelValue', value: string[]): void
+	(e: 'upload', payload: UTSJSONObject): void
+	(e: 'delete', payload: UTSJSONObject): void
+	(e: 'preview', payload: UTSJSONObject): void
+	(e: 'error', payload: UTSJSONObject): void
+}>()
+
+const imageList = ref<string[]>([])
+
+function cloneStringArray(list: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < list.length; i++) {
+		result.push(list[i])
+	}
+	return result
+}
+
+function syncModelValue(list: string[]) {
+	imageList.value = cloneStringArray(list)
+}
+
+function emitModelValue() {
+	emit('update:modelValue', cloneStringArray(imageList.value))
+}
+
+function buildDeletePayload(index: number, path: string) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		list: cloneStringArray(imageList.value),
+	} as UTSJSONObject
+}
+
+function buildPreviewPayload(index: number, path: string) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		list: cloneStringArray(imageList.value),
+	} as UTSJSONObject
+}
+
+function buildErrorPayload(type: string, path: string, message: string) : UTSJSONObject {
+	return {
+		type: type,
+		path: path,
+		message: message,
+	} as UTSJSONObject
+}
+
+function tryParseResponse(text: string) : UTSJSONObject | null {
+	if (text == '') {
+		return null
+	}
+	try {
+		return JSON.parse(text) as UTSJSONObject
+	} catch (e) {
+		return null
+	}
+}
+
+function buildUploadPayload(index: number, path: string, responseText: string) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		responseText: responseText,
+		response: tryParseResponse(responseText),
+	} as UTSJSONObject
+}
+
+function emitError(type: string, path: string, message: string) {
+	emit('error', buildErrorPayload(type, path, message))
+}
+
+function uploadImage(path: string, index: number) {
+	uni.uploadFile({
+		url: props.action,
+		filePath: path,
+		name: props.name,
+		header: props.headers,
+		formData: props.formData,
+		success: (res) => {
+			emit('upload', buildUploadPayload(index, path, res.data))
+		},
+		fail: (err) => {
+			const message = err.errMsg
+			emitError('upload', path, message)
+		},
+	})
+}
+
+function handleChoose() {
+	if (props.disabled) {
+		return
+	}
+	const remain = props.max - imageList.value.length
+	if (remain <= 0) {
+		uni.showToast({
+			title: '已达到最大数量',
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.chooseImage({
+		count: remain,
+		sizeType: ['compressed', 'original'],
+		sourceType: ['album', 'camera'],
+		success: (res) => {
+			const selectedPaths = res.tempFilePaths
+			if (selectedPaths.length == 0) {
+				return
+			}
+
+			for (let i = 0; i < selectedPaths.length; i++) {
+				imageList.value.push(selectedPaths[i])
+			}
+			emitModelValue()
+
+			if (props.action != '') {
+				for (let i = 0; i < selectedPaths.length; i++) {
+					const selectedPath = selectedPaths[i]
+					const currentIndex = imageList.value.indexOf(selectedPath)
+					if (currentIndex >= 0) {
+						uploadImage(selectedPath, currentIndex)
+					}
+				}
+			}
+		},
+		fail: (err) => {
+			const message = err.errMsg
+			emitError('choose', '', message)
+		},
+	})
+}
+
+function handlePreview(index: number) {
+	if (!props.previewEnabled) {
+		return
+	}
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+
+	const currentPath = imageList.value[index]
+	emit('preview', buildPreviewPayload(index, currentPath))
+
+	uni.previewImage({
+		current: currentPath,
+		urls: cloneStringArray(imageList.value),
+	})
+}
+
+function handleDelete(index: number) {
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+	const currentPath = imageList.value[index]
+	imageList.value.splice(index, 1)
+	emitModelValue()
+	emit('delete', buildDeletePayload(index, currentPath))
+}
+
+watch(
+	() : string[] => props.modelValue,
+	(newVal: string[]) => {
+		syncModelValue(newVal)
+	}
+)
+
+onMounted(() => {
+	syncModelValue(props.modelValue)
+})
+</script>
+
+<style>
+.lu-root {
+	width: 100%;
+}
+
+.lu-list {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.lu-item {
+	width: 88px;
+	height: 88px;
+	margin-right: 12px;
+	margin-bottom: 12px;
+	border-radius: 8px;
+	position: relative;
+	overflow: hidden;
+	background-color: #F3F4F6;
+}
+
+.lu-image {
+	width: 88px;
+	height: 88px;
+	border-radius: 8px;
+}
+
+.lu-item-add {
+	align-items: center;
+	justify-content: center;
+	border-width: 1px;
+	border-style: dashed;
+	border-color: #D1D5DB;
+	background-color: #FAFAFA;
+}
+
+.lu-delete {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 24px;
+	height: 24px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(17, 24, 39, 0.72);
+	border-bottom-left-radius: 8px;
+}
+
+.lu-delete-text {
+	color: #FFFFFF;
+	font-size: 16px;
+	line-height: 16px;
+}
+
+.lu-add-icon {
+	color: #6B7280;
+	font-size: 28px;
+	line-height: 28px;
+}
+
+.lu-add-text {
+	margin-top: 6px;
+	color: #6B7280;
+	font-size: 12px;
+	line-height: 12px;
+}
+</style>

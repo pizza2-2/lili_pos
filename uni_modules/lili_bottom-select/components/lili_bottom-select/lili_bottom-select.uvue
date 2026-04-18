@@ -1,0 +1,1061 @@
+<template>
+	<!-- 触发器插槽 / 默认触发器 -->
+	<view class="bs-trigger-wrapper" @click="open">
+		<slot name="trigger">
+			<view class="bs-trigger-default">
+				<text :class="displayText != '' ? 'bs-trigger-text' : 'bs-trigger-placeholder'">
+					{{ displayText != '' ? displayText : placeholder }}
+				</text>
+				<view class="bs-trigger-actions">
+					<view v-if="showEditAction" class="bs-trigger-action" @click.stop="handleEditAction">
+						<text class="bs-trigger-action-icon">✎</text>
+					</view>
+					<view v-if="showAddAction" class="bs-trigger-action" @click.stop="handleAddAction">
+						<text class="bs-trigger-action-icon">＋</text>
+					</view>
+					<!-- 右箭头 -->
+					<view class="bs-trigger-arrow">
+						<text class="bs-arrow-icon">{{ renderVisible ? '⌄' : '›' }}</text>
+					</view>
+				</view>
+			</view>
+		</slot>
+	</view>
+
+	<!-- 底部弹出蒙层 -->
+	<view
+		v-if="renderVisible"
+		:class="overlayVisible ? 'bs-overlay bs-overlay-active' : 'bs-overlay'"
+		@click="handleOverlayClick"
+	>
+	</view>
+
+	<!-- 底部弹出面板 -->
+	<view
+		v-if="renderVisible"
+		:class="panelVisible ? 'bs-panel bs-panel-active' : 'bs-panel'"
+		:style="panelStyle"
+	>
+		<view class="bs-handle-wrap">
+			<view class="bs-handle"></view>
+		</view>
+
+		<!-- 顶部栏：标题 + 关闭按钮 -->
+		<view class="bs-header">
+			<text class="bs-header-title">{{ title }}</text>
+			<view class="bs-header-close" @click="close">
+				<text class="bs-close-icon">✕</text>
+			</view>
+		</view>
+
+		<!-- 搜索框 -->
+		<view class="bs-search-bar">
+			<view class="bs-search-inner">
+				<text class="bs-search-icon">🔍</text>
+				<input
+					class="bs-search-input"
+					v-model="keyword"
+					:placeholder="searchPlaceholder"
+					:disabled="disabled"
+					@input="onSearchInput"
+					@confirm="triggerSearch"
+					confirm-type="search"
+				/>
+				<view v-if="keyword != ''" class="bs-search-clear" @click="clearSearch">
+					<text class="bs-clear-icon">✕</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- 已选标签行（多选模式） -->
+		<view v-if="multiple && selectedItems.length > 0" class="bs-tags-bar">
+			<scroll-view scroll-x="true" style="flex:1">
+				<view class="bs-tags-inner">
+					<view
+						v-for="item in selectedItems"
+						:key="item[valueKey]"
+						class="bs-tag"
+					>
+						<text class="bs-tag-text">{{ item[labelKey] }}</text>
+						<view class="bs-tag-remove" @click.stop="removeSelectedItem(item)">
+							<text class="bs-tag-remove-icon">✕</text>
+						</view>
+					</view>
+				</view>
+			</scroll-view>
+		</view>
+
+		<!-- 列表区域 -->
+		<scroll-view
+			scroll-y="true"
+			style="flex:1"
+			@scrolltolower="loadMore"
+			:show-scrollbar="false"
+		>
+			<!-- 初次加载中 -->
+			<view v-if="loading && displayList.length == 0" class="bs-state-wrapper">
+				<text class="bs-state-text">加载中...</text>
+			</view>
+
+			<!-- 空状态 -->
+			<view v-else-if="!loading && displayList.length == 0 && listLoaded" class="bs-state-wrapper">
+				<text class="bs-state-text">{{ emptyText }}</text>
+			</view>
+
+			<!-- 列表项 -->
+			<view v-else>
+				<view
+					v-for="item in displayList"
+					:key="item[valueKey]"
+					:class="isItemSelected(item) ? 'bs-list-item bs-list-item-selected' : 'bs-list-item'"
+					@click="onItemClick(item)"
+				>
+					<text :class="isItemSelected(item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label'">
+						{{ item[labelKey] }}
+					</text>
+					<!-- 选中图标 -->
+					<view v-if="isItemSelected(item)" class="bs-check-icon-wrapper">
+						<text class="bs-check-icon">✓</text>
+					</view>
+				</view>
+
+				<!-- 分页加载状态 -->
+				<view v-if="loading && displayList.length > 0" class="bs-load-more">
+					<text class="bs-load-more-text">加载中...</text>
+				</view>
+				<view v-else-if="!hasMore && displayList.length > 0" class="bs-load-more">
+					<text class="bs-load-more-text">没有更多了</text>
+				</view>
+			</view>
+		</scroll-view>
+
+		<!-- 多选确认栏 -->
+		<view v-if="multiple" class="bs-confirm-bar">
+			<view class="bs-confirm-info">
+				<text class="bs-confirm-count" v-if="selectedItems.length > 0">
+					已选 {{ selectedItems.length }} 项
+				</text>
+			</view>
+			<view class="bs-confirm-btns">
+				<view class="bs-btn-clear" @click="clearAllSelected">
+					<text class="bs-btn-clear-text">清空</text>
+				</view>
+				<view class="bs-btn-confirm" @click="confirmMultiple">
+					<text class="bs-btn-confirm-text">确定</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type SelectChangePayload = {
+	value: string
+	text: string
+	item: UTSJSONObject
+}
+
+type MultiSelectChangePayload = {
+	values: string[]
+	texts: string[]
+	items: UTSJSONObject[]
+}
+
+type Props = {
+	fetchData: (params: UTSJSONObject) => Promise<UTSJSONObject>
+	value?: string
+	values?: string[]
+	multiple?: boolean
+	placeholder?: string
+	title?: string
+	searchPlaceholder?: string
+	emptyText?: string
+	disabled?: boolean
+	labelKey?: string
+	valueKey?: string
+	pageSize?: number
+	searchDelay?: number
+	closeOnOverlay?: boolean
+	showEditAction?: boolean
+	showAddAction?: boolean
+	editActionText?: string
+	addActionText?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	value: '',
+	values: () : string[] => [],
+	multiple: false,
+	placeholder: '请选择',
+	title: '请选择',
+	searchPlaceholder: '请输入关键词搜索',
+	emptyText: '暂无数据',
+	disabled: false,
+	labelKey: 'text',
+	valueKey: 'value',
+	pageSize: 20,
+	searchDelay: 300,
+	closeOnOverlay: true,
+	showEditAction: true,
+	showAddAction: true,
+	editActionText: '编辑',
+	addActionText: '新增',
+})
+
+const emit = defineEmits<{
+	(e: 'change', payload: UTSJSONObject): void
+	(e: 'multiChange', payload: UTSJSONObject): void
+	(e: 'open'): void
+	(e: 'close'): void
+	(e: 'edit'): void
+	(e: 'add'): void
+}>()
+
+const renderVisible = ref<boolean>(false)
+const overlayVisible = ref<boolean>(false)
+const panelVisible = ref<boolean>(false)
+const internalValue = ref<string>(props.value ?? '')
+const internalText = ref<string>('')
+const textInitialized = ref<boolean>(false)
+const selectedItems = ref<UTSJSONObject[]>([])
+const keyword = ref<string>('')
+const displayList = ref<UTSJSONObject[]>([])
+const currentPage = ref<number>(1)
+const total = ref<number>(0)
+const loading = ref<boolean>(false)
+const hasMore = ref<boolean>(true)
+const listLoaded = ref<boolean>(false)
+const panelStyle = ref<string>('')
+
+let searchTimer: number | null = null
+let enterTimer: number | null = null
+let closeTimer: number | null = null
+const PANEL_ANIMATION_DURATION = 340
+
+function fieldToStr(item: UTSJSONObject, key: string) : string {
+	const v = item[key]
+	if (v == null) return ''
+	return '' + v
+}
+
+function fieldLabel(item: UTSJSONObject, key: string) : string {
+	const v = item[key]
+	if (v == null) return ''
+	return v as string
+}
+
+function getNumberField(obj: UTSJSONObject, key: string) : number {
+	const value = obj[key]
+	if (value == null) return 0
+	return value as number
+}
+
+function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
+	const value = obj[key]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function buildFetchParams(page: number, keywordValue: string, id: string) : UTSJSONObject {
+	return {
+		page: page,
+		pageSize: props.pageSize,
+		keyword: keywordValue,
+		id: id,
+	} as UTSJSONObject
+}
+
+function clearAnimationTimers() {
+	if (enterTimer != null) {
+		const timer = enterTimer
+		clearTimeout(timer!)
+		enterTimer = null
+	}
+	if (closeTimer != null) {
+		const timer = closeTimer
+		clearTimeout(timer!)
+		closeTimer = null
+	}
+}
+
+function activatePanelAnimation() {
+	clearAnimationTimers()
+	enterTimer = setTimeout(() => {
+		overlayVisible.value = true
+		panelVisible.value = true
+		enterTimer = null
+	}, 16)
+}
+
+function updateTextFromList() {
+	for (let i = 0; i < displayList.value.length; i++) {
+		const item = displayList.value[i]
+		if (fieldToStr(item, props.valueKey) == internalValue.value) {
+			internalText.value = fieldLabel(item, props.labelKey)
+			textInitialized.value = true
+			break
+		}
+	}
+}
+
+function syncFromList(vals: string[]) {
+	if (vals.length == 0) {
+		selectedItems.value = []
+		return
+	}
+	const matched: UTSJSONObject[] = []
+	for (let i = 0; i < displayList.value.length; i++) {
+		const item = displayList.value[i]
+		if (vals.includes(fieldToStr(item, props.valueKey))) {
+			matched.push(item)
+		}
+	}
+	selectedItems.value = matched
+}
+
+async function loadData(isReset: boolean) {
+	if (loading.value) return
+	if (!isReset && !hasMore.value) return
+
+	loading.value = true
+	const page = isReset ? 1 : currentPage.value
+
+	try {
+		const res = await props.fetchData(buildFetchParams(page, keyword.value, ''))
+		const data = getListField(res, 'data')
+		total.value = getNumberField(res, 'total')
+
+		if (isReset) {
+			displayList.value = data
+			currentPage.value = 2
+			listLoaded.value = true
+		} else {
+			const merged: UTSJSONObject[] = [...displayList.value, ...data]
+			displayList.value = merged
+			currentPage.value = currentPage.value + 1
+		}
+
+		hasMore.value = displayList.value.length < total.value && data.length >= props.pageSize
+
+		if (!props.multiple && internalValue.value != '' && !textInitialized.value) {
+			updateTextFromList()
+		}
+		if (props.multiple) {
+			const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
+			syncFromList(curVals)
+		}
+	} catch (e) {
+		console.error('lili_bottom-select loadData 失败:', e)
+		uni.showToast({ title: '数据加载失败', icon: 'none' })
+	} finally {
+		loading.value = false
+	}
+}
+
+async function fetchTextByValue(value: string) {
+	if (value == '' || textInitialized.value) return
+	try {
+		const res = await props.fetchData(buildFetchParams(1, '', value))
+		const data = getListField(res, 'data')
+		for (let i = 0; i < data.length; i++) {
+			const item = data[i]
+			if (fieldToStr(item, props.valueKey) == value) {
+				internalText.value = fieldLabel(item, props.labelKey)
+				textInitialized.value = true
+				break
+			}
+		}
+	} catch (e) {
+		console.error('lili_bottom-select fetchTextByValue 失败:', e)
+	}
+}
+
+function syncMultiValuesFromProps(vals: string[]) {
+	if (vals.length == 0) {
+		selectedItems.value = []
+		return
+	}
+	if (displayList.value.length > 0) {
+		syncFromList(vals)
+	}
+}
+
+const displayText = computed<string>(() : string => {
+	if (props.multiple) {
+		if (selectedItems.value.length == 0) return ''
+		const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+		return texts.join('、')
+	}
+	return internalText.value
+})
+
+watch(
+	() : string => props.value ?? '',
+	(newVal: string) => {
+		if (newVal != internalValue.value) {
+			internalValue.value = newVal
+			if (newVal != '') {
+				if (!textInitialized.value) {
+					fetchTextByValue(newVal)
+				}
+			} else {
+				internalText.value = ''
+				textInitialized.value = false
+			}
+		}
+	}
+)
+
+watch(
+	() : string[] => props.values ?? [],
+	(newVals: string[]) => {
+		if (props.multiple) {
+			syncMultiValuesFromProps(newVals)
+		}
+	}
+)
+
+onMounted(() => {
+	const info = uni.getWindowInfo()
+	const winH = info.windowHeight
+	let panelH = Math.floor(winH * 0.72)
+	if (panelH < 420) {
+		panelH = 420
+	}
+	const maxPanelH = winH - 24
+	if (panelH > maxPanelH) {
+		panelH = maxPanelH
+	}
+	panelStyle.value = `height:${panelH}px;`
+
+	if (!props.multiple && internalValue.value != '') {
+		fetchTextByValue(internalValue.value)
+	}
+	if (props.multiple && props.values.length > 0) {
+		syncMultiValuesFromProps(props.values)
+	}
+})
+
+async function open() {
+	if (props.disabled) return
+	if (renderVisible.value) return
+	renderVisible.value = true
+	overlayVisible.value = false
+	panelVisible.value = false
+	activatePanelAnimation()
+	emit('open')
+	keyword.value = ''
+	if (!listLoaded.value) {
+		await loadData(true)
+	} else {
+		currentPage.value = 1
+		hasMore.value = displayList.value.length < total.value
+	}
+	if (props.multiple) {
+		const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
+		syncFromList(curVals.length > 0 ? curVals : (props.values ?? []))
+	}
+}
+
+function close() {
+	if (!renderVisible.value) return
+	clearAnimationTimers()
+	overlayVisible.value = false
+	panelVisible.value = false
+	closeTimer = setTimeout(() => {
+		renderVisible.value = false
+		closeTimer = null
+		emit('close')
+	}, PANEL_ANIMATION_DURATION)
+}
+
+function handleOverlayClick() {
+	if (props.closeOnOverlay) {
+		close()
+	}
+}
+
+function handleEditAction() {
+	if (props.disabled) return
+	emit('edit')
+}
+
+function handleAddAction() {
+	if (props.disabled) return
+	emit('add')
+}
+
+async function triggerSearch() {
+	if (searchTimer != null) {
+		clearTimeout(searchTimer!)
+		searchTimer = null
+	}
+	displayList.value = []
+	hasMore.value = true
+	listLoaded.value = false
+	await loadData(true)
+}
+
+function onSearchInput() {
+	if (searchTimer != null) {
+		clearTimeout(searchTimer!)
+	}
+	searchTimer = setTimeout(() => {
+		triggerSearch()
+	}, props.searchDelay)
+}
+
+async function clearSearch() {
+	keyword.value = ''
+	await triggerSearch()
+}
+
+function loadMore() {
+	if (hasMore.value && !loading.value) {
+		loadData(false)
+	}
+}
+
+function isItemSelected(item: UTSJSONObject) : boolean {
+	const itemVal = fieldToStr(item, props.valueKey)
+	if (props.multiple) {
+		for (let i = 0; i < selectedItems.value.length; i++) {
+			if (fieldToStr(selectedItems.value[i], props.valueKey) == itemVal) {
+				return true
+			}
+		}
+		return false
+	}
+	return internalValue.value == itemVal
+}
+
+function confirmSingleItem(item: UTSJSONObject) {
+	const value = fieldToStr(item, props.valueKey)
+	const text = fieldLabel(item, props.labelKey)
+	internalValue.value = value
+	internalText.value = text
+	textInitialized.value = true
+	emit('change', { value: value, text: text, item: item } as UTSJSONObject)
+	close()
+}
+
+function toggleMultiItem(item: UTSJSONObject) {
+	const val = fieldToStr(item, props.valueKey)
+	const idx = selectedItems.value.findIndex((s: UTSJSONObject) : boolean => {
+		return fieldToStr(s, props.valueKey) == val
+	})
+	if (idx >= 0) {
+		const newList: UTSJSONObject[] = []
+		for (let i = 0; i < selectedItems.value.length; i++) {
+			if (i != idx) {
+				newList.push(selectedItems.value[i])
+			}
+		}
+		selectedItems.value = newList
+	} else {
+		selectedItems.value = [...selectedItems.value, item]
+	}
+}
+
+function onItemClick(item: UTSJSONObject) {
+	if (props.disabled) return
+	if (props.multiple) {
+		toggleMultiItem(item)
+	} else {
+		confirmSingleItem(item)
+	}
+}
+
+function removeSelectedItem(item: UTSJSONObject) {
+	const val = fieldToStr(item, props.valueKey)
+	const newList: UTSJSONObject[] = []
+	for (let i = 0; i < selectedItems.value.length; i++) {
+		if (fieldToStr(selectedItems.value[i], props.valueKey) != val) {
+			newList.push(selectedItems.value[i])
+		}
+	}
+	selectedItems.value = newList
+}
+
+function clearAllSelected() {
+	selectedItems.value = []
+}
+
+function confirmMultiple() {
+	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
+	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+	emit('multiChange', {
+		values: values,
+		texts: texts,
+		items: selectedItems.value,
+	} as UTSJSONObject)
+	close()
+}
+
+function openPanel() { open() }
+function closePanel() { close() }
+
+function setValue(value: string, text: string) {
+	internalValue.value = value
+	if (text != '') {
+		internalText.value = text
+		textInitialized.value = true
+	} else if (value != '') {
+		fetchTextByValue(value)
+	} else {
+		internalText.value = ''
+		textInitialized.value = false
+	}
+}
+
+function setValues(items: UTSJSONObject[]) {
+	selectedItems.value = items
+}
+
+function getValue() : SelectChangePayload {
+	return {
+		value: internalValue.value,
+		text: internalText.value,
+		item: {} as UTSJSONObject,
+	} as SelectChangePayload
+}
+
+function getValues() : MultiSelectChangePayload {
+	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
+	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+	return {
+		values: values,
+		texts: texts,
+		items: selectedItems.value,
+	} as MultiSelectChangePayload
+}
+
+function clearValue() {
+	internalValue.value = ''
+	internalText.value = ''
+	textInitialized.value = false
+}
+
+function clearValues() {
+	selectedItems.value = []
+}
+
+async function refreshData() {
+	displayList.value = []
+	listLoaded.value = false
+	keyword.value = ''
+	hasMore.value = true
+	await loadData(true)
+}
+
+async function preloadList(kw: string) {
+	if (kw != '') {
+		keyword.value = kw
+	}
+	displayList.value = []
+	listLoaded.value = false
+	hasMore.value = true
+	await loadData(true)
+}
+
+function reset() {
+	clearValue()
+	clearValues()
+	displayList.value = []
+	listLoaded.value = false
+	keyword.value = ''
+	hasMore.value = true
+	currentPage.value = 1
+}
+
+onUnmounted(() => {
+	clearAnimationTimers()
+	if (searchTimer != null) {
+		const timer = searchTimer
+		clearTimeout(timer!)
+		searchTimer = null
+	}
+})
+
+defineExpose({
+	openPanel,
+	closePanel,
+	setValue,
+	setValues,
+	getValue,
+	getValues,
+	clearValue,
+	clearValues,
+	refreshData,
+	preloadList,
+	reset,
+})
+</script>
+
+<style>
+.bs-trigger-wrapper {
+	flex-direction: row;
+	align-items: center;
+}
+
+.bs-trigger-default {
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	border-bottom-width: 1px;
+	border-bottom-color: #E5E5E5;
+	border-bottom-style: solid;
+}
+
+.bs-trigger-text {
+	flex: 1;
+	font-size: 14px;
+	color: #333333;
+}
+
+.bs-trigger-placeholder {
+	flex: 1;
+	font-size: 14px;
+	color: #999999;
+}
+
+.bs-trigger-actions {
+	flex-direction: row;
+	align-items: center;
+}
+
+.bs-trigger-action {
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	margin-left: 8px;
+	border-radius: 999px;
+	background-color: #F5F7FA;
+}
+
+.bs-trigger-action-icon {
+	font-size: 14px;
+	color: #666666;
+	line-height: 14px;
+}
+
+.bs-trigger-arrow {
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	margin-left: 8px;
+}
+
+.bs-arrow-icon {
+	font-size: 20px;
+	color: #CCCCCC;
+	line-height: 20px;
+}
+
+.bs-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.0);
+	z-index: 998;
+	opacity: 0;
+	transition-property: opacity, background-color;
+	transition-duration: 320ms;
+	transition-timing-function: ease;
+}
+
+.bs-overlay-active {
+	background-color: rgba(10, 18, 30, 0.32);
+	opacity: 1;
+}
+
+.bs-panel {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #FFFFFF;
+	border-radius: 22px 22px 0 0;
+	z-index: 999;
+	flex-direction: column;
+	opacity: 0;
+	transform: translateY(48px);
+	box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.14);
+	transition-property: transform, opacity;
+	transition-duration: 340ms;
+	transition-timing-function: ease;
+}
+
+.bs-panel-active {
+	opacity: 1;
+	transform: translateY(0px);
+}
+
+.bs-handle-wrap {
+	align-items: center;
+	padding-top: 10px;
+	padding-bottom: 4px;
+}
+
+.bs-handle {
+	width: 44px;
+	height: 5px;
+	border-radius: 999px;
+	background-color: #D9DEE7;
+}
+
+.bs-header {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 10px;
+	padding-bottom: 16px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-bottom-width: 1px;
+	border-bottom-color: #F0F0F0;
+	border-bottom-style: solid;
+}
+
+.bs-header-title {
+	font-size: 16px;
+	font-weight: bold;
+	color: #333333;
+}
+
+.bs-header-close {
+	width: 32px;
+	height: 32px;
+	align-items: center;
+	justify-content: center;
+}
+
+.bs-close-icon {
+	font-size: 16px;
+	color: #999999;
+}
+
+.bs-search-bar {
+	padding-top: 12px;
+	padding-bottom: 12px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-bottom-width: 1px;
+	border-bottom-color: #F0F0F0;
+	border-bottom-style: solid;
+}
+
+.bs-search-inner {
+	flex-direction: row;
+	align-items: center;
+	background-color: #F5F5F5;
+	border-radius: 20px;
+	padding-left: 12px;
+	padding-right: 12px;
+	height: 36px;
+}
+
+.bs-search-icon {
+	font-size: 14px;
+	color: #999999;
+	margin-right: 6px;
+}
+
+.bs-search-input {
+	flex: 1;
+	font-size: 14px;
+	color: #333333;
+	height: 36px;
+}
+
+.bs-search-clear {
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	margin-left: 4px;
+}
+
+.bs-clear-icon {
+	font-size: 12px;
+	color: #999999;
+}
+
+.bs-tags-bar {
+	flex-direction: row;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-bottom-width: 1px;
+	border-bottom-color: #F0F0F0;
+	border-bottom-style: solid;
+}
+
+.bs-tags-inner {
+	flex-direction: row;
+	flex-wrap: nowrap;
+}
+
+.bs-tag {
+	flex-direction: row;
+	align-items: center;
+	background-color: #E8F0FE;
+	border-radius: 12px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	padding-left: 10px;
+	padding-right: 10px;
+	margin-right: 8px;
+}
+
+.bs-tag-text {
+	font-size: 12px;
+	color: #4A90E2;
+}
+
+.bs-tag-remove {
+	width: 16px;
+	height: 16px;
+	align-items: center;
+	justify-content: center;
+	margin-left: 4px;
+}
+
+.bs-tag-remove-icon {
+	font-size: 10px;
+	color: #4A90E2;
+}
+
+.bs-list-item {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 14px;
+	padding-bottom: 14px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-bottom-width: 1px;
+	border-bottom-color: #F5F5F5;
+	border-bottom-style: solid;
+}
+
+.bs-list-item-selected {
+	background-color: #F0F5FF;
+}
+
+.bs-item-label {
+	flex: 1;
+	font-size: 14px;
+	color: #333333;
+	margin-right: 12px;
+}
+
+.bs-item-label-selected {
+	color: #4A90E2;
+}
+
+.bs-check-icon-wrapper {
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+}
+
+.bs-check-icon {
+	font-size: 16px;
+	color: #4A90E2;
+}
+
+.bs-state-wrapper {
+	align-items: center;
+	justify-content: center;
+	padding-top: 60px;
+	padding-bottom: 60px;
+}
+
+.bs-state-text {
+	font-size: 14px;
+	color: #999999;
+}
+
+.bs-load-more {
+	align-items: center;
+	padding-top: 16px;
+	padding-bottom: 16px;
+}
+
+.bs-load-more-text {
+	font-size: 12px;
+	color: #BBBBBB;
+}
+
+.bs-confirm-bar {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-top-width: 1px;
+	border-top-color: #F0F0F0;
+	border-top-style: solid;
+}
+
+.bs-confirm-info {
+	flex: 1;
+}
+
+.bs-confirm-count {
+	font-size: 13px;
+	color: #666666;
+}
+
+.bs-confirm-btns {
+	flex-direction: row;
+	align-items: center;
+}
+
+.bs-btn-clear {
+	padding-top: 8px;
+	padding-bottom: 8px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-radius: 18px;
+	border-width: 1px;
+	border-color: #DDDDDD;
+	border-style: solid;
+	margin-right: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.bs-btn-clear-text {
+	font-size: 14px;
+	color: #666666;
+}
+
+.bs-btn-confirm {
+	padding-top: 8px;
+	padding-bottom: 8px;
+	padding-left: 24px;
+	padding-right: 24px;
+	border-radius: 18px;
+	background-color: #4A90E2;
+	align-items: center;
+	justify-content: center;
+}
+
+.bs-btn-confirm-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+</style>

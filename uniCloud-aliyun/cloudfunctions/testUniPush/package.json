@@ -1,0 +1,14 @@
+{
+    "name": "testUniPush",
+    "version": "1.0.0",
+    "description": "",
+    "dependencies": {},
+    "main": "index.js",
+    "extensions": {
+        "uni-cloud-push": {}
+    },
+    "origin-plugin-dev-name": "fc-baseX-uniCloud",
+    "origin-plugin-version": "1.0.0",
+    "plugin-dev-name": "fc-baseX-uniCloud",
+    "plugin-version": "1.0.0"
+}
