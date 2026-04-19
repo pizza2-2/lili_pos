@@ -56,20 +56,16 @@ const _cache = __ins.renderCache;
 				name: buildDisplayName(profile),
 				avatar: ''
 			})
-
-			uni.showToast({ title: '登录成功', icon: 'success' })
-			setTimeout(() => {
-				uni.switchTab({
-					url: '/pages/tabbar/products'
-				})
-			}, 300)
+			uni.switchTab({
+				url: '/pages/tabbar/products'
+			})
 	} catch (error) {
 		clearAuthState()
 		let message = '登录失败'
 		if (error != null) {
 			const errorText = JSON.stringify(error)
 			if (errorText != null && errorText != '') {
-				const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/login/login.uvue:109")
+				const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/login/login.uvue:105")
 				if (parsedError != null) {
 					const rawMessage = parsedError!['message']
 					if (rawMessage != null) {

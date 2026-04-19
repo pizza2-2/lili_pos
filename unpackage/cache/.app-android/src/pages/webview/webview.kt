@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -21,25 +21,20 @@ open class GenPagesWebviewWebview : BasePage {
             val _ctx = __ins.proxy as GenPagesWebviewWebview
             val _cache = __ins.renderCache
             val src = ref<String>("")
-            val webview_styles: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("webview_styles", "pages/webview/webview.uvue", 9, 8)) {
-                var progress = object : UTSJSONObject() {
-                    var color = "#FF3333"
-                }
-            }
+            val webview_styles: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("webview_styles", "pages/webview/webview.uvue", 9, 8), "progress" to _uO("color" to "#FF3333"))
             onLoad(fun(event: OnLoadOptions){
                 src.value = event["url"] as String
             }
             )
             return fun(): Any? {
-                return _cE("web-view", _uM("id" to "web-view", "src" to unref(src), "webview-styles" to webview_styles), null, 8, _uA(
+                val _component_web_view = resolveComponent("web-view")
+                return _cV(_component_web_view, _uM("id" to "web-view", "src" to unref(src), "webview-styles" to webview_styles), null, 8, _uA(
                     "src"
                 ))
             }
         }
         val styles: Map<String, Map<String, Map<String, Any>>> by lazy {
-            _nCS(_uA(), _uA(
-                GenApp.styles
-            ))
+            _nCS(_uA())
         }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

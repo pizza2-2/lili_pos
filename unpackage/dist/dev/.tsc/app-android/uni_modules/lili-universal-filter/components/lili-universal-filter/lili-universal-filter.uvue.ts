@@ -1,7 +1,8 @@
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue", 50, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue", 78, 6>;
 	title?: string
 	searchPlaceholder?: string
 	searchValue?: string
+	filterVisible?: boolean
 	showBack?: boolean
 	showSearch?: boolean
 	showFilter?: boolean
@@ -22,6 +23,7 @@ const __sfc__ = defineComponent({
     title: { type: String, required: false, default: '' },
     searchPlaceholder: { type: String, required: false, default: '请输入搜索内容' },
     searchValue: { type: String, required: false, default: '' },
+    filterVisible: { type: Boolean, required: false, default: false },
     showBack: { type: Boolean, required: false, default: false },
     showSearch: { type: Boolean, required: false, default: true },
     showFilter: { type: Boolean, required: false, default: false },
@@ -34,7 +36,7 @@ const __sfc__ = defineComponent({
     backgroundColor: { type: String, required: false, default: '#FFFFFF' },
     homePath: { type: String, required: false, default: '/pages/tabbar/products' }
   },
-  emits: ["back", "home", "menu", "filter", "scan", "searchInput", "searchConfirm", "searchClear"],
+  emits: ["back", "home", "menu", "filter", "filter-open", "filter-close", "update:filterVisible", "scan", "searchInput", "searchConfirm", "searchClear"],
   setup(__props) {
 const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
@@ -49,6 +51,7 @@ __ins.emit(event, ...do_not_transform_spread)
 const statusBarHeight = ref<number>(0)
 const inputValue = ref<string>(props.searchValue)
 const rootStyle = ref<string>('')
+const filterPanelVisible = ref<boolean>(false)
 
 function syncRootStyle() {
 	const positionStyle = props.fixed ? 'position:sticky;top:0;' : ''
@@ -61,21 +64,12 @@ function updateStatusBarHeight() {
 	syncRootStyle()
 }
 
-function eventValueToString(e: UTSJSONObject) : string {
-	const detail = e["detail"]
-	if (detail == null) return ''
-	const detailObj = detail as UTSJSONObject
-	const value = detailObj["value"]
-	if (value == null) return ''
-	return '' + value
+function onSearchInput() {
+	emit('searchInput', inputValue.value)
 }
 
-function onSearchInput(e: UTSJSONObject) {
-	emit('searchInput', inputValue.value != '' ? inputValue.value : eventValueToString(e))
-}
-
-function onSearchConfirm(e: UTSJSONObject) {
-	emit('searchConfirm', inputValue.value != '' ? inputValue.value : eventValueToString(e))
+function onSearchConfirm() {
+	emit('searchConfirm', inputValue.value)
 }
 
 function clearSearch() {
@@ -103,7 +97,18 @@ function handleHome() {
 }
 
 function handleFilter() {
-	emit('filter')
+	filterPanelVisible.value = true
+	emit('update:filterVisible', true)
+	emit('filter-open')
+}
+
+function closeFilterPanel() {
+	if (!filterPanelVisible.value) {
+		return
+	}
+	filterPanelVisible.value = false
+	emit('update:filterVisible', false)
+	emit('filter-close')
 }
 
 function handleMenu() {
@@ -119,6 +124,15 @@ watch(
 	(newVal: string) => {
 		if (newVal != inputValue.value) {
 			inputValue.value = newVal
+		}
+	}
+)
+
+watch(
+	() : boolean => props.filterVisible,
+	(newVal: boolean) => {
+		if (newVal != filterPanelVisible.value) {
+			filterPanelVisible.value = newVal
 		}
 	}
 )
@@ -143,6 +157,8 @@ onMounted(() => {
 
 return (): any | null => {
 
+const _component_page_container = resolveComponent("page-container")
+
   return _cE("view", _uM({
     class: "uf-root",
     style: _nS(unref(rootStyle))
@@ -159,7 +175,11 @@ return (): any | null => {
                   class: _nC(_ctx.showBack && _ctx.showHome ? 'uf-segment uf-segment-split' : 'uf-segment'),
                   onClick: handleBack
                 }), [
-                  _cE("text", _uM({ class: "uf-segment-icon" }), "←")
+                  _cE("image", _uM({
+                    class: "uf-icon-image",
+                    src: "/static/icon/左箭头.png",
+                    mode: "aspectFit"
+                  }))
                 ], 2 /* CLASS */)
               : _cC("v-if", true),
             isTrue(_ctx.showHome)
@@ -168,7 +188,11 @@ return (): any | null => {
                   class: "uf-segment",
                   onClick: handleHome
                 }), [
-                  _cE("text", _uM({ class: "uf-segment-icon" }), "⌂")
+                  _cE("image", _uM({
+                    class: "uf-icon-image",
+                    src: "/static/icon/主页.png",
+                    mode: "aspectFit"
+                  }))
                 ])
               : _cC("v-if", true)
           ])
@@ -221,10 +245,14 @@ return (): any | null => {
             isTrue(_ctx.showFilter)
               ? _cE("view", _uM({
                   key: 0,
-                  class: _nC(_ctx.showFilter && _ctx.showMenu ? 'uf-segment uf-segment-split uf-segment-dark' : 'uf-segment uf-segment-dark'),
+                  class: _nC(_ctx.showFilter && _ctx.showMenu ? 'uf-segment uf-segment-split uf-segment-light' : 'uf-segment uf-segment-light'),
                   onClick: handleFilter
                 }), [
-                  _cE("text", _uM({ class: "uf-segment-text-light" }), _tD(_ctx.filterText), 1 /* TEXT */),
+                  _cE("image", _uM({
+                    class: "uf-icon-image",
+                    src: "/static/icon/_筛选.png",
+                    mode: "aspectFit"
+                  })),
                   isTrue(_ctx.filterActive)
                     ? _cE("view", _uM({
                         key: 0,
@@ -244,7 +272,40 @@ return (): any | null => {
               : _cC("v-if", true)
           ])
         : _cC("v-if", true)
-    ])
+    ]),
+    _cV(_component_page_container, _uM({
+      show: unref(filterPanelVisible),
+      position: "bottom",
+      round: true,
+      overlay: true,
+      duration: 260,
+      "overlay-style": "background-color: rgba(15, 23, 42, 0.38);",
+      "custom-style": "background-color: #FFFFFF;",
+      onClickoverlay: closeFilterPanel
+    }), _uM({
+      default: withSlotCtx((): any[] => [
+        _cE("view", _uM({ class: "uf-filter-panel" }), [
+          _cE("view", _uM({ class: "uf-filter-handle" })),
+          _cE("view", _uM({ class: "uf-filter-header" }), [
+            _cE("text", _uM({ class: "uf-filter-title" }), "筛选"),
+            _cE("view", _uM({
+              class: "uf-filter-close",
+              onClick: closeFilterPanel
+            }), [
+              _cE("text", _uM({ class: "uf-filter-close-text" }), "关闭")
+            ])
+          ]),
+          _cE("view", _uM({ class: "uf-filter-body" }), [
+            renderSlot(_ctx.$slots, "filter-panel", {}, (): any[] => [
+              _cE("view", _uM({ class: "uf-filter-empty" }), [
+                _cE("text", _uM({ class: "uf-filter-empty-text" }), "筛选面板内容待接入")
+              ])
+            ])
+          ])
+        ])
+      ]),
+      _: 3 /* FORWARDED */
+    }), 8 /* PROPS */, ["show"])
   ], 4 /* STYLE */)
 }
 }
@@ -252,4 +313,4 @@ return (): any | null => {
 })
 export default __sfc__
 export type LiliUniversalFilterComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterStyles = [_uM([["uf-root", _pS(_uM([["zIndex", 90], ["backgroundColor", "#FFFFFF"], ["borderBottomWidth", 1], ["borderBottomColor", "#EEF1F5"], ["borderBottomStyle", "solid"]]))], ["uf-bar", _pS(_uM([["height", 56], ["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["uf-segment-group", _pS(_uM([["height", 34], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["overflow", "hidden"]]))], ["uf-segment-group-left", _pS(_uM([["marginRight", 8]]))], ["uf-segment-group-right", _pS(_uM([["marginLeft", 8]]))], ["uf-segment", _pS(_uM([["minWidth", 34], ["height", 34], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 10], ["paddingRight", 10]]))], ["uf-segment-split", _pS(_uM([["borderRightWidth", 1], ["borderRightColor", "rgba(148,163,184,0.32)"], ["borderRightStyle", "solid"]]))], ["uf-segment-dark", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["uf-segment-icon", _pS(_uM([["fontSize", 15], ["color", "#1F2937"], ["lineHeight", "15px"]]))], ["uf-segment-icon-light", _pS(_uM([["fontSize", 15], ["color", "#FFFFFF"], ["lineHeight", "15px"]]))], ["uf-search-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-search-box", _pS(_uM([["height", 40], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["paddingLeft", 12], ["paddingRight", 10]]))], ["uf-scan-btn", _pS(_uM([["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#E2E8F0"], ["marginRight", 8]]))], ["uf-scan-icon", _pS(_uM([["fontSize", 12], ["color", "#334155"], ["lineHeight", "12px"]]))], ["uf-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["fontSize", 14], ["color", "#1F2937"], ["paddingRight", 6]]))], ["uf-clear-btn", _pS(_uM([["width", 24], ["height", 24], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#D8DEE6"]]))], ["uf-clear-icon", _pS(_uM([["fontSize", 14], ["color", "#536171"], ["lineHeight", "14px"]]))], ["uf-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["justifyContent", "center"]]))], ["uf-title", _pS(_uM([["fontSize", 17], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-segment-text-light", _pS(_uM([["fontSize", 12], ["color", "#FFFFFF"]]))], ["uf-dot", _pS(_uM([["width", 6], ["height", 6], ["borderTopLeftRadius", 3], ["borderTopRightRadius", 3], ["borderBottomRightRadius", 3], ["borderBottomLeftRadius", 3], ["backgroundColor", "#FB7185"], ["marginLeft", 5]]))]])]
+const GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterStyles = [_uM([["uf-root", _pS(_uM([["zIndex", 90], ["backgroundColor", "#FFFFFF"], ["borderBottomWidth", 1], ["borderBottomColor", "#EEF1F5"], ["borderBottomStyle", "solid"]]))], ["uf-bar", _pS(_uM([["height", 56], ["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["uf-segment-group", _pS(_uM([["height", 34], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["overflow", "hidden"]]))], ["uf-segment-group-left", _pS(_uM([["marginRight", 8]]))], ["uf-segment-group-right", _pS(_uM([["marginLeft", 8]]))], ["uf-segment", _pS(_uM([["minWidth", 34], ["height", 34], ["position", "relative"], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 10], ["paddingRight", 10]]))], ["uf-segment-split", _pS(_uM([["borderRightWidth", 1], ["borderRightColor", "rgba(148,163,184,0.32)"], ["borderRightStyle", "solid"]]))], ["uf-segment-dark", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["uf-segment-light", _pS(_uM([["backgroundColor", "#FFFFFF"]]))], ["uf-segment-icon", _pS(_uM([["fontSize", 15], ["color", "#1F2937"], ["lineHeight", "15px"]]))], ["uf-icon-image", _pS(_uM([["width", 18], ["height", 18]]))], ["uf-segment-icon-light", _pS(_uM([["fontSize", 15], ["color", "#FFFFFF"], ["lineHeight", "15px"]]))], ["uf-search-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-search-box", _pS(_uM([["height", 40], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["paddingLeft", 12], ["paddingRight", 10]]))], ["uf-scan-btn", _pS(_uM([["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#E2E8F0"], ["marginRight", 8]]))], ["uf-scan-icon", _pS(_uM([["fontSize", 12], ["color", "#334155"], ["lineHeight", "12px"]]))], ["uf-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["fontSize", 14], ["color", "#1F2937"], ["paddingRight", 6]]))], ["uf-clear-btn", _pS(_uM([["width", 24], ["height", 24], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#D8DEE6"]]))], ["uf-clear-icon", _pS(_uM([["fontSize", 14], ["color", "#536171"], ["lineHeight", "14px"]]))], ["uf-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["justifyContent", "center"]]))], ["uf-title", _pS(_uM([["fontSize", 17], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-segment-text-light", _pS(_uM([["fontSize", 12], ["color", "#FFFFFF"]]))], ["uf-dot", _pS(_uM([["width", 6], ["height", 6], ["borderTopLeftRadius", 3], ["borderTopRightRadius", 3], ["borderBottomRightRadius", 3], ["borderBottomLeftRadius", 3], ["backgroundColor", "#FB7185"], ["position", "absolute"], ["top", 9], ["right", 8]]))], ["uf-filter-panel", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 10], ["paddingBottom", 24]]))], ["uf-filter-handle", _pS(_uM([["width", 42], ["height", 4], ["borderTopLeftRadius", 2], ["borderTopRightRadius", 2], ["borderBottomRightRadius", 2], ["borderBottomLeftRadius", 2], ["backgroundColor", "#D5DCE5"], ["alignSelf", "center"]]))], ["uf-filter-header", _pS(_uM([["height", 44], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["uf-filter-title", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-filter-close", _pS(_uM([["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F3F6FA"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-close-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["color", "#475569"]]))], ["uf-filter-body", _pS(_uM([["paddingTop", 6]]))], ["uf-filter-empty", _pS(_uM([["height", 120], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-empty-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))]])]

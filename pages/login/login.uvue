@@ -93,13 +93,9 @@
 				name: buildDisplayName(profile),
 				avatar: ''
 			})
-
-			uni.showToast({ title: '登录成功', icon: 'success' })
-			setTimeout(() => {
-				uni.switchTab({
-					url: '/pages/tabbar/products'
-				})
-			}, 300)
+			uni.switchTab({
+				url: '/pages/tabbar/products'
+			})
 	} catch (error) {
 		clearAuthState()
 		let message = '登录失败'

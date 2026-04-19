@@ -40,10 +40,19 @@
 							<view class="lul-headline-row">
 								<view class="lul-title-wrap">
 									<text v-if="titleField != ''" class="lul-title">{{ fieldText(item, titleField) }}</text>
-									<text v-if="subtitleField != '' && fieldText(item, subtitleField) != ''" class="lul-subtitle">{{ fieldText(item, subtitleField) }}</text>
+									<text
+										v-if="subtitleField != '' && fieldText(item, subtitleField) != ''"
+										class="lul-subtitle"
+										@click.stop="handleSubtitleClick(item)"
+									>{{ fieldText(item, subtitleField) }}</text>
+									<text
+										v-if="metaField != '' && fieldText(item, metaField) != ''"
+										class="lul-meta"
+										@click.stop="handleMetaClick(item)"
+									>{{ fieldText(item, metaField) }}</text>
 								</view>
 								<view v-if="showMenu" class="lul-menu-wrap" @click.stop="handleMenu(item)">
-									<text class="lul-menu-icon">⋯</text>
+									<image class="lul-menu-image" src="/static/icon/更多.png" mode="aspectFit"></image>
 								</view>
 								<view v-if="showChevron" class="lul-chevron-wrap">
 									<text class="lul-chevron">›</text>
@@ -67,6 +76,7 @@
 							v-for="(field, fieldIndex) in fields"
 							:key="fieldKey(field, fieldIndex)"
 							class="lul-field-chip"
+							@click.stop="handleFieldClick(item, field)"
 						>
 							<text v-if="fieldIcon(field) != ''" class="lul-field-icon">{{ fieldIcon(field) }}</text>
 							<text v-if="fieldLabel(field) != ''" class="lul-field-label">{{ fieldLabel(field) }}</text>
@@ -112,6 +122,7 @@ type Props = {
 	keyField?: string
 	titleField?: string
 	subtitleField?: string
+	metaField?: string
 	imageField?: string
 	imageListField?: string
 	showImage?: boolean
@@ -142,6 +153,7 @@ const props = withDefaults(defineProps<Props>(), {
 	keyField: 'id',
 	titleField: 'title',
 	subtitleField: '',
+	metaField: '',
 	imageField: 'image',
 	imageListField: 'images',
 	showImage: true,
@@ -190,6 +202,9 @@ const emit = defineEmits<{
 	(e: 'preview-close', payload: UTSJSONObject): void
 	(e: 'menu', payload: UTSJSONObject): void
 	(e: 'page-change', payload: UTSJSONObject): void
+	(e: 'subtitle-click', payload: UTSJSONObject): void
+	(e: 'field-click', payload: UTSJSONObject): void
+	(e: 'meta-click', payload: UTSJSONObject): void
 }>()
 
 const previewImages = ref<string[]>([])
@@ -356,6 +371,32 @@ function handleItemClick(item: UTSJSONObject) {
 		return
 	}
 	emit('item-click', item)
+}
+
+function handleSubtitleClick(item: UTSJSONObject) {
+	emit('subtitle-click', {
+		item: item,
+		field: props.subtitleField,
+		value: fieldText(item, props.subtitleField),
+	} as UTSJSONObject)
+}
+
+function handleMetaClick(item: UTSJSONObject) {
+	emit('meta-click', {
+		item: item,
+		field: props.metaField,
+		value: fieldText(item, props.metaField),
+	} as UTSJSONObject)
+}
+
+function handleFieldClick(item: UTSJSONObject, field: UTSJSONObject) {
+	emit('field-click', {
+		item: item,
+		field: field,
+		key: stringValue(field['key']),
+		label: fieldLabel(field),
+		value: displayField(item, field),
+	} as UTSJSONObject)
 }
 
 function imageListFromItem(item: UTSJSONObject) : string[] {
@@ -570,12 +611,12 @@ function goNextPage() {
 
 .lul-card {
 	background-color: #FFFFFF;
-	border-radius: 22px;
-	padding-left: 16px;
-	padding-right: 16px;
-	padding-top: 16px;
-	padding-bottom: 16px;
-	margin-bottom: 14px;
+	border-radius: 14px;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	margin-bottom: 6px;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #E7ECF3;
@@ -595,15 +636,15 @@ function goNextPage() {
 }
 
 .lul-check-wrap {
-	width: 32px;
-	padding-top: 6px;
+	width: 26px;
+	padding-top: 4px;
 	align-items: flex-start;
 }
 
 .lul-check {
-	width: 22px;
-	height: 22px;
-	border-radius: 11px;
+	width: 18px;
+	height: 18px;
+	border-radius: 9px;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #CBD5E1;
@@ -618,41 +659,41 @@ function goNextPage() {
 }
 
 .lul-check-icon {
-	font-size: 12px;
-	line-height: 12px;
+	font-size: 10px;
+	line-height: 10px;
 	color: #FFFFFF;
 }
 
 .lul-cover-wrap {
-	width: 88px;
-	height: 88px;
-	border-radius: 18px;
+	width: 64px;
+	height: 64px;
+	border-radius: 12px;
 	overflow: hidden;
 	background-color: #E2E8F0;
 	position: relative;
-	margin-right: 14px;
+	margin-right: 8px;
 }
 
 .lul-cover {
-	width: 88px;
-	height: 88px;
+	width: 64px;
+	height: 64px;
 }
 
 .lul-cover-count {
 	position: absolute;
-	right: 8px;
-	bottom: 8px;
-	padding-left: 7px;
-	padding-right: 7px;
-	padding-top: 3px;
-	padding-bottom: 3px;
+	right: 6px;
+	bottom: 6px;
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 2px;
+	padding-bottom: 2px;
 	border-radius: 999px;
 	background-color: rgba(15, 23, 42, 0.72);
 }
 
 .lul-cover-count-text {
-	font-size: 11px;
-	line-height: 11px;
+	font-size: 10px;
+	line-height: 10px;
 	color: #FFFFFF;
 }
 
@@ -668,68 +709,82 @@ function goNextPage() {
 
 .lul-title-wrap {
 	flex: 1;
-	padding-right: 10px;
+	padding-right: 6px;
 }
 
 .lul-title {
-	font-size: 18px;
-	line-height: 24px;
+	font-size: 15px;
+	line-height: 18px;
 	color: #0F172A;
 	font-weight: 700;
 }
 
 .lul-subtitle {
-	font-size: 13px;
-	line-height: 19px;
+	font-size: 12px;
+	line-height: 14px;
 	color: #64748B;
-	margin-top: 4px;
+	margin-top: 2px;
+}
+
+.lul-meta {
+	font-size: 12px;
+	line-height: 14px;
+	color: #475569;
+	margin-top: 2px;
 }
 
 .lul-menu-wrap {
-	width: 28px;
-	height: 28px;
-	border-radius: 14px;
+	width: 24px;
+	height: 24px;
+	border-radius: 12px;
 	background-color: #F8FAFC;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #E2E8F0;
 	align-items: center;
 	justify-content: center;
-	margin-right: 8px;
+	margin-right: 6px;
 }
 
 .lul-menu-icon {
-	font-size: 18px;
-	line-height: 18px;
+	font-size: 15px;
+	line-height: 15px;
 	color: #64748B;
 }
 
+.lul-menu-image {
+	width: 16px;
+	height: 16px;
+}
+
 .lul-chevron-wrap {
-	width: 20px;
+	width: 16px;
 	align-items: flex-end;
-	padding-top: 2px;
+	padding-top: 1px;
 }
 
 .lul-chevron {
-	font-size: 18px;
-	line-height: 18px;
+	font-size: 16px;
+	line-height: 16px;
 	color: #94A3B8;
 }
 
 .lul-tags {
 	flex-direction: row;
 	flex-wrap: wrap;
-	margin-top: 12px;
+	margin-top: 6px;
+	align-items: center;
 }
 
 .lul-tag {
-	padding-left: 10px;
-	padding-right: 10px;
-	padding-top: 6px;
-	padding-bottom: 6px;
+	align-items: center;
+	justify-content: center;
+	height: 22px;
+	padding-left: 8px;
+	padding-right: 8px;
 	border-radius: 999px;
-	margin-right: 8px;
-	margin-bottom: 8px;
+	margin-right: 5px;
+	margin-bottom: 4px;
 }
 
 .lul-tag-info {
@@ -757,9 +812,9 @@ function goNextPage() {
 }
 
 .lul-tag-text {
-	font-size: 12px;
-	line-height: 12px;
-	font-weight: 700;
+	font-size: 10px;
+	line-height: 16px;
+	font-weight: 600;
 }
 
 .lul-tag-text-info {
@@ -789,8 +844,8 @@ function goNextPage() {
 .lul-fields {
 	flex-direction: row;
 	flex-wrap: wrap;
-	margin-top: 14px;
-	padding-top: 14px;
+	margin-top: 8px;
+	padding-top: 8px;
 	border-top-width: 1px;
 	border-top-style: solid;
 	border-top-color: #E7ECF3;
@@ -799,40 +854,45 @@ function goNextPage() {
 .lul-field-chip {
 	flex-direction: row;
 	align-items: center;
-	padding-left: 10px;
-	padding-right: 10px;
-	padding-top: 7px;
-	padding-bottom: 7px;
-	border-radius: 12px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 10px;
 	background-color: #F8FAFC;
-	margin-right: 8px;
-	margin-top: 8px;
+	margin-right: 5px;
+	margin-top: 4px;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #E2E8F0;
 }
 
-.lul-field-icon {
-	font-size: 12px;
-	line-height: 12px;
+/* .lul-field-icon {
+	font-size: 11px;
+	line-height: 11px;
 	color: #64748B;
 	margin-right: 4px;
 }
 
 .lul-field-label {
-	font-size: 12px;
-	line-height: 12px;
+	font-size: 11px;
+	line-height: 11px;
 	color: #64748B;
 	margin-right: 4px;
 }
 
 .lul-field-value {
-	font-size: 12px;
-	line-height: 12px;
+	font-size: 11px;
+	line-height: 11px;
 	color: #0F172A;
 	font-weight: 700;
+} */
+.lul-field-icon,
+.lul-field-label,
+.lul-field-value {
+	font-size: 11px;
+	line-height: 15px;
 }
-
 .lul-actions {
 	flex-direction: row;
 	flex-wrap: wrap;

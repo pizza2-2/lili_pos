@@ -15,7 +15,8 @@ const __sfc__ = defineComponent({
             src.value = event["url"] as string;
         });
         return (): any | null => {
-            return _cE("web-view", _uM({
+            const _component_web_view = resolveComponent("web-view");
+            return _cV(_component_web_view, _uM({
                 id: "web-view",
                 src: unref(src),
                 "webview-styles": webview_styles

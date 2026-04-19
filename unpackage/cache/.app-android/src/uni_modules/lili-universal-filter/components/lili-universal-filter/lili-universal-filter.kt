@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -20,6 +20,7 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
     open var title: String by `$props`
     open var searchPlaceholder: String by `$props`
     open var searchValue: String by `$props`
+    open var filterVisible: Boolean by `$props`
     open var showBack: Boolean by `$props`
     open var showSearch: Boolean by `$props`
     open var showFilter: Boolean by `$props`
@@ -44,6 +45,7 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
             val statusBarHeight = ref<Number>(0)
             val inputValue = ref<String>(props.searchValue)
             val rootStyle = ref<String>("")
+            val filterPanelVisible = ref<Boolean>(false)
             fun gen_syncRootStyle_fn() {
                 val positionStyle = if (props.fixed) {
                     "position:sticky;top:0;"
@@ -59,35 +61,12 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
                 syncRootStyle()
             }
             val updateStatusBarHeight = ::gen_updateStatusBarHeight_fn
-            fun gen_eventValueToString_fn(e: UTSJSONObject): String {
-                val detail = e["detail"]
-                if (detail == null) {
-                    return ""
-                }
-                val detailObj = detail as UTSJSONObject
-                val value = detailObj["value"]
-                if (value == null) {
-                    return ""
-                }
-                return "" + value
-            }
-            val eventValueToString = ::gen_eventValueToString_fn
-            fun gen_onSearchInput_fn(e: UTSJSONObject) {
-                emit("searchInput", if (inputValue.value != "") {
-                    inputValue.value
-                } else {
-                    eventValueToString(e)
-                }
-                )
+            fun gen_onSearchInput_fn() {
+                emit("searchInput", inputValue.value)
             }
             val onSearchInput = ::gen_onSearchInput_fn
-            fun gen_onSearchConfirm_fn(e: UTSJSONObject) {
-                emit("searchConfirm", if (inputValue.value != "") {
-                    inputValue.value
-                } else {
-                    eventValueToString(e)
-                }
-                )
+            fun gen_onSearchConfirm_fn() {
+                emit("searchConfirm", inputValue.value)
             }
             val onSearchConfirm = ::gen_onSearchConfirm_fn
             fun gen_clearSearch_fn() {
@@ -109,9 +88,20 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
             }
             val handleHome = ::gen_handleHome_fn
             fun gen_handleFilter_fn() {
-                emit("filter")
+                filterPanelVisible.value = true
+                emit("update:filterVisible", true)
+                emit("filter-open")
             }
             val handleFilter = ::gen_handleFilter_fn
+            fun gen_closeFilterPanel_fn() {
+                if (!filterPanelVisible.value) {
+                    return
+                }
+                filterPanelVisible.value = false
+                emit("update:filterVisible", false)
+                emit("filter-close")
+            }
+            val closeFilterPanel = ::gen_closeFilterPanel_fn
             fun gen_handleMenu_fn() {
                 emit("menu")
             }
@@ -126,6 +116,15 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
             , fun(newVal: String){
                 if (newVal != inputValue.value) {
                     inputValue.value = newVal
+                }
+            }
+            )
+            watch(fun(): Boolean {
+                return props.filterVisible
+            }
+            , fun(newVal: Boolean){
+                if (newVal != filterPanelVisible.value) {
+                    filterPanelVisible.value = newVal
                 }
             }
             )
@@ -148,6 +147,7 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
             }
             )
             return fun(): Any? {
+                val _component_page_container = resolveComponent("page-container")
                 return _cE("view", _uM("class" to "uf-root", "style" to _nS(unref(rootStyle))), _uA(
                     _cE("view", _uM("class" to "uf-bar"), _uA(
                         if (isTrue(_ctx.showBack || _ctx.showHome)) {
@@ -158,14 +158,14 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
                                     } else {
                                         "uf-segment"
                                     }), "onClick" to handleBack), _uA(
-                                        _cE("text", _uM("class" to "uf-segment-icon"), "←")
+                                        _cE("image", _uM("class" to "uf-icon-image", "src" to "/static/icon/左箭头.png", "mode" to "aspectFit"))
                                     ), 2)
                                 } else {
                                     _cC("v-if", true)
                                 },
                                 if (isTrue(_ctx.showHome)) {
                                     _cE("view", _uM("key" to 1, "class" to "uf-segment", "onClick" to handleHome), _uA(
-                                        _cE("text", _uM("class" to "uf-segment-icon"), "⌂")
+                                        _cE("image", _uM("class" to "uf-icon-image", "src" to "/static/icon/主页.png", "mode" to "aspectFit"))
                                     ))
                                 } else {
                                     _cC("v-if", true)
@@ -210,11 +210,11 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
                             _cE("view", _uM("key" to 3, "class" to "uf-segment-group uf-segment-group-right"), _uA(
                                 if (isTrue(_ctx.showFilter)) {
                                     _cE("view", _uM("key" to 0, "class" to _nC(if (_ctx.showFilter && _ctx.showMenu) {
-                                        "uf-segment uf-segment-split uf-segment-dark"
+                                        "uf-segment uf-segment-split uf-segment-light"
                                     } else {
-                                        "uf-segment uf-segment-dark"
+                                        "uf-segment uf-segment-light"
                                     }), "onClick" to handleFilter), _uA(
-                                        _cE("text", _uM("class" to "uf-segment-text-light"), _tD(_ctx.filterText), 1),
+                                        _cE("image", _uM("class" to "uf-icon-image", "src" to "/static/icon/_筛选.png", "mode" to "aspectFit")),
                                         if (isTrue(_ctx.filterActive)) {
                                             _cE("view", _uM("key" to 0, "class" to "uf-dot"))
                                         } else {
@@ -235,6 +235,32 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
                         } else {
                             _cC("v-if", true)
                         }
+                    )),
+                    _cV(_component_page_container, _uM("show" to unref(filterPanelVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 260, "overlay-style" to "background-color: rgba(15, 23, 42, 0.38);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closeFilterPanel), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "uf-filter-panel"), _uA(
+                                _cE("view", _uM("class" to "uf-filter-handle")),
+                                _cE("view", _uM("class" to "uf-filter-header"), _uA(
+                                    _cE("text", _uM("class" to "uf-filter-title"), "筛选"),
+                                    _cE("view", _uM("class" to "uf-filter-close", "onClick" to closeFilterPanel), _uA(
+                                        _cE("text", _uM("class" to "uf-filter-close-text"), "关闭")
+                                    ))
+                                )),
+                                _cE("view", _uM("class" to "uf-filter-body"), _uA(
+                                    renderSlot(_ctx.`$slots`, "filter-panel", _uO(), fun(): UTSArray<Any> {
+                                        return _uA(
+                                            _cE("view", _uM("class" to "uf-filter-empty"), _uA(
+                                                _cE("text", _uM("class" to "uf-filter-empty-text"), "筛选面板内容待接入")
+                                            ))
+                                        )
+                                    }
+                                    )
+                                ))
+                            ))
+                        )
+                    }
+                    ), "_" to 3), 8, _uA(
+                        "show"
                     ))
                 ), 4)
             }
@@ -246,16 +272,17 @@ open class GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniv
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("uf-root" to _pS(_uM("zIndex" to 90, "backgroundColor" to "#FFFFFF", "borderBottomWidth" to 1, "borderBottomColor" to "#EEF1F5", "borderBottomStyle" to "solid")), "uf-bar" to _pS(_uM("height" to 56, "flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12)), "uf-segment-group" to _pS(_uM("height" to 34, "flexDirection" to "row", "alignItems" to "center", "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "overflow" to "hidden")), "uf-segment-group-left" to _pS(_uM("marginRight" to 8)), "uf-segment-group-right" to _pS(_uM("marginLeft" to 8)), "uf-segment" to _pS(_uM("minWidth" to 34, "height" to 34, "flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 10, "paddingRight" to 10)), "uf-segment-split" to _pS(_uM("borderRightWidth" to 1, "borderRightColor" to "rgba(148,163,184,0.32)", "borderRightStyle" to "solid")), "uf-segment-dark" to _pS(_uM("backgroundColor" to "#0F172A")), "uf-segment-icon" to _pS(_uM("fontSize" to 15, "color" to "#1F2937", "lineHeight" to "15px")), "uf-segment-icon-light" to _pS(_uM("fontSize" to 15, "color" to "#FFFFFF", "lineHeight" to "15px")), "uf-search-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-search-box" to _pS(_uM("height" to 40, "flexDirection" to "row", "alignItems" to "center", "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "paddingLeft" to 12, "paddingRight" to 10)), "uf-scan-btn" to _pS(_uM("width" to 24, "height" to 24, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#E2E8F0", "marginRight" to 8)), "uf-scan-icon" to _pS(_uM("fontSize" to 12, "color" to "#334155", "lineHeight" to "12px")), "uf-search-input" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "fontSize" to 14, "color" to "#1F2937", "paddingRight" to 6)), "uf-clear-btn" to _pS(_uM("width" to 24, "height" to 24, "flexShrink" to 0, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#D8DEE6")), "uf-clear-icon" to _pS(_uM("fontSize" to 14, "color" to "#536171", "lineHeight" to "14px")), "uf-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "justifyContent" to "center")), "uf-title" to _pS(_uM("fontSize" to 17, "fontWeight" to "bold", "color" to "#111827")), "uf-segment-text-light" to _pS(_uM("fontSize" to 12, "color" to "#FFFFFF")), "uf-dot" to _pS(_uM("width" to 6, "height" to 6, "borderTopLeftRadius" to 3, "borderTopRightRadius" to 3, "borderBottomRightRadius" to 3, "borderBottomLeftRadius" to 3, "backgroundColor" to "#FB7185", "marginLeft" to 5)))
+                return _uM("uf-root" to _pS(_uM("zIndex" to 90, "backgroundColor" to "#FFFFFF", "borderBottomWidth" to 1, "borderBottomColor" to "#EEF1F5", "borderBottomStyle" to "solid")), "uf-bar" to _pS(_uM("height" to 56, "flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12)), "uf-segment-group" to _pS(_uM("height" to 34, "flexDirection" to "row", "alignItems" to "center", "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "overflow" to "hidden")), "uf-segment-group-left" to _pS(_uM("marginRight" to 8)), "uf-segment-group-right" to _pS(_uM("marginLeft" to 8)), "uf-segment" to _pS(_uM("minWidth" to 34, "height" to 34, "position" to "relative", "flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 10, "paddingRight" to 10)), "uf-segment-split" to _pS(_uM("borderRightWidth" to 1, "borderRightColor" to "rgba(148,163,184,0.32)", "borderRightStyle" to "solid")), "uf-segment-dark" to _pS(_uM("backgroundColor" to "#0F172A")), "uf-segment-light" to _pS(_uM("backgroundColor" to "#FFFFFF")), "uf-segment-icon" to _pS(_uM("fontSize" to 15, "color" to "#1F2937", "lineHeight" to "15px")), "uf-icon-image" to _pS(_uM("width" to 18, "height" to 18)), "uf-segment-icon-light" to _pS(_uM("fontSize" to 15, "color" to "#FFFFFF", "lineHeight" to "15px")), "uf-search-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-search-box" to _pS(_uM("height" to 40, "flexDirection" to "row", "alignItems" to "center", "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "paddingLeft" to 12, "paddingRight" to 10)), "uf-scan-btn" to _pS(_uM("width" to 24, "height" to 24, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#E2E8F0", "marginRight" to 8)), "uf-scan-icon" to _pS(_uM("fontSize" to 12, "color" to "#334155", "lineHeight" to "12px")), "uf-search-input" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "fontSize" to 14, "color" to "#1F2937", "paddingRight" to 6)), "uf-clear-btn" to _pS(_uM("width" to 24, "height" to 24, "flexShrink" to 0, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#D8DEE6")), "uf-clear-icon" to _pS(_uM("fontSize" to 14, "color" to "#536171", "lineHeight" to "14px")), "uf-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "justifyContent" to "center")), "uf-title" to _pS(_uM("fontSize" to 17, "fontWeight" to "bold", "color" to "#111827")), "uf-segment-text-light" to _pS(_uM("fontSize" to 12, "color" to "#FFFFFF")), "uf-dot" to _pS(_uM("width" to 6, "height" to 6, "borderTopLeftRadius" to 3, "borderTopRightRadius" to 3, "borderBottomRightRadius" to 3, "borderBottomLeftRadius" to 3, "backgroundColor" to "#FB7185", "position" to "absolute", "top" to 9, "right" to 8)), "uf-filter-panel" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "paddingLeft" to 16, "paddingRight" to 16, "paddingTop" to 10, "paddingBottom" to 24)), "uf-filter-handle" to _pS(_uM("width" to 42, "height" to 4, "borderTopLeftRadius" to 2, "borderTopRightRadius" to 2, "borderBottomRightRadius" to 2, "borderBottomLeftRadius" to 2, "backgroundColor" to "#D5DCE5", "alignSelf" to "center")), "uf-filter-header" to _pS(_uM("height" to 44, "flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between")), "uf-filter-title" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "fontWeight" to "bold", "color" to "#111827")), "uf-filter-close" to _pS(_uM("height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F3F6FA", "alignItems" to "center", "justifyContent" to "center")), "uf-filter-close-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "color" to "#475569")), "uf-filter-body" to _pS(_uM("paddingTop" to 6)), "uf-filter-empty" to _pS(_uM("height" to 120, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "uf-filter-empty-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()
-        var emits: Map<String, Any?> = _uM("back" to null, "home" to null, "menu" to null, "filter" to null, "scan" to null, "searchInput" to null, "searchConfirm" to null, "searchClear" to null)
-        var props = _nP(_uM("title" to _uM("type" to "String", "required" to false, "default" to ""), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入搜索内容"), "searchValue" to _uM("type" to "String", "required" to false, "default" to ""), "showBack" to _uM("type" to "Boolean", "required" to false, "default" to false), "showSearch" to _uM("type" to "Boolean", "required" to false, "default" to true), "showFilter" to _uM("type" to "Boolean", "required" to false, "default" to false), "showHome" to _uM("type" to "Boolean", "required" to false, "default" to false), "showMenu" to _uM("type" to "Boolean", "required" to false, "default" to false), "showScan" to _uM("type" to "Boolean", "required" to false, "default" to false), "filterActive" to _uM("type" to "Boolean", "required" to false, "default" to false), "filterText" to _uM("type" to "String", "required" to false, "default" to "筛选"), "fixed" to _uM("type" to "Boolean", "required" to false, "default" to true), "backgroundColor" to _uM("type" to "String", "required" to false, "default" to "#FFFFFF"), "homePath" to _uM("type" to "String", "required" to false, "default" to "/pages/tabbar/products")))
+        var emits: Map<String, Any?> = _uM("back" to null, "home" to null, "menu" to null, "filter" to null, "filter-open" to null, "filter-close" to null, "update:filterVisible" to null, "scan" to null, "searchInput" to null, "searchConfirm" to null, "searchClear" to null)
+        var props = _nP(_uM("title" to _uM("type" to "String", "required" to false, "default" to ""), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入搜索内容"), "searchValue" to _uM("type" to "String", "required" to false, "default" to ""), "filterVisible" to _uM("type" to "Boolean", "required" to false, "default" to false), "showBack" to _uM("type" to "Boolean", "required" to false, "default" to false), "showSearch" to _uM("type" to "Boolean", "required" to false, "default" to true), "showFilter" to _uM("type" to "Boolean", "required" to false, "default" to false), "showHome" to _uM("type" to "Boolean", "required" to false, "default" to false), "showMenu" to _uM("type" to "Boolean", "required" to false, "default" to false), "showScan" to _uM("type" to "Boolean", "required" to false, "default" to false), "filterActive" to _uM("type" to "Boolean", "required" to false, "default" to false), "filterText" to _uM("type" to "String", "required" to false, "default" to "筛选"), "fixed" to _uM("type" to "Boolean", "required" to false, "default" to true), "backgroundColor" to _uM("type" to "String", "required" to false, "default" to "#FFFFFF"), "homePath" to _uM("type" to "String", "required" to false, "default" to "/pages/tabbar/products")))
         var propsNeedCastKeys = _uA(
             "title",
             "searchPlaceholder",
             "searchValue",
+            "filterVisible",
             "showBack",
             "showSearch",
             "showFilter",

@@ -21,42 +21,15 @@ const navigateToInterceptor = {
 		if (pass == -1 && authState.token == '') {
 			options.url = loginUrl
 		}
-	},
-	success: function (res : NavigateBackSuccess)  {
-		__f__('log','at pkg/router/permission.uts:26','拦截 navigateTo 接口 success 返回参数为：', res)
-	}, 
-	fail: function (err : NavigateToFail) {
-		__f__('log','at pkg/router/permission.uts:29','拦截 navigateTo 接口 fail 返回参数为：',err)
-	}
-} as AddInterceptorOptions
-
-// tabbar切换拦截
-const switchTabInterceptor = {
-	invoke: function (options : SwitchTabOptions) {
-		__f__('log','at pkg/router/permission.uts:36','拦截 switchTab 接口传入参数为：', options)
-		// 获取要跳转的页面路径（url去掉"?"和"?"后的参数）
-		const url:string = options.url.split('?')[0]
-		__f__('log','at pkg/router/permission.uts:39',url)
-	},
-	success: function (res : SwitchTabSuccess) {
-		__f__('log','at pkg/router/permission.uts:42','拦截 switchTab 接口 success 返回参数为：', res)
-	},
-	fail: function (err : SwitchTabFail) {
-		__f__('log','at pkg/router/permission.uts:45','拦截 switchTab 接口 fail 返回参数为：', err)
-	},
-	complete: function (res : SwitchTabComplete) {
-		__f__('log','at pkg/router/permission.uts:48','拦截 switchTab 接口 complete 返回参数为：', res)
 	}
 } as AddInterceptorOptions
 
 // 添加路由拦截权限
 export function routerPermission(){
 	uni.addInterceptor("navigateTo", navigateToInterceptor)
-	uni.addInterceptor("switchTab", switchTabInterceptor)
 }
 
 // 移除路由拦截权限
 export function removeRouterPermission{
 	uni.removeInterceptor('navigateTo')
-	uni.removeInterceptor('switchTab')
 }

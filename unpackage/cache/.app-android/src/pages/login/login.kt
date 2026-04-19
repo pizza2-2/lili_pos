@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -59,11 +59,7 @@ open class GenPagesLoginLogin : BasePage {
                             setAuthToken(loginRes.token_type + " " + loginRes.access_token)
                             val profile = await(getProfile())
                             setAuthUserInfo(UserInfoState(id = profile.id, name = buildDisplayName(profile), avatar = ""))
-                            uni_showToast(ShowToastOptions(title = "登录成功", icon = "success"))
-                            setTimeout(fun(){
-                                uni_switchTab(SwitchTabOptions(url = "/pages/tabbar/products"))
-                            }
-                            , 300)
+                            uni_switchTab(SwitchTabOptions(url = "/pages/tabbar/products"))
                         }
                          catch (error: Throwable) {
                             clearAuthState()
@@ -71,7 +67,7 @@ open class GenPagesLoginLogin : BasePage {
                             if (error != null) {
                                 val errorText = JSON.stringify(error)
                                 if (errorText != null && errorText != "") {
-                                    val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/login/login.uvue:109")
+                                    val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/login/login.uvue:105")
                                     if (parsedError != null) {
                                         val rawMessage = parsedError!!["message"]
                                         if (rawMessage != null) {
@@ -157,8 +153,6 @@ open class GenPagesLoginLogin : BasePage {
         val styles: Map<String, Map<String, Map<String, Any>>> by lazy {
             _nCS(_uA(
                 styles0
-            ), _uA(
-                GenApp.styles
             ))
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>

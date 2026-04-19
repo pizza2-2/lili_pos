@@ -5,6 +5,11 @@ import { isAgreePrivacyState } from '@/store/global'
 
 import { registerRequestPermissionTipsListener,unregisterRequestPermissionTipsListener,setRequestPermissionTips } from "@/uni_modules/uni-registerRequestPermissionTips"
 
+// 该插件在当前项目 Android 运行时存在资源类缺失问题：
+// `io.dcloud.uts.permissionrequest.R$drawable` 无法解析。
+// 先降级关闭全局权限提示监听，避免 chooseImage / 相机流程直接崩溃。
+const enableRequestPermissionTipsListener = false
+
 // 拒绝授权的timeNumber分钟内不再请求权限授权，而是弹窗引导打开系统设置，根据实际情况自行修改
 const timeNumber = ref<number>(15)
 // 记录当前拒绝定位请求的时间戳
@@ -27,6 +32,9 @@ PermissionTips["android.permission.CALL_PHONE"] = "<h1>电话权限说明</h1><p
 
 // 全局注册和监听系统权限申请
 export function registerOSPermission(){
+	if (!enableRequestPermissionTipsListener) {
+		return
+	}
 	setRequestPermissionTips(PermissionTips)
 	registerRequestPermissionTipsListener({
 		onComplete: (e) => {
@@ -50,6 +58,9 @@ export function registerOSPermission(){
 
 // 取消全局监听os权限
 export function unregisterOSPermission(){
+	if (!enableRequestPermissionTipsListener) {
+		return
+	}
 	unregisterRequestPermissionTipsListener(null)
 }
 
@@ -101,7 +112,7 @@ export function getLocationAsync():Promise<GetLocationSuccess> {
 				resolve(res)
 			},
 			fail: (err: IGetLocationFail) => {
-				__f__('log','at pkg/util/osPermission.uts:104',"获取定位错误："+err)
+				__f__('log','at pkg/util/osPermission.uts:115',"获取定位错误："+err)
 				if(err.errCode == 1505003 || err.errCode == 1505004){
 					uni.showModal({
 						content: "定位权限已经被拒绝，请前往设置中开启",
@@ -173,7 +184,7 @@ export function getCameraAsync(sizeType:string[] = ['original','compressed']):Pr
 				resolve(res)
 			},
 			fail: (err: IMediaError) => {
-				__f__('log','at pkg/util/osPermission.uts:176',"相机拍照错误：",err.errCode,err.errMsg)
+				__f__('log','at pkg/util/osPermission.uts:187',"相机拍照错误：",err.errCode,err.errMsg)
 				if(err.errCode == 1101005){
 					uni.showModal({
 						content: "相机权限已经被拒绝，请前往设置中开启",
@@ -246,7 +257,7 @@ export function getAlbumAsync(count:number = 1,sizeType:string[] = ['original','
 				resolve(res)
 			},
 			fail: (err: IMediaError) => {
-				__f__('log','at pkg/util/osPermission.uts:249',"获取相册错误：",err.errCode,err.errMsg)
+				__f__('log','at pkg/util/osPermission.uts:260',"获取相册错误：",err.errCode,err.errMsg)
 				if(err.errCode == 1101005){
 					uni.showModal({
 						content: "相册权限已经被拒绝，请前往设置中开启",

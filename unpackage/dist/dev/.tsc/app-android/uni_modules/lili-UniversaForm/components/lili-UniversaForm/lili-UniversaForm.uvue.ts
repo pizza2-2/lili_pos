@@ -1,0 +1,947 @@
+import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
+
+type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
+type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
+
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 139, 6>;
+	mode?: string
+	formSections?: UTSJSONObject[]
+	initialData?: UTSJSONObject
+	showFooter?: boolean
+	enableBackConfirm?: boolean
+	leaveSignal?: number
+	uploadContentTypeModel?: string
+}
+
+
+const __sfc__ = defineComponent({
+  __name: 'lili-UniversaForm',
+  props: {
+    mode: { type: String, required: false, default: 'create' },
+    formSections: { type: Array as PropType<UTSJSONObject[]>, required: false, default: () : UTSJSONObject[] => [] },
+    initialData: { type: UTSJSONObject, required: false, default: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	} },
+    showFooter: { type: Boolean, required: false, default: true },
+    enableBackConfirm: { type: Boolean, required: false, default: true },
+    leaveSignal: { type: Number, required: false, default: 0 },
+    uploadContentTypeModel: { type: String, required: false, default: '' }
+  },
+  emits: ["submit", "cancel", "field-change", "form-change", "dirty-change", "save-request", "discard-leave", "upload", "upload-delete", "upload-error", "bottom-select-add", "bottom-select-edit"],
+  setup(__props, __setupCtx: SetupContext) {
+const __expose = __setupCtx.expose
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const props = __props
+
+function emit(event: string, ...do_not_transform_spread: Array<any | null>) {
+__ins.emit(event, ...do_not_transform_spread)
+}
+
+const formData = ref<UTSJSONObject>({} as UTSJSONObject)
+const fieldErrors = ref<UTSJSONObject>({} as UTSJSONObject)
+const openSections = ref<boolean[]>([])
+const dirty = ref<boolean>(false)
+const snapshot = ref<string>('')
+const allowNativeBackOnce = ref<boolean>(false)
+
+function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
+	const value = obj[key]
+	if (value == null) return {} as UTSJSONObject
+	return value as UTSJSONObject
+}
+
+function cloneObject(source: UTSJSONObject) : UTSJSONObject {
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 190, 8), } as UTSJSONObject
+	for (const key in source) {
+		target[key] = source[key]
+	}
+	return target
+}
+
+function getArrayField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
+	const value = obj[key]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
+	const value = obj[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function getBooleanField(obj: UTSJSONObject, key: string, fallback: boolean = false) : boolean {
+	const value = obj[key]
+	if (value == null) return fallback
+	return value as boolean
+}
+
+function getNumberField(obj: UTSJSONObject, key: string, fallback: number = 0) : number {
+	const value = obj[key]
+	if (value == null) return fallback
+	return value as number
+}
+
+function getFieldKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'key')
+}
+
+function getFieldKeyWithIndex(field: UTSJSONObject, index: number) : string {
+	const key = getFieldKey(field)
+	if (key != '') return key
+	return 'field_' + index
+}
+
+function getSectionKey(section: UTSJSONObject, index: number) : string {
+	const key = getStringField(section, 'key')
+	if (key != '') return key
+	return 'section_' + index
+}
+
+function getSectionTitle(section: UTSJSONObject, index: number) : string {
+	const title = getStringField(section, 'title')
+	if (title != '') return title
+	return '分组' + (index + 1)
+}
+
+function getSectionDescription(section: UTSJSONObject) : string {
+	return getStringField(section, 'description')
+}
+
+function getSectionFields(section: UTSJSONObject) : UTSJSONObject[] {
+	return getArrayField(section, 'fields')
+}
+
+function getFieldLabel(field: UTSJSONObject) : string {
+	const label = getStringField(field, 'label')
+	if (label != '') return label
+	return getFieldKey(field)
+}
+
+function getFieldDescription(field: UTSJSONObject) : string {
+	return getStringField(field, 'description')
+}
+
+function getFieldPlaceholder(field: UTSJSONObject) : string {
+	const placeholder = getStringField(field, 'placeholder')
+	if (placeholder != '') return placeholder
+	return '请输入' + getFieldLabel(field)
+}
+
+function getFieldType(field: UTSJSONObject) : string {
+	return getStringField(field, 'type', 'input')
+}
+
+function isInputField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'input'
+}
+
+function isTextareaField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'textarea'
+}
+
+function isNumberField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'number'
+}
+
+function isSwitchField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'switch'
+}
+
+function isBottomSelectField(field: UTSJSONObject) : boolean {
+	const fieldType = getFieldType(field)
+	return fieldType == 'bottomSelect' || fieldType == 'select'
+}
+
+function isUploadField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'upload'
+}
+
+function isRequired(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'required', false)
+}
+
+function isCreateOnly(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'createOnly', false)
+}
+
+function isEditOnly(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'editOnly', false)
+}
+
+function isReadonly(field: UTSJSONObject) : boolean {
+	if (getBooleanField(field, 'readonly', false)) return true
+	if (props.mode == 'create' && isEditOnly(field)) return true
+	if (props.mode == 'edit' && isCreateOnly(field)) return true
+	return false
+}
+
+function shouldShowField(field: UTSJSONObject) : boolean {
+	if (getBooleanField(field, 'hidden', false)) return false
+	const hideMode = getStringField(field, 'hideInMode')
+	if (hideMode != '' && hideMode == props.mode) return false
+	return true
+}
+
+function getDefaultValue(field: UTSJSONObject) : any {
+	const fieldType = getFieldType(field)
+	const customDefault = field['defaultValue']
+	if (customDefault != null) {
+		return customDefault
+	}
+	if (fieldType == 'switch') return false
+	if (fieldType == 'upload') return [] as string[]
+	if (fieldType == 'number') return ''
+	return ''
+}
+
+function getFieldValue(field: UTSJSONObject) : any {
+	const key = getFieldKey(field)
+	if (key == '') return getDefaultValue(field)
+	const current = formData.value[key]
+	if (current == null) return getDefaultValue(field)
+	return current
+}
+
+function getStringFieldValue(field: UTSJSONObject) : string {
+	const value = getFieldValue(field)
+	if (value == null) return ''
+	if (Array.isArray(value)) return ''
+	return '' + value
+}
+
+function getBooleanFieldValue(field: UTSJSONObject) : boolean {
+	const value = getFieldValue(field)
+	if (value == null) return false
+	return value as boolean
+}
+
+function getUploadValue(field: UTSJSONObject) : string[] {
+	const value = getFieldValue(field)
+	if (value == null) return []
+	return value as string[]
+}
+
+function getUploadFileItemsKey(field: UTSJSONObject) : string {
+	const customKey = getStringField(field, 'fileItemsKey')
+	if (customKey != '') return customKey
+	return getFieldKey(field) + 'Items'
+}
+
+function getUploadFileItems(field: UTSJSONObject) : UTSJSONObject[] {
+	const itemsKey = getUploadFileItemsKey(field)
+	const value = formData.value[itemsKey]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function getFieldError(field: UTSJSONObject) : string {
+	const key = getFieldKey(field)
+	if (key == '') return ''
+	return getStringField(fieldErrors.value, key)
+}
+
+function getBottomSelectTitle(field: UTSJSONObject) : string {
+	const title = getStringField(field, 'title')
+	if (title != '') return title
+	return getFieldLabel(field)
+}
+
+function getBottomSelectSearchPlaceholder(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'searchPlaceholder')
+	if (value != '') return value
+	return '请输入关键词搜索'
+}
+
+function getBottomSelectEmptyText(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'emptyText')
+	if (value != '') return value
+	return '暂无数据'
+}
+
+function getBottomSelectLabelKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'labelKey')
+	if (value != '') return value
+	return 'text'
+}
+
+function getBottomSelectValueKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'valueKey')
+	if (value != '') return value
+	return 'value'
+}
+
+function getBottomSelectPageSize(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'pageSize', 20)
+	if (value <= 0) return 20
+	return value
+}
+
+function getBottomSelectSearchDelay(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'searchDelay', 300)
+	if (value <= 0) return 300
+	return value
+}
+
+function showBottomSelectEdit(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showEditAction', true)
+}
+
+function showBottomSelectAdd(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showAddAction', true)
+}
+
+function getFieldFetchData(field: UTSJSONObject) : FetchDataFn {
+	return field['fetchData'] as FetchDataFn
+}
+
+function getUploadAction(field: UTSJSONObject) : string {
+	return getStringField(field, 'action')
+}
+
+function getUploadName(field: UTSJSONObject) : string {
+	const name = getStringField(field, 'name')
+	if (name != '') return name
+	return 'file'
+}
+
+function getUploadHeaders(field: UTSJSONObject) : UTSJSONObject {
+	return getObjectField(field, 'headers')
+}
+
+function getUploadFormData(field: UTSJSONObject) : UTSJSONObject {
+	const fieldFormData = getObjectField(field, 'formData')
+	const result = cloneObject(fieldFormData)
+	const fieldContentTypeModel = getStringField(result, 'content_type_model').trim()
+	if (fieldContentTypeModel == '') {
+		const pageContentTypeModel = props.uploadContentTypeModel.trim()
+		if (pageContentTypeModel != '') {
+			result['content_type_model'] = pageContentTypeModel
+		}
+	}
+	return result
+}
+
+function getUploadMax(field: UTSJSONObject) : number {
+	const maxValue = getNumberField(field, 'max', 9)
+	if (maxValue <= 0) return 9
+	return maxValue
+}
+
+function getUploadText(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'uploadText')
+	if (value != '') return value
+	return '上传图片'
+}
+
+function setFieldValueByKey(key: string, value: any) {
+	formData.value[key] = value
+}
+
+function clearFieldError(key: string) {
+	if (fieldErrors.value[key] != null) {
+		fieldErrors.value[key] = ''
+	}
+}
+
+function emitFieldChange(field: UTSJSONObject, value: any) {
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 484, 8), 
+		field: field,
+		key: getFieldKey(field),
+		value: value,
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject
+	emit('field-change', payload)
+	emit('form-change', payload)
+}
+
+function serializeState() : string {
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 496, 8), 
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject
+	return JSON.stringify(state)
+}
+
+function refreshDirtyState() {
+	const nextDirty = serializeState() != snapshot.value
+	if (nextDirty != dirty.value) {
+		dirty.value = nextDirty
+		emit('dirty-change', nextDirty)
+	}
+}
+
+function markSnapshot() {
+	snapshot.value = serializeState()
+	if (dirty.value) {
+		dirty.value = false
+		emit('dirty-change', false)
+	}
+}
+
+function applyInitialValues() {
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 520, 8), } as UTSJSONObject
+	for (let i = 0; i < props.formSections.length; i++) {
+		const fields = getSectionFields(props.formSections[i])
+		for (let j = 0; j < fields.length; j++) {
+			const field = fields[j]
+			const key = getFieldKey(field)
+			if (key == '') continue
+			const incoming = props.initialData[key]
+			if (incoming != null) {
+				nextData[key] = incoming
+			} else {
+				nextData[key] = getDefaultValue(field)
+			}
+			if (isUploadField(field)) {
+				const itemsKey = getUploadFileItemsKey(field)
+				const incomingItems = props.initialData[itemsKey]
+				if (incomingItems != null) {
+					nextData[itemsKey] = incomingItems
+				} else {
+					nextData[itemsKey] = [] as UTSJSONObject[]
+				}
+			}
+		}
+	}
+	formData.value = nextData
+	fieldErrors.value = {} as UTSJSONObject
+	markSnapshot()
+}
+
+function initOpenSections() {
+	const result: boolean[] = []
+	for (let i = 0; i < props.formSections.length; i++) {
+		result.push(getBooleanField(props.formSections[i], 'defaultOpen', i == 0))
+	}
+	openSections.value = result
+}
+
+function isSectionOpen(index: number) : boolean {
+	if (index < 0 || index >= openSections.value.length) return false
+	return openSections.value[index]
+}
+
+function toggleSection(index: number) {
+	if (index < 0 || index >= openSections.value.length) return
+	openSections.value[index] = !openSections.value[index]
+}
+
+function readEventValue(event: any) : string {
+	if (event == null) return ''
+	const inputEvent = event as UniInputEvent
+	const detail = inputEvent.detail
+	if (detail == null) return ''
+	return detail.value
+}
+
+function handleTextInput(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = readEventValue(event)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleNumberInput(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = readEventValue(event)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleSwitchChange(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const switchEvent = event as UniSwitchChangeEvent
+	const detail = switchEvent.detail
+	if (detail == null) return
+	const value = detail.value
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const payloadObject = payload as UTSJSONObject
+	const value = getStringField(payloadObject, 'value')
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleBottomSelectAdd(field: UTSJSONObject) {
+	emit('bottom-select-add', {
+		field: field,
+		key: getFieldKey(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleBottomSelectEdit(field: UTSJSONObject) {
+	emit('bottom-select-edit', {
+		field: field,
+		key: getFieldKey(field),
+		value: getFieldValue(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleUploadModelChange(field: UTSJSONObject, value: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const listValue = value as string[]
+	const nextList: string[] = []
+	for (let i = 0; i < listValue.length; i++) {
+		nextList.push(listValue[i])
+	}
+	setFieldValueByKey(key, nextList)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, nextList)
+}
+
+function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
+	const itemsKey = getUploadFileItemsKey(field)
+	const sourceItems = value as UTSJSONObject[]
+	const nextItems: UTSJSONObject[] = []
+	for (let index = 0; index < sourceItems.length; index++) {
+		const sourceItem = sourceItems[index]
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 658, 9), } as UTSJSONObject
+		for (const key in sourceItem) {
+			clonedItem[key] = sourceItem[key]
+		}
+		nextItems.push(clonedItem)
+	}
+	setFieldValueByKey(itemsKey, nextItems)
+	refreshDirtyState()
+}
+
+function handleUploadSuccess(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	emit('upload', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function handleUploadDelete(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	refreshDirtyState()
+	emit('upload-delete', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function handleUploadError(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	emit('upload-error', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function validateField(field: UTSJSONObject) : string {
+	if (!shouldShowField(field)) return ''
+	const key = getFieldKey(field)
+	if (key == '') return ''
+	const value = formData.value[key]
+	if (isRequired(field)) {
+		if (value == null) {
+			return getFieldLabel(field) + '不能为空'
+		}
+		if (Array.isArray(value) && (value as string[]).length == 0) {
+			return getFieldLabel(field) + '不能为空'
+		}
+		if (!Array.isArray(value) && ('' + value) == '') {
+			return getFieldLabel(field) + '不能为空'
+		}
+	}
+	const validator = field['validator']
+	if (validator != null) {
+		const validatorValue = value == null ? '' : value
+		const errorText = (validator as ValidatorFn)(validatorValue, formData.value, props.mode)
+		if (errorText != '') {
+			return errorText
+		}
+	}
+	return ''
+}
+
+function validate() : boolean {
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 730, 8), } as UTSJSONObject
+	let hasError = false
+	for (let i = 0; i < props.formSections.length; i++) {
+		const fields = getSectionFields(props.formSections[i])
+		for (let j = 0; j < fields.length; j++) {
+			const field = fields[j]
+			const errorText = validateField(field)
+			if (errorText != '') {
+				errors[getFieldKey(field)] = errorText
+				hasError = true
+			}
+		}
+	}
+	fieldErrors.value = errors
+	return !hasError
+}
+
+function buildSubmitPayload() : UTSJSONObject {
+	return {
+		mode: props.mode,
+		formData: formData.value,
+		hasChanges: dirty.value,
+		uploadContentTypeModel: props.uploadContentTypeModel,
+	} as UTSJSONObject
+}
+
+function discardAndLeave() {
+	allowNativeBackOnce.value = true
+	dirty.value = false
+	emit('discard-leave', buildSubmitPayload())
+}
+
+function confirmLeave() {
+	uni.showModal({
+		title: '提示',
+		content: '页面内容已修改，是否先保存？',
+		cancelText: '直接离开',
+		confirmText: '去保存',
+		success: (res) => {
+			if (res.confirm) {
+				emit('save-request', buildSubmitPayload())
+				return
+			}
+			if (res.cancel) {
+				discardAndLeave()
+			}
+		},
+	})
+}
+
+function handleSubmit() {
+	if (!validate()) {
+		uni.showToast({
+			title: '请检查必填项',
+			icon: 'none',
+		})
+		return
+	}
+	emit('submit', buildSubmitPayload())
+}
+
+function handleCancel() {
+	if (!dirty.value) {
+		emit('cancel', buildSubmitPayload())
+		return
+	}
+	confirmLeave()
+}
+
+watch(
+	() : UTSJSONObject[] => props.formSections,
+	() => {
+		initOpenSections()
+		applyInitialValues()
+	},
+	{
+		immediate: true,
+	}
+)
+
+watch(
+	() : UTSJSONObject => props.initialData,
+	() => {
+		applyInitialValues()
+	}
+)
+
+watch(
+	() : string => props.mode,
+	() => {
+		refreshDirtyState()
+	}
+)
+
+watch(
+	() : number => props.leaveSignal,
+	() => {
+		allowNativeBackOnce.value = true
+		dirty.value = false
+	}
+)
+
+onBackPress(() : boolean | null => {
+	if (!props.enableBackConfirm) return null
+	if (allowNativeBackOnce.value) {
+		allowNativeBackOnce.value = false
+		return null
+	}
+	if (!dirty.value) return null
+	uni.showModal({
+		title: '提示',
+		content: '当前页面有未保存内容，是否保存？',
+		cancelText: '直接离开',
+		confirmText: '保存',
+		success: (res) => {
+			if (res.confirm) {
+				emit('save-request', buildSubmitPayload())
+				return
+			}
+			if (res.cancel) {
+				discardAndLeave()
+			}
+		},
+	})
+	return true
+})
+
+__expose({
+	validate,
+	getFormData: () : UTSJSONObject => formData.value,
+	setFormData: (data: UTSJSONObject) => {
+		formData.value = data
+		refreshDirtyState()
+	},
+	resetForm: () => {
+		applyInitialValues()
+	},
+	resetDirty: () => {
+		markSnapshot()
+	},
+	hasPendingChanges: () : boolean => dirty.value,
+	confirmLeave,
+	submit: handleSubmit,
+})
+
+return (): any | null => {
+
+const _component_switch = resolveComponent("switch")
+
+  return _cE("view", _uM({ class: "uf-root" }), [
+    _cE("scroll-view", _uM({
+      class: "uf-scroll",
+      style: _nS(_uM({"flex":"1"})),
+      direction: "vertical",
+      "show-scrollbar": "false"
+    }), [
+      _cE(Fragment, null, RenderHelpers.renderList(props.formSections, (section, sectionIndex, __index, _cached): any => {
+        return _cE("view", _uM({
+          key: getSectionKey(section, sectionIndex),
+          class: "uf-section"
+        }), [
+          _cE("view", _uM({
+            class: "uf-section-header",
+            onClick: () => {toggleSection(sectionIndex)}
+          }), [
+            _cE("view", _uM({ class: "uf-section-title-wrap" }), [
+              _cE("text", _uM({ class: "uf-section-title" }), _tD(getSectionTitle(section, sectionIndex)), 1 /* TEXT */),
+              getSectionDescription(section) != ''
+                ? _cE("text", _uM({
+                    key: 0,
+                    class: "uf-section-desc"
+                  }), _tD(getSectionDescription(section)), 1 /* TEXT */)
+                : _cC("v-if", true)
+            ]),
+            _cE("text", _uM({ class: "uf-section-arrow" }), _tD(isSectionOpen(sectionIndex) ? '⌃' : '⌄'), 1 /* TEXT */)
+          ], 8 /* PROPS */, ["onClick"]),
+          isTrue(isSectionOpen(sectionIndex))
+            ? _cE("view", _uM({
+                key: 0,
+                class: "uf-section-body"
+              }), [
+                _cE(Fragment, null, RenderHelpers.renderList(getSectionFields(section), (field, fieldIndex, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: getFieldKeyWithIndex(field, fieldIndex)
+                  }), [
+                    isTrue(shouldShowField(field))
+                      ? _cE("view", _uM({
+                          key: 0,
+                          class: "uf-field"
+                        }), [
+                          _cE("view", _uM({ class: "uf-field-head" }), [
+                            _cE("view", _uM({ class: "uf-field-title-line" }), [
+                              _cE("text", _uM({ class: "uf-field-label" }), _tD(getFieldLabel(field)), 1 /* TEXT */),
+                              isTrue(isRequired(field))
+                                ? _cE("text", _uM({
+                                    key: 0,
+                                    class: "uf-required"
+                                  }), "*")
+                                : _cC("v-if", true),
+                              isTrue(isReadonly(field))
+                                ? _cE("text", _uM({
+                                    key: 1,
+                                    class: "uf-mode-tag"
+                                  }), "只读")
+                                : isTrue(isCreateOnly(field) && props.mode == 'create')
+                                  ? _cE("text", _uM({
+                                      key: 2,
+                                      class: "uf-mode-tag"
+                                    }), "新增")
+                                  : isTrue(isEditOnly(field) && props.mode == 'edit')
+                                    ? _cE("text", _uM({
+                                        key: 3,
+                                        class: "uf-mode-tag"
+                                      }), "编辑")
+                                    : _cC("v-if", true)
+                            ]),
+                            getFieldDescription(field) != ''
+                              ? _cE("text", _uM({
+                                  key: 0,
+                                  class: "uf-field-desc"
+                                }), _tD(getFieldDescription(field)), 1 /* TEXT */)
+                              : _cC("v-if", true)
+                          ]),
+                          _cE("view", _uM({ class: "uf-control" }), [
+                            isTrue(isInputField(field))
+                              ? _cE("input", _uM({
+                                  key: 0,
+                                  class: "uf-input",
+                                  value: getStringFieldValue(field),
+                                  placeholder: getFieldPlaceholder(field),
+                                  disabled: isReadonly(field),
+                                  onInput: ($event: UniInputEvent) => {handleTextInput(field, $event)}
+                                }), null, 40 /* PROPS, NEED_HYDRATION */, ["value", "placeholder", "disabled", "onInput"])
+                              : isTrue(isTextareaField(field))
+                                ? _cE("textarea", _uM({
+                                    key: 1,
+                                    class: "uf-textarea",
+                                    value: getStringFieldValue(field),
+                                    placeholder: getFieldPlaceholder(field),
+                                    disabled: isReadonly(field),
+                                    onInput: ($event: any) => {handleTextInput(field, $event)}
+                                  }), null, 40 /* PROPS, NEED_HYDRATION */, ["value", "placeholder", "disabled", "onInput"])
+                                : isTrue(isNumberField(field))
+                                  ? _cE("input", _uM({
+                                      key: 2,
+                                      class: "uf-input",
+                                      type: "number",
+                                      value: getStringFieldValue(field),
+                                      placeholder: getFieldPlaceholder(field),
+                                      disabled: isReadonly(field),
+                                      onInput: ($event: UniInputEvent) => {handleNumberInput(field, $event)}
+                                    }), null, 40 /* PROPS, NEED_HYDRATION */, ["value", "placeholder", "disabled", "onInput"])
+                                  : isTrue(isSwitchField(field))
+                                    ? _cV(_component_switch, _uM({
+                                        key: 3,
+                                        checked: getBooleanFieldValue(field),
+                                        disabled: isReadonly(field),
+                                        onChange: ($event: any) => {handleSwitchChange(field, $event)}
+                                      }), null, 8 /* PROPS */, ["checked", "disabled", "onChange"])
+                                    : isTrue(isBottomSelectField(field))
+                                      ? _cE("view", _uM({
+                                          key: 4,
+                                          class: "uf-bottom-select-wrap"
+                                        }), [
+                                          _cV(unref(liliBottomSelect), _uM({
+                                            value: getStringFieldValue(field),
+                                            title: getBottomSelectTitle(field),
+                                            placeholder: getFieldPlaceholder(field),
+                                            searchPlaceholder: getBottomSelectSearchPlaceholder(field),
+                                            emptyText: getBottomSelectEmptyText(field),
+                                            disabled: isReadonly(field),
+                                            labelKey: getBottomSelectLabelKey(field),
+                                            valueKey: getBottomSelectValueKey(field),
+                                            pageSize: getBottomSelectPageSize(field),
+                                            searchDelay: getBottomSelectSearchDelay(field),
+                                            showEditAction: showBottomSelectEdit(field),
+                                            showAddAction: showBottomSelectAdd(field),
+                                            fetchData: getFieldFetchData(field),
+                                            onChange: ($event: any) => {handleBottomSelectChange(field, $event)},
+                                            onEdit: () => {handleBottomSelectEdit(field)},
+                                            onAdd: () => {handleBottomSelectAdd(field)}
+                                          }), null, 8 /* PROPS */, ["value", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "showEditAction", "showAddAction", "fetchData", "onChange", "onEdit", "onAdd"])
+                                        ])
+                                      : isTrue(isUploadField(field))
+                                        ? _cE("view", _uM({
+                                            key: 5,
+                                            class: "uf-upload-wrap"
+                                          }), [
+                                            _cV(unref(liliUpload), _uM({
+                                              modelValue: getUploadValue(field),
+                                              fileItems: getUploadFileItems(field),
+                                              action: getUploadAction(field),
+                                              name: getUploadName(field),
+                                              headers: getUploadHeaders(field),
+                                              formData: getUploadFormData(field),
+                                              max: getUploadMax(field),
+                                              disabled: isReadonly(field),
+                                              uploadText: getUploadText(field),
+                                              "onUpdate:modelValue": ($event: any) => {handleUploadModelChange(field, $event)},
+                                              "onUpdate:fileItems": ($event: any) => {handleUploadFileItemsChange(field, $event)},
+                                              onUpload: ($event: any) => {handleUploadSuccess(field, $event)},
+                                              onDelete: ($event: any) => {handleUploadDelete(field, $event)},
+                                              onError: ($event: any) => {handleUploadError(field, $event)}
+                                            }), null, 8 /* PROPS */, ["modelValue", "fileItems", "action", "name", "headers", "formData", "max", "disabled", "uploadText", "onUpdate:modelValue", "onUpdate:fileItems", "onUpload", "onDelete", "onError"])
+                                          ])
+                                        : _cE("view", _uM({
+                                            key: 6,
+                                            class: "uf-plain-value"
+                                          }), [
+                                            _cE("text", _uM({ class: "uf-plain-value-text" }), _tD(getStringFieldValue(field)), 1 /* TEXT */)
+                                          ])
+                          ]),
+                          getFieldError(field) != ''
+                            ? _cE("text", _uM({
+                                key: 0,
+                                class: "uf-error-text"
+                              }), _tD(getFieldError(field)), 1 /* TEXT */)
+                            : _cC("v-if", true)
+                        ])
+                      : _cC("v-if", true)
+                  ])
+                }), 128 /* KEYED_FRAGMENT */)
+              ])
+            : _cC("v-if", true)
+        ])
+      }), 128 /* KEYED_FRAGMENT */)
+    ], 4 /* STYLE */),
+    isTrue(props.showFooter)
+      ? _cE("view", _uM({
+          key: 0,
+          class: "uf-footer"
+        }), [
+          _cE("button", _uM({
+            class: "uf-btn uf-btn-light",
+            onClick: handleCancel
+          }), "取消"),
+          _cE("button", _uM({
+            class: "uf-btn uf-btn-primary",
+            onClick: handleSubmit
+          }), _tD(props.mode == 'edit' ? '保存修改' : '创建'), 1 /* TEXT */)
+        ])
+      : _cC("v-if", true)
+  ])
+}
+}
+
+})
+export default __sfc__
+export type LiliUniversaFormComponentPublicInstance = InstanceType<typeof __sfc__>;
+const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))]])]

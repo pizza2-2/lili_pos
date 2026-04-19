@@ -4,37 +4,70 @@
 			title="供应商"
 			searchPlaceholder="输入供应商名称、编码、联系人"
 			:searchValue="keyword"
+			:filterVisible="filterVisible"
 			:showBack="true"
 			:showSearch="true"
 			:showFilter="true"
 			:showHome="true"
-			:filterActive="keyword != ''"
+			:filterActive="hasActiveFilter"
 			filterText="重置"
 			homePath="/pages/tabbar/products"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
-			@filter="handleReset"
-		/>
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="supplier-filter-panel">
+					<view class="supplier-filter-actions">
+						<view class="supplier-filter-btn supplier-filter-btn-light" @click="handleFilterReset">
+							<text class="supplier-filter-btn-light-text">重置</text>
+						</view>
+						<view class="supplier-filter-btn supplier-filter-btn-primary" @click="applySelectedSupplier">
+							<text class="supplier-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+
+					<view v-if="filterOptionsLoading" class="supplier-filter-state">
+						<text class="supplier-filter-state-text">筛选选项加载中...</text>
+					</view>
+
+					<view v-else-if="filterOptionsError != ''" class="supplier-filter-state">
+						<text class="supplier-filter-state-text">{{ filterOptionsError }}</text>
+					</view>
+
+					<view v-else-if="filterDefinitions.length == 0" class="supplier-filter-state">
+						<text class="supplier-filter-state-text">暂无可用筛选项</text>
+					</view>
+
+					<scroll-view v-else scroll-y="true" class="supplier-filter-scroll">
+						<view
+							v-for="filter in filterDefinitions"
+							:key="filter.key"
+							class="supplier-filter-group"
+						>
+							<text class="supplier-filter-group-title">{{ filter.label }}</text>
+							<view class="supplier-filter-options">
+								<view
+									v-for="option in filter.options"
+									:key="filter.key + '-' + option.value"
+									:class="isFilterOptionSelected(filter.param, option.value) ? 'supplier-filter-option supplier-filter-option-active' : 'supplier-filter-option'"
+									@click="toggleFilterOption(filter.param, option.value)"
+								>
+									<text :class="isFilterOptionSelected(filter.param, option.value) ? 'supplier-filter-option-text supplier-filter-option-text-active' : 'supplier-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+			</template>
+		</lili-universal-filter>
 
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
 			<view class="page-content">
-				<view class="summary-card">
-					<view class="summary-item summary-item-gap">
-						<text class="summary-value">{{ supplierCountText }}</text>
-						<text class="summary-label">当前结果</text>
-					</view>
-					<view class="summary-item summary-item-gap">
-						<text class="summary-value">{{ activeCountText }}</text>
-						<text class="summary-label">启用中</text>
-					</view>
-					<view class="summary-item">
-						<text class="summary-value">{{ withFileCountText }}</text>
-						<text class="summary-label">含附件</text>
-					</view>
-				</view>
 
 				<view v-if="errorMessage != '' && !isLoading" class="error-card">
 					<text class="error-title">加载失败</text>
@@ -49,6 +82,7 @@
 					keyField="id"
 					titleField="name"
 					subtitleField="codeText"
+					metaField="contactText"
 					imageField="cover"
 					imageListField="images"
 					tagField="tags"
@@ -65,6 +99,9 @@
 					:totalPages="totalPages"
 					:totalCount="totalCount"
 					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
 				/>
@@ -77,9 +114,10 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { getSupplierList, SupplierItem, SupplierListResponse } from '@/pkg/api/modules/suppliers'
+import { deleteSupplier, getSupplierList, getSupplierFilterOptions, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse } from '@/pkg/api/modules/suppliers'
 
 const keyword = ref('')
+const filterVisible = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref('')
 const suppliers = ref<SupplierItem[]>([])
@@ -87,9 +125,13 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<SupplierFilterOptionsResponse | null>(null)
+const selectedIsActive = ref<string | null>(null)
+const selectedHasArrears = ref<string | null>(null)
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'contact', label: '联系人' } as UTSJSONObject,
 	{ key: 'phone', label: '电话' } as UTSJSONObject,
 	{ key: 'address', label: '地址' } as UTSJSONObject,
 	{ key: 'arrears_amount', label: '欠款'} as UTSJSONObject,
@@ -97,9 +139,10 @@ const fieldConfig = ref<UTSJSONObject[]>([
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
-	{ key: 'copy-phone', text: '复制电话' } as UTSJSONObject,
-	{ key: 'reload', text: '刷新列表' } as UTSJSONObject,
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
+
 
 function applySupplierResponse(response: SupplierListResponse) {
 	suppliers.value = response.results
@@ -107,6 +150,14 @@ function applySupplierResponse(response: SupplierListResponse) {
 	totalPages.value = response.total_pages
 	totalCount.value = response.total_count
 	pageSize.value = response.page_size
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
 }
 
 function parseErrorMessage(error: any): string {
@@ -145,6 +196,8 @@ async function loadSuppliers() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
+			is_active: selectedIsActive.value,
+			has_arrears: selectedHasArrears.value,
 		})
 		applySupplierResponse(response)
 	} catch (error) {
@@ -220,17 +273,6 @@ function formatDateText(value: string): string {
 	return value
 }
 
-function buildTags(item: SupplierItem): string[] {
-	const tags: string[] = []
-	tags.push(item.is_active ? '启用' : '停用')
-	if (item.files_count > 0) {
-		tags.push('有附件')
-	}
-	if (item.arrears_amount != '0.00') {
-		tags.push('有欠款')
-	}
-	return tags
-}
 
 function supplierToListItem(item: SupplierItem): UTSJSONObject {
 	const cover = getSupplierImage(item)
@@ -238,10 +280,14 @@ function supplierToListItem(item: SupplierItem): UTSJSONObject {
 	return {
 		id: item.id.toString(),
 		name: item.name,
+		code: getDisplayText(item.code),
 		codeText: '编码：' + getDisplayText(item.code),
+		contactText: '联系人：' + getDisplayText(item.contact),
 		contact: getDisplayText(item.contact),
 		phone: getDisplayText(item.phone),
 		address: getDisplayText(item.address),
+		description: item.description == null ? '' : item.description,
+		is_active: item.is_active,
 		total_amount: item.total_amount,
 		paid_amount_text: formatPaidAmount(item.paid_amount),
 		arrears_amount: item.arrears_amount,
@@ -249,9 +295,28 @@ function supplierToListItem(item: SupplierItem): UTSJSONObject {
 		filesText: item.files_count.toString() + ' 个',
 		cover: cover,
 		images: images,
-		tags: buildTags(item),
 		rawId: item.id.toString(),
 	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({
+			title: emptyTitle,
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({
+				title: successTitle,
+				icon: 'success',
+			})
+		},
+	})
 }
 
 function handleSearchInput(value: string) {
@@ -276,6 +341,23 @@ function handleReset() {
 	loadSuppliers()
 }
 
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) {
+		return
+	}
+
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+
+	try {
+		filterOptions.value = await getSupplierFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error)
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
 	if (pageValue == null) {
@@ -292,6 +374,41 @@ function handlePageChange(payload: UTSJSONObject) {
 	loadSuppliers()
 }
 
+function isFilterOptionSelected(param: string, value: string): boolean {
+	if (param == 'is_active') {
+		return selectedIsActive.value == value
+	}
+	if (param == 'has_arrears') {
+		return selectedHasArrears.value == value
+	}
+	return false
+}
+
+function toggleFilterOption(param: string, value: string) {
+	if (param == 'is_active') {
+		selectedIsActive.value = selectedIsActive.value == value ? null : value
+		return
+	}
+	if (param == 'has_arrears') {
+		selectedHasArrears.value = selectedHasArrears.value == value ? null : value
+	}
+}
+
+function handleFilterReset() {
+	selectedIsActive.value = null
+	selectedHasArrears.value = null
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadSuppliers()
+}
+
+function applySelectedSupplier() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadSuppliers()
+}
+
 function handleItemClick(payload: UTSJSONObject) {
 	const name = payload['name']
 	const text = name == null ? '供应商' : (name as string)
@@ -299,6 +416,84 @@ function handleItemClick(payload: UTSJSONObject) {
 		title: text,
 		icon: 'none',
 	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+
+	const itemObject = item as UTSJSONObject
+	const code = itemObject['code']
+	const codeText = code == null ? '' : (code as string)
+	copyText(codeText, '编码已复制', '暂无编码')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) {
+		return
+	}
+
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+
+	if (key == 'phone') {
+		const phone = item['phone']
+		const phoneText = phone == null ? '' : (phone as string)
+		copyText(phoneText, '电话已复制', '暂无电话')
+		return
+	}
+
+	if (key == 'contact') {
+		const contact = item['contact']
+		const contactText = contact == null ? '' : (contact as string)
+		copyText(contactText, '联系人已复制', '暂无联系人')
+		return
+	}
+
+	if (key == 'address') {
+		const address = item['address']
+		const addressText = address == null ? '' : (address as string)
+		copyText(addressText, '地址已复制', '暂无地址')
+		return
+	}
+
+	if (key == 'arrears_amount') {
+		const arrears = item['arrears_amount']
+		const arrearsText = arrears == null ? '' : ('' + arrears)
+		copyText(arrearsText, '欠款已复制', '暂无欠款')
+	}
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+
+	const itemObject = item as UTSJSONObject
+	const contact = itemObject['contact']
+	const contactText = contact == null ? '' : (contact as string)
+	copyText(contactText, '联系人已复制', '暂无联系人')
+}
+
+async function confirmDeleteSupplier(supplierId: string) {
+	try {
+		await deleteSupplier(supplierId)
+		uni.showToast({
+			title: '删除成功',
+			icon: 'success',
+		})
+		loadSuppliers()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
 }
 
 function handleMenu(payload: UTSJSONObject) {
@@ -316,6 +511,30 @@ function handleMenu(payload: UTSJSONObject) {
 	}
 
 	const key = actionKey as string
+	const supplierIdValue = itemObject['rawId']
+	const supplierId = supplierIdValue == null ? '' : (supplierIdValue as string)
+
+	if (key == 'edit') {
+		uni.navigateTo({
+			url: '/pages/suppliers/from?id=' + supplierId,
+		})
+		return
+	}
+
+	if (key == 'delete') {
+		uni.showModal({
+			title: '删除供应商',
+			content: '确定删除这个供应商吗？',
+			success: (res) => {
+				if (!res.confirm) {
+					return
+				}
+				confirmDeleteSupplier(supplierId)
+			},
+		})
+		return
+	}
+
 	if (key == 'reload') {
 		loadSuppliers()
 		return
@@ -376,17 +595,32 @@ const withFileCountText = computed((): string => {
 	return count.toString()
 })
 
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedIsActive.value != null || selectedHasArrears.value != null
+})
+
 const emptyText = computed((): string => {
 	if (isLoading.value) {
 		return '正在加载'
 	}
-	if (keyword.value != '') {
+	if (hasActiveFilter.value) {
 		return '没有匹配的供应商'
 	}
 	return '暂无供应商'
 })
 
+const filterDefinitions = computed((): SupplierFilterDefinition[] => {
+	if (filterOptions.value == null) {
+		return []
+	}
+	return filterOptions.value.filters
+})
+
 onLoad(() => {
+	loadSuppliers()
+})
+
+onShow(() => {
 	loadSuppliers()
 })
 </script>
@@ -479,6 +713,122 @@ onLoad(() => {
 
 .retry-btn-text {
 	font-size: 14px;
+	color: #FFFFFF;
+}
+
+.supplier-filter-panel {
+	padding-bottom: 8px;
+}
+
+.supplier-filter-actions {
+	flex-direction: row;
+	margin-bottom: 12px;
+}
+
+.supplier-filter-btn {
+	flex: 1;
+	height: 40px;
+	border-radius: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.supplier-filter-btn-light {
+	background-color: #F3F6FA;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	margin-right: 8px;
+}
+
+.supplier-filter-btn-primary {
+	background-color: #0F172A;
+}
+
+.supplier-filter-btn-light-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #475569;
+}
+
+.supplier-filter-btn-primary-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+
+.supplier-filter-state {
+	height: 140px;
+	border-radius: 14px;
+	background-color: #F8FAFC;
+	align-items: center;
+	justify-content: center;
+}
+
+.supplier-filter-state-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.supplier-filter-scroll {
+	height: 360px;
+}
+
+.supplier-filter-group {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	margin-bottom: 8px;
+}
+
+.supplier-filter-group-title {
+	font-size: 14px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.supplier-filter-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.supplier-filter-option {
+	min-width: 56px;
+	height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 17px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.supplier-filter-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.supplier-filter-option-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #475569;
+}
+
+.supplier-filter-option-text-active {
 	color: #FFFFFF;
 }
 </style>

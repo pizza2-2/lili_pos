@@ -1,0 +1,454 @@
+import liliPopup from '../../../lili-popup/components/lili-popup/lili-popup.uvue'
+import { deleteMediaFile } from '@/pkg/api/modules/media.uts'
+
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 47, 6>;
+	modelValue?: string[]
+	fileItems?: UTSJSONObject[]
+	action?: string
+	name?: string
+	headers?: UTSJSONObject
+	formData?: UTSJSONObject
+	max?: number
+	disabled?: boolean
+	previewEnabled?: boolean
+	uploadText?: string
+}
+
+
+const __sfc__ = defineComponent({
+  __name: 'lili-upload',
+  props: {
+    modelValue: { type: Array as PropType<string[]>, required: false, default: () : string[] => [] },
+    fileItems: { type: Array as PropType<UTSJSONObject[]>, required: false, default: () : UTSJSONObject[] => [] },
+    action: { type: String, required: false, default: '' },
+    name: { type: String, required: false, default: 'file' },
+    headers: { type: UTSJSONObject, required: false, default: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	} },
+    formData: { type: UTSJSONObject, required: false, default: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	} },
+    max: { type: Number, required: false, default: 9 },
+    disabled: { type: Boolean, required: false, default: false },
+    previewEnabled: { type: Boolean, required: false, default: true },
+    uploadText: { type: String, required: false, default: '上传图片' }
+  },
+  emits: ["update:modelValue", "update:fileItems", "upload", "delete", "preview", "error"],
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const props = __props
+
+function emit(event: string, ...do_not_transform_spread: Array<any | null>) {
+__ins.emit(event, ...do_not_transform_spread)
+}
+
+const imageList = ref<string[]>([])
+const imageItems = ref<UTSJSONObject[]>([])
+const deletePopupVisible = ref<boolean>(false)
+const pendingDeleteIndex = ref<number>(-1)
+const deleting = ref<boolean>(false)
+const uploadingCount = ref<number>(0)
+
+function cloneStringArray(list: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < list.length; i++) {
+		result.push(list[i])
+	}
+	return result
+}
+
+function cloneObjectArray(list: UTSJSONObject[]) : UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 105, 9), } as UTSJSONObject
+		for (const key in item) {
+			clonedItem[key] = item[key]
+		}
+		result.push(clonedItem)
+	}
+	return result
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
+	const value = obj[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function buildFileItem(path: string, id: string = '') : UTSJSONObject {
+	return {
+		path: path,
+		url: path,
+		id: id,
+		isRemote: id != '',
+	} as UTSJSONObject
+}
+
+function syncModelValue(list: string[], metaItems: UTSJSONObject[]) {
+	imageList.value = cloneStringArray(list)
+	const nextItems: UTSJSONObject[] = []
+	for (let index = 0; index < list.length; index++) {
+		const currentPath = list[index]
+		let matchedItem: UTSJSONObject | null = null
+		for (let metaIndex = 0; metaIndex < metaItems.length; metaIndex++) {
+			const metaItem = metaItems[metaIndex]
+			const metaPath = getStringField(metaItem, 'path', getStringField(metaItem, 'url'))
+			if (metaPath == currentPath) {
+				matchedItem = metaItem
+				break
+			}
+		}
+		if (matchedItem != null) {
+			nextItems.push(buildFileItem(currentPath, getStringField(matchedItem, 'id')))
+			continue
+		}
+		nextItems.push(buildFileItem(currentPath))
+	}
+	imageItems.value = nextItems
+}
+
+function emitModelValue() {
+	emit('update:modelValue', cloneStringArray(imageList.value))
+}
+
+function emitFileItems() {
+	emit('update:fileItems', cloneObjectArray(imageItems.value))
+}
+
+function buildDeletePayload(index: number, path: string, item: UTSJSONObject, apiDeleted: boolean) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		id: getStringField(item, 'id'),
+		apiDeleted: apiDeleted,
+		list: cloneStringArray(imageList.value),
+		fileItems: cloneObjectArray(imageItems.value),
+	} as UTSJSONObject
+}
+
+function buildPreviewPayload(index: number, path: string) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		list: cloneStringArray(imageList.value),
+	} as UTSJSONObject
+}
+
+function buildErrorPayload(type: string, path: string, message: string) : UTSJSONObject {
+	return {
+		type: type,
+		path: path,
+		message: message,
+	} as UTSJSONObject
+}
+
+function tryParseResponse(text: string) : UTSJSONObject | null {
+	if (text == '') {
+		return null
+	}
+	try {
+		return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:192") as UTSJSONObject
+	} catch (e) {
+		return null
+	}
+}
+
+function buildUploadPayload(index: number, path: string, responseText: string) : UTSJSONObject {
+	return {
+		index: index,
+		path: path,
+		responseText: responseText,
+		response: tryParseResponse(responseText),
+	} as UTSJSONObject
+}
+
+function emitError(type: string, path: string, message: string) {
+	emit('error', buildErrorPayload(type, path, message))
+}
+
+function beginUploading() {
+	const wasUploading = uploadingCount.value > 0
+	uploadingCount.value = uploadingCount.value + 1
+	if (!wasUploading) {
+		uni.showLoading({
+			title: '图片上传中...',
+			mask: true,
+		})
+	}
+}
+
+function endUploading() {
+	if (uploadingCount.value <= 0) {
+		uploadingCount.value = 0
+		return
+	}
+	uploadingCount.value = uploadingCount.value - 1
+	if (uploadingCount.value <= 0) {
+		uploadingCount.value = 0
+		uni.hideLoading()
+	}
+}
+
+function uploadImage(path: string, index: number) {
+	console.log('lili-upload uploadImage start:', index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:235")
+	beginUploading()
+	try {
+		uni.uploadFile({
+			url: props.action,
+			filePath: path,
+			name: props.name,
+			header: props.headers,
+			formData: props.formData,
+			success: (res) => {
+				console.log('lili-upload uploadImage success:', index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:245")
+				emit('upload', buildUploadPayload(index, path, res.data))
+				endUploading()
+			},
+			fail: (err) => {
+				const message = err.errMsg
+				console.log('lili-upload uploadImage fail:', index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:251")
+				emitError('upload', path, message)
+				endUploading()
+			},
+		})
+	} catch (error) {
+		const message = error == null ? '上传失败' : (error as Error).message
+		emitError('upload', path, message == '' ? '上传失败' : message)
+		endUploading()
+	}
+}
+
+function handleChoose() {
+	if (props.disabled) {
+		return
+	}
+	if (uploadingCount.value > 0) {
+		uni.showToast({
+			title: '图片上传中，请稍后',
+			icon: 'none',
+		})
+		return
+	}
+	const remain = props.max - imageList.value.length
+	if (remain <= 0) {
+		uni.showToast({
+			title: '已达到最大数量',
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.chooseImage({
+		count: remain,
+		sizeType: ['compressed', 'original'],
+		sourceType: ['album', 'camera'],
+		success: (res) => {
+			const selectedPaths = res.tempFilePaths
+			if (selectedPaths.length == 0) {
+				return
+			}
+
+			for (let i = 0; i < selectedPaths.length; i++) {
+				imageList.value.push(selectedPaths[i])
+				imageItems.value.push(buildFileItem(selectedPaths[i]))
+			}
+			emitModelValue()
+			emitFileItems()
+
+			if (props.action != '') {
+				for (let i = 0; i < selectedPaths.length; i++) {
+					const selectedPath = selectedPaths[i]
+					const currentIndex = imageList.value.indexOf(selectedPath)
+					if (currentIndex >= 0) {
+						uploadImage(selectedPath, currentIndex)
+					}
+				}
+			}
+		},
+		fail: (err) => {
+			const message = err.errMsg
+			emitError('choose', '', message)
+		},
+	})
+}
+
+function handlePreview(index: number) {
+	if (!props.previewEnabled) {
+		return
+	}
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+
+	const currentPath = imageList.value[index]
+	emit('preview', buildPreviewPayload(index, currentPath))
+
+	uni.previewImage({
+		current: currentPath,
+		urls: cloneStringArray(imageList.value),
+	})
+}
+
+function handleDeletePopupVisibleChange(value: boolean) {
+	deletePopupVisible.value = value
+}
+
+function handleDeleteCancel() {
+	pendingDeleteIndex.value = -1
+}
+
+function removeImageAt(index: number, apiDeleted: boolean) {
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+	const currentPath = imageList.value[index]
+	const currentItem = index < imageItems.value.length ? imageItems.value[index] : buildFileItem(currentPath)
+	imageList.value.splice(index, 1)
+	if (index < imageItems.value.length) {
+		imageItems.value.splice(index, 1)
+	}
+	emitModelValue()
+	emitFileItems()
+	emit('delete', buildDeletePayload(index, currentPath, currentItem, apiDeleted))
+}
+
+function handleDelete(index: number) {
+	if (uploadingCount.value > 0) {
+		uni.showToast({
+			title: '图片上传中，请稍后',
+			icon: 'none',
+		})
+		return
+	}
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+	pendingDeleteIndex.value = index
+	deletePopupVisible.value = true
+}
+
+async function confirmDelete() {
+	if (deleting.value) {
+		return
+	}
+	const index = pendingDeleteIndex.value
+	if (index < 0 || index >= imageList.value.length) {
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+		return
+	}
+	const currentItem = index < imageItems.value.length ? imageItems.value[index] : buildFileItem(imageList.value[index])
+	const fileId = getStringField(currentItem, 'id')
+	if (fileId == '') {
+		removeImageAt(index, false)
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+		return
+	}
+	deleting.value = true
+	try {
+		await deleteMediaFile(fileId)
+		removeImageAt(index, true)
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+	} catch (error) {
+		const message = error == null ? '删除图片失败' : (error as Error).message
+		emitError('delete', imageList.value[index], message == '' ? '删除图片失败' : message)
+	} finally {
+		deleting.value = false
+	}
+}
+
+watch(
+	() : string[] => props.modelValue,
+	(newVal: string[]) => {
+		syncModelValue(newVal, props.fileItems)
+	}
+)
+
+watch(
+	() : UTSJSONObject[] => props.fileItems,
+	(newVal: UTSJSONObject[]) => {
+		syncModelValue(props.modelValue, newVal)
+	}
+)
+
+onMounted(() => {
+	syncModelValue(props.modelValue, props.fileItems)
+})
+
+onUnmounted(() => {
+	if (uploadingCount.value > 0) {
+		uploadingCount.value = 0
+		uni.hideLoading()
+	}
+})
+
+return (): any | null => {
+
+  return _cE("view", _uM({ class: "lu-root" }), [
+    _cE("view", _uM({ class: "lu-list" }), [
+      _cE(Fragment, null, RenderHelpers.renderList(unref(imageList), (item, index, __index, _cached): any => {
+        return _cE("view", _uM({
+          key: item + '-' + index,
+          class: "lu-item"
+        }), [
+          _cE("image", _uM({
+            class: "lu-image",
+            src: item,
+            mode: "aspectFill",
+            onClick: () => {handlePreview(index)}
+          }), null, 8 /* PROPS */, ["src", "onClick"]),
+          isTrue(!props.disabled && unref(uploadingCount) <= 0)
+            ? _cE("view", _uM({
+                key: 0,
+                class: "lu-delete",
+                onClick: () => {handleDelete(index)}
+              }), [
+                _cE("text", _uM({ class: "lu-delete-text" }), "×")
+              ], 8 /* PROPS */, ["onClick"])
+            : _cC("v-if", true)
+        ])
+      }), 128 /* KEYED_FRAGMENT */),
+      isTrue(!props.disabled && unref(uploadingCount) <= 0 && unref(imageList).length < props.max)
+        ? _cE("view", _uM({
+            key: 0,
+            class: "lu-item lu-item-add",
+            onClick: handleChoose
+          }), [
+            _cE("text", _uM({ class: "lu-add-icon" }), "+"),
+            _cE("text", _uM({ class: "lu-add-text" }), _tD(props.uploadText), 1 /* TEXT */)
+          ])
+        : _cC("v-if", true)
+    ]),
+    unref(uploadingCount) > 0
+      ? _cE("view", _uM({
+          key: 0,
+          class: "lu-uploading-mask"
+        }), [
+          _cE("text", _uM({ class: "lu-uploading-text" }), "图片上传中...")
+        ])
+      : _cC("v-if", true),
+    _cV(unref(liliPopup), _uM({
+      visible: unref(deletePopupVisible),
+      title: "删除图片",
+      content: "确定删除这张图片吗？",
+      cancelText: "取消",
+      confirmText: "删除",
+      confirmDanger: true,
+      "onUpdate:visible": handleDeletePopupVisibleChange,
+      onCancel: handleDeleteCancel,
+      onConfirm: confirmDelete
+    }), null, 8 /* PROPS */, ["visible"])
+  ])
+}
+}
+
+})
+export default __sfc__
+export type LiliUploadComponentPublicInstance = InstanceType<typeof __sfc__>;
+const GenUniModulesLiliUploadComponentsLiliUploadLiliUploadStyles = [_uM([["lu-root", _pS(_uM([["width", "100%"], ["position", "relative"]]))], ["lu-list", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"]]))], ["lu-item", _pS(_uM([["width", 88], ["height", 88], ["marginRight", 12], ["marginBottom", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["position", "relative"], ["overflow", "hidden"], ["backgroundColor", "#F3F4F6"]]))], ["lu-image", _pS(_uM([["width", 88], ["height", 88], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8]]))], ["lu-item-add", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "dashed"], ["borderRightStyle", "dashed"], ["borderBottomStyle", "dashed"], ["borderLeftStyle", "dashed"], ["borderTopColor", "#D1D5DB"], ["borderRightColor", "#D1D5DB"], ["borderBottomColor", "#D1D5DB"], ["borderLeftColor", "#D1D5DB"], ["backgroundColor", "#FAFAFA"]]))], ["lu-delete", _pS(_uM([["position", "absolute"], ["top", 0], ["right", 0], ["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(17,24,39,0.72)"], ["borderBottomLeftRadius", 8]]))], ["lu-delete-text", _pS(_uM([["color", "#FFFFFF"], ["fontSize", 16], ["lineHeight", "16px"]]))], ["lu-add-icon", _pS(_uM([["color", "#6B7280"], ["fontSize", 28], ["lineHeight", "28px"]]))], ["lu-add-text", _pS(_uM([["marginTop", 6], ["color", "#6B7280"], ["fontSize", 12], ["lineHeight", "12px"]]))], ["lu-uploading-mask", _pS(_uM([["position", "absolute"], ["left", 0], ["top", 0], ["right", 0], ["bottom", 0], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.38)"]]))], ["lu-uploading-text", _pS(_uM([["color", "#FFFFFF"], ["fontSize", 13], ["lineHeight", "16px"], ["paddingTop", 8], ["paddingRight", 12], ["paddingBottom", 8], ["paddingLeft", 12], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "rgba(15,23,42,0.72)"]]))]])]

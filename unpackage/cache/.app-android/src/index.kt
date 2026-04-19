@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -18,6 +18,7 @@ import io.dcloud.uniapp.extapi.connectSocket as uni_connectSocket
 import io.dcloud.uniapp.extapi.createPushMessage as uni_createPushMessage
 import io.dcloud.uniapp.extapi.exit as uni_exit
 import io.dcloud.uniapp.extapi.getAppAuthorizeSetting as uni_getAppAuthorizeSetting
+import io.dcloud.uniapp.extapi.getFileSystemManager as uni_getFileSystemManager
 import io.dcloud.uniapp.extapi.getPrivacySetting as uni_getPrivacySetting
 import io.dcloud.uniapp.extapi.getPushChannelManager as uni_getPushChannelManager
 import io.dcloud.uniapp.extapi.getPushClientId as uni_getPushClientId
@@ -36,10 +37,30 @@ import io.dcloud.uniapp.extapi.request as uni_request
 import io.dcloud.uniapp.extapi.setStorage as uni_setStorage
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
+import io.dcloud.uniapp.extapi.uploadFile as uni_uploadFile
 val runBlock1 = run {
     __uniConfig.getAppStyles = fun(): Map<String, Map<String, Map<String, Any>>> {
         return GenApp.styles
     }
+}
+typealias currentPageCaptureScreenshotCallBack = (base64: String, error: String) -> Unit
+fun currentPageCaptureScreenshot(fullPage: Boolean, callback: currentPageCaptureScreenshotCallBack) {
+    val pages = getCurrentPages() as UTSArray<UniPage>
+    val currentPage = pages[pages.length - 1]
+    currentPage.vm?.`$viewToTempFilePath`(ViewToTempFilePathOptions(wholeContent = fullPage, overwrite = true, success = fun(res){
+        val fileManager = uni_getFileSystemManager()
+        fileManager.readFile(ReadFileOptions(encoding = "base64", filePath = res.tempFilePath, success = fun(readFileRes) {
+            callback(readFileRes.data as String, "")
+        }
+        , fail = fun(err) {
+            callback("", "captureScreenshot fail: " + JSON.stringify(err))
+        }
+        ))
+    }
+    , fail = fun(err){
+        callback("", "captureScreenshot fail: " + JSON.stringify(err))
+    }
+    ))
 }
 fun initRuntimeSocket(hosts: String, port: String, id: String): UTSPromise<SocketTask?> {
     if (hosts == "" || port == "" || id == "") {
@@ -83,30 +104,36 @@ fun tryConnectSocket(host: String, port: String, id: String): UTSPromise<SocketT
             resolve(null)
         }
         )
+        socket.onMessage(fun(result){
+            if (UTSAndroid.`typeof`(result["data"]) == "string") {
+                val message = UTSAndroid.consoleDebugError(JSON.parse<UTSJSONObject>(result["data"] as String), " at ../../../../../../../HBuilderX.4.65.2025051206/HBuilderX/plugins/uniapp-cli-vite/node_modules/@dcloudio/uni-console/src/runtime/app/socket.ts:67")!!
+                if ((message["type"] as String) == "screencap") {
+                    val id = message["id"] as String
+                    currentPageCaptureScreenshot(message["fullPage"] as Boolean, fun(base64: String, error: String){
+                        socket.send(SendSocketMessageOptions(data = JSON.stringify(_uO("id" to id, "base64" to base64, "error" to error))))
+                    }
+                    )
+                }
+            }
+            resolve(null)
+        }
+        )
     }
     )
 }
 fun initRuntimeSocketService(): UTSPromise<Boolean> {
     val hosts: String = "192.168.0.163,127.0.0.1,172.27.192.1"
     val port: String = "8090"
-    val id: String = "app-android_IEmG4l"
+    val id: String = "app-android_yrzwe5"
     if (hosts == "" || port == "" || id == "") {
         return UTSPromise.resolve(false)
     }
-    var socketTask: SocketTask? = null
-    __registerWebViewUniConsole(fun(): String {
-        return "!function(){\"use strict\";\"function\"==typeof SuppressedError&&SuppressedError;var e=[\"log\",\"warn\",\"error\",\"info\",\"debug\"],n=e.reduce((function(e,n){return e[n]=console[n].bind(console),e}),{}),t=null,r=new Set,o={};function i(e){if(null!=t){var n=e.map((function(e){if(\"string\"==typeof e)return e;var n=e&&\"promise\"in e&&\"reason\"in e,t=n?\"UnhandledPromiseRejection: \":\"\";if(n&&(e=e.reason),e instanceof Error&&e.stack)return e.message&&!e.stack.includes(e.message)?\"\".concat(t).concat(e.message,\"\\n\").concat(e.stack):\"\".concat(t).concat(e.stack);if(\"object\"==typeof e&&null!==e)try{return t+JSON.stringify(e)}catch(e){return t+String(e)}return t+String(e)})).filter(Boolean);n.length>0&&t(JSON.stringify(Object.assign({type:\"error\",data:n},o)))}else e.forEach((function(e){r.add(e)}))}function a(e,n){try{return{type:e,args:u(n)}}catch(e){}return{type:e,args:[]}}function u(e){return e.map((function(e){return c(e)}))}function c(e,n){if(void 0===n&&(n=0),n>=7)return{type:\"object\",value:\"[Maximum depth reached]\"};switch(typeof e){case\"string\":return{type:\"string\",value:e};case\"number\":return function(e){return{type:\"number\",value:String(e)}}(e);case\"boolean\":return function(e){return{type:\"boolean\",value:String(e)}}(e);case\"object\":try{return function(e,n){if(null===e)return{type:\"null\"};if(function(e){return e.\$&&s(e.\$)}(e))return function(e,n){return{type:\"object\",className:\"ComponentPublicInstance\",value:{properties:Object.entries(e.\$.type).map((function(e){return f(e[0],e[1],n+1)}))}}}(e,n);if(s(e))return function(e,n){return{type:\"object\",className:\"ComponentInternalInstance\",value:{properties:Object.entries(e.type).map((function(e){return f(e[0],e[1],n+1)}))}}}(e,n);if(function(e){return e.style&&null!=e.tagName&&null!=e.nodeName}(e))return function(e,n){return{type:\"object\",value:{properties:Object.entries(e).filter((function(e){var n=e[0];return[\"id\",\"tagName\",\"nodeName\",\"dataset\",\"offsetTop\",\"offsetLeft\",\"style\"].includes(n)})).map((function(e){return f(e[0],e[1],n+1)}))}}}(e,n);if(function(e){return\"function\"==typeof e.getPropertyValue&&\"function\"==typeof e.setProperty&&e.\$styles}(e))return function(e,n){return{type:\"object\",value:{properties:Object.entries(e.\$styles).map((function(e){return f(e[0],e[1],n+1)}))}}}(e,n);if(Array.isArray(e))return{type:\"object\",subType:\"array\",value:{properties:e.map((function(e,t){return function(e,n,t){var r=c(e,t);return r.name=\"\".concat(n),r}(e,t,n+1)}))}};if(e instanceof Set)return{type:\"object\",subType:\"set\",className:\"Set\",description:\"Set(\".concat(e.size,\")\"),value:{entries:Array.from(e).map((function(e){return function(e,n){return{value:c(e,n)}}(e,n+1)}))}};if(e instanceof Map)return{type:\"object\",subType:\"map\",className:\"Map\",description:\"Map(\".concat(e.size,\")\"),value:{entries:Array.from(e.entries()).map((function(e){return function(e,n){return{key:c(e[0],n),value:c(e[1],n)}}(e,n+1)}))}};if(e instanceof Promise)return{type:\"object\",subType:\"promise\",value:{properties:[]}};if(e instanceof RegExp)return{type:\"object\",subType:\"regexp\",value:String(e),className:\"Regexp\"};if(e instanceof Date)return{type:\"object\",subType:\"date\",value:String(e),className:\"Date\"};if(e instanceof Error)return{type:\"object\",subType:\"error\",value:e.message||String(e),className:e.name||\"Error\"};var t=void 0,r=e.constructor;r&&r.get\$UTSMetadata\$&&(t=r.get\$UTSMetadata\$().name);var o=Object.entries(e);(function(e){return e.modifier&&e.modifier._attribute&&e.nodeContent})(e)&&(o=o.filter((function(e){var n=e[0];return\"modifier\"!==n&&\"nodeContent\"!==n})));return{type:\"object\",className:t,value:{properties:o.map((function(e){return f(e[0],e[1],n+1)}))}}}(e,n)}catch(e){return{type:\"object\",value:{properties:[]}}}case\"undefined\":return{type:\"undefined\"};case\"function\":return function(e){return{type:\"function\",value:\"function \".concat(e.name,\"() {}\")}}(e);case\"symbol\":return function(e){return{type:\"symbol\",value:e.description}}(e);case\"bigint\":return function(e){return{type:\"bigint\",value:String(e)}}(e)}}function s(e){return e.type&&null!=e.uid&&e.appContext}function f(e,n,t){var r=c(n,t);return r.name=e,r}var l=null,p=[],y={},g=\"---BEGIN:EXCEPTION---\",d=\"---END:EXCEPTION---\";function v(e){null!=l?l(JSON.stringify(Object.assign({type:\"console\",data:e},y))):p.push.apply(p,e)}var m=/^\\s*at\\s+[\\w/./-]+:\\d+\$/;function b(){function t(e){return function(){for(var t=[],r=0;r<arguments.length;r++)t[r]=arguments[r];var o=function(e,n,t){if(t||2===arguments.length)for(var r,o=0,i=n.length;o<i;o++)!r&&o in n||(r||(r=Array.prototype.slice.call(n,0,o)),r[o]=n[o]);return e.concat(r||Array.prototype.slice.call(n))}([],t,!0);if(o.length){var u=o[o.length-1];\"string\"==typeof u&&m.test(u)&&o.pop()}if(n[e].apply(n,o),\"error\"===e&&1===t.length){var c=t[0];if(\"string\"==typeof c&&c.startsWith(g)){var s=g.length,f=c.length-d.length;return void i([c.slice(s,f)])}if(c instanceof Error)return void i([c])}v([a(e,t)])}}return function(){var e=console.log,n=Symbol();try{console.log=n}catch(e){return!1}var t=console.log===n;return console.log=e,t}()?(e.forEach((function(e){console[e]=t(e)})),function(){e.forEach((function(e){console[e]=n[e]}))}):function(){}}function _(e){var n={type:\"WEB_INVOKE_APPSERVICE\",args:{data:{name:\"console\",arg:e}}};return window.__uniapp_x_postMessageToService?window.__uniapp_x_postMessageToService(n):window.__uniapp_x_.postMessageToService(JSON.stringify(n))}!function(){if(!window.__UNI_CONSOLE_WEBVIEW__){window.__UNI_CONSOLE_WEBVIEW__=!0;var e=\"[web-view]\".concat(window.__UNI_PAGE_ROUTE__?\"[\".concat(window.__UNI_PAGE_ROUTE__,\"]\"):\"\");b(),function(e,n){if(void 0===n&&(n={}),l=e,Object.assign(y,n),null!=e&&p.length>0){var t=p.slice();p.length=0,v(t)}}((function(e){_(e)}),{channel:e}),function(e,n){if(void 0===n&&(n={}),t=e,Object.assign(o,n),null!=e&&r.size>0){var a=Array.from(r);r.clear(),i(a)}}((function(e){_(e)}),{channel:e}),window.addEventListener(\"error\",(function(e){i([e.error])})),window.addEventListener(\"unhandledrejection\",(function(e){i([e])}))}}()}();"
-    }
-    , fun(data: String){
-        socketTask?.send(SendSocketMessageOptions(data = data))
-    }
-    )
     return UTSPromise.resolve().then(fun(): UTSPromise<Boolean> {
         return initRuntimeSocket(hosts, port, id).then(fun(socket): Boolean {
             if (socket == null) {
                 return false
             }
-            socketTask = socket
+            socket
             return true
         }
         )
@@ -142,9 +169,7 @@ val runBlock3 = run {
                 if (res.type == "receive") {
                     if (uni_getAppAuthorizeSetting().notificationAuthorized == "authorized") {
                         console.log("推送权限已开", " at store/global.uts:46")
-                        uni_createPushMessage(CreatePushMessageOptions(title = res.data["title"] as String?, content = res.data["content"] as String, cover = true, channelId = "channel-id", `when` = Date.now() + 10000, icon = "/static/logo.png", sound = "system", delay = 1, payload = object : UTSJSONObject() {
-                            var pkey = "pvalue1"
-                        }, category = "IM", success = fun(res) {
+                        uni_createPushMessage(CreatePushMessageOptions(title = res.data["title"] as String?, content = res.data["content"] as String, cover = true, channelId = "channel-id", `when` = Date.now() + 10000, icon = "/static/logo.png", sound = "system", delay = 1, payload = _uO("pkey" to "pvalue1"), category = "IM", success = fun(res) {
                             console.log("res: " + res, " at store/global.uts:66")
                             uni_hideToast()
                             uni_showToast(ShowToastOptions(title = "创建本地通知消息成功"))
@@ -326,42 +351,19 @@ val navigateToInterceptor = AddInterceptorOptions(invoke = fun(options: Navigate
         options.url = loginUrl
     }
 }
-, success = fun(res: NavigateBackSuccess) {
-    console.log("拦截 navigateTo 接口 success 返回参数为：", res, " at pkg/router/permission.uts:26")
-}
-, fail = fun(err: NavigateToFail) {
-    console.log("拦截 navigateTo 接口 fail 返回参数为：", err, " at pkg/router/permission.uts:29")
-}
-)
-val switchTabInterceptor = AddInterceptorOptions(invoke = fun(options: SwitchTabOptions) {
-    console.log("拦截 switchTab 接口传入参数为：", options, " at pkg/router/permission.uts:36")
-    val url: String = options.url.split("?")[0]
-    console.log(url, " at pkg/router/permission.uts:39")
-}
-, success = fun(res: SwitchTabSuccess) {
-    console.log("拦截 switchTab 接口 success 返回参数为：", res, " at pkg/router/permission.uts:42")
-}
-, fail = fun(err: SwitchTabFail) {
-    console.log("拦截 switchTab 接口 fail 返回参数为：", err, " at pkg/router/permission.uts:45")
-}
-, complete = fun(res: SwitchTabComplete) {
-    console.log("拦截 switchTab 接口 complete 返回参数为：", res, " at pkg/router/permission.uts:48")
-}
 )
 fun routerPermission() {
     uni_addInterceptor("navigateTo", navigateToInterceptor)
-    uni_addInterceptor("switchTab", switchTabInterceptor)
 }
 fun removeRouterPermission() {
     uni_removeInterceptor("navigateTo", null)
-    uni_removeInterceptor("switchTab", null)
 }
+val enableRequestPermissionTipsListener = false
 val timeNumber = ref<Number>(15)
 val disAllowLocation = ref<Number>(0)
 val disAllowCamera = ref<Number>(0)
 val disAllowAlbum = ref<Number>(0)
-var PermissionTips: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("PermissionTips", "pkg/util/osPermission.uts", 17, 5)) {
-}
+var PermissionTips: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("PermissionTips", "pkg/util/osPermission.uts", 21, 5))
 val runBlock4 = run {
     PermissionTips["android.permission.ACCESS_COARSE_LOCATION"] = "<h1>定位权限说明</h1><p style=\"color:#cccccc\">为了提供您所在区域的信息服务，我们需要获取您设备所在区域信息。以便于向您展示商品信息。</p>"
     PermissionTips["android.permission.ACCESS_FINE_LOCATION"] = "<h1>定位权限说明</h1><p style=\"color:#cccccc\">为了提供您所在区域的信息服务，我们需要获取您设备所在区域信息。以便于向您展示商品信息。</p>"
@@ -371,6 +373,9 @@ val runBlock4 = run {
     PermissionTips["android.permission.CALL_PHONE"] = "<h1>电话权限说明</h1><p style=\"color:#cccccc\">为了您能和商家客户进行电话通话，我们需要获取您拨打电话的权限。</p>"
 }
 fun registerOSPermission() {
+    if (!enableRequestPermissionTipsListener) {
+        return
+    }
     setRequestPermissionTips(PermissionTips)
     registerRequestPermissionTipsListener(RequestPermissionTipsListener(onComplete = fun(e){
         for(k in resolveUTSKeyIterator(PermissionTips)){
@@ -388,6 +393,9 @@ fun registerOSPermission() {
     ))
 }
 fun unregisterOSPermission() {
+    if (!enableRequestPermissionTipsListener) {
+        return
+    }
     unregisterRequestPermissionTipsListener(null)
 }
 var firstBackTime: Number = 0
@@ -493,9 +501,7 @@ open class RootType (
 }
 fun requestIntercept(reqData: UTSJSONObject): Map<String, UTSJSONObject> {
     val map = Map<String, UTSJSONObject>()
-    val header: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("header", "pkg/api/index.uts", 17, 11)) {
-        var `content-type` = "application/json"
-    }
+    val header: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("header", "pkg/api/index.uts", 17, 11), "content-type" to "application/json")
     if (authState.token != "") {
         header["Authorization"] = authState.token
     }
@@ -505,7 +511,7 @@ fun requestIntercept(reqData: UTSJSONObject): Map<String, UTSJSONObject> {
     map.set("data", reqData as UTSJSONObject)
     return map
 }
-fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = UTSJSONObject(), showLoading: Boolean = false): UTSPromise<Any> {
+fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), showLoading: Boolean = false): UTSPromise<Any> {
     return wrapUTSPromise(suspend w@{
             return@w UTSPromise(fun(resolve, reject){
                 if (showLoading) {
@@ -552,7 +558,7 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = UTSJSON
                 }
                 , complete = fun(_){
                     if (showLoading) {
-                        uni_hideLoading()
+                        uni_hideLoading(null)
                     }
                 }
                 ))
@@ -621,10 +627,7 @@ open class ProfileResponse (
 }
 fun accountLogin(data: LoginData): UTSPromise<LoginResponse> {
     return wrapUTSPromise(suspend w@{
-            val body: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("body", "pkg/api/modules/login.uts", 52, 11)) {
-                var username = data.username
-                var password = data.password
-            }
+            val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/login.uts", 52, 11), "username" to data.username, "password" to data.password)
             val raw = await(request("/api/accounts/auth/login/", "POST", body, true))
             val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<LoginResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:57")
             if (parsed == null) {
@@ -635,7 +638,7 @@ fun accountLogin(data: LoginData): UTSPromise<LoginResponse> {
 }
 fun getProfile(): UTSPromise<ProfileResponse> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request("/api/accounts/auth/me/", "GET", UTSJSONObject(), false))
+            val raw = await(request("/api/accounts/auth/me/", "GET", _uO(), false))
             val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<ProfileResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:98")
             if (parsed == null) {
                 throw UTSError("用户信息响应解析失败")
@@ -1114,6 +1117,8 @@ open class SupplierListQuery (
     open var page: Number,
     @JsonNotNull
     open var page_size: Number,
+    open var is_active: String? = null,
+    open var has_arrears: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
         return UTSSourceMapPosition("SupplierListQuery", "pkg/api/modules/suppliers.uts", 2, 13)
@@ -1154,7 +1159,7 @@ open class SupplierMediaFile (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SupplierMediaFile", "pkg/api/modules/suppliers.uts", 7, 13)
+        return UTSSourceMapPosition("SupplierMediaFile", "pkg/api/modules/suppliers.uts", 9, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SupplierMediaFileReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1403,7 +1408,7 @@ open class SupplierItem (
     open var media_files: UTSArray<SupplierMediaFile>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SupplierItem", "pkg/api/modules/suppliers.uts", 25, 13)
+        return UTSSourceMapPosition("SupplierItem", "pkg/api/modules/suppliers.uts", 27, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SupplierItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1643,16 +1648,274 @@ open class SupplierListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SupplierListResponse", "pkg/api/modules/suppliers.uts", 44, 13)
+        return UTSSourceMapPosition("SupplierListResponse", "pkg/api/modules/suppliers.uts", 46, 13)
+    }
+}
+open class SupplierFilterOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var label: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierFilterOption", "pkg/api/modules/suppliers.uts", 54, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SupplierFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SupplierFilterOptionReactiveObject : SupplierFilterOption, IUTSReactive<SupplierFilterOption> {
+    override var __v_raw: SupplierFilterOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SupplierFilterOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, label = __v_raw.label) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SupplierFilterOptionReactiveObject {
+        return SupplierFilterOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+}
+open class SupplierFilterDefinition (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var param: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var control: String,
+    @JsonNotNull
+    open var aliases: UTSArray<String>,
+    @JsonNotNull
+    open var multiple: Boolean = false,
+    @JsonNotNull
+    open var options: UTSArray<SupplierFilterOption>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierFilterDefinition", "pkg/api/modules/suppliers.uts", 58, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SupplierFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SupplierFilterDefinitionReactiveObject : SupplierFilterDefinition, IUTSReactive<SupplierFilterDefinition> {
+    override var __v_raw: SupplierFilterDefinition
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SupplierFilterDefinition, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, param = __v_raw.param, label = __v_raw.label, control = __v_raw.control, aliases = __v_raw.aliases, multiple = __v_raw.multiple, options = __v_raw.options) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SupplierFilterDefinitionReactiveObject {
+        return SupplierFilterDefinitionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var key: String
+        get() {
+            return _tRG(__v_raw, "key", __v_raw.key, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("key")) {
+                return
+            }
+            val oldValue = __v_raw.key
+            __v_raw.key = value
+            _tRS(__v_raw, "key", oldValue, value)
+        }
+    override var param: String
+        get() {
+            return _tRG(__v_raw, "param", __v_raw.param, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("param")) {
+                return
+            }
+            val oldValue = __v_raw.param
+            __v_raw.param = value
+            _tRS(__v_raw, "param", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+    override var control: String
+        get() {
+            return _tRG(__v_raw, "control", __v_raw.control, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("control")) {
+                return
+            }
+            val oldValue = __v_raw.control
+            __v_raw.control = value
+            _tRS(__v_raw, "control", oldValue, value)
+        }
+    override var aliases: UTSArray<String>
+        get() {
+            return _tRG(__v_raw, "aliases", __v_raw.aliases, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("aliases")) {
+                return
+            }
+            val oldValue = __v_raw.aliases
+            __v_raw.aliases = value
+            _tRS(__v_raw, "aliases", oldValue, value)
+        }
+    override var multiple: Boolean
+        get() {
+            return _tRG(__v_raw, "multiple", __v_raw.multiple, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("multiple")) {
+                return
+            }
+            val oldValue = __v_raw.multiple
+            __v_raw.multiple = value
+            _tRS(__v_raw, "multiple", oldValue, value)
+        }
+    override var options: UTSArray<SupplierFilterOption>
+        get() {
+            return _tRG(__v_raw, "options", __v_raw.options, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("options")) {
+                return
+            }
+            val oldValue = __v_raw.options
+            __v_raw.options = value
+            _tRS(__v_raw, "options", oldValue, value)
+        }
+}
+open class SupplierFilterOptionsResponse (
+    @JsonNotNull
+    open var resource: String,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var filters: UTSArray<SupplierFilterDefinition>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierFilterOptionsResponse", "pkg/api/modules/suppliers.uts", 67, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SupplierFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SupplierFilterOptionsResponseReactiveObject : SupplierFilterOptionsResponse, IUTSReactive<SupplierFilterOptionsResponse> {
+    override var __v_raw: SupplierFilterOptionsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SupplierFilterOptionsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(resource = __v_raw.resource, count = __v_raw.count, filters = __v_raw.filters) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SupplierFilterOptionsResponseReactiveObject {
+        return SupplierFilterOptionsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var resource: String
+        get() {
+            return _tRG(__v_raw, "resource", __v_raw.resource, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("resource")) {
+                return
+            }
+            val oldValue = __v_raw.resource
+            __v_raw.resource = value
+            _tRS(__v_raw, "resource", oldValue, value)
+        }
+    override var count: Number
+        get() {
+            return _tRG(__v_raw, "count", __v_raw.count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("count")) {
+                return
+            }
+            val oldValue = __v_raw.count
+            __v_raw.count = value
+            _tRS(__v_raw, "count", oldValue, value)
+        }
+    override var filters: UTSArray<SupplierFilterDefinition>
+        get() {
+            return _tRG(__v_raw, "filters", __v_raw.filters, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("filters")) {
+                return
+            }
+            val oldValue = __v_raw.filters
+            __v_raw.filters = value
+            _tRS(__v_raw, "filters", oldValue, value)
+        }
+}
+open class SupplierMutationData (
+    open var code: String? = null,
+    @JsonNotNull
+    open var name: String,
+    open var address: String? = null,
+    open var phone: String? = null,
+    open var contact: String? = null,
+    open var description: String? = null,
+    open var is_active: Boolean? = null,
+    open var company_infos: UTSArray<UTSJSONObject>? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierMutationData", "pkg/api/modules/suppliers.uts", 80, 13)
     }
 }
 fun buildListQuery(data: SupplierListQuery): UTSJSONObject {
-    val query: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("query", "pkg/api/modules/suppliers.uts", 53, 11)) {
-        var page = data.page
-        var page_size = data.page_size
-    }
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/suppliers.uts", 91, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
+    }
+    if (data.is_active != null && data.is_active != "") {
+        query["is_active"] = data.is_active
+    }
+    if (data.has_arrears != null && data.has_arrears != "") {
+        query["has_arrears"] = data.has_arrears
     }
     return query
 }
@@ -1679,21 +1942,24 @@ fun normalizeSupplierList(data: SupplierListResponse): SupplierListResponse {
         var supplierIndex: Number = 0
         while(supplierIndex < data.results.length){
             val supplier = data.results[supplierIndex]
-            run {
-                var mediaIndex: Number = 0
-                while(mediaIndex < supplier.media_files.length){
-                    val mediaFile = supplier.media_files[mediaIndex]
-                    mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
-                    mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
-                    mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
-                    mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
-                    mediaIndex += 1
-                }
-            }
+            normalizeSupplierMediaFiles(supplier.media_files)
             supplierIndex += 1
         }
     }
     return data
+}
+fun normalizeSupplierMediaFiles(files: UTSArray<SupplierMediaFile>) {
+    run {
+        var mediaIndex: Number = 0
+        while(mediaIndex < files.length){
+            val mediaFile = files[mediaIndex]
+            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
+            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
+            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
+            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+            mediaIndex += 1
+        }
+    }
 }
 fun intValue(value: Any?): Number {
     if (value == null) {
@@ -1709,12 +1975,18 @@ fun intValue(value: Any?): Number {
     }
     return parsed
 }
+fun stringValue(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
 fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListResponse {
     val rawText = JSON.stringify(raw)
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:109")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:166")
     }
     if (rawObject == null) {
         throw UTSError("供应商列表响应解析失败")
@@ -1724,7 +1996,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/suppliers.uts:118")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/suppliers.uts:175")
         }
     }
     var results: UTSArray<SupplierItem> = _uA()
@@ -1734,7 +2006,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
         val parsedResults = if (resultText == null || resultText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<SupplierItem>(resultText), " at pkg/api/modules/suppliers.uts:125")
+            UTSAndroid.consoleDebugError(JSON.parseArray<SupplierItem>(resultText), " at pkg/api/modules/suppliers.uts:182")
         }
         if (parsedResults != null) {
             results = parsedResults!!
@@ -1797,11 +2069,204 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
     }
     return SupplierListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
 }
+fun stringArrayValue(value: Any?): UTSArray<String> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    val parsed = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/suppliers.uts:256")
+    }
+    if (parsed == null) {
+        return _uA()
+    }
+    val result: UTSArray<String> = _uA()
+    run {
+        var index: Number = 0
+        while(index < parsed!!.length){
+            result.push(stringValue(parsed!![index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:268")
+    }
+    if (rawObject == null) {
+        throw UTSError("供应商过滤选项解析失败")
+    }
+    var filters: UTSArray<SupplierFilterDefinition> = _uA()
+    val rawFilters = rawObject!!["filters"]
+    if (rawFilters != null) {
+        val filtersText = JSON.stringify(rawFilters)
+        val filterObjects = if (filtersText == null || filtersText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/suppliers.uts:276")
+        }
+        if (filterObjects != null) {
+            val nextFilters: UTSArray<SupplierFilterDefinition> = _uA()
+            run {
+                var filterIndex: Number = 0
+                while(filterIndex < filterObjects!!.length){
+                    val filterObject = filterObjects!![filterIndex]
+                    var options: UTSArray<SupplierFilterOption> = _uA()
+                    val rawOptions = filterObject["options"]
+                    if (rawOptions != null) {
+                        val optionsText = JSON.stringify(rawOptions)
+                        val optionObjects = if (optionsText == null || optionsText == "") {
+                            null
+                        } else {
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/suppliers.uts:285")
+                        }
+                        if (optionObjects != null) {
+                            val nextOptions: UTSArray<SupplierFilterOption> = _uA()
+                            run {
+                                var optionIndex: Number = 0
+                                while(optionIndex < optionObjects!!.length){
+                                    val optionObject = optionObjects!![optionIndex]
+                                    nextOptions.push(SupplierFilterOption(value = stringValue(optionObject["value"]), label = stringValue(optionObject["label"])))
+                                    optionIndex += 1
+                                }
+                            }
+                            options = nextOptions
+                        }
+                    }
+                    nextFilters.push(SupplierFilterDefinition(key = stringValue(filterObject["key"]), param = stringValue(filterObject["param"]), label = stringValue(filterObject["label"]), control = stringValue(filterObject["control"]), aliases = stringArrayValue(filterObject["aliases"]), multiple = stringValue(filterObject["multiple"]) == "true", options = options))
+                    filterIndex += 1
+                }
+            }
+            filters = nextFilters
+        }
+    }
+    return SupplierFilterOptionsResponse(resource = stringValue(rawObject!!["resource"]), count = intValue(rawObject!!["count"]), filters = filters)
+}
+fun buildSupplierMediaFileFromObject(rawObject: UTSJSONObject): SupplierMediaFile {
+    return SupplierMediaFile(id = stringValue(rawObject["id"]), company = intValue(rawObject["company"]), original_filename = stringValue(rawObject["original_filename"]), file_type = stringValue(rawObject["file_type"]), file_type_display = stringValue(rawObject["file_type_display"]), mime_type = stringValue(rawObject["mime_type"]), file_size = intValue(rawObject["file_size"]), file_size_display = stringValue(rawObject["file_size_display"]), file_url = normalizeServerUrl(stringValue(rawObject["file_url"])), thumbnail_url = normalizeServerUrl(stringValue(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl(stringValue(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl(stringValue(rawObject["signed_thumbnail_url"])), object_id = stringValue(rawObject["object_id"]), is_deleted = stringValue(rawObject["is_deleted"]) == "true", created_at = stringValue(rawObject["created_at"]), updated_at = stringValue(rawObject["updated_at"]))
+}
+fun buildSupplierMediaFilesFromValue(value: Any?): UTSArray<SupplierMediaFile> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    val rawArray = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/suppliers.uts:342")
+    }
+    if (rawArray == null) {
+        return _uA()
+    }
+    val result: UTSArray<SupplierMediaFile> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rawArray!!.length){
+            result.push(buildSupplierMediaFileFromObject(rawArray!![index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildSupplierItemResponse(raw: Any): SupplierItem {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:354")
+    }
+    if (rawObject == null) {
+        throw UTSError("供应商详情响应解析失败")
+    }
+    return SupplierItem(id = intValue(rawObject!!["id"]), code = stringValue(rawObject!!["code"]), name = stringValue(rawObject!!["name"]), address = stringValue(rawObject!!["address"]), phone = stringValue(rawObject!!["phone"]), contact = stringValue(rawObject!!["contact"]), description = if (rawObject!!["description"] == null) {
+        null
+    } else {
+        stringValue(rawObject!!["description"])
+    }
+    , total_amount = stringValue(rawObject!!["total_amount"]), arrears_amount = stringValue(rawObject!!["arrears_amount"]), paid_amount = intValue(rawObject!!["paid_amount"]), is_active = stringValue(rawObject!!["is_active"]) == "true", files_count = intValue(rawObject!!["files_count"]), company_infos = (fun(): UTSArray<UTSJSONObject> {
+        val companyInfosValue = rawObject!!["company_infos"]
+        if (companyInfosValue == null) {
+            return _uA<UTSJSONObject>()
+        }
+        val companyInfosText = JSON.stringify(companyInfosValue)
+        val companyInfosArray = if (companyInfosText == null || companyInfosText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(companyInfosText), " at pkg/api/modules/suppliers.uts:377")
+        }
+        if (companyInfosArray == null) {
+            return _uA<UTSJSONObject>()
+        }
+        return companyInfosArray!!
+    }
+    )(), is_deleted = stringValue(rawObject!!["is_deleted"]) == "true", created_at = stringValue(rawObject!!["created_at"]), updated_at = stringValue(rawObject!!["updated_at"]), media_files = buildSupplierMediaFilesFromValue(rawObject!!["media_files"]))
+}
+fun buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/suppliers.uts", 415, 11), "name" to data.name)
+    if (data.code != null) {
+        body["code"] = data.code
+    }
+    if (data.address != null) {
+        body["address"] = data.address
+    }
+    if (data.phone != null) {
+        body["phone"] = data.phone
+    }
+    if (data.contact != null) {
+        body["contact"] = data.contact
+    }
+    if (data.description != null) {
+        body["description"] = data.description
+    }
+    if (data.is_active != null) {
+        body["is_active"] = data.is_active
+    }
+    if (data.company_infos != null) {
+        body["company_infos"] = data.company_infos
+    }
+    return body
+}
+fun supplierDetailPath(id: Any): String {
+    return "/api/procurement/suppliers/" + stringValue(id) + "/"
+}
 fun getSupplierList(data: SupplierListQuery): UTSPromise<SupplierListResponse> {
     return wrapUTSPromise(suspend w@{
             val raw = await(request("/api/procurement/suppliers/", "GET", buildListQuery(data), true))
             return@w normalizeSupplierList(buildSupplierListResponse(raw, data))
     })
+}
+fun getSupplierFilterOptions(): UTSPromise<SupplierFilterOptionsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/suppliers/filter-options/", "GET", _uO(), true))
+            return@w buildSupplierFilterOptionsResponse(raw)
+    })
+}
+fun getSupplierDetail(id: Any): UTSPromise<SupplierItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(supplierDetailPath(id), "GET", _uO(), true))
+            return@w buildSupplierItemResponse(raw)
+    })
+}
+fun createSupplier(data: SupplierMutationData): UTSPromise<SupplierItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/suppliers/", "POST", buildSupplierMutationBody(data), true))
+            return@w buildSupplierItemResponse(raw)
+    })
+}
+fun updateSupplier(id: Any, data: SupplierMutationData): UTSPromise<SupplierItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(supplierDetailPath(id), "PUT", buildSupplierMutationBody(data), true))
+            return@w buildSupplierItemResponse(raw)
+    })
+}
+fun deleteSupplier(id: Any): UTSPromise<Any> {
+    return request(supplierDetailPath(id), "DELETE", _uO(), true)
 }
 val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
@@ -1843,8 +2308,486 @@ val GenPagesSuppliersIndexClass = CreateVueComponent(GenPagesSuppliersIndex::cla
     return GenPagesSuppliersIndex(instance, renderer)
 }
 )
+open class SelectChangePayload (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+    @JsonNotNull
+    open var item: UTSJSONObject,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 152, 6)
+    }
+}
+open class MultiSelectChangePayload (
+    @JsonNotNull
+    open var values: UTSArray<String>,
+    @JsonNotNull
+    open var texts: UTSArray<String>,
+    @JsonNotNull
+    open var items: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 158, 6)
+    }
+}
+val GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass = CreateVueComponent(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inheritAttrs, inject = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inject, props = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.props, propsNeedCastKeys = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.propsNeedCastKeys, emits = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.emits, components = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.components, styles = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.setup(props as GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect {
+    return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect(instance)
+}
+)
+val GenUniModulesLiliPopupComponentsLiliPopupLiliPopupClass = CreateVueComponent(GenUniModulesLiliPopupComponentsLiliPopupLiliPopup::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.inheritAttrs, inject = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.inject, props = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.props, propsNeedCastKeys = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.propsNeedCastKeys, emits = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.emits, components = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.components, styles = GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliPopupComponentsLiliPopupLiliPopup.setup(props as GenUniModulesLiliPopupComponentsLiliPopupLiliPopup, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliPopupComponentsLiliPopupLiliPopup {
+    return GenUniModulesLiliPopupComponentsLiliPopupLiliPopup(instance)
+}
+)
+open class MediaBatchUploadItem (
+    @JsonNotNull
+    open var filePath: String,
+    open var name: String? = null,
+    open var formData: UTSJSONObject? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MediaBatchUploadItem", "pkg/api/modules/media.uts", 43, 13)
+    }
+}
+open class MediaBatchUploadResult (
+    @JsonNotNull
+    open var successItems: UTSArray<UTSJSONObject>,
+    @JsonNotNull
+    open var failItems: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MediaBatchUploadResult", "pkg/api/modules/media.uts", 48, 13)
+    }
+}
+fun stringValue__1(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun mediaFilePath(id: Any): String {
+    return "/api/media/files/" + stringValue__1(id) + "/"
+}
+fun buildUploadHeaders(): UTSJSONObject {
+    val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pkg/api/modules/media.uts", 246, 11))
+    if (authState.token != "") {
+        headers["Authorization"] = authState.token
+    }
+    return headers
+}
+fun parseResponseErrorMessage(text: String): String {
+    if (text == "") {
+        return ""
+    }
+    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:296")
+    if (rootObject == null) {
+        return ""
+    }
+    val detailMessage = stringValue__1(rootObject["detail"])
+    if (detailMessage != "") {
+        return detailMessage
+    }
+    val message = stringValue__1(rootObject["message"])
+    if (message != "") {
+        return message
+    }
+    return ""
+}
+fun cloneObject(source: UTSJSONObject): UTSJSONObject {
+    val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pkg/api/modules/media.uts", 311, 11))
+    for(key in resolveUTSKeyIterator(source)){
+        target[key] = source[key]
+    }
+    return target
+}
+fun buildBatchUploadFormData(items: UTSArray<MediaBatchUploadItem>): UTSJSONObject {
+    val result: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("result", "pkg/api/modules/media.uts", 318, 11))
+    var initialized = false
+    run {
+        var index: Number = 0
+        while(index < items.length){
+            val itemFormData = items[index].formData
+            if (itemFormData == null) {
+                index += 1
+                continue
+            }
+            if (!initialized) {
+                val cloned = cloneObject(itemFormData!!)
+                for(key in resolveUTSKeyIterator(cloned)){
+                    result[key] = cloned[key]
+                }
+                initialized = true
+                index += 1
+                continue
+            }
+            val currentContentTypeModel = stringValue__1(itemFormData!!["content_type_model"]).trim()
+            val currentObjectId = stringValue__1(itemFormData!!["object_id"]).trim()
+            val currentCompanyId = stringValue__1(itemFormData!!["company_id"]).trim()
+            val baseContentTypeModel = stringValue__1(result["content_type_model"]).trim()
+            val baseObjectId = stringValue__1(result["object_id"]).trim()
+            val baseCompanyId = stringValue__1(result["company_id"]).trim()
+            if (currentContentTypeModel != "" && baseContentTypeModel != "" && currentContentTypeModel != baseContentTypeModel) {
+                throw UTSError("批量上传参数冲突: content_type_model 不一致")
+            }
+            if (currentObjectId != "" && baseObjectId != "" && currentObjectId != baseObjectId) {
+                throw UTSError("批量上传参数冲突: object_id 不一致")
+            }
+            if (currentCompanyId != "" && baseCompanyId != "" && currentCompanyId != baseCompanyId) {
+                throw UTSError("批量上传参数冲突: company_id 不一致")
+            }
+            for(key in resolveUTSKeyIterator(itemFormData!!)){
+                if (result[key] == null || stringValue__1(result[key]).trim() == "") {
+                    result[key] = itemFormData!![key]
+                }
+            }
+            index += 1
+        }
+    }
+    val contentTypeModel = stringValue__1(result["content_type_model"]).trim()
+    val objectId = stringValue__1(result["object_id"]).trim()
+    if (contentTypeModel == "" || objectId == "") {
+        throw UTSError("批量上传缺少必填参数: content_type_model 和 object_id")
+    }
+    return result
+}
+fun parseBatchUploadResponseText(text: String): UTSArray<UTSJSONObject> {
+    if (text == "") {
+        return _uA()
+    }
+    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:365")
+    if (rootObject == null) {
+        throw UTSError("批量上传响应解析失败")
+    }
+    val successValue = rootObject["success"]
+    if (successValue != null) {
+        val successText = stringValue__1(successValue)
+        if (successText != "true") {
+            var message = stringValue__1(rootObject["message"])
+            if (message == "") {
+                message = stringValue__1(rootObject["detail"])
+            }
+            throw UTSError(if (message == "") {
+                "批量上传失败"
+            } else {
+                message
+            }
+            )
+        }
+        return extractUploadedItems(rootObject["data"])
+    }
+    return extractUploadedItems(rootObject)
+}
+fun tryParseObject(text: String): UTSJSONObject? {
+    if (text == "") {
+        return null
+    }
+    try {
+        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:388")
+    }
+     catch (error: Throwable) {
+        return null
+    }
+}
+fun tryParseArray(text: String): UTSArray<UTSJSONObject>? {
+    if (text == "") {
+        return null
+    }
+    try {
+        return UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/media.uts:399")
+    }
+     catch (error: Throwable) {
+        return null
+    }
+}
+fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
+    if (value == null) {
+        return _uA()
+    }
+    val valueText = JSON.stringify(value)
+    if (valueText == null || valueText == "") {
+        return _uA()
+    }
+    val uploadedArray = tryParseArray(valueText)
+    if (uploadedArray != null) {
+        return uploadedArray!!
+    }
+    val valueObject = tryParseObject(valueText)
+    if (valueObject == null) {
+        return _uA()
+    }
+    val uploadedValue = valueObject["uploaded"]
+    if (uploadedValue != null) {
+        val uploadedText = JSON.stringify(uploadedValue)
+        val parsedUploadedArray = if (uploadedText == null || uploadedText == "") {
+            null
+        } else {
+            tryParseArray(uploadedText)
+        }
+        if (parsedUploadedArray != null) {
+            return parsedUploadedArray!!
+        }
+    }
+    if (valueObject["id"] != null || valueObject["original_filename"] != null || valueObject["file_url"] != null || valueObject["signed_url"] != null) {
+        return _uA(
+            valueObject
+        )
+    }
+    val detailMessage = stringValue__1(valueObject["detail"])
+    if (detailMessage != "") {
+        throw UTSError(detailMessage)
+    }
+    val message = stringValue__1(valueObject["message"])
+    if (message != "") {
+        throw UTSError(message)
+    }
+    return _uA()
+}
+fun normalizeUploadFilePath(filePath: String): String {
+    return filePath.trim()
+}
+fun buildUploadFailMessage(err: UploadFileFail): String {
+    var message = stringValue__1(err.errMsg)
+    val rawText = JSON.stringify(err)
+    if (rawText != null && rawText != "") {
+        val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:449")
+        if (rawObject != null) {
+            val causeValue = rawObject!!["cause"]
+            if (causeValue != null) {
+                val causeText = JSON.stringify(causeValue)
+                if (causeText != null && causeText != "") {
+                    val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:455")
+                    if (causeObject != null) {
+                        val causeMessage = stringValue__1(causeObject!!["message"])
+                        if (causeMessage != "") {
+                            message = if (message == "") {
+                                causeMessage
+                            } else {
+                                (message + " | " + causeMessage)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (message == "") {
+        return "上传失败"
+    }
+    return message
+}
+fun uploadBatchMediaFilesRequest(items: UTSArray<MediaBatchUploadItem>, formData: UTSJSONObject): UTSPromise<UTSArray<UTSJSONObject>> {
+    return UTSPromise(fun(resolve, reject){
+        val headers = buildUploadHeaders()
+        val uploadTimeout = if (timeOut < 120000) {
+            120000
+        } else {
+            timeOut
+        }
+        val files: UTSArray<UploadFileOptionFiles> = _uA()
+        run {
+            var index: Number = 0
+            while(index < items.length){
+                val resolvedFilePath = normalizeUploadFilePath(items[index].filePath)
+                files.push(UploadFileOptionFiles(name = "files", uri = resolvedFilePath))
+                index += 1
+            }
+        }
+        console.log("media batch upload start:", baseUrl + "/api/media/files/batch-upload/", files.length, " at pkg/api/modules/media.uts:521")
+        try {
+            uni_uploadFile(UploadFileOptions(url = baseUrl + "/api/media/files/batch-upload/", files = files, header = headers, formData = formData, timeout = uploadTimeout, success = fun(res: UploadFileSuccess){
+                console.log("media batch upload success:", res.statusCode, items.length, " at pkg/api/modules/media.uts:531")
+                if (res.statusCode < 200 || res.statusCode >= 300) {
+                    val responseMessage = parseResponseErrorMessage(res.data)
+                    reject(UTSError(if (responseMessage == "") {
+                        ("HTTP状态码错误: " + res.statusCode)
+                    } else {
+                        responseMessage
+                    }
+                    ))
+                    return
+                }
+                try {
+                    resolve(parseBatchUploadResponseText(res.data))
+                }
+                 catch (error: Throwable) {
+                    reject(error)
+                }
+            }
+            , fail = fun(err: UploadFileFail){
+                val failMessage = buildUploadFailMessage(err)
+                console.log("media batch upload fail:", failMessage, err.errCode, " at pkg/api/modules/media.uts:545")
+                reject(UTSError(failMessage))
+            }
+            ))
+        }
+         catch (error: Throwable) {
+            reject(error)
+        }
+    }
+    )
+}
+fun deleteMediaFileRequest(id: Any): UTSPromise<Boolean> {
+    return UTSPromise(fun(resolve, reject){
+        val headers = buildUploadHeaders()
+        headers["content-type"] = "application/json"
+        val requestUrl = baseUrl + mediaFilePath(id)
+        console.log("请求地址:", requestUrl, " at pkg/api/modules/media.uts:602")
+        uni_request<Any>(RequestOptions(url = requestUrl, method = "DELETE", header = headers, timeout = timeOut, success = fun(res){
+            if (res.statusCode == 204 || res.statusCode == 200) {
+                resolve(true)
+                return
+            }
+            reject(UTSError("HTTP状态码错误: " + res.statusCode))
+        }
+        , fail = fun(err){
+            reject(UTSError(stringValue__1(err.errMsg)))
+        }
+        ))
+    }
+    )
+}
+fun deleteMediaFile(id: Any): UTSPromise<Boolean> {
+    return deleteMediaFileRequest(id)
+}
+fun batchUploadMediaFiles(items: UTSArray<MediaBatchUploadItem>): UTSPromise<MediaBatchUploadResult> {
+    return wrapUTSPromise(suspend w@{
+            val successItems: UTSArray<UTSJSONObject> = _uA()
+            val failItems: UTSArray<UTSJSONObject> = _uA()
+            console.log("media batch upload count:", items.length, " at pkg/api/modules/media.uts:687")
+            if (items.length == 0) {
+                return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
+            }
+            try {
+                val formData = buildBatchUploadFormData(items)
+                val uploadedItems = await(uploadBatchMediaFilesRequest(items, formData))
+                if (uploadedItems.length == items.length) {
+                    run {
+                        var index: Number = 0
+                        while(index < items.length){
+                            successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
+                            index += 1
+                        }
+                    }
+                } else {
+                    val message = "批量上传返回数量异常: 请求 " + items.length + " 个，返回 " + uploadedItems.length + " 个"
+                    run {
+                        var index: Number = 0
+                        while(index < items.length){
+                            if (index < uploadedItems.length) {
+                                successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
+                            } else {
+                                failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
+                            }
+                            index += 1
+                        }
+                    }
+                }
+            }
+             catch (error: Throwable) {
+                val message = stringValue__1((error as UTSError).message)
+                run {
+                    var index: Number = 0
+                    while(index < items.length){
+                        failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
+                        index += 1
+                    }
+                }
+            }
+            return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
+    })
+}
+val GenUniModulesLiliUploadComponentsLiliUploadLiliUploadClass = CreateVueComponent(GenUniModulesLiliUploadComponentsLiliUploadLiliUpload::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.inheritAttrs, inject = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.inject, props = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.props, propsNeedCastKeys = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.propsNeedCastKeys, emits = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.emits, components = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.components, styles = GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliUploadComponentsLiliUploadLiliUpload.setup(props as GenUniModulesLiliUploadComponentsLiliUploadLiliUpload)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUploadComponentsLiliUploadLiliUpload {
+    return GenUniModulesLiliUploadComponentsLiliUploadLiliUpload(instance)
+}
+)
+typealias FetchDataFn = (params: UTSJSONObject) -> UTSPromise<UTSJSONObject>
+typealias ValidatorFn = (value: Any, formData: UTSJSONObject, mode: String) -> String
+val GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormClass = CreateVueComponent(GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.inheritAttrs, inject = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.inject, props = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.props, propsNeedCastKeys = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.propsNeedCastKeys, emits = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.emits, components = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.components, styles = GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm.setup(props as GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm {
+    return GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm(instance)
+}
+)
+open class SelectOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 40, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SelectOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SelectOptionReactiveObject : SelectOption, IUTSReactive<SelectOption> {
+    override var __v_raw: SelectOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SelectOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SelectOptionReactiveObject {
+        return SelectOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
 val GenPagesSuppliersFromClass = CreateVueComponent(GenPagesSuppliersFrom::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesSuppliersFrom.inheritAttrs, inject = GenPagesSuppliersFrom.inject, props = GenPagesSuppliersFrom.props, propsNeedCastKeys = GenPagesSuppliersFrom.propsNeedCastKeys, emits = GenPagesSuppliersFrom.emits, components = GenPagesSuppliersFrom.components, styles = GenPagesSuppliersFrom.styles)
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesSuppliersFrom.inheritAttrs, inject = GenPagesSuppliersFrom.inject, props = GenPagesSuppliersFrom.props, propsNeedCastKeys = GenPagesSuppliersFrom.propsNeedCastKeys, emits = GenPagesSuppliersFrom.emits, components = GenPagesSuppliersFrom.components, styles = GenPagesSuppliersFrom.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesSuppliersFrom.setup(props as GenPagesSuppliersFrom)
+    }
+    )
 }
 , fun(instance, renderer): GenPagesSuppliersFrom {
     return GenPagesSuppliersFrom(instance, renderer)
@@ -1864,7 +2807,7 @@ open class UniAppConfig : io.dcloud.uniapp.appframe.AppConfig {
     override var appid: String = "__UNI__1CE1B14"
     override var versionName: String = "1.0.0"
     override var versionCode: String = "100"
-    override var uniCompilerVersion: String = "4.87"
+    override var uniCompilerVersion: String = "5.07"
     constructor() : super() {}
 }
 fun definePageRoutes() {
@@ -1877,7 +2820,7 @@ fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/webview/webview", component = GenPagesWebviewWebviewClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/privacy/privacy", component = GenPagesPrivacyPrivacyClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/suppliers/index", component = GenPagesSuppliersIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
-    __uniRoutes.push(UniPageRoute(path = "pages/suppliers/from", component = GenPagesSuppliersFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/suppliers/from", component = GenPagesSuppliersFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
 }
 val __uniTabBar: Map<String, Any?>? = _uM("color" to "#94A3B8", "selectedColor" to "#0F172A", "backgroundColor" to "#FFFFFF", "borderStyle" to "black", "list" to _uA(
     _uM("pagePath" to "pages/tabbar/reports", "iconPath" to "static/tabBar/Report.png", "selectedIconPath" to "static/tabBar/Report (1).png", "text" to "报表"),

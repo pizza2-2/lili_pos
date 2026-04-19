@@ -3,6 +3,8 @@ export type SupplierListQuery = {
     search: string | null;
     page: number;
     page_size: number;
+    is_active: string | null;
+    has_arrears: string | null;
 };
 export type SupplierMediaFile = {
     id: string;
@@ -49,6 +51,42 @@ export type SupplierListResponse = {
     current_page: number;
     page_size: number;
 };
+export type SupplierFilterOption = {
+    value: string;
+    label: string;
+};
+export type SupplierFilterDefinition = {
+    key: string;
+    param: string;
+    label: string;
+    control: string;
+    aliases: string[];
+    multiple: boolean;
+    options: SupplierFilterOption[];
+};
+export type SupplierFilterOptionsResponse = {
+    resource: string;
+    count: number;
+    filters: SupplierFilterDefinition[];
+};
+export type SupplierFormOptionsResponse = {
+    resource: string;
+    count: number;
+    options: UTSJSONObject;
+};
+export type SupplierGlobalStatisticsResponse = {
+    data: UTSJSONObject;
+};
+export type SupplierMutationData = {
+    code: string | null;
+    name: string;
+    address: string | null;
+    phone: string | null;
+    contact: string | null;
+    description: string | null;
+    is_active: boolean | null;
+    company_infos: UTSJSONObject[] | null;
+};
 function buildListQuery(data: SupplierListQuery): UTSJSONObject {
     const query = {
         page: data.page,
@@ -56,6 +94,12 @@ function buildListQuery(data: SupplierListQuery): UTSJSONObject {
     } as UTSJSONObject;
     if (data.search != null && data.search != '') {
         query['search'] = data.search;
+    }
+    if (data.is_active != null && data.is_active != '') {
+        query['is_active'] = data.is_active;
+    }
+    if (data.has_arrears != null && data.has_arrears != '') {
+        query['has_arrears'] = data.has_arrears;
     }
     return query;
 }
@@ -80,15 +124,22 @@ function normalizeServerUrl(url: string): string {
 function normalizeSupplierList(data: SupplierListResponse): SupplierListResponse {
     for (let supplierIndex = 0; supplierIndex < data.results.length; supplierIndex += 1) {
         const supplier = data.results[supplierIndex];
-        for (let mediaIndex = 0; mediaIndex < supplier.media_files.length; mediaIndex += 1) {
-            const mediaFile = supplier.media_files[mediaIndex];
-            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url);
-            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url);
-            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url);
-            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url);
-        }
+        normalizeSupplierMediaFiles(supplier.media_files);
     }
     return data;
+}
+function normalizeSupplierMediaFiles(files: SupplierMediaFile[]) {
+    for (let mediaIndex = 0; mediaIndex < files.length; mediaIndex += 1) {
+        const mediaFile = files[mediaIndex];
+        mediaFile.file_url = normalizeServerUrl(mediaFile.file_url);
+        mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url);
+        mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url);
+        mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url);
+    }
+}
+function normalizeSupplierItem(item: SupplierItem): SupplierItem {
+    normalizeSupplierMediaFiles(item.media_files);
+    return item;
 }
 function intValue(value: any | null): number {
     if (value == null) {
@@ -103,6 +154,12 @@ function intValue(value: any | null): number {
         return 0;
     }
     return parsed;
+}
+function stringValue(value: any | null): string {
+    if (value == null) {
+        return '';
+    }
+    return '' + value;
 }
 function buildSupplierListResponse(raw: any, query: SupplierListQuery): SupplierListResponse {
     const rawText = JSON.stringify(raw);
@@ -191,8 +248,248 @@ function buildSupplierListResponse(raw: any, query: SupplierListQuery): Supplier
         page_size: pageSize,
     } as SupplierListResponse;
 }
+function stringArrayValue(value: any | null): string[] {
+    if (value == null) {
+        return [];
+    }
+    const text = JSON.stringify(value);
+    const parsed = text == null || text == '' ? null : JSON.parseArray<any>(text);
+    if (parsed == null) {
+        return [];
+    }
+    const result: string[] = [];
+    for (let index = 0; index < parsed!.length; index += 1) {
+        result.push(stringValue(parsed![index]));
+    }
+    return result;
+}
+function buildSupplierFilterOptionsResponse(raw: any): SupplierFilterOptionsResponse {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null) {
+        throw new Error('供应商过滤选项解析失败');
+    }
+    let filters: SupplierFilterDefinition[] = [];
+    const rawFilters = rawObject!['filters'];
+    if (rawFilters != null) {
+        const filtersText = JSON.stringify(rawFilters);
+        const filterObjects = filtersText == null || filtersText == '' ? null : JSON.parseArray<UTSJSONObject>(filtersText);
+        if (filterObjects != null) {
+            const nextFilters: SupplierFilterDefinition[] = [];
+            for (let filterIndex = 0; filterIndex < filterObjects!.length; filterIndex += 1) {
+                const filterObject = filterObjects![filterIndex];
+                let options: SupplierFilterOption[] = [];
+                const rawOptions = filterObject['options'];
+                if (rawOptions != null) {
+                    const optionsText = JSON.stringify(rawOptions);
+                    const optionObjects = optionsText == null || optionsText == '' ? null : JSON.parseArray<UTSJSONObject>(optionsText);
+                    if (optionObjects != null) {
+                        const nextOptions: SupplierFilterOption[] = [];
+                        for (let optionIndex = 0; optionIndex < optionObjects!.length; optionIndex += 1) {
+                            const optionObject = optionObjects![optionIndex];
+                            nextOptions.push({
+                                value: stringValue(optionObject['value']),
+                                label: stringValue(optionObject['label']),
+                            } as SupplierFilterOption);
+                        }
+                        options = nextOptions;
+                    }
+                }
+                nextFilters.push({
+                    key: stringValue(filterObject['key']),
+                    param: stringValue(filterObject['param']),
+                    label: stringValue(filterObject['label']),
+                    control: stringValue(filterObject['control']),
+                    aliases: stringArrayValue(filterObject['aliases']),
+                    multiple: stringValue(filterObject['multiple']) == 'true',
+                    options: options,
+                } as SupplierFilterDefinition);
+            }
+            filters = nextFilters;
+        }
+    }
+    return {
+        resource: stringValue(rawObject!['resource']),
+        count: intValue(rawObject!['count']),
+        filters: filters,
+    } as SupplierFilterOptionsResponse;
+}
+function buildSupplierMediaFileFromObject(rawObject: UTSJSONObject): SupplierMediaFile {
+    return {
+        id: stringValue(rawObject['id']),
+        company: intValue(rawObject['company']),
+        original_filename: stringValue(rawObject['original_filename']),
+        file_type: stringValue(rawObject['file_type']),
+        file_type_display: stringValue(rawObject['file_type_display']),
+        mime_type: stringValue(rawObject['mime_type']),
+        file_size: intValue(rawObject['file_size']),
+        file_size_display: stringValue(rawObject['file_size_display']),
+        file_url: normalizeServerUrl(stringValue(rawObject['file_url'])),
+        thumbnail_url: normalizeServerUrl(stringValue(rawObject['thumbnail_url'])),
+        signed_url: normalizeServerUrl(stringValue(rawObject['signed_url'])),
+        signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject['signed_thumbnail_url'])),
+        object_id: stringValue(rawObject['object_id']),
+        is_deleted: stringValue(rawObject['is_deleted']) == 'true',
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+    } as SupplierMediaFile;
+}
+function buildSupplierMediaFilesFromValue(value: any | null): SupplierMediaFile[] {
+    if (value == null) {
+        return [];
+    }
+    const text = JSON.stringify(value);
+    const rawArray = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text);
+    if (rawArray == null) {
+        return [];
+    }
+    const result: SupplierMediaFile[] = [];
+    for (let index = 0; index < rawArray!.length; index += 1) {
+        result.push(buildSupplierMediaFileFromObject(rawArray![index]));
+    }
+    return result;
+}
+function buildSupplierItemResponse(raw: any): SupplierItem {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null) {
+        throw new Error('供应商详情响应解析失败');
+    }
+    return {
+        id: intValue(rawObject!['id']),
+        code: stringValue(rawObject!['code']),
+        name: stringValue(rawObject!['name']),
+        address: stringValue(rawObject!['address']),
+        phone: stringValue(rawObject!['phone']),
+        contact: stringValue(rawObject!['contact']),
+        description: rawObject!['description'] == null ? null : stringValue(rawObject!['description']),
+        total_amount: stringValue(rawObject!['total_amount']),
+        arrears_amount: stringValue(rawObject!['arrears_amount']),
+        paid_amount: intValue(rawObject!['paid_amount']),
+        is_active: stringValue(rawObject!['is_active']) == 'true',
+        files_count: intValue(rawObject!['files_count']),
+        company_infos: ((): UTSJSONObject[] => {
+            const companyInfosValue = rawObject!['company_infos'];
+            if (companyInfosValue == null) {
+                return [] as UTSJSONObject[];
+            }
+            const companyInfosText = JSON.stringify(companyInfosValue);
+            const companyInfosArray = companyInfosText == null || companyInfosText == '' ? null : JSON.parseArray<UTSJSONObject>(companyInfosText);
+            if (companyInfosArray == null) {
+                return [] as UTSJSONObject[];
+            }
+            return companyInfosArray!;
+        })(),
+        is_deleted: stringValue(rawObject!['is_deleted']) == 'true',
+        created_at: stringValue(rawObject!['created_at']),
+        updated_at: stringValue(rawObject!['updated_at']),
+        media_files: buildSupplierMediaFilesFromValue(rawObject!['media_files']),
+    } as SupplierItem;
+}
+function buildSupplierImagesResponse(raw: any): SupplierMediaFile[] {
+    return buildSupplierMediaFilesFromValue(raw);
+}
+function buildSupplierFormOptionsResponse(raw: any): SupplierFormOptionsResponse {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null) {
+        throw new Error('供应商表单选项解析失败');
+    }
+    return {
+        resource: stringValue(rawObject!['resource']),
+        count: intValue(rawObject!['count']),
+        options: rawObject!,
+    } as SupplierFormOptionsResponse;
+}
+function buildSupplierGlobalStatisticsResponse(raw: any): SupplierGlobalStatisticsResponse {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null) {
+        throw new Error('供应商全局统计解析失败');
+    }
+    return {
+        data: rawObject!,
+    } as SupplierGlobalStatisticsResponse;
+}
+function buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
+    const body = {
+        name: data.name,
+    } as UTSJSONObject;
+    if (data.code != null) {
+        body['code'] = data.code;
+    }
+    if (data.address != null) {
+        body['address'] = data.address;
+    }
+    if (data.phone != null) {
+        body['phone'] = data.phone;
+    }
+    if (data.contact != null) {
+        body['contact'] = data.contact;
+    }
+    if (data.description != null) {
+        body['description'] = data.description;
+    }
+    if (data.is_active != null) {
+        body['is_active'] = data.is_active;
+    }
+    if (data.company_infos != null) {
+        body['company_infos'] = data.company_infos;
+    }
+    return body;
+}
+function supplierDetailPath(id: number | string): string {
+    return '/api/procurement/suppliers/' + stringValue(id) + '/';
+}
 export async function getSupplierList(data: SupplierListQuery): Promise<SupplierListResponse> {
     const raw = await request('/api/procurement/suppliers/', 'GET', buildListQuery(data), true);
     return normalizeSupplierList(buildSupplierListResponse(raw, data));
+}
+export async function getSupplierFilterOptions(): Promise<SupplierFilterOptionsResponse> {
+    const raw = await request('/api/procurement/suppliers/filter-options/', 'GET', {} as UTSJSONObject, true);
+    return buildSupplierFilterOptionsResponse(raw);
+}
+export async function getSupplierDetail(id: number | string): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildSupplierItemResponse(raw);
+}
+export async function createSupplier(data: SupplierMutationData): Promise<SupplierItem> {
+    const raw = await request('/api/procurement/suppliers/', 'POST', buildSupplierMutationBody(data), true);
+    return buildSupplierItemResponse(raw);
+}
+export async function updateSupplier(id: number | string, data: SupplierMutationData): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id), 'PUT', buildSupplierMutationBody(data), true);
+    return buildSupplierItemResponse(raw);
+}
+export async function patchSupplier(id: number | string, data: SupplierMutationData): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id), 'PATCH', buildSupplierMutationBody(data), true);
+    return buildSupplierItemResponse(raw);
+}
+export function deleteSupplier(id: number | string): Promise<any> {
+    return request(supplierDetailPath(id), 'DELETE', {} as UTSJSONObject, true);
+}
+export async function getSupplierOptions(): Promise<SupplierFormOptionsResponse> {
+    const raw = await request('/api/procurement/suppliers/options/', 'GET', {} as UTSJSONObject, true);
+    return buildSupplierFormOptionsResponse(raw);
+}
+export async function restoreSupplier(id: number | string): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id) + 'restore/', 'POST', {} as UTSJSONObject, true);
+    return buildSupplierItemResponse(raw);
+}
+export async function getSupplierAllImages(id: number | string): Promise<SupplierMediaFile[]> {
+    const raw = await request(supplierDetailPath(id) + 'all_images/', 'GET', {} as UTSJSONObject, true);
+    return buildSupplierImagesResponse(raw);
+}
+export async function getSupplierGlobalStatistics(): Promise<SupplierGlobalStatisticsResponse> {
+    const raw = await request('/api/procurement/suppliers/global_statistics/', 'GET', {} as UTSJSONObject, true);
+    return buildSupplierGlobalStatisticsResponse(raw);
+}
+export async function activateSupplier(id: number | string): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id) + 'activate/', 'POST', {} as UTSJSONObject, true);
+    return buildSupplierItemResponse(raw);
+}
+export async function deactivateSupplier(id: number | string): Promise<SupplierItem> {
+    const raw = await request(supplierDetailPath(id) + 'deactivate/', 'POST', {} as UTSJSONObject, true);
+    return buildSupplierItemResponse(raw);
 }
 //# sourceMappingURL=suppliers.uts.map

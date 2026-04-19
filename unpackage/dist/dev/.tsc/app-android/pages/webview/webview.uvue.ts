@@ -20,7 +20,9 @@ const _cache = __ins.renderCache;
 
 return (): any | null => {
 
-  return _cE("web-view", _uM({
+const _component_web_view = resolveComponent("web-view")
+
+  return _cV(_component_web_view, _uM({
     id: "web-view",
     src: unref(src),
     "webview-styles": webview_styles

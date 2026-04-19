@@ -2,7 +2,7 @@ import { SupplierListQuery } from "../../pkg/api/modules/suppliers";
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue';
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue';
 import { computed } from 'vue';
-import { getSupplierList, SupplierItem, SupplierListResponse } from '@/pkg/api/modules/suppliers';
+import { deleteSupplier, getSupplierList, getSupplierFilterOptions, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse } from '@/pkg/api/modules/suppliers';
 const __sfc__ = defineComponent({
     __name: 'index',
     setup(__props) {
@@ -10,6 +10,7 @@ const __sfc__ = defineComponent({
         const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
         const _cache = __ins.renderCache;
         const keyword = ref('');
+        const filterVisible = ref(false);
         const isLoading = ref(false);
         const errorMessage = ref('');
         const suppliers = ref<SupplierItem[]>([]);
@@ -17,15 +18,19 @@ const __sfc__ = defineComponent({
         const totalPages = ref(1);
         const totalCount = ref(0);
         const pageSize = ref(20);
+        const filterOptionsLoading = ref(false);
+        const filterOptionsError = ref('');
+        const filterOptions = ref<SupplierFilterOptionsResponse | null>(null);
+        const selectedIsActive = ref<string | null>(null);
+        const selectedHasArrears = ref<string | null>(null);
         const fieldConfig = ref<UTSJSONObject[]>([
-            { key: 'contact', label: '联系人' } as UTSJSONObject,
             { key: 'phone', label: '电话' } as UTSJSONObject,
             { key: 'address', label: '地址' } as UTSJSONObject,
             { key: 'arrears_amount', label: '欠款' } as UTSJSONObject,
         ]);
         const menuActions = ref<UTSJSONObject[]>([
-            { key: 'copy-phone', text: '复制电话' } as UTSJSONObject,
-            { key: 'reload', text: '刷新列表' } as UTSJSONObject,
+            { key: 'edit', text: '编辑' } as UTSJSONObject,
+            { key: 'delete', text: '删除' } as UTSJSONObject,
         ]);
         function applySupplierResponse(response: SupplierListResponse) {
             suppliers.value = response.results;
@@ -34,12 +39,18 @@ const __sfc__ = defineComponent({
             totalCount.value = response.total_count;
             pageSize.value = response.page_size;
         }
+        function closeFilterDrawer() {
+            filterVisible.value = false;
+        }
+        function handleFilterVisibleChange(value: boolean) {
+            filterVisible.value = value;
+        }
         function parseErrorMessage(error: any): string {
             let message = '供应商列表加载失败';
             if (error != null) {
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:117");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:168");
                     if (parsedError != null) {
                         const rawMessage = parsedError!['message'];
                         if (rawMessage != null) {
@@ -67,6 +78,8 @@ const __sfc__ = defineComponent({
                     search: keyword.value == '' ? null : keyword.value,
                     page: currentPage.value,
                     page_size: pageSize.value,
+                    is_active: selectedIsActive.value,
+                    has_arrears: selectedHasArrears.value,
                 } as SupplierListQuery);
                 applySupplierResponse(response);
             }
@@ -137,27 +150,20 @@ const __sfc__ = defineComponent({
             }
             return value;
         }
-        function buildTags(item: SupplierItem): string[] {
-            const tags: string[] = [];
-            tags.push(item.is_active ? '启用' : '停用');
-            if (item.files_count > 0) {
-                tags.push('有附件');
-            }
-            if (item.arrears_amount != '0.00') {
-                tags.push('有欠款');
-            }
-            return tags;
-        }
         function supplierToListItem(item: SupplierItem): UTSJSONObject {
             const cover = getSupplierImage(item);
             const images = buildImages(item);
             return {
                 id: item.id.toString(10),
                 name: item.name,
+                code: getDisplayText(item.code),
                 codeText: '编码：' + getDisplayText(item.code),
+                contactText: '联系人：' + getDisplayText(item.contact),
                 contact: getDisplayText(item.contact),
                 phone: getDisplayText(item.phone),
                 address: getDisplayText(item.address),
+                description: item.description == null ? '' : item.description,
+                is_active: item.is_active,
                 total_amount: item.total_amount,
                 paid_amount_text: formatPaidAmount(item.paid_amount),
                 arrears_amount: item.arrears_amount,
@@ -165,9 +171,26 @@ const __sfc__ = defineComponent({
                 filesText: item.files_count.toString(10) + ' 个',
                 cover: cover,
                 images: images,
-                tags: buildTags(item),
                 rawId: item.id.toString(10),
             } as UTSJSONObject;
+        }
+        function copyText(text: string, successTitle: string, emptyTitle: string) {
+            if (text == '' || text == '-') {
+                uni.showToast({
+                    title: emptyTitle,
+                    icon: 'none',
+                });
+                return;
+            }
+            uni.setClipboardData({
+                data: text,
+                success: () => {
+                    uni.showToast({
+                        title: successTitle,
+                        icon: 'success',
+                    });
+                },
+            });
         }
         function handleSearchInput(value: string) {
             keyword.value = value;
@@ -187,6 +210,22 @@ const __sfc__ = defineComponent({
             currentPage.value = 1;
             loadSuppliers();
         }
+        async function handleFilterOpen(): Promise<void> {
+            if (filterOptions.value != null || filterOptionsLoading.value) {
+                return;
+            }
+            filterOptionsLoading.value = true;
+            filterOptionsError.value = '';
+            try {
+                filterOptions.value = await getSupplierFilterOptions();
+            }
+            catch (error: any) {
+                filterOptionsError.value = parseErrorMessage(error);
+            }
+            finally {
+                filterOptionsLoading.value = false;
+            }
+        }
         function handlePageChange(payload: UTSJSONObject) {
             const pageValue = payload['page'];
             if (pageValue == null) {
@@ -200,6 +239,37 @@ const __sfc__ = defineComponent({
             currentPage.value = nextPage;
             loadSuppliers();
         }
+        function isFilterOptionSelected(param: string, value: string): boolean {
+            if (param == 'is_active') {
+                return selectedIsActive.value == value;
+            }
+            if (param == 'has_arrears') {
+                return selectedHasArrears.value == value;
+            }
+            return false;
+        }
+        function toggleFilterOption(param: string, value: string) {
+            if (param == 'is_active') {
+                selectedIsActive.value = selectedIsActive.value == value ? null : value;
+                return;
+            }
+            if (param == 'has_arrears') {
+                selectedHasArrears.value = selectedHasArrears.value == value ? null : value;
+            }
+        }
+        function handleFilterReset() {
+            selectedIsActive.value = null;
+            selectedHasArrears.value = null;
+            keyword.value = '';
+            currentPage.value = 1;
+            closeFilterDrawer();
+            loadSuppliers();
+        }
+        function applySelectedSupplier() {
+            currentPage.value = 1;
+            closeFilterDrawer();
+            loadSuppliers();
+        }
         function handleItemClick(payload: UTSJSONObject) {
             const name = payload['name'];
             const text = name == null ? '供应商' : (name as string);
@@ -207,6 +277,74 @@ const __sfc__ = defineComponent({
                 title: text,
                 icon: 'none',
             });
+        }
+        function handleSubtitleClick(payload: UTSJSONObject) {
+            const item = payload['item'];
+            if (item == null) {
+                return;
+            }
+            const itemObject = item as UTSJSONObject;
+            const code = itemObject['code'];
+            const codeText = code == null ? '' : (code as string);
+            copyText(codeText, '编码已复制', '暂无编码');
+        }
+        function handleFieldClick(payload: UTSJSONObject) {
+            const keyValue = payload['key'];
+            const itemValue = payload['item'];
+            if (keyValue == null || itemValue == null) {
+                return;
+            }
+            const key = keyValue as string;
+            const item = itemValue as UTSJSONObject;
+            if (key == 'phone') {
+                const phone = item['phone'];
+                const phoneText = phone == null ? '' : (phone as string);
+                copyText(phoneText, '电话已复制', '暂无电话');
+                return;
+            }
+            if (key == 'contact') {
+                const contact = item['contact'];
+                const contactText = contact == null ? '' : (contact as string);
+                copyText(contactText, '联系人已复制', '暂无联系人');
+                return;
+            }
+            if (key == 'address') {
+                const address = item['address'];
+                const addressText = address == null ? '' : (address as string);
+                copyText(addressText, '地址已复制', '暂无地址');
+                return;
+            }
+            if (key == 'arrears_amount') {
+                const arrears = item['arrears_amount'];
+                const arrearsText = arrears == null ? '' : ('' + arrears);
+                copyText(arrearsText, '欠款已复制', '暂无欠款');
+            }
+        }
+        function handleMetaClick(payload: UTSJSONObject) {
+            const item = payload['item'];
+            if (item == null) {
+                return;
+            }
+            const itemObject = item as UTSJSONObject;
+            const contact = itemObject['contact'];
+            const contactText = contact == null ? '' : (contact as string);
+            copyText(contactText, '联系人已复制', '暂无联系人');
+        }
+        async function confirmDeleteSupplier(supplierId: string): Promise<void> {
+            try {
+                await deleteSupplier(supplierId);
+                uni.showToast({
+                    title: '删除成功',
+                    icon: 'success',
+                });
+                loadSuppliers();
+            }
+            catch (error: any) {
+                uni.showToast({
+                    title: parseErrorMessage(error),
+                    icon: 'none',
+                });
+            }
         }
         function handleMenu(payload: UTSJSONObject) {
             const action = payload['action'];
@@ -221,6 +359,27 @@ const __sfc__ = defineComponent({
                 return;
             }
             const key = actionKey as string;
+            const supplierIdValue = itemObject['rawId'];
+            const supplierId = supplierIdValue == null ? '' : (supplierIdValue as string);
+            if (key == 'edit') {
+                uni.navigateTo({
+                    url: '/pages/suppliers/from?id=' + supplierId,
+                });
+                return;
+            }
+            if (key == 'delete') {
+                uni.showModal({
+                    title: '删除供应商',
+                    content: '确定删除这个供应商吗？',
+                    success: (res) => {
+                        if (!res.confirm) {
+                            return;
+                        }
+                        confirmDeleteSupplier(supplierId);
+                    },
+                });
+                return;
+            }
             if (key == 'reload') {
                 loadSuppliers();
                 return;
@@ -274,16 +433,28 @@ const __sfc__ = defineComponent({
             }
             return count.toString(10);
         });
+        const hasActiveFilter = computed((): boolean => {
+            return keyword.value != '' || selectedIsActive.value != null || selectedHasArrears.value != null;
+        });
         const emptyText = computed((): string => {
             if (isLoading.value) {
                 return '正在加载';
             }
-            if (keyword.value != '') {
+            if (hasActiveFilter.value) {
                 return '没有匹配的供应商';
             }
             return '暂无供应商';
         });
+        const filterDefinitions = computed((): SupplierFilterDefinition[] => {
+            if (filterOptions.value == null) {
+                return [];
+            }
+            return filterOptions.value!.filters;
+        });
         onLoad((_options) => {
+            loadSuppliers();
+        });
+        onShow(() => {
             loadSuppliers();
         });
         return (): any | null => {
@@ -294,37 +465,93 @@ const __sfc__ = defineComponent({
                     title: "供应商",
                     searchPlaceholder: "输入供应商名称、编码、联系人",
                     searchValue: unref(keyword),
+                    filterVisible: unref(filterVisible),
                     showBack: true,
                     showSearch: true,
                     showFilter: true,
                     showHome: true,
-                    filterActive: unref(keyword) != '',
+                    filterActive: hasActiveFilter.value,
                     filterText: "重置",
                     homePath: "/pages/tabbar/products",
                     onSearchInput: handleSearchInput,
                     onSearchConfirm: handleSearchConfirm,
                     onSearchClear: handleSearchClear,
-                    onFilter: handleReset
-                }), null, 8 /* PROPS */, ["searchValue", "filterActive"]),
+                    "onUpdate:filterVisible": handleFilterVisibleChange,
+                    onFilterOpen: handleFilterOpen
+                }), _uM({
+                    "filter-panel": withSlotCtx((): any[] => [
+                        _cE("view", _uM({ class: "supplier-filter-panel" }), [
+                            _cE("view", _uM({ class: "supplier-filter-actions" }), [
+                                _cE("view", _uM({
+                                    class: "supplier-filter-btn supplier-filter-btn-light",
+                                    onClick: handleFilterReset
+                                }), [
+                                    _cE("text", _uM({ class: "supplier-filter-btn-light-text" }), "重置")
+                                ]),
+                                _cE("view", _uM({
+                                    class: "supplier-filter-btn supplier-filter-btn-primary",
+                                    onClick: applySelectedSupplier
+                                }), [
+                                    _cE("text", _uM({ class: "supplier-filter-btn-primary-text" }), "应用")
+                                ])
+                            ]),
+                            isTrue(unref(filterOptionsLoading))
+                                ? _cE("view", _uM({
+                                    key: 0,
+                                    class: "supplier-filter-state"
+                                }), [
+                                    _cE("text", _uM({ class: "supplier-filter-state-text" }), "筛选选项加载中...")
+                                ])
+                                : unref(filterOptionsError) != ''
+                                    ? _cE("view", _uM({
+                                        key: 1,
+                                        class: "supplier-filter-state"
+                                    }), [
+                                        _cE("text", _uM({ class: "supplier-filter-state-text" }), _tD(unref(filterOptionsError)), 1 /* TEXT */)
+                                    ])
+                                    : filterDefinitions.value.length == 0
+                                        ? _cE("view", _uM({
+                                            key: 2,
+                                            class: "supplier-filter-state"
+                                        }), [
+                                            _cE("text", _uM({ class: "supplier-filter-state-text" }), "暂无可用筛选项")
+                                        ])
+                                        : _cE("scroll-view", _uM({
+                                            key: 3,
+                                            "scroll-y": "true",
+                                            class: "supplier-filter-scroll"
+                                        }), [
+                                            _cE(Fragment, null, RenderHelpers.renderList(filterDefinitions.value, (filter, __key, __index, _cached): any => {
+                                                return _cE("view", _uM({
+                                                    key: filter.key,
+                                                    class: "supplier-filter-group"
+                                                }), [
+                                                    _cE("text", _uM({ class: "supplier-filter-group-title" }), _tD(filter.label), 1 /* TEXT */),
+                                                    _cE("view", _uM({ class: "supplier-filter-options" }), [
+                                                        _cE(Fragment, null, RenderHelpers.renderList(filter.options, (option, __key, __index, _cached): any => {
+                                                            return _cE("view", _uM({
+                                                                key: filter.key + '-' + option.value,
+                                                                class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'supplier-filter-option supplier-filter-option-active' : 'supplier-filter-option'),
+                                                                onClick: () => { toggleFilterOption(filter.param, option.value); }
+                                                            }), [
+                                                                _cE("text", _uM({
+                                                                    class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'supplier-filter-option-text supplier-filter-option-text-active' : 'supplier-filter-option-text')
+                                                                }), _tD(option.label), 3 /* TEXT, CLASS */)
+                                                            ], 10 /* CLASS, PROPS */, ["onClick"]);
+                                                        }), 128 /* KEYED_FRAGMENT */)
+                                                    ])
+                                                ]);
+                                            }), 128 /* KEYED_FRAGMENT */)
+                                        ])
+                        ])
+                    ]),
+                    _: 1 /* STABLE */
+                }), 8 /* PROPS */, ["searchValue", "filterVisible", "filterActive"]),
                 _cE("scroll-view", _uM({
                     style: _nS(_uM({ "flex": "1" })),
                     class: "page-scroll"
                 }), [
                     _cE("view", _uM({ class: "page-content" }), [
-                        _cE("view", _uM({ class: "summary-card" }), [
-                            _cE("view", _uM({ class: "summary-item summary-item-gap" }), [
-                                _cE("text", _uM({ class: "summary-value" }), _tD(supplierCountText.value), 1 /* TEXT */),
-                                _cE("text", _uM({ class: "summary-label" }), "当前结果")
-                            ]),
-                            _cE("view", _uM({ class: "summary-item summary-item-gap" }), [
-                                _cE("text", _uM({ class: "summary-value" }), _tD(activeCountText.value), 1 /* TEXT */),
-                                _cE("text", _uM({ class: "summary-label" }), "启用中")
-                            ]),
-                            _cE("view", _uM({ class: "summary-item" }), [
-                                _cE("text", _uM({ class: "summary-value" }), _tD(withFileCountText.value), 1 /* TEXT */),
-                                _cE("text", _uM({ class: "summary-label" }), "含附件")
-                            ])
-                        ]),
                         isTrue(unref(errorMessage) != '' && !unref(isLoading))
                             ? _cE("view", _uM({
                                 key: 0,
@@ -345,6 +572,7 @@ const __sfc__ = defineComponent({
                             keyField: "id",
                             titleField: "name",
                             subtitleField: "codeText",
+                            metaField: "contactText",
                             imageField: "cover",
                             imageListField: "images",
                             tagField: "tags",
@@ -361,6 +589,9 @@ const __sfc__ = defineComponent({
                             totalPages: unref(totalPages),
                             totalCount: unref(totalCount),
                             onItemClick: handleItemClick,
+                            onSubtitleClick: handleSubtitleClick,
+                            onMetaClick: handleMetaClick,
+                            onFieldClick: handleFieldClick,
                             onMenu: handleMenu,
                             onPageChange: handlePageChange
                         }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount"])
@@ -371,5 +602,5 @@ const __sfc__ = defineComponent({
     }
 });
 export default __sfc__;
-const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 24]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["flexDirection", "row"]]))], ["summary-item", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["summary-item-gap", _pS(_uM([["marginRight", 10]]))], ["summary-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["summary-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginTop", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))]])];
+const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 24]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["flexDirection", "row"]]))], ["summary-item", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["summary-item-gap", _pS(_uM([["marginRight", 10]]))], ["summary-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["summary-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginTop", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["supplier-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["supplier-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["supplier-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["supplier-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["supplier-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["supplier-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["supplier-filter-state", _pS(_uM([["height", 140], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["supplier-filter-scroll", _pS(_uM([["height", 360]]))], ["supplier-filter-group", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 8]]))], ["supplier-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["supplier-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["supplier-filter-option", _pS(_uM([["minWidth", 56], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["supplier-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["supplier-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["supplier-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))]])];
 //# sourceMappingURL=index.uvue.map

@@ -3,10 +3,10 @@
 		<view class="uf-bar">
 			<view v-if="showBack || showHome" class="uf-segment-group uf-segment-group-left">
 				<view v-if="showBack" :class="showBack && showHome ? 'uf-segment uf-segment-split' : 'uf-segment'" @click="handleBack">
-					<text class="uf-segment-icon">←</text>
+					<image class="uf-icon-image" src="/static/icon/左箭头.png" mode="aspectFit"></image>
 				</view>
 				<view v-if="showHome" class="uf-segment" @click="handleHome">
-					<text class="uf-segment-icon">⌂</text>
+					<image class="uf-icon-image" src="/static/icon/主页.png" mode="aspectFit"></image>
 				</view>
 			</view>
 
@@ -34,8 +34,8 @@
 			</view>
 
 			<view v-if="showFilter || showMenu" class="uf-segment-group uf-segment-group-right">
-				<view v-if="showFilter" :class="showFilter && showMenu ? 'uf-segment uf-segment-split uf-segment-dark' : 'uf-segment uf-segment-dark'" @click="handleFilter">
-					<text class="uf-segment-text-light">{{ filterText }}</text>
+				<view v-if="showFilter" :class="showFilter && showMenu ? 'uf-segment uf-segment-split uf-segment-light' : 'uf-segment uf-segment-light'" @click="handleFilter">
+					<image class="uf-icon-image" src="/static/icon/_筛选.png" mode="aspectFit"></image>
 					<view v-if="filterActive" class="uf-dot"></view>
 				</view>
 				<view v-if="showMenu" class="uf-segment uf-segment-dark" @click="handleMenu">
@@ -43,6 +43,34 @@
 				</view>
 			</view>
 		</view>
+
+		<page-container
+			:show="filterPanelVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="260"
+			overlay-style="background-color: rgba(15, 23, 42, 0.38);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeFilterPanel"
+		>
+			<view class="uf-filter-panel">
+				<view class="uf-filter-handle"></view>
+				<view class="uf-filter-header">
+					<text class="uf-filter-title">筛选</text>
+					<view class="uf-filter-close" @click="closeFilterPanel">
+						<text class="uf-filter-close-text">关闭</text>
+					</view>
+				</view>
+				<view class="uf-filter-body">
+					<slot name="filter-panel">
+						<view class="uf-filter-empty">
+							<text class="uf-filter-empty-text">筛选面板内容待接入</text>
+						</view>
+					</slot>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
@@ -51,6 +79,7 @@ type Props = {
 	title?: string
 	searchPlaceholder?: string
 	searchValue?: string
+	filterVisible?: boolean
 	showBack?: boolean
 	showSearch?: boolean
 	showFilter?: boolean
@@ -68,6 +97,7 @@ const props = withDefaults(defineProps<Props>(), {
 	title: '',
 	searchPlaceholder: '请输入搜索内容',
 	searchValue: '',
+	filterVisible: false,
 	showBack: false,
 	showSearch: true,
 	showFilter: false,
@@ -86,6 +116,9 @@ const emit = defineEmits<{
 	(e: 'home'): void
 	(e: 'menu'): void
 	(e: 'filter'): void
+	(e: 'filter-open'): void
+	(e: 'filter-close'): void
+	(e: 'update:filterVisible', value: boolean): void
 	(e: 'scan'): void
 	(e: 'searchInput', value: string): void
 	(e: 'searchConfirm', value: string): void
@@ -95,6 +128,7 @@ const emit = defineEmits<{
 const statusBarHeight = ref<number>(0)
 const inputValue = ref<string>(props.searchValue)
 const rootStyle = ref<string>('')
+const filterPanelVisible = ref<boolean>(false)
 
 function syncRootStyle() {
 	const positionStyle = props.fixed ? 'position:sticky;top:0;' : ''
@@ -107,21 +141,12 @@ function updateStatusBarHeight() {
 	syncRootStyle()
 }
 
-function eventValueToString(e: UTSJSONObject) : string {
-	const detail = e["detail"]
-	if (detail == null) return ''
-	const detailObj = detail as UTSJSONObject
-	const value = detailObj["value"]
-	if (value == null) return ''
-	return '' + value
+function onSearchInput() {
+	emit('searchInput', inputValue.value)
 }
 
-function onSearchInput(e: UTSJSONObject) {
-	emit('searchInput', inputValue.value != '' ? inputValue.value : eventValueToString(e))
-}
-
-function onSearchConfirm(e: UTSJSONObject) {
-	emit('searchConfirm', inputValue.value != '' ? inputValue.value : eventValueToString(e))
+function onSearchConfirm() {
+	emit('searchConfirm', inputValue.value)
 }
 
 function clearSearch() {
@@ -149,7 +174,18 @@ function handleHome() {
 }
 
 function handleFilter() {
-	emit('filter')
+	filterPanelVisible.value = true
+	emit('update:filterVisible', true)
+	emit('filter-open')
+}
+
+function closeFilterPanel() {
+	if (!filterPanelVisible.value) {
+		return
+	}
+	filterPanelVisible.value = false
+	emit('update:filterVisible', false)
+	emit('filter-close')
 }
 
 function handleMenu() {
@@ -165,6 +201,15 @@ watch(
 	(newVal: string) => {
 		if (newVal != inputValue.value) {
 			inputValue.value = newVal
+		}
+	}
+)
+
+watch(
+	() : boolean => props.filterVisible,
+	(newVal: boolean) => {
+		if (newVal != filterPanelVisible.value) {
+			filterPanelVisible.value = newVal
 		}
 	}
 )
@@ -228,6 +273,7 @@ onMounted(() => {
 .uf-segment {
 	min-width: 34px;
 	height: 34px;
+	position: relative;
 	flex-direction: row;
 	align-items: center;
 	justify-content: center;
@@ -245,10 +291,19 @@ onMounted(() => {
 	background-color: #0F172A;
 }
 
+.uf-segment-light {
+	background-color: #FFFFFF;
+}
+
 .uf-segment-icon {
 	font-size: 15px;
 	color: #1F2937;
 	line-height: 15px;
+}
+
+.uf-icon-image {
+	width: 18px;
+	height: 18px;
 }
 
 .uf-segment-icon-light {
@@ -335,6 +390,74 @@ onMounted(() => {
 	height: 6px;
 	border-radius: 3px;
 	background-color: #FB7185;
-	margin-left: 5px;
+	position: absolute;
+	top: 9px;
+	right: 8px;
+}
+
+.uf-filter-panel {
+	background-color: #FFFFFF;
+	border-top-left-radius: 22px;
+	border-top-right-radius: 22px;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 10px;
+	padding-bottom: 24px;
+}
+
+.uf-filter-handle {
+	width: 42px;
+	height: 4px;
+	border-radius: 2px;
+	background-color: #D5DCE5;
+	align-self: center;
+}
+
+.uf-filter-header {
+	height: 44px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.uf-filter-title {
+	font-size: 16px;
+	line-height: 16px;
+	font-weight: bold;
+	color: #111827;
+}
+
+.uf-filter-close {
+	height: 30px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 15px;
+	background-color: #F3F6FA;
+	align-items: center;
+	justify-content: center;
+}
+
+.uf-filter-close-text {
+	font-size: 12px;
+	line-height: 12px;
+	color: #475569;
+}
+
+.uf-filter-body {
+	padding-top: 6px;
+}
+
+.uf-filter-empty {
+	height: 120px;
+	border-radius: 16px;
+	background-color: #F8FAFC;
+	align-items: center;
+	justify-content: center;
+}
+
+.uf-filter-empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
 }
 </style>

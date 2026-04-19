@@ -1,0 +1,318 @@
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 35, 6>;
+	visible?: boolean
+	title?: string
+	content?: string
+	cancelText?: string
+	confirmText?: string
+	auxiliaryText?: string
+	width?: string
+	zIndex?: number
+	closeOnMask?: boolean
+	showCloseIcon?: boolean
+	confirmDanger?: boolean
+	autoClose?: boolean
+}
+
+
+const __sfc__ = defineComponent({
+  __name: 'lili-popup',
+  props: {
+    visible: { type: Boolean, required: false, default: false },
+    title: { type: String, required: false, default: '提示' },
+    content: { type: String, required: false, default: '' },
+    cancelText: { type: String, required: false, default: '取消' },
+    confirmText: { type: String, required: false, default: '确定' },
+    auxiliaryText: { type: String, required: false, default: '' },
+    width: { type: String, required: false, default: '620rpx' },
+    zIndex: { type: Number, required: false, default: 999 },
+    closeOnMask: { type: Boolean, required: false, default: false },
+    showCloseIcon: { type: Boolean, required: false, default: false },
+    confirmDanger: { type: Boolean, required: false, default: false },
+    autoClose: { type: Boolean, required: false, default: true }
+  },
+  emits: ["update:visible", "open", "close", "cancel", "confirm", "auxiliary", "action"],
+  setup(__props, __setupCtx: SetupContext) {
+const __expose = __setupCtx.expose
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const props = __props
+
+function emit(event: string, ...do_not_transform_spread: Array<any | null>) {
+__ins.emit(event, ...do_not_transform_spread)
+}
+
+const renderVisible = ref<boolean>(props.visible)
+const currentTitle = ref<string>(props.title)
+const currentContent = ref<string>(props.content)
+const cancelTextValue = ref<string>(props.cancelText)
+const confirmTextValue = ref<string>(props.confirmText)
+const auxiliaryTextValue = ref<string>(props.auxiliaryText)
+const panelStyle = ref<string>('')
+const rootStyle = ref<string>('')
+const closeOnMaskValue = ref<boolean>(props.closeOnMask)
+const showCloseIconValue = ref<boolean>(props.showCloseIcon)
+const confirmDangerValue = ref<boolean>(props.confirmDanger)
+const autoCloseValue = ref<boolean>(props.autoClose)
+
+function syncStyle() {
+	panelStyle.value = `width:${props.width};`
+	rootStyle.value = `z-index:${props.zIndex};`
+}
+
+function readString(config: UTSJSONObject, key: string, fallback: string) : string {
+	const value = config[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function readBoolean(config: UTSJSONObject, key: string, fallback: boolean) : boolean {
+	const value = config[key]
+	if (value == null) return fallback
+	return value as boolean
+}
+
+function applyBaseProps() {
+	currentTitle.value = props.title
+	currentContent.value = props.content
+	cancelTextValue.value = props.cancelText
+	confirmTextValue.value = props.confirmText
+	auxiliaryTextValue.value = props.auxiliaryText
+	closeOnMaskValue.value = props.closeOnMask
+	showCloseIconValue.value = props.showCloseIcon
+	confirmDangerValue.value = props.confirmDanger
+	autoCloseValue.value = props.autoClose
+}
+
+function applyConfig(config: UTSJSONObject | null) {
+	applyBaseProps()
+	if (config == null) return
+	currentTitle.value = readString(config, 'title', currentTitle.value)
+	currentContent.value = readString(config, 'content', currentContent.value)
+	cancelTextValue.value = readString(config, 'cancelText', cancelTextValue.value)
+	confirmTextValue.value = readString(config, 'confirmText', confirmTextValue.value)
+	auxiliaryTextValue.value = readString(config, 'auxiliaryText', auxiliaryTextValue.value)
+	closeOnMaskValue.value = readBoolean(config, 'closeOnMask', closeOnMaskValue.value)
+	showCloseIconValue.value = readBoolean(config, 'showCloseIcon', showCloseIconValue.value)
+	confirmDangerValue.value = readBoolean(config, 'confirmDanger', confirmDangerValue.value)
+	autoCloseValue.value = readBoolean(config, 'autoClose', autoCloseValue.value)
+}
+
+function changeVisible(value: boolean) {
+	renderVisible.value = value
+	emit('update:visible', value)
+	if (value) {
+		emit('open')
+	}
+}
+
+function open(config: UTSJSONObject | null = null) {
+	applyConfig(config)
+	changeVisible(true)
+}
+
+function openSaveConfirm(config: UTSJSONObject | null = null) {
+	const defaultConfig: UTSJSONObject = {__$originalPosition: new UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 145, 8),
+		title: '是否保存',
+		content: '当前内容已修改，是否保存后再退出？',
+		auxiliaryText: '退出',
+		cancelText: '取消保存',
+		confirmText: '保存',
+		showCloseIcon: false,
+		closeOnMask: false,
+		confirmDanger: false,
+		autoClose: true,
+	}
+	if (config != null) {
+		for (var key in config) {
+			defaultConfig[key] = config[key]
+		}
+	}
+	open(defaultConfig)
+}
+
+function close(action: string = 'close') {
+	changeVisible(false)
+	emit('action', action)
+	emit('close', action)
+}
+
+function handleCancel() {
+	emit('cancel')
+	if (autoCloseValue.value) {
+		close('cancel')
+	}
+}
+
+function handleConfirm() {
+	emit('confirm')
+	if (autoCloseValue.value) {
+		close('confirm')
+	}
+}
+
+function handleAuxiliary() {
+	emit('auxiliary')
+	if (autoCloseValue.value) {
+		close('auxiliary')
+	}
+}
+
+function handleMaskClick() {
+	if (!closeOnMaskValue.value) return
+	close('mask')
+}
+
+function handleCloseIcon() {
+	close('icon')
+}
+
+watch(
+	() : boolean => props.visible,
+	(newValue: boolean) => {
+		renderVisible.value = newValue
+	}
+)
+
+watch(
+	() : string => props.title,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.content,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.cancelText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.confirmText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.auxiliaryText,
+	() => {
+		if (!renderVisible.value) {
+			applyBaseProps()
+		}
+	}
+)
+
+watch(
+	() : string => props.width,
+	() => {
+		syncStyle()
+	}
+)
+
+watch(
+	() : number => props.zIndex,
+	() => {
+		syncStyle()
+	}
+)
+
+onMounted(() => {
+	applyBaseProps()
+	syncStyle()
+})
+
+__expose({
+	open,
+	openSaveConfirm,
+	close,
+})
+
+return (): any | null => {
+
+  return isTrue(unref(renderVisible))
+    ? _cE("view", _uM({
+        key: 0,
+        class: "lp-root",
+        style: _nS(unref(rootStyle))
+      }), [
+        _cE("view", _uM({
+          class: "lp-mask",
+          onClick: handleMaskClick
+        })),
+        _cE("view", _uM({
+          class: "lp-panel",
+          style: _nS(unref(panelStyle))
+        }), [
+          isTrue(unref(showCloseIconValue))
+            ? _cE("view", _uM({
+                key: 0,
+                class: "lp-close",
+                onClick: handleCloseIcon
+              }), [
+                _cE("text", _uM({ class: "lp-close-text" }), "×")
+              ])
+            : _cC("v-if", true),
+          _cE("view", _uM({ class: "lp-header" }), [
+            _cE("text", _uM({ class: "lp-title" }), _tD(unref(currentTitle)), 1 /* TEXT */)
+          ]),
+          _cE("view", _uM({ class: "lp-body" }), [
+            renderSlot(_ctx.$slots, "default", {}, (): any[] => [
+              unref(currentContent) != ''
+                ? _cE("text", _uM({
+                    key: 0,
+                    class: "lp-content"
+                  }), _tD(unref(currentContent)), 1 /* TEXT */)
+                : _cC("v-if", true)
+            ])
+          ]),
+          _cE("view", _uM({ class: "lp-footer" }), [
+            unref(auxiliaryTextValue) != ''
+              ? _cE("view", _uM({
+                  key: 0,
+                  class: "lp-btn lp-btn-gap-right lp-btn-light",
+                  onClick: handleAuxiliary
+                }), [
+                  _cE("text", _uM({ class: "lp-btn-light-text" }), _tD(unref(auxiliaryTextValue)), 1 /* TEXT */)
+                ])
+              : _cC("v-if", true),
+            _cE("view", _uM({
+              class: _nC(unref(auxiliaryTextValue) != '' ? 'lp-btn lp-btn-gap-right lp-btn-light' : 'lp-btn lp-btn-light'),
+              onClick: handleCancel
+            }), [
+              _cE("text", _uM({ class: "lp-btn-light-text" }), _tD(unref(cancelTextValue)), 1 /* TEXT */)
+            ], 2 /* CLASS */),
+            _cE("view", _uM({
+              class: _nC(unref(confirmDangerValue) ? 'lp-btn lp-btn-danger' : 'lp-btn lp-btn-primary'),
+              onClick: handleConfirm
+            }), [
+              _cE("text", _uM({ class: "lp-btn-primary-text" }), _tD(unref(confirmTextValue)), 1 /* TEXT */)
+            ], 2 /* CLASS */)
+          ])
+        ], 4 /* STYLE */)
+      ], 4 /* STYLE */)
+    : _cC("v-if", true)
+}
+}
+
+})
+export default __sfc__
+export type LiliPopupComponentPublicInstance = InstanceType<typeof __sfc__>;
+const GenUniModulesLiliPopupComponentsLiliPopupLiliPopupStyles = [_uM([["lp-root", _pS(_uM([["position", "fixed"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 24], ["paddingRight", 24]]))], ["lp-mask", _pS(_uM([["position", "absolute"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "rgba(15,23,42,0.48)"]]))], ["lp-panel", _pS(_uM([["position", "relative"], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 24], ["borderTopRightRadius", 24], ["borderBottomRightRadius", 24], ["borderBottomLeftRadius", 24], ["paddingTop", 28], ["paddingLeft", 24], ["paddingRight", 24], ["paddingBottom", 20]]))], ["lp-close", _pS(_uM([["position", "absolute"], ["top", 16], ["right", 16], ["width", 28], ["height", 28], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F3F4F6"]]))], ["lp-close-text", _pS(_uM([["fontSize", 18], ["lineHeight", "18px"], ["color", "#475569"]]))], ["lp-header", _pS(_uM([["alignItems", "center"], ["paddingRight", 36]]))], ["lp-title", _pS(_uM([["fontSize", 18], ["lineHeight", "26px"], ["color", "#0F172A"], ["fontWeight", "600"], ["textAlign", "center"]]))], ["lp-body", _pS(_uM([["minHeight", 56], ["paddingTop", 16], ["paddingBottom", 24], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lp-content", _pS(_uM([["fontSize", 15], ["lineHeight", "23px"], ["color", "#475569"], ["textAlign", "center"]]))], ["lp-footer", _pS(_uM([["flexDirection", "row"]]))], ["lp-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["lp-btn-gap-right", _pS(_uM([["marginLeft", 12]]))], ["lp-btn-light", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lp-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["lp-btn-danger", _pS(_uM([["backgroundColor", "#DC2626"]]))], ["lp-btn-light-text", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#334155"], ["fontWeight", "500"]]))], ["lp-btn-primary-text", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#FFFFFF"], ["fontWeight", "600"]]))]])]

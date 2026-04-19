@@ -1,0 +1,1058 @@
+<template>
+	<view class="uf-root">
+		<scroll-view class="uf-scroll" style="flex:1" direction="vertical" show-scrollbar="false">
+			<view
+				v-for="(section, sectionIndex) in props.formSections"
+				:key="getSectionKey(section, sectionIndex)"
+				class="uf-section"
+			>
+				<view class="uf-section-header" @click="toggleSection(sectionIndex)">
+					<view class="uf-section-title-wrap">
+						<text class="uf-section-title">{{ getSectionTitle(section, sectionIndex) }}</text>
+						<text v-if="getSectionDescription(section) != ''" class="uf-section-desc">{{ getSectionDescription(section) }}</text>
+					</view>
+					<text class="uf-section-arrow">{{ isSectionOpen(sectionIndex) ? '⌃' : '⌄' }}</text>
+				</view>
+
+				<view v-if="isSectionOpen(sectionIndex)" class="uf-section-body">
+					<view
+						v-for="(field, fieldIndex) in getSectionFields(section)"
+						:key="getFieldKeyWithIndex(field, fieldIndex)"
+					>
+						<view
+							v-if="shouldShowField(field)"
+							class="uf-field"
+						>
+						<view class="uf-field-head">
+							<view class="uf-field-title-line">
+								<text class="uf-field-label">{{ getFieldLabel(field) }}</text>
+								<text v-if="isRequired(field)" class="uf-required">*</text>
+								<text v-if="isReadonly(field)" class="uf-mode-tag">只读</text>
+								<text v-else-if="isCreateOnly(field) && props.mode == 'create'" class="uf-mode-tag">新增</text>
+								<text v-else-if="isEditOnly(field) && props.mode == 'edit'" class="uf-mode-tag">编辑</text>
+							</view>
+							<text v-if="getFieldDescription(field) != ''" class="uf-field-desc">{{ getFieldDescription(field) }}</text>
+						</view>
+
+						<view class="uf-control">
+							<input
+								v-if="isInputField(field)"
+								class="uf-input"
+								:value="getStringFieldValue(field)"
+								:placeholder="getFieldPlaceholder(field)"
+								:disabled="isReadonly(field)"
+								@input="handleTextInput(field, $event)"
+							/>
+
+							<textarea
+								v-else-if="isTextareaField(field)"
+								class="uf-textarea"
+								:value="getStringFieldValue(field)"
+								:placeholder="getFieldPlaceholder(field)"
+								:disabled="isReadonly(field)"
+								@input="handleTextInput(field, $event)"
+							></textarea>
+
+							<input
+								v-else-if="isNumberField(field)"
+								class="uf-input"
+								type="number"
+								:value="getStringFieldValue(field)"
+								:placeholder="getFieldPlaceholder(field)"
+								:disabled="isReadonly(field)"
+								@input="handleNumberInput(field, $event)"
+							/>
+
+							<switch
+								v-else-if="isSwitchField(field)"
+								:checked="getBooleanFieldValue(field)"
+								:disabled="isReadonly(field)"
+								@change="handleSwitchChange(field, $event)"
+							/>
+
+							<view v-else-if="isBottomSelectField(field)" class="uf-bottom-select-wrap">
+								<liliBottomSelect
+									:value="getStringFieldValue(field)"
+									:title="getBottomSelectTitle(field)"
+									:placeholder="getFieldPlaceholder(field)"
+									:searchPlaceholder="getBottomSelectSearchPlaceholder(field)"
+									:emptyText="getBottomSelectEmptyText(field)"
+									:disabled="isReadonly(field)"
+									:labelKey="getBottomSelectLabelKey(field)"
+									:valueKey="getBottomSelectValueKey(field)"
+									:pageSize="getBottomSelectPageSize(field)"
+									:searchDelay="getBottomSelectSearchDelay(field)"
+									:showEditAction="showBottomSelectEdit(field)"
+									:showAddAction="showBottomSelectAdd(field)"
+									:fetchData="getFieldFetchData(field)"
+									@change="handleBottomSelectChange(field, $event)"
+									@edit="handleBottomSelectEdit(field)"
+									@add="handleBottomSelectAdd(field)"
+								/>
+							</view>
+
+							<view v-else-if="isUploadField(field)" class="uf-upload-wrap">
+								<liliUpload
+									:modelValue="getUploadValue(field)"
+									:fileItems="getUploadFileItems(field)"
+									:action="getUploadAction(field)"
+									:name="getUploadName(field)"
+									:headers="getUploadHeaders(field)"
+									:formData="getUploadFormData(field)"
+									:max="getUploadMax(field)"
+									:disabled="isReadonly(field)"
+									:uploadText="getUploadText(field)"
+									@update:modelValue="handleUploadModelChange(field, $event)"
+									@update:fileItems="handleUploadFileItemsChange(field, $event)"
+									@upload="handleUploadSuccess(field, $event)"
+									@delete="handleUploadDelete(field, $event)"
+									@error="handleUploadError(field, $event)"
+								/>
+							</view>
+
+							<view v-else class="uf-plain-value">
+								<text class="uf-plain-value-text">{{ getStringFieldValue(field) }}</text>
+							</view>
+						</view>
+
+							<text v-if="getFieldError(field) != ''" class="uf-error-text">{{ getFieldError(field) }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view v-if="props.showFooter" class="uf-footer">
+			<button class="uf-btn uf-btn-light" @click="handleCancel">取消</button>
+			<button class="uf-btn uf-btn-primary" @click="handleSubmit">{{ props.mode == 'edit' ? '保存修改' : '创建' }}</button>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
+
+type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
+type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
+
+type Props = {
+	mode?: string
+	formSections?: UTSJSONObject[]
+	initialData?: UTSJSONObject
+	showFooter?: boolean
+	enableBackConfirm?: boolean
+	leaveSignal?: number
+	uploadContentTypeModel?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	mode: 'create',
+	formSections: () : UTSJSONObject[] => [],
+	initialData: () : UTSJSONObject => {
+		return {} as UTSJSONObject
+	},
+	showFooter: true,
+	enableBackConfirm: true,
+	leaveSignal: 0,
+	uploadContentTypeModel: '',
+})
+
+const emit = defineEmits<{
+	(e: 'submit', payload: UTSJSONObject): void
+	(e: 'cancel', payload: UTSJSONObject): void
+	(e: 'field-change', payload: UTSJSONObject): void
+	(e: 'form-change', payload: UTSJSONObject): void
+	(e: 'dirty-change', value: boolean): void
+	(e: 'save-request', payload: UTSJSONObject): void
+	(e: 'discard-leave', payload: UTSJSONObject): void
+	(e: 'upload', payload: UTSJSONObject): void
+	(e: 'upload-delete', payload: UTSJSONObject): void
+	(e: 'upload-error', payload: UTSJSONObject): void
+	(e: 'bottom-select-add', payload: UTSJSONObject): void
+	(e: 'bottom-select-edit', payload: UTSJSONObject): void
+}>()
+
+const formData = ref<UTSJSONObject>({} as UTSJSONObject)
+const fieldErrors = ref<UTSJSONObject>({} as UTSJSONObject)
+const openSections = ref<boolean[]>([])
+const dirty = ref<boolean>(false)
+const snapshot = ref<string>('')
+const allowNativeBackOnce = ref<boolean>(false)
+
+function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
+	const value = obj[key]
+	if (value == null) return {} as UTSJSONObject
+	return value as UTSJSONObject
+}
+
+function cloneObject(source: UTSJSONObject) : UTSJSONObject {
+	const target = {} as UTSJSONObject
+	for (const key in source) {
+		target[key] = source[key]
+	}
+	return target
+}
+
+function getArrayField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
+	const value = obj[key]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
+	const value = obj[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function getBooleanField(obj: UTSJSONObject, key: string, fallback: boolean = false) : boolean {
+	const value = obj[key]
+	if (value == null) return fallback
+	return value as boolean
+}
+
+function getNumberField(obj: UTSJSONObject, key: string, fallback: number = 0) : number {
+	const value = obj[key]
+	if (value == null) return fallback
+	return value as number
+}
+
+function getFieldKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'key')
+}
+
+function getFieldKeyWithIndex(field: UTSJSONObject, index: number) : string {
+	const key = getFieldKey(field)
+	if (key != '') return key
+	return 'field_' + index
+}
+
+function getSectionKey(section: UTSJSONObject, index: number) : string {
+	const key = getStringField(section, 'key')
+	if (key != '') return key
+	return 'section_' + index
+}
+
+function getSectionTitle(section: UTSJSONObject, index: number) : string {
+	const title = getStringField(section, 'title')
+	if (title != '') return title
+	return '分组' + (index + 1)
+}
+
+function getSectionDescription(section: UTSJSONObject) : string {
+	return getStringField(section, 'description')
+}
+
+function getSectionFields(section: UTSJSONObject) : UTSJSONObject[] {
+	return getArrayField(section, 'fields')
+}
+
+function getFieldLabel(field: UTSJSONObject) : string {
+	const label = getStringField(field, 'label')
+	if (label != '') return label
+	return getFieldKey(field)
+}
+
+function getFieldDescription(field: UTSJSONObject) : string {
+	return getStringField(field, 'description')
+}
+
+function getFieldPlaceholder(field: UTSJSONObject) : string {
+	const placeholder = getStringField(field, 'placeholder')
+	if (placeholder != '') return placeholder
+	return '请输入' + getFieldLabel(field)
+}
+
+function getFieldType(field: UTSJSONObject) : string {
+	return getStringField(field, 'type', 'input')
+}
+
+function isInputField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'input'
+}
+
+function isTextareaField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'textarea'
+}
+
+function isNumberField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'number'
+}
+
+function isSwitchField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'switch'
+}
+
+function isBottomSelectField(field: UTSJSONObject) : boolean {
+	const fieldType = getFieldType(field)
+	return fieldType == 'bottomSelect' || fieldType == 'select'
+}
+
+function isUploadField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'upload'
+}
+
+function isRequired(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'required', false)
+}
+
+function isCreateOnly(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'createOnly', false)
+}
+
+function isEditOnly(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'editOnly', false)
+}
+
+function isReadonly(field: UTSJSONObject) : boolean {
+	if (getBooleanField(field, 'readonly', false)) return true
+	if (props.mode == 'create' && isEditOnly(field)) return true
+	if (props.mode == 'edit' && isCreateOnly(field)) return true
+	return false
+}
+
+function shouldShowField(field: UTSJSONObject) : boolean {
+	if (getBooleanField(field, 'hidden', false)) return false
+	const hideMode = getStringField(field, 'hideInMode')
+	if (hideMode != '' && hideMode == props.mode) return false
+	return true
+}
+
+function getDefaultValue(field: UTSJSONObject) : any {
+	const fieldType = getFieldType(field)
+	const customDefault = field['defaultValue']
+	if (customDefault != null) {
+		return customDefault
+	}
+	if (fieldType == 'switch') return false
+	if (fieldType == 'upload') return [] as string[]
+	if (fieldType == 'number') return ''
+	return ''
+}
+
+function getFieldValue(field: UTSJSONObject) : any {
+	const key = getFieldKey(field)
+	if (key == '') return getDefaultValue(field)
+	const current = formData.value[key]
+	if (current == null) return getDefaultValue(field)
+	return current
+}
+
+function getStringFieldValue(field: UTSJSONObject) : string {
+	const value = getFieldValue(field)
+	if (value == null) return ''
+	if (Array.isArray(value)) return ''
+	return '' + value
+}
+
+function getBooleanFieldValue(field: UTSJSONObject) : boolean {
+	const value = getFieldValue(field)
+	if (value == null) return false
+	return value as boolean
+}
+
+function getUploadValue(field: UTSJSONObject) : string[] {
+	const value = getFieldValue(field)
+	if (value == null) return []
+	return value as string[]
+}
+
+function getUploadFileItemsKey(field: UTSJSONObject) : string {
+	const customKey = getStringField(field, 'fileItemsKey')
+	if (customKey != '') return customKey
+	return getFieldKey(field) + 'Items'
+}
+
+function getUploadFileItems(field: UTSJSONObject) : UTSJSONObject[] {
+	const itemsKey = getUploadFileItemsKey(field)
+	const value = formData.value[itemsKey]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function getFieldError(field: UTSJSONObject) : string {
+	const key = getFieldKey(field)
+	if (key == '') return ''
+	return getStringField(fieldErrors.value, key)
+}
+
+function getBottomSelectTitle(field: UTSJSONObject) : string {
+	const title = getStringField(field, 'title')
+	if (title != '') return title
+	return getFieldLabel(field)
+}
+
+function getBottomSelectSearchPlaceholder(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'searchPlaceholder')
+	if (value != '') return value
+	return '请输入关键词搜索'
+}
+
+function getBottomSelectEmptyText(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'emptyText')
+	if (value != '') return value
+	return '暂无数据'
+}
+
+function getBottomSelectLabelKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'labelKey')
+	if (value != '') return value
+	return 'text'
+}
+
+function getBottomSelectValueKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'valueKey')
+	if (value != '') return value
+	return 'value'
+}
+
+function getBottomSelectPageSize(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'pageSize', 20)
+	if (value <= 0) return 20
+	return value
+}
+
+function getBottomSelectSearchDelay(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'searchDelay', 300)
+	if (value <= 0) return 300
+	return value
+}
+
+function showBottomSelectEdit(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showEditAction', true)
+}
+
+function showBottomSelectAdd(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showAddAction', true)
+}
+
+function getFieldFetchData(field: UTSJSONObject) : FetchDataFn {
+	return field['fetchData'] as FetchDataFn
+}
+
+function getUploadAction(field: UTSJSONObject) : string {
+	return getStringField(field, 'action')
+}
+
+function getUploadName(field: UTSJSONObject) : string {
+	const name = getStringField(field, 'name')
+	if (name != '') return name
+	return 'file'
+}
+
+function getUploadHeaders(field: UTSJSONObject) : UTSJSONObject {
+	return getObjectField(field, 'headers')
+}
+
+function getUploadFormData(field: UTSJSONObject) : UTSJSONObject {
+	const fieldFormData = getObjectField(field, 'formData')
+	const result = cloneObject(fieldFormData)
+	const fieldContentTypeModel = getStringField(result, 'content_type_model').trim()
+	if (fieldContentTypeModel == '') {
+		const pageContentTypeModel = props.uploadContentTypeModel.trim()
+		if (pageContentTypeModel != '') {
+			result['content_type_model'] = pageContentTypeModel
+		}
+	}
+	return result
+}
+
+function getUploadMax(field: UTSJSONObject) : number {
+	const maxValue = getNumberField(field, 'max', 9)
+	if (maxValue <= 0) return 9
+	return maxValue
+}
+
+function getUploadText(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'uploadText')
+	if (value != '') return value
+	return '上传图片'
+}
+
+function setFieldValueByKey(key: string, value: any) {
+	formData.value[key] = value
+}
+
+function clearFieldError(key: string) {
+	if (fieldErrors.value[key] != null) {
+		fieldErrors.value[key] = ''
+	}
+}
+
+function emitFieldChange(field: UTSJSONObject, value: any) {
+	const payload = {
+		field: field,
+		key: getFieldKey(field),
+		value: value,
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject
+	emit('field-change', payload)
+	emit('form-change', payload)
+}
+
+function serializeState() : string {
+	const state = {
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject
+	return JSON.stringify(state)
+}
+
+function refreshDirtyState() {
+	const nextDirty = serializeState() != snapshot.value
+	if (nextDirty != dirty.value) {
+		dirty.value = nextDirty
+		emit('dirty-change', nextDirty)
+	}
+}
+
+function markSnapshot() {
+	snapshot.value = serializeState()
+	if (dirty.value) {
+		dirty.value = false
+		emit('dirty-change', false)
+	}
+}
+
+function applyInitialValues() {
+	const nextData = {} as UTSJSONObject
+	for (let i = 0; i < props.formSections.length; i++) {
+		const fields = getSectionFields(props.formSections[i])
+		for (let j = 0; j < fields.length; j++) {
+			const field = fields[j]
+			const key = getFieldKey(field)
+			if (key == '') continue
+			const incoming = props.initialData[key]
+			if (incoming != null) {
+				nextData[key] = incoming
+			} else {
+				nextData[key] = getDefaultValue(field)
+			}
+			if (isUploadField(field)) {
+				const itemsKey = getUploadFileItemsKey(field)
+				const incomingItems = props.initialData[itemsKey]
+				if (incomingItems != null) {
+					nextData[itemsKey] = incomingItems
+				} else {
+					nextData[itemsKey] = [] as UTSJSONObject[]
+				}
+			}
+		}
+	}
+	formData.value = nextData
+	fieldErrors.value = {} as UTSJSONObject
+	markSnapshot()
+}
+
+function initOpenSections() {
+	const result: boolean[] = []
+	for (let i = 0; i < props.formSections.length; i++) {
+		result.push(getBooleanField(props.formSections[i], 'defaultOpen', i == 0))
+	}
+	openSections.value = result
+}
+
+function isSectionOpen(index: number) : boolean {
+	if (index < 0 || index >= openSections.value.length) return false
+	return openSections.value[index]
+}
+
+function toggleSection(index: number) {
+	if (index < 0 || index >= openSections.value.length) return
+	openSections.value[index] = !openSections.value[index]
+}
+
+function readEventValue(event: any) : string {
+	if (event == null) return ''
+	const inputEvent = event as UniInputEvent
+	const detail = inputEvent.detail
+	if (detail == null) return ''
+	return detail.value
+}
+
+function handleTextInput(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = readEventValue(event)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleNumberInput(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = readEventValue(event)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleSwitchChange(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const switchEvent = event as UniSwitchChangeEvent
+	const detail = switchEvent.detail
+	if (detail == null) return
+	const value = detail.value
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const payloadObject = payload as UTSJSONObject
+	const value = getStringField(payloadObject, 'value')
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function handleBottomSelectAdd(field: UTSJSONObject) {
+	emit('bottom-select-add', {
+		field: field,
+		key: getFieldKey(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleBottomSelectEdit(field: UTSJSONObject) {
+	emit('bottom-select-edit', {
+		field: field,
+		key: getFieldKey(field),
+		value: getFieldValue(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleUploadModelChange(field: UTSJSONObject, value: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const listValue = value as string[]
+	const nextList: string[] = []
+	for (let i = 0; i < listValue.length; i++) {
+		nextList.push(listValue[i])
+	}
+	setFieldValueByKey(key, nextList)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, nextList)
+}
+
+function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
+	const itemsKey = getUploadFileItemsKey(field)
+	const sourceItems = value as UTSJSONObject[]
+	const nextItems: UTSJSONObject[] = []
+	for (let index = 0; index < sourceItems.length; index++) {
+		const sourceItem = sourceItems[index]
+		const clonedItem = {} as UTSJSONObject
+		for (const key in sourceItem) {
+			clonedItem[key] = sourceItem[key]
+		}
+		nextItems.push(clonedItem)
+	}
+	setFieldValueByKey(itemsKey, nextItems)
+	refreshDirtyState()
+}
+
+function handleUploadSuccess(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	emit('upload', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function handleUploadDelete(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	refreshDirtyState()
+	emit('upload-delete', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function handleUploadError(field: UTSJSONObject, payload: any) {
+	const payloadObject = payload as UTSJSONObject
+	emit('upload-error', {
+		field: field,
+		key: getFieldKey(field),
+		payload: payloadObject,
+		formData: formData.value,
+		mode: props.mode,
+	} as UTSJSONObject)
+}
+
+function validateField(field: UTSJSONObject) : string {
+	if (!shouldShowField(field)) return ''
+	const key = getFieldKey(field)
+	if (key == '') return ''
+	const value = formData.value[key]
+	if (isRequired(field)) {
+		if (value == null) {
+			return getFieldLabel(field) + '不能为空'
+		}
+		if (Array.isArray(value) && (value as string[]).length == 0) {
+			return getFieldLabel(field) + '不能为空'
+		}
+		if (!Array.isArray(value) && ('' + value) == '') {
+			return getFieldLabel(field) + '不能为空'
+		}
+	}
+	const validator = field['validator']
+	if (validator != null) {
+		const validatorValue = value == null ? '' : value
+		const errorText = (validator as ValidatorFn)(validatorValue, formData.value, props.mode)
+		if (errorText != '') {
+			return errorText
+		}
+	}
+	return ''
+}
+
+function validate() : boolean {
+	const errors = {} as UTSJSONObject
+	let hasError = false
+	for (let i = 0; i < props.formSections.length; i++) {
+		const fields = getSectionFields(props.formSections[i])
+		for (let j = 0; j < fields.length; j++) {
+			const field = fields[j]
+			const errorText = validateField(field)
+			if (errorText != '') {
+				errors[getFieldKey(field)] = errorText
+				hasError = true
+			}
+		}
+	}
+	fieldErrors.value = errors
+	return !hasError
+}
+
+function buildSubmitPayload() : UTSJSONObject {
+	return {
+		mode: props.mode,
+		formData: formData.value,
+		hasChanges: dirty.value,
+		uploadContentTypeModel: props.uploadContentTypeModel,
+	} as UTSJSONObject
+}
+
+function discardAndLeave() {
+	allowNativeBackOnce.value = true
+	dirty.value = false
+	emit('discard-leave', buildSubmitPayload())
+}
+
+function confirmLeave() {
+	uni.showModal({
+		title: '提示',
+		content: '页面内容已修改，是否先保存？',
+		cancelText: '直接离开',
+		confirmText: '去保存',
+		success: (res) => {
+			if (res.confirm) {
+				emit('save-request', buildSubmitPayload())
+				return
+			}
+			if (res.cancel) {
+				discardAndLeave()
+			}
+		},
+	})
+}
+
+function handleSubmit() {
+	if (!validate()) {
+		uni.showToast({
+			title: '请检查必填项',
+			icon: 'none',
+		})
+		return
+	}
+	emit('submit', buildSubmitPayload())
+}
+
+function handleCancel() {
+	if (!dirty.value) {
+		emit('cancel', buildSubmitPayload())
+		return
+	}
+	confirmLeave()
+}
+
+watch(
+	() : UTSJSONObject[] => props.formSections,
+	() => {
+		initOpenSections()
+		applyInitialValues()
+	},
+	{
+		immediate: true,
+	}
+)
+
+watch(
+	() : UTSJSONObject => props.initialData,
+	() => {
+		applyInitialValues()
+	}
+)
+
+watch(
+	() : string => props.mode,
+	() => {
+		refreshDirtyState()
+	}
+)
+
+watch(
+	() : number => props.leaveSignal,
+	() => {
+		allowNativeBackOnce.value = true
+		dirty.value = false
+	}
+)
+
+onBackPress(() : boolean | null => {
+	if (!props.enableBackConfirm) return null
+	if (allowNativeBackOnce.value) {
+		allowNativeBackOnce.value = false
+		return null
+	}
+	if (!dirty.value) return null
+	uni.showModal({
+		title: '提示',
+		content: '当前页面有未保存内容，是否保存？',
+		cancelText: '直接离开',
+		confirmText: '保存',
+		success: (res) => {
+			if (res.confirm) {
+				emit('save-request', buildSubmitPayload())
+				return
+			}
+			if (res.cancel) {
+				discardAndLeave()
+			}
+		},
+	})
+	return true
+})
+
+defineExpose({
+	validate,
+	getFormData: () : UTSJSONObject => formData.value,
+	setFormData: (data: UTSJSONObject) => {
+		formData.value = data
+		refreshDirtyState()
+	},
+	resetForm: () => {
+		applyInitialValues()
+	},
+	resetDirty: () => {
+		markSnapshot()
+	},
+	hasPendingChanges: () : boolean => dirty.value,
+	confirmLeave,
+	submit: handleSubmit,
+})
+</script>
+
+<style>
+.uf-root {
+	flex: 1;
+	background-color: #F5F7FB;
+}
+
+.uf-scroll {
+	flex: 1;
+	padding: 8px;
+	padding-bottom: 96px;
+}
+
+.uf-section {
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+}
+
+.uf-section-header {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 16px;
+}
+
+.uf-section-title-wrap {
+	flex: 1;
+}
+
+.uf-section-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #1F2937;
+	line-height: 20px;
+}
+
+.uf-section-desc {
+	margin-top: 4px;
+	font-size: 12px;
+	color: #9CA3AF;
+	line-height: 16px;
+}
+
+.uf-section-arrow {
+	font-size: 18px;
+	color: #9CA3AF;
+	line-height: 18px;
+}
+
+.uf-section-body {
+	padding: 0 16px 12px 16px;
+}
+
+.uf-field {
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #F1F5F9;
+}
+
+.uf-field-head {
+	margin-bottom: 8px;
+}
+
+.uf-field-title-line {
+	flex-direction: row;
+	align-items: center;
+}
+
+.uf-field-label {
+	font-size: 14px;
+	color: #111827;
+	line-height: 18px;
+}
+
+.uf-required {
+	margin-left: 4px;
+	font-size: 14px;
+	color: #DC2626;
+	line-height: 18px;
+}
+
+.uf-mode-tag {
+	margin-left: 8px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	color: #92400E;
+	line-height: 14px;
+	background-color: #FEF3C7;
+}
+
+.uf-field-desc {
+	margin-top: 4px;
+	font-size: 12px;
+	color: #6B7280;
+	line-height: 16px;
+}
+
+.uf-control {
+	min-height: 44px;
+}
+
+.uf-input {
+	height: 44px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+	font-size: 14px;
+	color: #111827;
+}
+
+.uf-textarea {
+	height: 96px;
+	padding: 12px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+	font-size: 14px;
+	color: #111827;
+}
+
+.uf-bottom-select-wrap {
+	min-height: 44px;
+}
+
+.uf-upload-wrap {
+	padding-top: 4px;
+}
+
+.uf-plain-value {
+	min-height: 44px;
+	padding: 12px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+}
+
+.uf-plain-value-text {
+	font-size: 14px;
+	color: #111827;
+	line-height: 20px;
+}
+
+.uf-error-text {
+	margin-top: 6px;
+	font-size: 12px;
+	color: #DC2626;
+	line-height: 16px;
+}
+
+.uf-footer {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	flex-direction: row;
+	padding: 12px;
+	background-color: #FFFFFF;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #E5E7EB;
+}
+
+.uf-btn {
+	flex: 1;
+	height: 44px;
+	border-radius: 10px;
+	font-size: 15px;
+	line-height: 44px;
+}
+
+.uf-btn-light {
+	margin-right: 10px;
+	color: #374151;
+	background-color: #E5E7EB;
+}
+
+.uf-btn-primary {
+	color: #FFFFFF;
+	background-color: #2563EB;
+}
+</style>

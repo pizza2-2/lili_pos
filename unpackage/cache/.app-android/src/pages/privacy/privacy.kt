@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -87,8 +87,6 @@ open class GenPagesPrivacyPrivacy : BasePage {
         val styles: Map<String, Map<String, Map<String, Any>>> by lazy {
             _nCS(_uA(
                 styles0
-            ), _uA(
-                GenApp.styles
             ))
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>

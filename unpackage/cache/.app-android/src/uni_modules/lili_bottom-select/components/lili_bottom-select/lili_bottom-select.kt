@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -607,7 +607,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val setValues = ::gen_setValues_fn
             fun gen_getValue_fn(): SelectChangePayload {
-                return SelectChangePayload(value = internalValue.value, text = internalText.value, item = UTSJSONObject())
+                return SelectChangePayload(value = internalValue.value, text = internalText.value, item = _uO())
             }
             val getValue = ::gen_getValue_fn
             fun gen_getValues_fn(): MultiSelectChangePayload {
@@ -677,7 +677,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             return fun(): Any? {
                 return _cE(Fragment, null, _uA(
                     _cE("view", _uM("class" to "bs-trigger-wrapper", "onClick" to open), _uA(
-                        renderSlot(_ctx.`$slots`, "trigger", UTSJSONObject(), fun(): UTSArray<Any> {
+                        renderSlot(_ctx.`$slots`, "trigger", _uO(), fun(): UTSArray<Any> {
                             return _uA(
                                 _cE("view", _uM("class" to "bs-trigger-default"), _uA(
                                     _cE("text", _uM("class" to _nC(if (unref(displayText) != "") {

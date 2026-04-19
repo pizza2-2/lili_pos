@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uts.sdk.modules.uniRegisterRequestPermissionTips
 import android.app.Activity
 import android.graphics.Color
@@ -123,8 +123,7 @@ open class CompleteRunnable : Runnable, IUTSSourceMap {
             PermissionTipsView = null
         }
         if (listener != null) {
-            var permissionStatus: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("permissionStatus", "uni_modules/uni-registerRequestPermissionTips/utssdk/app-android/index.uts", 89, 17)) {
-            }
+            var permissionStatus: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("permissionStatus", "uni_modules/uni-registerRequestPermissionTips/utssdk/app-android/index.uts", 89, 17))
             for(p in resolveUTSKeyIterator(this.permissions)){
                 permissionStatus[p] = if (UTSAndroid.checkSystemPermissionGranted(UTSAndroid.getUniActivity()!!, _uA(
                     p

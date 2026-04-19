@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -126,17 +126,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                 changeVisible(true)
             }
             fun openSaveConfirm(config: UTSJSONObject? = null) {
-                val defaultConfig: UTSJSONObject = object : UTSJSONObject(UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 145, 8)) {
-                    var title = "是否保存"
-                    var content = "当前内容已修改，是否保存后再退出？"
-                    var auxiliaryText = "退出"
-                    var cancelText = "取消保存"
-                    var confirmText = "保存"
-                    var showCloseIcon = false
-                    var closeOnMask = false
-                    var confirmDanger = false
-                    var autoClose = true
-                }
+                val defaultConfig: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 145, 8), "title" to "是否保存", "content" to "当前内容已修改，是否保存后再退出？", "auxiliaryText" to "退出", "cancelText" to "取消保存", "confirmText" to "保存", "showCloseIcon" to false, "closeOnMask" to false, "confirmDanger" to false, "autoClose" to true)
                 if (config != null) {
                     for(key in resolveUTSKeyIterator(config)){
                         defaultConfig[key] = config[key]
@@ -269,7 +259,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                                 _cE("text", _uM("class" to "lp-title"), _tD(unref(currentTitle)), 1)
                             )),
                             _cE("view", _uM("class" to "lp-body"), _uA(
-                                renderSlot(_ctx.`$slots`, "default", UTSJSONObject(), fun(): UTSArray<Any> {
+                                renderSlot(_ctx.`$slots`, "default", _uO(), fun(): UTSArray<Any> {
                                     return _uA(
                                         if (unref(currentContent) != "") {
                                             _cE("text", _uM("key" to 0, "class" to "lp-content"), _tD(unref(currentContent)), 1)
@@ -316,7 +306,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("lp-root" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 24, "paddingRight" to 24)), "lp-mask" to _pS(_uM("position" to "absolute", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(15,23,42,0.48)")), "lp-panel" to _pS(_uM("position" to "relative", "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 24, "borderTopRightRadius" to 24, "borderBottomRightRadius" to 24, "borderBottomLeftRadius" to 24, "paddingTop" to 28, "paddingLeft" to 24, "paddingRight" to 24, "paddingBottom" to 20)), "lp-close" to _pS(_uM("position" to "absolute", "top" to 16, "right" to 16, "width" to 28, "height" to 28, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F3F4F6")), "lp-close-text" to _pS(_uM("fontSize" to 18, "lineHeight" to "18px", "color" to "#475569")), "lp-header" to _pS(_uM("alignItems" to "center", "paddingRight" to 36)), "lp-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "26px", "color" to "#0F172A", "textAlign" to "center")), "lp-body" to _pS(_uM("minHeight" to 56, "paddingTop" to 16, "paddingBottom" to 24, "alignItems" to "center", "justifyContent" to "center")), "lp-content" to _pS(_uM("fontSize" to 15, "lineHeight" to "23px", "color" to "#475569", "textAlign" to "center")), "lp-footer" to _pS(_uM("flexDirection" to "row")), "lp-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12)), "lp-btn-gap-right" to _pS(_uM("marginLeft" to 12)), "lp-btn-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lp-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "lp-btn-danger" to _pS(_uM("backgroundColor" to "#DC2626")), "lp-btn-light-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#334155")), "lp-btn-primary-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#FFFFFF")))
+                return _uM("lp-root" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 24, "paddingRight" to 24)), "lp-mask" to _pS(_uM("position" to "absolute", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(15,23,42,0.48)")), "lp-panel" to _pS(_uM("position" to "relative", "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 24, "borderTopRightRadius" to 24, "borderBottomRightRadius" to 24, "borderBottomLeftRadius" to 24, "paddingTop" to 28, "paddingLeft" to 24, "paddingRight" to 24, "paddingBottom" to 20)), "lp-close" to _pS(_uM("position" to "absolute", "top" to 16, "right" to 16, "width" to 28, "height" to 28, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F3F4F6")), "lp-close-text" to _pS(_uM("fontSize" to 18, "lineHeight" to "18px", "color" to "#475569")), "lp-header" to _pS(_uM("alignItems" to "center", "paddingRight" to 36)), "lp-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "26px", "color" to "#0F172A", "fontWeight" to "600", "textAlign" to "center")), "lp-body" to _pS(_uM("minHeight" to 56, "paddingTop" to 16, "paddingBottom" to 24, "alignItems" to "center", "justifyContent" to "center")), "lp-content" to _pS(_uM("fontSize" to 15, "lineHeight" to "23px", "color" to "#475569", "textAlign" to "center")), "lp-footer" to _pS(_uM("flexDirection" to "row")), "lp-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12)), "lp-btn-gap-right" to _pS(_uM("marginLeft" to 12)), "lp-btn-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lp-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "lp-btn-danger" to _pS(_uM("backgroundColor" to "#DC2626")), "lp-btn-light-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#334155", "fontWeight" to "500")), "lp-btn-primary-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#FFFFFF", "fontWeight" to "600")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

@@ -1,4 +1,4 @@
-@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
 package uni.UNI1CE1B14
 import io.dcloud.uniapp.*
 import io.dcloud.uniapp.extapi.*
@@ -122,7 +122,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 }
                 , mask = true))
                 uni_downloadFile(DownloadFileOptions(url = path, success = fun(res){
-                    uni_hideLoading()
+                    uni_hideLoading(null)
                     if (res.statusCode == 200) {
                         next(res.tempFilePath)
                         return
@@ -135,7 +135,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                     , icon = "none"))
                 }
                 , fail = fun(_){
-                    uni_hideLoading()
+                    uni_hideLoading(null)
                     uni_showToast(ShowToastOptions(title = if (actionName == "share") {
                         "分享失败"
                     } else {

@@ -5,16 +5,15 @@
 				v-for="(item, index) in imageList"
 				:key="item + '-' + index"
 				class="lu-item"
-				@click="handlePreview(index)"
 			>
-				<image class="lu-image" :src="item" mode="aspectFill"></image>
-				<view v-if="!props.disabled" class="lu-delete" @click.stop="handleDelete(index)">
+				<image class="lu-image" :src="item" mode="aspectFill" @click="handlePreview(index)"></image>
+				<view v-if="!props.disabled && uploadingCount <= 0" class="lu-delete" @click="handleDelete(index)">
 					<text class="lu-delete-text">×</text>
 				</view>
 			</view>
 
 			<view
-				v-if="!props.disabled && imageList.length < props.max"
+				v-if="!props.disabled && uploadingCount <= 0 && imageList.length < props.max"
 				class="lu-item lu-item-add"
 				@click="handleChoose"
 			>
@@ -22,12 +21,32 @@
 				<text class="lu-add-text">{{ props.uploadText }}</text>
 			</view>
 		</view>
+
+		<view v-if="uploadingCount > 0" class="lu-uploading-mask">
+			<text class="lu-uploading-text">图片上传中...</text>
+		</view>
+
+		<liliPopup
+			:visible="deletePopupVisible"
+			title="删除图片"
+			content="确定删除这张图片吗？"
+			cancelText="取消"
+			confirmText="删除"
+			:confirmDanger="true"
+			@update:visible="handleDeletePopupVisibleChange"
+			@cancel="handleDeleteCancel"
+			@confirm="confirmDelete"
+		/>
 	</view>
 </template>
 
 <script setup lang="uts">
+import liliPopup from '../../../lili-popup/components/lili-popup/lili-popup.uvue'
+import { deleteMediaFile } from '@/pkg/api/modules/media.uts'
+
 type Props = {
 	modelValue?: string[]
+	fileItems?: UTSJSONObject[]
 	action?: string
 	name?: string
 	headers?: UTSJSONObject
@@ -40,6 +59,7 @@ type Props = {
 
 const props = withDefaults(defineProps<Props>(), {
 	modelValue: () : string[] => [],
+	fileItems: () : UTSJSONObject[] => [],
 	action: '',
 	name: 'file',
 	headers: () : UTSJSONObject => {
@@ -56,6 +76,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
 	(e: 'update:modelValue', value: string[]): void
+	(e: 'update:fileItems', value: UTSJSONObject[]): void
 	(e: 'upload', payload: UTSJSONObject): void
 	(e: 'delete', payload: UTSJSONObject): void
 	(e: 'preview', payload: UTSJSONObject): void
@@ -63,6 +84,11 @@ const emit = defineEmits<{
 }>()
 
 const imageList = ref<string[]>([])
+const imageItems = ref<UTSJSONObject[]>([])
+const deletePopupVisible = ref<boolean>(false)
+const pendingDeleteIndex = ref<number>(-1)
+const deleting = ref<boolean>(false)
+const uploadingCount = ref<number>(0)
 
 function cloneStringArray(list: string[]) : string[] {
 	const result: string[] = []
@@ -72,19 +98,73 @@ function cloneStringArray(list: string[]) : string[] {
 	return result
 }
 
-function syncModelValue(list: string[]) {
+function cloneObjectArray(list: UTSJSONObject[]) : UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		const clonedItem = {} as UTSJSONObject
+		for (const key in item) {
+			clonedItem[key] = item[key]
+		}
+		result.push(clonedItem)
+	}
+	return result
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
+	const value = obj[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function buildFileItem(path: string, id: string = '') : UTSJSONObject {
+	return {
+		path: path,
+		url: path,
+		id: id,
+		isRemote: id != '',
+	} as UTSJSONObject
+}
+
+function syncModelValue(list: string[], metaItems: UTSJSONObject[]) {
 	imageList.value = cloneStringArray(list)
+	const nextItems: UTSJSONObject[] = []
+	for (let index = 0; index < list.length; index++) {
+		const currentPath = list[index]
+		let matchedItem: UTSJSONObject | null = null
+		for (let metaIndex = 0; metaIndex < metaItems.length; metaIndex++) {
+			const metaItem = metaItems[metaIndex]
+			const metaPath = getStringField(metaItem, 'path', getStringField(metaItem, 'url'))
+			if (metaPath == currentPath) {
+				matchedItem = metaItem
+				break
+			}
+		}
+		if (matchedItem != null) {
+			nextItems.push(buildFileItem(currentPath, getStringField(matchedItem, 'id')))
+			continue
+		}
+		nextItems.push(buildFileItem(currentPath))
+	}
+	imageItems.value = nextItems
 }
 
 function emitModelValue() {
 	emit('update:modelValue', cloneStringArray(imageList.value))
 }
 
-function buildDeletePayload(index: number, path: string) : UTSJSONObject {
+function emitFileItems() {
+	emit('update:fileItems', cloneObjectArray(imageItems.value))
+}
+
+function buildDeletePayload(index: number, path: string, item: UTSJSONObject, apiDeleted: boolean) : UTSJSONObject {
 	return {
 		index: index,
 		path: path,
+		id: getStringField(item, 'id'),
+		apiDeleted: apiDeleted,
 		list: cloneStringArray(imageList.value),
+		fileItems: cloneObjectArray(imageItems.value),
 	} as UTSJSONObject
 }
 
@@ -128,25 +208,67 @@ function emitError(type: string, path: string, message: string) {
 	emit('error', buildErrorPayload(type, path, message))
 }
 
+function beginUploading() {
+	const wasUploading = uploadingCount.value > 0
+	uploadingCount.value = uploadingCount.value + 1
+	if (!wasUploading) {
+		uni.showLoading({
+			title: '图片上传中...',
+			mask: true,
+		})
+	}
+}
+
+function endUploading() {
+	if (uploadingCount.value <= 0) {
+		uploadingCount.value = 0
+		return
+	}
+	uploadingCount.value = uploadingCount.value - 1
+	if (uploadingCount.value <= 0) {
+		uploadingCount.value = 0
+		uni.hideLoading()
+	}
+}
+
 function uploadImage(path: string, index: number) {
-	uni.uploadFile({
-		url: props.action,
-		filePath: path,
-		name: props.name,
-		header: props.headers,
-		formData: props.formData,
-		success: (res) => {
-			emit('upload', buildUploadPayload(index, path, res.data))
-		},
-		fail: (err) => {
-			const message = err.errMsg
-			emitError('upload', path, message)
-		},
-	})
+	console.log('lili-upload uploadImage start:', index, path)
+	beginUploading()
+	try {
+		uni.uploadFile({
+			url: props.action,
+			filePath: path,
+			name: props.name,
+			header: props.headers,
+			formData: props.formData,
+			success: (res) => {
+				console.log('lili-upload uploadImage success:', index, path, res.statusCode)
+				emit('upload', buildUploadPayload(index, path, res.data))
+				endUploading()
+			},
+			fail: (err) => {
+				const message = err.errMsg
+				console.log('lili-upload uploadImage fail:', index, path, message)
+				emitError('upload', path, message)
+				endUploading()
+			},
+		})
+	} catch (error) {
+		const message = error == null ? '上传失败' : (error as Error).message
+		emitError('upload', path, message == '' ? '上传失败' : message)
+		endUploading()
+	}
 }
 
 function handleChoose() {
 	if (props.disabled) {
+		return
+	}
+	if (uploadingCount.value > 0) {
+		uni.showToast({
+			title: '图片上传中，请稍后',
+			icon: 'none',
+		})
 		return
 	}
 	const remain = props.max - imageList.value.length
@@ -170,8 +292,10 @@ function handleChoose() {
 
 			for (let i = 0; i < selectedPaths.length; i++) {
 				imageList.value.push(selectedPaths[i])
+				imageItems.value.push(buildFileItem(selectedPaths[i]))
 			}
 			emitModelValue()
+			emitFileItems()
 
 			if (props.action != '') {
 				for (let i = 0; i < selectedPaths.length; i++) {
@@ -207,31 +331,106 @@ function handlePreview(index: number) {
 	})
 }
 
-function handleDelete(index: number) {
+function handleDeletePopupVisibleChange(value: boolean) {
+	deletePopupVisible.value = value
+}
+
+function handleDeleteCancel() {
+	pendingDeleteIndex.value = -1
+}
+
+function removeImageAt(index: number, apiDeleted: boolean) {
 	if (index < 0 || index >= imageList.value.length) {
 		return
 	}
 	const currentPath = imageList.value[index]
+	const currentItem = index < imageItems.value.length ? imageItems.value[index] : buildFileItem(currentPath)
 	imageList.value.splice(index, 1)
+	if (index < imageItems.value.length) {
+		imageItems.value.splice(index, 1)
+	}
 	emitModelValue()
-	emit('delete', buildDeletePayload(index, currentPath))
+	emitFileItems()
+	emit('delete', buildDeletePayload(index, currentPath, currentItem, apiDeleted))
+}
+
+function handleDelete(index: number) {
+	if (uploadingCount.value > 0) {
+		uni.showToast({
+			title: '图片上传中，请稍后',
+			icon: 'none',
+		})
+		return
+	}
+	if (index < 0 || index >= imageList.value.length) {
+		return
+	}
+	pendingDeleteIndex.value = index
+	deletePopupVisible.value = true
+}
+
+async function confirmDelete() {
+	if (deleting.value) {
+		return
+	}
+	const index = pendingDeleteIndex.value
+	if (index < 0 || index >= imageList.value.length) {
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+		return
+	}
+	const currentItem = index < imageItems.value.length ? imageItems.value[index] : buildFileItem(imageList.value[index])
+	const fileId = getStringField(currentItem, 'id')
+	if (fileId == '') {
+		removeImageAt(index, false)
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+		return
+	}
+	deleting.value = true
+	try {
+		await deleteMediaFile(fileId)
+		removeImageAt(index, true)
+		deletePopupVisible.value = false
+		pendingDeleteIndex.value = -1
+	} catch (error) {
+		const message = error == null ? '删除图片失败' : (error as Error).message
+		emitError('delete', imageList.value[index], message == '' ? '删除图片失败' : message)
+	} finally {
+		deleting.value = false
+	}
 }
 
 watch(
 	() : string[] => props.modelValue,
 	(newVal: string[]) => {
-		syncModelValue(newVal)
+		syncModelValue(newVal, props.fileItems)
+	}
+)
+
+watch(
+	() : UTSJSONObject[] => props.fileItems,
+	(newVal: UTSJSONObject[]) => {
+		syncModelValue(props.modelValue, newVal)
 	}
 )
 
 onMounted(() => {
-	syncModelValue(props.modelValue)
+	syncModelValue(props.modelValue, props.fileItems)
+})
+
+onUnmounted(() => {
+	if (uploadingCount.value > 0) {
+		uploadingCount.value = 0
+		uni.hideLoading()
+	}
 })
 </script>
 
 <style>
 .lu-root {
 	width: 100%;
+	position: relative;
 }
 
 .lu-list {
@@ -294,5 +493,26 @@ onMounted(() => {
 	color: #6B7280;
 	font-size: 12px;
 	line-height: 12px;
+}
+
+.lu-uploading-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.38);
+}
+
+.lu-uploading-text {
+	color: #FFFFFF;
+	font-size: 13px;
+	line-height: 16px;
+	padding: 8px 12px;
+	border-radius: 999px;
+	background-color: rgba(15, 23, 42, 0.72);
 }
 </style>

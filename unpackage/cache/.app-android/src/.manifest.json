@@ -1,132 +1,80 @@
 {
   "version": "1",
   "env": {
-    "compiler_version": "4.87"
+    "compiler_version": "5.07"
   },
   "files": {
-    "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
-      "md5": "58ef45e2aac50ba1b8ec7ad0e6470e0a02a1d615",
-      "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect"
-    },
-    "pages/index/index.kt": {
-      "class": "GenPagesIndexIndex",
-      "md5": "842f28ad21bfac2439fedcf293c9376627922a6d"
-    },
     "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
-      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload",
-      "md5": "c14519619f338b0d9dc5aa750c33bbad9b9d4c40"
+      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e",
+      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
     },
-    "pages/login/login.kt": {
-      "md5": "24e37d2faedca92c9b26292b060410c6aba13087",
-      "class": "GenPagesLoginLogin"
-    },
-    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
-      "md5": "73e73ca51d2c2c1c10b281ed4ea8f8d79a01472f",
-      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup"
-    },
-    "pages/index/privacy.kt": {
-      "class": "GenPagesIndexPrivacy",
-      "md5": "e1cfd08be179d30e7dfb304f83981e416300d05b"
-    },
-    "index.kt": {
-      "class": "",
-      "md5": "eb16fb3e9377dc3f87ead1fbca282aa5f4a6ac82"
-    },
-    "pages/suppliers/index.kt": {
-      "md5": "ad99fb566e1804cb5737badc1f4063295c8f196e",
-      "class": "GenPagesSuppliersIndex"
-    },
-    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
-      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList",
-      "md5": "14721b46c161e77b1540071d0469c0cdef2513e3"
-    },
-    "pages/tabbar/mine.kt": {
-      "class": "GenPagesTabbarMine",
-      "md5": "0307ff04fa3cece74b4f3451a9312a9e2a4fd8ab"
-    },
-    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
-      "md5": "3a571b9b696effaf89bc959cbf35f38eca3b567a",
-      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview"
-    },
-    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
-      "md5": "a2d595cd277ef9fe91a2f987cc54e5b85c92a1c6",
-      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
-    },
-    "pages/suppliers/from.kt": {
-      "class": "GenPagesSuppliersFrom",
-      "md5": "96be3304ba44224a003c3f59219dabb706524d1b"
-    },
-    "pages/tabbar/reports.kt": {
-      "class": "GenPagesTabbarReports",
-      "md5": "372500af4a648476258869c5fcef274a8d03e193"
-    },
-    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
-      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup",
-      "md5": "57f871f1b1bd56a760ab124367552d48c2cb49c4"
-    },
-    "pages/suppliers/suppliers.kt": {
-      "class": "GenPagesSuppliersSuppliers",
-      "md5": "67fc2589bba1830f1799e129ddab4e505af9d8a6"
-    },
-    "pages/index/router.kt": {
-      "class": "GenPagesIndexRouter",
-      "md5": "4f720d1379432cb5e6192132c91d8cbee813b26c"
-    },
-    "pages/index/http.kt": {
-      "class": "GenPagesIndexHttp",
-      "md5": "33f3d4de99751580bf9c4c1636407e1f037d58ef"
-    },
-    "pages/privacy/privacy.kt": {
-      "md5": "1534701bd662da2926adbf75ec096ee7d496e0b1",
-      "class": "GenPagesPrivacyPrivacy"
-    },
-    "pages/index/push.kt": {
-      "class": "GenPagesIndexPush",
-      "md5": "c0a64e787beea07721dcdec2c0c5799929ef5a00"
-    },
-    "pages/index/crypto.kt": {
-      "md5": "2501d68e9d2c716ccb0fc74b9cbd0e4bfcf12602",
-      "class": "GenPagesIndexCrypto"
-    },
-    "pages/index/css.kt": {
-      "md5": "bef51ae0d8cb848cc495c7e826ad15584e0f8432",
-      "class": "GenPagesIndexCss"
-    },
-    "pages/index/test.kt": {
-      "md5": "9e1eaaea8ed2e09132fed6a18cf3eb67a4b25999",
-      "class": "GenPagesIndexTest"
-    },
-    "pages/index/update.kt": {
-      "class": "GenPagesIndexUpdate",
-      "md5": "58566c7dc50f92cdbcf45dff88e52d20974c3378"
+    "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
+      "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect",
+      "md5": "248c10a066b33e364aefe365017c387b154b33df"
     },
     "pages/webview/webview.kt": {
-      "md5": "333c38ab54143b94f032a4f37e3774ab9dbe3960",
-      "class": "GenPagesWebviewWebview"
+      "class": "GenPagesWebviewWebview",
+      "md5": "138888d18d6368b3e324680ed4b11da16956b725"
     },
-    "pages/index/global.kt": {
-      "class": "GenPagesIndexGlobal",
-      "md5": "51aa9f32d3941867134e6b820d2cd5e1f2235d4f"
-    },
-    "components/universal-filter/universal-filter.kt": {
-      "md5": "549d53b5fbc8dad8d35942e9ff07c5b116f69008",
-      "class": "GenComponentsUniversalFilterUniversalFilter"
+    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
+      "md5": "7ad25fe6af3c1245510e9e4401967dc306ade90a",
+      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
     },
     "pages/tabbar/settings.kt": {
-      "class": "GenPagesTabbarSettings",
-      "md5": "54d8b6f79d060513d8624c17bb8af3b548da0251"
+      "md5": "5002ff5842cba0930383aa88c796f6169ca376fe",
+      "class": "GenPagesTabbarSettings"
+    },
+    "pages/suppliers/index.kt": {
+      "class": "GenPagesSuppliersIndex",
+      "md5": "a5127069dd3d9c6b150ea5bf30cf1a50c710a65f"
+    },
+    "pages/privacy/privacy.kt": {
+      "class": "GenPagesPrivacyPrivacy",
+      "md5": "dd937ccdef05b0913c68db2008109433b48cac44"
+    },
+    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
+      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm",
+      "md5": "4ac13ee5ac38b4f3c89ca1ea547d13685c1c77cf"
+    },
+    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
+      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview",
+      "md5": "f491a3806ae1ef2e3775d06835d971f1e87c937f"
     },
     "pages/tabbar/products.kt": {
       "class": "GenPagesTabbarProducts",
-      "md5": "4dc78dc563cc0d760a6f5ab256bd8641447dfd5c"
+      "md5": "e48a1ffda9a603b6463a8a6e0030b863b33915ff"
     },
-    "pages/index/permission.kt": {
-      "md5": "5cc50bc57e73b4331ad5dc308cf23c93874edc50",
-      "class": "GenPagesIndexPermission"
+    "pages/tabbar/reports.kt": {
+      "class": "GenPagesTabbarReports",
+      "md5": "b3f0189c2cc6112fbbf4e50456ba49b47ba62d2a"
     },
-    "pages/index/time.kt": {
-      "md5": "440c3b9f7088103126334ce4160d06629d37165e",
-      "class": "GenPagesIndexTime"
+    "index.kt": {
+      "md5": "af55b469a355ca012e17b7d515028c3475fa5d9e",
+      "class": ""
+    },
+    "pages/suppliers/from.kt": {
+      "md5": "78742694588622bcf6617f0ad13b5f89da4a1453",
+      "class": "GenPagesSuppliersFrom"
+    },
+    "pages/login/login.kt": {
+      "class": "GenPagesLoginLogin",
+      "md5": "a909b3af7b084bd2a37dac5cbb194bd3e7f504ae"
+    },
+    "pages/tabbar/mine.kt": {
+      "class": "GenPagesTabbarMine",
+      "md5": "03428cd13f0152c775caa5db9881229cc4c42a41"
+    },
+    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
+      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup",
+      "md5": "bf06c167c33970eafb4bb4fd86ebf6d87c4e97ed"
+    },
+    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
+      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList",
+      "md5": "166db754610167364723c55cfd8e67abbac36f4a"
+    },
+    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
+      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup",
+      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0"
     }
   }
 }
