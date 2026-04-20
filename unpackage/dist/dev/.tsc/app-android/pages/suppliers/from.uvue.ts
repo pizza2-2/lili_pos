@@ -5,7 +5,7 @@ import { SupplierItem, SupplierMutationData, createSupplier, getSupplierDetail, 
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 40, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 48, 6>;
 	value: string
 	text: string
 }
@@ -18,10 +18,14 @@ const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
 const _cache = __ins.renderCache;
 
+const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
+
 const formMode = ref('create')
 const supplierId = ref('')
 const leaveSignal = ref(0)
 const submitting = ref(false)
+const savingVisible = ref(false)
+const savingText = ref('处理中...')
 const initialData = ref<UTSJSONObject>({
 	code: '',
 	name: '',
@@ -98,7 +102,7 @@ function buildInitialDataFromSupplier(item: SupplierItem) : UTSJSONObject {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 125, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 135, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -108,9 +112,13 @@ function buildUploadHeaders() : UTSJSONObject {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:137")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:151")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -156,7 +164,7 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'base',
 		title: '基础信息',
-		description: '创建和编辑共用这一组字段。',
+		description: '。',
 		defaultOpen: true,
 		fields: [
 			{
@@ -201,8 +209,8 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'status',
 		title: '状态设置',
-		description: '这里使用现有 bottom-select 组件。',
-		defaultOpen: true,
+		description: '',
+		defaultOpen: false,
 		fields: [
 			{
 				key: 'is_active',
@@ -219,7 +227,7 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'media',
 		title: '图片资料',
-		description: '这里使用现有 lili-upload 组件。',
+		description: '可同时上传多张图片',
 		defaultOpen: true,
 		fields: [
 			{
@@ -251,7 +259,7 @@ async function loadSupplierDetailData(idText: string) {
 	}
 	try {
 		const detail = await getSupplierDetail(idText)
-		console.log(detail, " at pages/suppliers/from.uvue:278")
+		console.log(detail, " at pages/suppliers/from.uvue:292")
 		initialData.value = buildInitialDataFromSupplier(detail)
 	} catch (error) {
 		uni.showToast({
@@ -273,6 +281,10 @@ function goBackToList() {
 			},
 		})
 	}, 16)
+}
+
+function markSupplierListRefreshNeeded() {
+	uni.setStorageSync(supplierListRefreshStorageKey, '1')
 }
 
 function stringifyPayload(payload: UTSJSONObject) : string {
@@ -325,15 +337,15 @@ function collectPendingImagePaths(formDataObject: UTSJSONObject) : string[] {
 }
 
 async function uploadPendingSupplierImages(formDataObject: UTSJSONObject, contentTypeModel: string) {
-	if (formMode.value != 'edit' || supplierId.value == '') {
+	if (supplierId.value == '') {
 		return
-	}
-	if (contentTypeModel == '') {
-		throw new Error('缺少上传参数: content_type_model')
 	}
 	const pendingImagePaths = collectPendingImagePaths(formDataObject)
 	if (pendingImagePaths.length == 0) {
 		return
+	}
+	if (contentTypeModel == '') {
+		throw new Error('缺少上传参数: content_type_model')
 	}
 	const uploadItems: MediaBatchUploadItem[] = []
 	for (let index = 0; index < pendingImagePaths.length; index += 1) {
@@ -363,19 +375,32 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
 	const actionText = formMode.value == 'edit' ? '保存修改' : '创建供应商'
 	submitting.value = true
+	savingText.value = actionText + '中...'
+	savingVisible.value = true
 	uni.showLoading({
-		title: actionText + '中...',
+		title: savingText.value,
 		mask: true,
 	})
 	try {
-		await uploadPendingSupplierImages(data, uploadContentTypeModel)
 		const body = buildSupplierMutationPayload(data)
 		if (formMode.value == 'edit' && supplierId.value != '') {
+			savingText.value = '上传图片中...'
+			await uploadPendingSupplierImages(data, uploadContentTypeModel)
+			savingText.value = '保存修改中...'
 			await updateSupplier(supplierId.value, body)
 		} else {
-			await createSupplier(body)
+			savingText.value = '创建供应商中...'
+			const createdSupplier = await createSupplier(body)
+			supplierId.value = createdSupplier.id.toString()
+			try {
+				savingText.value = '上传图片中...'
+				await uploadPendingSupplierImages(data, uploadContentTypeModel)
+			} catch (uploadError) {
+				throw new Error('供应商已创建，但图片上传失败')
+			}
 		}
 		clearDraftStorage()
+		markSupplierListRefreshNeeded()
 		uni.showToast({
 			title: actionText + '成功',
 			icon: 'success',
@@ -387,6 +412,7 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 			icon: 'none',
 		})
 	} finally {
+		savingVisible.value = false
 		uni.hideLoading()
 		submitting.value = false
 	}
@@ -508,11 +534,21 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
         onUploadDelete: handleUploadDelete,
         onUploadError: handleUploadError
       }), null, 8 /* PROPS */, ["mode", "formSections", "initialData", "leaveSignal"])
-    ])
+    ]),
+    isTrue(unref(savingVisible))
+      ? _cE("view", _uM({
+          key: 0,
+          class: "page-saving-mask"
+        }), [
+          _cE("view", _uM({ class: "page-saving-card" }), [
+            _cE("text", _uM({ class: "page-saving-text" }), _tD(unref(savingText)), 1 /* TEXT */)
+          ])
+        ])
+      : _cC("v-if", true)
   ])
 }
 }
 
 })
 export default __sfc__
-const GenPagesSuppliersFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#EEF2F7"]]))], ["page-header", _pS(_uM([["paddingTop", 8], ["paddingRight", 10], ["paddingBottom", 6], ["paddingLeft", 10], ["backgroundColor", "#EEF2F7"]]))], ["page-mode", _pS(_uM([["alignSelf", "flex-start"], ["paddingTop", 4], ["paddingRight", 10], ["paddingBottom", 4], ["paddingLeft", 10], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#155E75"], ["backgroundColor", "#CFFAFE"]]))], ["page-desc", _pS(_uM([["marginTop", 8], ["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["page-content", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingLeft", 0], ["paddingRight", 0], ["paddingBottom", 0]]))]])]
+const GenPagesSuppliersFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-header", _pS(_uM([["paddingTop", 8], ["paddingRight", 10], ["paddingBottom", 6], ["paddingLeft", 10], ["backgroundColor", "#EEF2F7"]]))], ["page-mode", _pS(_uM([["alignSelf", "flex-start"], ["paddingTop", 4], ["paddingRight", 10], ["paddingBottom", 4], ["paddingLeft", 10], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#155E75"], ["backgroundColor", "#CFFAFE"]]))], ["page-desc", _pS(_uM([["marginTop", 8], ["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["page-content", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingLeft", 0], ["paddingRight", 0], ["paddingBottom", 0]]))], ["page-saving-mask", _pS(_uM([["position", "absolute"], ["left", 0], ["top", 0], ["right", 0], ["bottom", 0], ["zIndex", 9999], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.28)"]]))], ["page-saving-card", _pS(_uM([["height", 44], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.86)"]]))], ["page-saving-text", _pS(_uM([["fontSize", 13], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]

@@ -4,77 +4,85 @@
     "compiler_version": "5.07"
   },
   "files": {
-    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
-      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e",
-      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
+    "pages/suppliers/from.kt": {
+      "class": "GenPagesSuppliersFrom",
+      "md5": "82ef70ab217c76f92663a4dc2378230f1df6cfbc"
+    },
+    "pages/tabbar/products.kt": {
+      "md5": "e48a1ffda9a603b6463a8a6e0030b863b33915ff",
+      "class": "GenPagesTabbarProducts"
     },
     "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
       "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect",
       "md5": "248c10a066b33e364aefe365017c387b154b33df"
     },
+    "pages/tabbar/settings.kt": {
+      "class": "GenPagesTabbarSettings",
+      "md5": "5002ff5842cba0930383aa88c796f6169ca376fe"
+    },
+    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
+      "md5": "001ef0238ca99044ed3b7f0646866f427588b263",
+      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm"
+    },
+    "pages/suppliers/index.kt": {
+      "class": "GenPagesSuppliersIndex",
+      "md5": "347d5d2f54f1f37f9713214e6698750f764dafe0"
+    },
+    "pages/transactions/from.kt": {
+      "class": "GenPagesTransactionsFrom",
+      "md5": "ef45c7c22f9979b393f5364470544bd3c4ecd22a"
+    },
+    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
+      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview",
+      "md5": "2b3cb94499bab2ae8d52400b3471310da1ad63d2"
+    },
+    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
+      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter",
+      "md5": "7ad25fe6af3c1245510e9e4401967dc306ade90a"
+    },
+    "pages/tabbar/reports.kt": {
+      "md5": "b3f0189c2cc6112fbbf4e50456ba49b47ba62d2a",
+      "class": "GenPagesTabbarReports"
+    },
+    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
+      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e",
+      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
+    },
+    "pages/transactions/index.kt": {
+      "md5": "7a69f86ef34e2c7000fe4503e733cab5b319887a",
+      "class": "GenPagesTransactionsIndex"
+    },
+    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
+      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup",
+      "md5": "6868a2f6ce9ab8691365790f413eec55b5663922"
+    },
+    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
+      "md5": "4590a7b3041ffdf3e485d3b79c5b7660684645a8",
+      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList"
+    },
+    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
+      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup",
+      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0"
+    },
     "pages/webview/webview.kt": {
       "class": "GenPagesWebviewWebview",
       "md5": "138888d18d6368b3e324680ed4b11da16956b725"
     },
-    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
-      "md5": "7ad25fe6af3c1245510e9e4401967dc306ade90a",
-      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
-    },
-    "pages/tabbar/settings.kt": {
-      "md5": "5002ff5842cba0930383aa88c796f6169ca376fe",
-      "class": "GenPagesTabbarSettings"
-    },
-    "pages/suppliers/index.kt": {
-      "class": "GenPagesSuppliersIndex",
-      "md5": "a5127069dd3d9c6b150ea5bf30cf1a50c710a65f"
-    },
-    "pages/privacy/privacy.kt": {
-      "class": "GenPagesPrivacyPrivacy",
-      "md5": "dd937ccdef05b0913c68db2008109433b48cac44"
-    },
-    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
-      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm",
-      "md5": "4ac13ee5ac38b4f3c89ca1ea547d13685c1c77cf"
-    },
-    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
-      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview",
-      "md5": "f491a3806ae1ef2e3775d06835d971f1e87c937f"
-    },
-    "pages/tabbar/products.kt": {
-      "class": "GenPagesTabbarProducts",
-      "md5": "e48a1ffda9a603b6463a8a6e0030b863b33915ff"
-    },
-    "pages/tabbar/reports.kt": {
-      "class": "GenPagesTabbarReports",
-      "md5": "b3f0189c2cc6112fbbf4e50456ba49b47ba62d2a"
-    },
     "index.kt": {
-      "md5": "af55b469a355ca012e17b7d515028c3475fa5d9e",
+      "md5": "cf2a92edfa4d7a7c4c3d78be6e648a193cc7d949",
       "class": ""
-    },
-    "pages/suppliers/from.kt": {
-      "md5": "78742694588622bcf6617f0ad13b5f89da4a1453",
-      "class": "GenPagesSuppliersFrom"
-    },
-    "pages/login/login.kt": {
-      "class": "GenPagesLoginLogin",
-      "md5": "a909b3af7b084bd2a37dac5cbb194bd3e7f504ae"
     },
     "pages/tabbar/mine.kt": {
       "class": "GenPagesTabbarMine",
       "md5": "03428cd13f0152c775caa5db9881229cc4c42a41"
     },
-    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
-      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup",
-      "md5": "bf06c167c33970eafb4bb4fd86ebf6d87c4e97ed"
+    "pages/privacy/privacy.kt": {
+      "md5": "dd937ccdef05b0913c68db2008109433b48cac44",
+      "class": "GenPagesPrivacyPrivacy"
     },
-    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
-      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList",
-      "md5": "166db754610167364723c55cfd8e67abbac36f4a"
-    },
-    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
-      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup",
-      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0"
+    "pages/login/login.kt": {
+      "class": "GenPagesLoginLogin",
+      "md5": "a909b3af7b084bd2a37dac5cbb194bd3e7f504ae"
     }
   }
 }

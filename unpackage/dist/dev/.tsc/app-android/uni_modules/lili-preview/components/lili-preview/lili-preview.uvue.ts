@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-preview/components/lili-preview/lili-preview.uvue", 62, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-preview/components/lili-preview/lili-preview.uvue", 63, 6>;
 	images?: string[]
 	initialIndex?: number
 	visible?: boolean
@@ -10,6 +10,7 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	enableSave?: boolean
 	enableShare?: boolean
 	emptyText?: string
+	showList?: boolean
 }
 
 
@@ -24,7 +25,8 @@ const __sfc__ = defineComponent({
     gap: { type: Number, required: false, default: 12 },
     enableSave: { type: Boolean, required: false, default: true },
     enableShare: { type: Boolean, required: false, default: true },
-    emptyText: { type: String, required: false, default: '暂无图片' }
+    emptyText: { type: String, required: false, default: '暂无图片' },
+    showList: { type: Boolean, required: false, default: true }
   },
   emits: ["preview", "close", "save", "share", "update:visible", "update:index"],
   setup(__props) {
@@ -178,9 +180,11 @@ function showPrevious() {
 	}
 	if (currentIndex.value <= 0) {
 		currentIndex.value = imageList.value.length - 1
+		emit('update:index', currentIndex.value)
 		return
 	}
 	currentIndex.value = currentIndex.value - 1
+	emit('update:index', currentIndex.value)
 }
 
 function showNext() {
@@ -189,9 +193,11 @@ function showNext() {
 	}
 	if (currentIndex.value >= imageList.value.length - 1) {
 		currentIndex.value = 0
+		emit('update:index', currentIndex.value)
 		return
 	}
 	currentIndex.value = currentIndex.value + 1
+	emit('update:index', currentIndex.value)
 }
 
 function saveCurrentImage() {
@@ -251,6 +257,9 @@ watch(
 	() : string[] => props.images,
 	(newVal: string[]) => {
 		syncImages(newVal)
+	},
+	{
+		immediate: true,
 	}
 )
 
@@ -258,6 +267,9 @@ watch(
 	() : number => props.initialIndex,
 	(newVal: number) => {
 		currentIndex.value = clampIndex(newVal, imageList.value.length)
+	},
+	{
+		immediate: true,
 	}
 )
 
@@ -265,17 +277,16 @@ watch(
 	() : boolean => props.visible,
 	(newVal: boolean) => {
 		previewVisible.value = newVal
+	},
+	{
+		immediate: true,
 	}
 )
-
-syncImages(props.images)
-currentIndex.value = clampIndex(props.initialIndex, imageList.value.length)
-previewVisible.value = props.visible
 
 return (): any | null => {
 
   return _cE("view", _uM({ class: "lp-root" }), [
-    imageList.value.length > 0
+    isTrue(props.showList && imageList.value.length > 0)
       ? _cE("view", _uM({
           key: 0,
           class: "lp-list"
@@ -296,12 +307,14 @@ return (): any | null => {
             ], 12 /* STYLE, PROPS */, ["onClick"])
           }), 128 /* KEYED_FRAGMENT */)
         ])
-      : _cE("view", _uM({
-          key: 1,
-          class: "lp-empty"
-        }), [
-          _cE("text", _uM({ class: "lp-empty-text" }), _tD(props.emptyText), 1 /* TEXT */)
-        ]),
+      : isTrue(props.showList)
+        ? _cE("view", _uM({
+            key: 1,
+            class: "lp-empty"
+          }), [
+            _cE("text", _uM({ class: "lp-empty-text" }), _tD(props.emptyText), 1 /* TEXT */)
+          ])
+        : _cC("v-if", true),
     isTrue(previewVisible.value)
       ? _cE("view", _uM({
           key: 2,

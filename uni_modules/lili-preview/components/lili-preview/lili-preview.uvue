@@ -1,6 +1,6 @@
 <template>
 	<view class="lp-root">
-		<view v-if="imageList.length > 0" class="lp-list">
+		<view v-if="props.showList && imageList.length > 0" class="lp-list">
 			<view
 				v-for="(item, index) in imageList"
 				:key="item + '-' + index"
@@ -11,7 +11,8 @@
 				<image class="lp-image" :style="imageStyle" :src="item" mode="aspectFill"></image>
 			</view>
 		</view>
-		<view v-else class="lp-empty">
+
+		<view v-else-if="props.showList" class="lp-empty">
 			<text class="lp-empty-text">{{ props.emptyText }}</text>
 		</view>
 
@@ -69,6 +70,7 @@ type Props = {
 	enableSave?: boolean
 	enableShare?: boolean
 	emptyText?: string
+	showList?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -81,6 +83,7 @@ const props = withDefaults(defineProps<Props>(), {
 	enableSave: true,
 	enableShare: true,
 	emptyText: '暂无图片',
+	showList: true,
 })
 
 const emit = defineEmits<{
@@ -232,9 +235,11 @@ function showPrevious() {
 	}
 	if (currentIndex.value <= 0) {
 		currentIndex.value = imageList.value.length - 1
+		emit('update:index', currentIndex.value)
 		return
 	}
 	currentIndex.value = currentIndex.value - 1
+	emit('update:index', currentIndex.value)
 }
 
 function showNext() {
@@ -243,9 +248,11 @@ function showNext() {
 	}
 	if (currentIndex.value >= imageList.value.length - 1) {
 		currentIndex.value = 0
+		emit('update:index', currentIndex.value)
 		return
 	}
 	currentIndex.value = currentIndex.value + 1
+	emit('update:index', currentIndex.value)
 }
 
 function saveCurrentImage() {
@@ -305,6 +312,9 @@ watch(
 	() : string[] => props.images,
 	(newVal: string[]) => {
 		syncImages(newVal)
+	},
+	{
+		immediate: true,
 	}
 )
 
@@ -312,6 +322,9 @@ watch(
 	() : number => props.initialIndex,
 	(newVal: number) => {
 		currentIndex.value = clampIndex(newVal, imageList.value.length)
+	},
+	{
+		immediate: true,
 	}
 )
 
@@ -319,12 +332,11 @@ watch(
 	() : boolean => props.visible,
 	(newVal: boolean) => {
 		previewVisible.value = newVal
+	},
+	{
+		immediate: true,
 	}
 )
-
-syncImages(props.images)
-currentIndex.value = clampIndex(props.initialIndex, imageList.value.length)
-previewVisible.value = props.visible
 </script>
 
 <style>

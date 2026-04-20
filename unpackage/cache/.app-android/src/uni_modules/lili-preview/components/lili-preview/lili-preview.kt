@@ -30,6 +30,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
     open var enableSave: Boolean by `$props`
     open var enableShare: Boolean by `$props`
     open var emptyText: String by `$props`
+    open var showList: Boolean by `$props`
     companion object {
         @Suppress("UNUSED_PARAMETER", "UNUSED_VARIABLE")
         var setup: (__props: GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview) -> Any? = fun(__props): Any? {
@@ -176,9 +177,11 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 }
                 if (currentIndex.value <= 0) {
                     currentIndex.value = imageList.value.length - 1
+                    emit("update:index", currentIndex.value)
                     return
                 }
                 currentIndex.value = currentIndex.value - 1
+                emit("update:index", currentIndex.value)
             }
             val showPrevious = ::gen_showPrevious_fn
             fun gen_showNext_fn() {
@@ -187,9 +190,11 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 }
                 if (currentIndex.value >= imageList.value.length - 1) {
                     currentIndex.value = 0
+                    emit("update:index", currentIndex.value)
                     return
                 }
                 currentIndex.value = currentIndex.value + 1
+                emit("update:index", currentIndex.value)
             }
             val showNext = ::gen_showNext_fn
             fun gen_saveCurrentImage_fn() {
@@ -236,27 +241,24 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
             , fun(newVal: UTSArray<String>){
                 syncImages(newVal)
             }
-            )
+            , WatchOptions(immediate = true))
             watch(fun(): Number {
                 return props.initialIndex
             }
             , fun(newVal: Number){
                 currentIndex.value = clampIndex(newVal, imageList.value.length)
             }
-            )
+            , WatchOptions(immediate = true))
             watch(fun(): Boolean {
                 return props.visible
             }
             , fun(newVal: Boolean){
                 previewVisible.value = newVal
             }
-            )
-            syncImages(props.images)
-            currentIndex.value = clampIndex(props.initialIndex, imageList.value.length)
-            previewVisible.value = props.visible
+            , WatchOptions(immediate = true))
             return fun(): Any? {
                 return _cE("view", _uM("class" to "lp-root"), _uA(
-                    if (imageList.value.length > 0) {
+                    if (isTrue(props.showList && imageList.value.length > 0)) {
                         _cE("view", _uM("key" to 0, "class" to "lp-list"), _uA(
                             _cE(Fragment, null, RenderHelpers.renderList(imageList.value, fun(item, index, __index, _cached): Any {
                                 return _cE("view", _uM("key" to (item + "-" + index), "class" to "lp-item", "style" to _nS(itemStyle.value), "onClick" to fun(){
@@ -271,9 +273,13 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                             }), 128)
                         ))
                     } else {
-                        _cE("view", _uM("key" to 1, "class" to "lp-empty"), _uA(
-                            _cE("text", _uM("class" to "lp-empty-text"), _tD(props.emptyText), 1)
-                        ))
+                        if (isTrue(props.showList)) {
+                            _cE("view", _uM("key" to 1, "class" to "lp-empty"), _uA(
+                                _cE("text", _uM("class" to "lp-empty-text"), _tD(props.emptyText), 1)
+                            ))
+                        } else {
+                            _cC("v-if", true)
+                        }
                     }
                     ,
                     if (isTrue(previewVisible.value)) {
@@ -352,7 +358,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
         var props = _nP(_uM("images" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
-        ), "initialIndex" to _uM("type" to "Number", "required" to false, "default" to 0), "visible" to _uM("type" to "Boolean", "required" to false, "default" to false), "thumbSize" to _uM("type" to "Number", "required" to false, "default" to 72), "radius" to _uM("type" to "Number", "required" to false, "default" to 12), "gap" to _uM("type" to "Number", "required" to false, "default" to 12), "enableSave" to _uM("type" to "Boolean", "required" to false, "default" to true), "enableShare" to _uM("type" to "Boolean", "required" to false, "default" to true), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无图片")))
+        ), "initialIndex" to _uM("type" to "Number", "required" to false, "default" to 0), "visible" to _uM("type" to "Boolean", "required" to false, "default" to false), "thumbSize" to _uM("type" to "Number", "required" to false, "default" to 72), "radius" to _uM("type" to "Number", "required" to false, "default" to 12), "gap" to _uM("type" to "Number", "required" to false, "default" to 12), "enableSave" to _uM("type" to "Boolean", "required" to false, "default" to true), "enableShare" to _uM("type" to "Boolean", "required" to false, "default" to true), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无图片"), "showList" to _uM("type" to "Boolean", "required" to false, "default" to true)))
         var propsNeedCastKeys = _uA(
             "images",
             "initialIndex",
@@ -362,7 +368,8 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
             "gap",
             "enableSave",
             "enableShare",
-            "emptyText"
+            "emptyText",
+            "showList"
         )
         var components: Map<String, CreateVueComponent> = _uM()
     }

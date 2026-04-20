@@ -28,6 +28,12 @@
 				@upload-error="handleUploadError"
 			/>
 		</view>
+
+		<view v-if="savingVisible" class="page-saving-mask">
+			<view class="page-saving-card">
+				<text class="page-saving-text">{{ savingText }}</text>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -36,6 +42,8 @@ import { computed } from 'vue'
 import { SupplierItem, SupplierMutationData, createSupplier, getSupplierDetail, updateSupplier } from '@/pkg/api/modules/suppliers'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
+
+const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
 
 type SelectOption = {
 	value: string
@@ -46,6 +54,8 @@ const formMode = ref('create')
 const supplierId = ref('')
 const leaveSignal = ref(0)
 const submitting = ref(false)
+const savingVisible = ref(false)
+const savingText = ref('处理中...')
 const initialData = ref<UTSJSONObject>({
 	code: '',
 	name: '',
@@ -132,6 +142,10 @@ function buildUploadHeaders() : UTSJSONObject {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -180,7 +194,7 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'base',
 		title: '基础信息',
-		description: '创建和编辑共用这一组字段。',
+		description: '。',
 		defaultOpen: true,
 		fields: [
 			{
@@ -225,8 +239,8 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'status',
 		title: '状态设置',
-		description: '这里使用现有 bottom-select 组件。',
-		defaultOpen: true,
+		description: '',
+		defaultOpen: false,
 		fields: [
 			{
 				key: 'is_active',
@@ -243,7 +257,7 @@ const formSections = ref<UTSJSONObject[]>([
 	{
 		key: 'media',
 		title: '图片资料',
-		description: '这里使用现有 lili-upload 组件。',
+		description: '可同时上传多张图片',
 		defaultOpen: true,
 		fields: [
 			{
@@ -299,6 +313,10 @@ function goBackToList() {
 	}, 16)
 }
 
+function markSupplierListRefreshNeeded() {
+	uni.setStorageSync(supplierListRefreshStorageKey, '1')
+}
+
 function stringifyPayload(payload: UTSJSONObject) : string {
 	const text = JSON.stringify(payload)
 	if (text == null) return ''
@@ -349,15 +367,15 @@ function collectPendingImagePaths(formDataObject: UTSJSONObject) : string[] {
 }
 
 async function uploadPendingSupplierImages(formDataObject: UTSJSONObject, contentTypeModel: string) {
-	if (formMode.value != 'edit' || supplierId.value == '') {
+	if (supplierId.value == '') {
 		return
-	}
-	if (contentTypeModel == '') {
-		throw new Error('缺少上传参数: content_type_model')
 	}
 	const pendingImagePaths = collectPendingImagePaths(formDataObject)
 	if (pendingImagePaths.length == 0) {
 		return
+	}
+	if (contentTypeModel == '') {
+		throw new Error('缺少上传参数: content_type_model')
 	}
 	const uploadItems: MediaBatchUploadItem[] = []
 	for (let index = 0; index < pendingImagePaths.length; index += 1) {
@@ -387,19 +405,32 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
 	const actionText = formMode.value == 'edit' ? '保存修改' : '创建供应商'
 	submitting.value = true
+	savingText.value = actionText + '中...'
+	savingVisible.value = true
 	uni.showLoading({
-		title: actionText + '中...',
+		title: savingText.value,
 		mask: true,
 	})
 	try {
-		await uploadPendingSupplierImages(data, uploadContentTypeModel)
 		const body = buildSupplierMutationPayload(data)
 		if (formMode.value == 'edit' && supplierId.value != '') {
+			savingText.value = '上传图片中...'
+			await uploadPendingSupplierImages(data, uploadContentTypeModel)
+			savingText.value = '保存修改中...'
 			await updateSupplier(supplierId.value, body)
 		} else {
-			await createSupplier(body)
+			savingText.value = '创建供应商中...'
+			const createdSupplier = await createSupplier(body)
+			supplierId.value = createdSupplier.id.toString()
+			try {
+				savingText.value = '上传图片中...'
+				await uploadPendingSupplierImages(data, uploadContentTypeModel)
+			} catch (uploadError) {
+				throw new Error('供应商已创建，但图片上传失败')
+			}
 		}
 		clearDraftStorage()
+		markSupplierListRefreshNeeded()
 		uni.showToast({
 			title: actionText + '成功',
 			icon: 'success',
@@ -411,6 +442,7 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 			icon: 'none',
 		})
 	} finally {
+		savingVisible.value = false
 		uni.hideLoading()
 		submitting.value = false
 	}
@@ -504,6 +536,7 @@ onLoad((event : OnLoadOptions) => {
 <style>
 .page {
 	flex: 1;
+	position: relative;
 	background-color: #EEF2F7;
 }
 
@@ -534,5 +567,33 @@ onLoad((event : OnLoadOptions) => {
 	padding-left: 0;
 	padding-right: 0;
 	padding-bottom: 0;
+}
+
+.page-saving-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 9999;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.28);
+}
+
+.page-saving-card {
+	height: 44px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-radius: 22px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.86);
+}
+
+.page-saving-text {
+	font-size: 13px;
+	line-height: 16px;
+	color: #FFFFFF;
 }
 </style>

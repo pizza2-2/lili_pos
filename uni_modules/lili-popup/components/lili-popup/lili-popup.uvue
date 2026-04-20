@@ -1,12 +1,13 @@
 <template>
 	<view v-if="renderVisible" class="lp-root" :style="rootStyle">
 		<view class="lp-mask" @click="handleMaskClick"></view>
+
 		<view class="lp-panel" :style="panelStyle">
 			<view v-if="showCloseIconValue" class="lp-close" @click="handleCloseIcon">
 				<text class="lp-close-text">×</text>
 			</view>
 
-			<view class="lp-header">
+			<view :class="showCloseIconValue ? 'lp-header lp-header-has-close' : 'lp-header'">
 				<text class="lp-title">{{ currentTitle }}</text>
 			</view>
 
@@ -17,14 +18,26 @@
 			</view>
 
 			<view class="lp-footer">
-				<view v-if="auxiliaryTextValue != ''" class="lp-btn lp-btn-gap-right lp-btn-light" @click="handleAuxiliary">
+				<view
+					v-if="auxiliaryTextValue != ''"
+					class="lp-btn lp-btn-light"
+					@click="handleAuxiliary"
+				>
 					<text class="lp-btn-light-text">{{ auxiliaryTextValue }}</text>
 				</view>
-				<view :class="auxiliaryTextValue != '' ? 'lp-btn lp-btn-gap-right lp-btn-light' : 'lp-btn lp-btn-light'" @click="handleCancel">
+
+				<view
+					:class="auxiliaryTextValue != '' ? 'lp-btn lp-btn-gap-left lp-btn-light' : 'lp-btn lp-btn-light'"
+					@click="handleCancel"
+				>
 					<text class="lp-btn-light-text">{{ cancelTextValue }}</text>
 				</view>
-				<view :class="confirmDangerValue ? 'lp-btn lp-btn-danger' : 'lp-btn lp-btn-primary'" @click="handleConfirm">
-					<text class="lp-btn-primary-text">{{ confirmTextValue }}</text>
+
+				<view
+					:class="confirmDangerValue ? 'lp-btn lp-btn-gap-left lp-btn-danger' : 'lp-btn lp-btn-gap-left lp-btn-primary'"
+					@click="handleConfirm"
+				>
+					<text class="lp-btn-solid-text">{{ confirmTextValue }}</text>
 				</view>
 			</view>
 		</view>
@@ -86,17 +99,17 @@ const confirmDangerValue = ref<boolean>(props.confirmDanger)
 const autoCloseValue = ref<boolean>(props.autoClose)
 
 function syncStyle() {
-	panelStyle.value = `width:${props.width};`
+	panelStyle.value = `width:${props.width};max-width:100%;`
 	rootStyle.value = `z-index:${props.zIndex};`
 }
 
-function readString(config: UTSJSONObject, key: string, fallback: string) : string {
+function readString(config: UTSJSONObject, key: string, fallback: string): string {
 	const value = config[key]
 	if (value == null) return fallback
 	return '' + value
 }
 
-function readBoolean(config: UTSJSONObject, key: string, fallback: boolean) : boolean {
+function readBoolean(config: UTSJSONObject, key: string, fallback: boolean): boolean {
 	const value = config[key]
 	if (value == null) return fallback
 	return value as boolean
@@ -117,6 +130,7 @@ function applyBaseProps() {
 function applyConfig(config: UTSJSONObject | null) {
 	applyBaseProps()
 	if (config == null) return
+
 	currentTitle.value = readString(config, 'title', currentTitle.value)
 	currentContent.value = readString(config, 'content', currentContent.value)
 	cancelTextValue.value = readString(config, 'cancelText', cancelTextValue.value)
@@ -153,11 +167,13 @@ function openSaveConfirm(config: UTSJSONObject | null = null) {
 		confirmDanger: false,
 		autoClose: true,
 	}
+
 	if (config != null) {
 		for (var key in config) {
 			defaultConfig[key] = config[key]
 		}
 	}
+
 	open(defaultConfig)
 }
 
@@ -197,67 +213,91 @@ function handleCloseIcon() {
 	close('icon')
 }
 
+function syncBasePropsWhenClosed() {
+	if (!renderVisible.value) {
+		applyBaseProps()
+	}
+}
+
 watch(
-	() : boolean => props.visible,
+	(): boolean => props.visible,
 	(newValue: boolean) => {
 		renderVisible.value = newValue
 	}
 )
 
 watch(
-	() : string => props.title,
+	(): string => props.title,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.content,
+	(): string => props.content,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.cancelText,
+	(): string => props.cancelText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.confirmText,
+	(): string => props.confirmText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.auxiliaryText,
+	(): string => props.auxiliaryText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.width,
+	(): boolean => props.closeOnMask,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.showCloseIcon,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.confirmDanger,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.autoClose,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): string => props.width,
 	() => {
 		syncStyle()
 	}
 )
 
 watch(
-	() : number => props.zIndex,
+	(): number => props.zIndex,
 	() => {
 		syncStyle()
 	}
@@ -278,97 +318,118 @@ defineExpose({
 <style>
 .lp-root {
 	position: fixed;
-	top: 0px;
-	left: 0px;
-	right: 0px;
-	bottom: 0px;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
 	align-items: center;
 	justify-content: center;
-	padding-left: 24px;
-	padding-right: 24px;
+	padding-left: 40rpx;
+	padding-right: 40rpx;
 }
 
 .lp-mask {
 	position: absolute;
-	top: 0px;
-	left: 0px;
-	right: 0px;
-	bottom: 0px;
-	background-color: rgba(15, 23, 42, 0.48);
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.42);
 }
 
 .lp-panel {
 	position: relative;
+	width: 100%;
+	max-width: 100%;
 	background-color: #FFFFFF;
-	border-radius: 24px;
-	padding-top: 28px;
-	padding-left: 24px;
-	padding-right: 24px;
-	padding-bottom: 20px;
+	border-radius: 28rpx;
+	padding-top: 34rpx;
+	padding-left: 32rpx;
+	padding-right: 32rpx;
+	padding-bottom: 28rpx;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #F1F5F9;
+	box-shadow: 0 16rpx 48rpx rgba(15, 23, 42, 0.10);
+	box-sizing: border-box;
+	overflow: hidden;
 }
 
 .lp-close {
 	position: absolute;
-	top: 16px;
-	right: 16px;
-	width: 28px;
-	height: 28px;
+	top: 20rpx;
+	right: 20rpx;
+	width: 52rpx;
+	height: 52rpx;
 	align-items: center;
 	justify-content: center;
-	border-radius: 14px;
-	background-color: #F3F4F6;
+	border-radius: 26rpx;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
 }
 
 .lp-close-text {
-	font-size: 18px;
-	line-height: 18px;
-	color: #475569;
+	font-size: 34rpx;
+	line-height: 34rpx;
+	color: #64748B;
+	font-weight: 500;
 }
 
 .lp-header {
 	align-items: center;
-	padding-right: 36px;
+	justify-content: center;
+}
+
+.lp-header-has-close {
+	padding-right: 60rpx;
 }
 
 .lp-title {
-	font-size: 18px;
-	line-height: 26px;
+	width: 100%;
+	font-size: 34rpx;
+	line-height: 44rpx;
 	color: #0F172A;
 	font-weight: 600;
 	text-align: center;
 }
 
 .lp-body {
-	min-height: 56px;
-	padding-top: 16px;
-	padding-bottom: 24px;
+	min-height: 80rpx;
+	padding-top: 24rpx;
+	padding-bottom: 30rpx;
 	align-items: center;
 	justify-content: center;
 }
 
 .lp-content {
-	font-size: 15px;
-	line-height: 23px;
-	color: #475569;
+	width: 100%;
+	font-size: 28rpx;
+	line-height: 42rpx;
+	color: #64748B;
 	text-align: center;
 }
 
 .lp-footer {
 	flex-direction: row;
+	align-items: center;
+	justify-content: center;
 }
 
 .lp-btn {
-	flex: 1;
-	height: 44px;
-	border-radius: 14px;
+	height: 72rpx;
+	min-width: 156rpx;
+	padding-left: 28rpx;
+	padding-right: 28rpx;
+	border-radius: 18rpx;
 	align-items: center;
 	justify-content: center;
-	padding-left: 12px;
-	padding-right: 12px;
+	box-sizing: border-box;
 }
 
-.lp-btn-gap-right {
-	margin-left: 12px;
+.lp-btn-gap-left {
+	margin-left: 16rpx;
 }
 
 .lp-btn-light {
@@ -380,23 +441,27 @@ defineExpose({
 
 .lp-btn-primary {
 	background-color: #0F172A;
+	box-shadow: 0 8rpx 20rpx rgba(15, 23, 42, 0.10);
 }
 
 .lp-btn-danger {
-	background-color: #DC2626;
+	background-color: #EF4444;
+	box-shadow: 0 8rpx 20rpx rgba(239, 68, 68, 0.14);
 }
 
 .lp-btn-light-text {
-	font-size: 15px;
-	line-height: 15px;
+	font-size: 28rpx;
+	line-height: 28rpx;
 	color: #334155;
 	font-weight: 500;
+	text-align: center;
 }
 
-.lp-btn-primary-text {
-	font-size: 15px;
-	line-height: 15px;
+.lp-btn-solid-text {
+	font-size: 28rpx;
+	line-height: 28rpx;
 	color: #FFFFFF;
 	font-weight: 600;
+	text-align: center;
 }
 </style>

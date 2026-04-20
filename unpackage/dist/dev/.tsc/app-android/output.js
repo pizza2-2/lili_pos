@@ -26,7 +26,7 @@ const liliPreview_uvue_vue_type_style_index_0_lang = {};
 
 const liliUniversalList_uvue_vue_type_style_index_0_lang = {};
 
-const index_uvue_vue_type_style_index_0_lang = {};
+const index_uvue_vue_type_style_index_0_lang$1 = {};
 
 const lili_bottomSelect_uvue_vue_type_style_index_0_lang = {};
 
@@ -35,6 +35,10 @@ const liliPopup_uvue_vue_type_style_index_0_lang = {};
 const liliUpload_uvue_vue_type_style_index_0_lang = {};
 
 const liliUniversaForm_uvue_vue_type_style_index_0_lang = {};
+
+const from_uvue_vue_type_style_index_0_lang$1 = {};
+
+const index_uvue_vue_type_style_index_0_lang = {};
 
 const from_uvue_vue_type_style_index_0_lang = {};
 

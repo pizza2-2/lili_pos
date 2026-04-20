@@ -23,6 +23,9 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
     open var enableBackConfirm: Boolean by `$props`
     open var leaveSignal: Number by `$props`
     open var uploadContentTypeModel: String by `$props`
+    open var showFloatingAction: Boolean by `$props`
+    open var floatingActionText: String by `$props`
+    open var floatingActionDisabled: Boolean by `$props`
     open var validate: () -> Boolean
         get() {
             return unref(this.`$exposed`["validate"]) as () -> Boolean
@@ -105,7 +108,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val getObjectField = ::gen_getObjectField_fn
             fun gen_cloneObject_fn(source: UTSJSONObject): UTSJSONObject {
-                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 190, 8))
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 204, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     target[key] = source[key]
                 }
@@ -468,13 +471,13 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val clearFieldError = ::gen_clearFieldError_fn
             fun gen_emitFieldChange_fn(field: UTSJSONObject, value: Any) {
-                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 484, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
+                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 498, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
                 emit("field-change", payload)
                 emit("form-change", payload)
             }
             val emitFieldChange = ::gen_emitFieldChange_fn
             fun gen_serializeState_fn(): String {
-                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 496, 8), "mode" to props.mode, "formData" to formData.value)
+                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 510, 8), "mode" to props.mode, "formData" to formData.value)
                 return JSON.stringify(state)
             }
             val serializeState = ::gen_serializeState_fn
@@ -495,7 +498,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val markSnapshot = ::gen_markSnapshot_fn
             fun gen_applyInitialValues_fn() {
-                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 520, 8))
+                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 534, 8))
                 run {
                     var i: Number = 0
                     while(i < props.formSections.length){
@@ -663,7 +666,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     var index: Number = 0
                     while(index < sourceItems.length){
                         val sourceItem = sourceItems[index]
-                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 658, 9))
+                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 672, 9))
                         for(key in resolveUTSKeyIterator(sourceItem)){
                             clonedItem[key] = sourceItem[key]
                         }
@@ -727,7 +730,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val validateField = ::gen_validateField_fn
             fun gen_validate_fn(): Boolean {
-                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 730, 8))
+                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 744, 8))
                 var hasError = false
                 run {
                     var i: Number = 0
@@ -791,6 +794,15 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 confirmLeave()
             }
             val handleCancel = ::gen_handleCancel_fn
+            fun gen_handleFloatingActionClick_fn() {
+                if (props.floatingActionDisabled) {
+                    return
+                }
+                val payload = buildSubmitPayload()
+                payload["source"] = "floating-action"
+                emit("floating-action", payload)
+            }
+            val handleFloatingActionClick = ::gen_handleFloatingActionClick_fn
             watch(fun(): UTSArray<UTSJSONObject> {
                 return props.formSections
             }
@@ -993,7 +1005,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                             } else {
                                                                                 if (isTrue(isUploadField(field))) {
                                                                                     _cE("view", _uM("key" to 5, "class" to "uf-upload-wrap"), _uA(
-                                                                                        _cV(unref(GenUniModulesLiliUploadComponentsLiliUploadLiliUploadClass), _uM("modelValue" to getUploadValue(field), "fileItems" to getUploadFileItems(field), "action" to getUploadAction(field), "name" to getUploadName(field), "headers" to getUploadHeaders(field), "formData" to getUploadFormData(field), "max" to getUploadMax(field), "disabled" to isReadonly(field), "uploadText" to getUploadText(field), "onUpdate:modelValue" to fun(`$event`: Any){
+                                                                                        _cV(unref(GenUniModulesLiliUploadComponentsLiliUploadLiliUploadClass), _uM("modelValue" to getUploadValue(field), "action" to getUploadAction(field), "name" to getUploadName(field), "headers" to getUploadHeaders(field), "formData" to getUploadFormData(field), "max" to getUploadMax(field), "disabled" to isReadonly(field), "uploadText" to getUploadText(field), "onUpdate:modelValue" to fun(`$event`: Any){
                                                                                             handleUploadModelChange(field, `$event`)
                                                                                         }, "onUpdate:fileItems" to fun(`$event`: Any){
                                                                                             handleUploadFileItemsChange(field, `$event`)
@@ -1005,7 +1017,6 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                                             handleUploadError(field, `$event`)
                                                                                         }), null, 8, _uA(
                                                                                             "modelValue",
-                                                                                            "fileItems",
                                                                                             "action",
                                                                                             "name",
                                                                                             "headers",
@@ -1062,6 +1073,14 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     } else {
                         _cC("v-if", true)
                     }
+                    ,
+                    if (isTrue(props.showFloatingAction)) {
+                        _cE("view", _uM("key" to 1, "class" to "uf-floating-action", "onClick" to handleFloatingActionClick), _uA(
+                            _cE("text", _uM("class" to "uf-floating-action-text"), _tD(props.floatingActionText), 1)
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
                 ))
             }
         }
@@ -1072,18 +1091,18 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("uf-root" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F5F7FB")), "uf-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingTop" to 8, "paddingRight" to 8, "paddingBottom" to 96, "paddingLeft" to 8)), "uf-section" to _pS(_uM("marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF")), "uf-section-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingRight" to 16, "paddingBottom" to 14, "paddingLeft" to 16)), "uf-section-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-section-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#1F2937", "lineHeight" to "20px")), "uf-section-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#9CA3AF", "lineHeight" to "16px")), "uf-section-arrow" to _pS(_uM("fontSize" to 18, "color" to "#9CA3AF", "lineHeight" to "18px")), "uf-section-body" to _pS(_uM("paddingTop" to 0, "paddingRight" to 16, "paddingBottom" to 12, "paddingLeft" to 16)), "uf-field" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#F1F5F9")), "uf-field-head" to _pS(_uM("marginBottom" to 8)), "uf-field-title-line" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "uf-field-label" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "18px")), "uf-required" to _pS(_uM("marginLeft" to 4, "fontSize" to 14, "color" to "#DC2626", "lineHeight" to "18px")), "uf-mode-tag" to _pS(_uM("marginLeft" to 8, "paddingTop" to 2, "paddingRight" to 8, "paddingBottom" to 2, "paddingLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 11, "color" to "#92400E", "lineHeight" to "14px", "backgroundColor" to "#FEF3C7")), "uf-field-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#6B7280", "lineHeight" to "16px")), "uf-control" to _pS(_uM("minHeight" to 44)), "uf-input" to _pS(_uM("height" to 44, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-textarea" to _pS(_uM("height" to 96, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-bottom-select-wrap" to _pS(_uM("minHeight" to 44)), "uf-upload-wrap" to _pS(_uM("paddingTop" to 4)), "uf-plain-value" to _pS(_uM("minHeight" to 44, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC")), "uf-plain-value-text" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "20px")), "uf-error-text" to _pS(_uM("marginTop" to 6, "fontSize" to 12, "color" to "#DC2626", "lineHeight" to "16px")), "uf-footer" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E5E7EB")), "uf-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "fontSize" to 15, "lineHeight" to "44px")), "uf-btn-light" to _pS(_uM("marginRight" to 10, "color" to "#374151", "backgroundColor" to "#E5E7EB")), "uf-btn-primary" to _pS(_uM("color" to "#FFFFFF", "backgroundColor" to "#2563EB")))
+                return _uM("uf-root" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F5F7FB")), "uf-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingTop" to 8, "paddingRight" to 8, "paddingBottom" to 96, "paddingLeft" to 8)), "uf-section" to _pS(_uM("marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF")), "uf-section-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingRight" to 16, "paddingBottom" to 14, "paddingLeft" to 16)), "uf-section-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-section-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#1F2937", "lineHeight" to "20px")), "uf-section-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#9CA3AF", "lineHeight" to "16px")), "uf-section-arrow" to _pS(_uM("fontSize" to 18, "color" to "#9CA3AF", "lineHeight" to "18px")), "uf-section-body" to _pS(_uM("paddingTop" to 0, "paddingRight" to 16, "paddingBottom" to 12, "paddingLeft" to 16)), "uf-field" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#F1F5F9")), "uf-field-head" to _pS(_uM("marginBottom" to 8)), "uf-field-title-line" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "uf-field-label" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "18px")), "uf-required" to _pS(_uM("marginLeft" to 4, "fontSize" to 14, "color" to "#DC2626", "lineHeight" to "18px")), "uf-mode-tag" to _pS(_uM("marginLeft" to 8, "paddingTop" to 2, "paddingRight" to 8, "paddingBottom" to 2, "paddingLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 11, "color" to "#92400E", "lineHeight" to "14px", "backgroundColor" to "#FEF3C7")), "uf-field-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#6B7280", "lineHeight" to "16px")), "uf-control" to _pS(_uM("minHeight" to 44)), "uf-input" to _pS(_uM("height" to 44, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-textarea" to _pS(_uM("height" to 96, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-bottom-select-wrap" to _pS(_uM("minHeight" to 44)), "uf-upload-wrap" to _pS(_uM("paddingTop" to 4)), "uf-plain-value" to _pS(_uM("minHeight" to 44, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC")), "uf-plain-value-text" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "20px")), "uf-error-text" to _pS(_uM("marginTop" to 6, "fontSize" to 12, "color" to "#DC2626", "lineHeight" to "16px")), "uf-footer" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E5E7EB")), "uf-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "fontSize" to 15, "lineHeight" to "44px")), "uf-btn-light" to _pS(_uM("marginRight" to 10, "color" to "#374151", "backgroundColor" to "#E5E7EB")), "uf-btn-primary" to _pS(_uM("color" to "#FFFFFF", "backgroundColor" to "#2563EB")), "uf-floating-action" to _pS(_uM("position" to "absolute", "left" to 12, "bottom" to 84, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(37,99,235,0.92)")), "uf-floating-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()
-        var emits: Map<String, Any?> = _uM("submit" to null, "cancel" to null, "field-change" to null, "form-change" to null, "dirty-change" to null, "save-request" to null, "discard-leave" to null, "upload" to null, "upload-delete" to null, "upload-error" to null, "bottom-select-add" to null, "bottom-select-edit" to null)
+        var emits: Map<String, Any?> = _uM("submit" to null, "cancel" to null, "field-change" to null, "form-change" to null, "dirty-change" to null, "save-request" to null, "discard-leave" to null, "upload" to null, "upload-delete" to null, "upload-error" to null, "bottom-select-add" to null, "bottom-select-edit" to null, "floating-action" to null)
         var props = _nP(_uM("mode" to _uM("type" to "String", "required" to false, "default" to "create"), "formSections" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
             return _uA()
         }
         ), "initialData" to _uM("type" to "UTSJSONObject", "required" to false, "default" to fun(): UTSJSONObject {
             return _uO()
         }
-        ), "showFooter" to _uM("type" to "Boolean", "required" to false, "default" to true), "enableBackConfirm" to _uM("type" to "Boolean", "required" to false, "default" to true), "leaveSignal" to _uM("type" to "Number", "required" to false, "default" to 0), "uploadContentTypeModel" to _uM("type" to "String", "required" to false, "default" to "")))
+        ), "showFooter" to _uM("type" to "Boolean", "required" to false, "default" to true), "enableBackConfirm" to _uM("type" to "Boolean", "required" to false, "default" to true), "leaveSignal" to _uM("type" to "Number", "required" to false, "default" to 0), "uploadContentTypeModel" to _uM("type" to "String", "required" to false, "default" to ""), "showFloatingAction" to _uM("type" to "Boolean", "required" to false, "default" to false), "floatingActionText" to _uM("type" to "String", "required" to false, "default" to "快捷"), "floatingActionDisabled" to _uM("type" to "Boolean", "required" to false, "default" to false)))
         var propsNeedCastKeys = _uA(
             "mode",
             "formSections",
@@ -1091,7 +1110,10 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             "showFooter",
             "enableBackConfirm",
             "leaveSignal",
-            "uploadContentTypeModel"
+            "uploadContentTypeModel",
+            "showFloatingAction",
+            "floatingActionText",
+            "floatingActionDisabled"
         )
         var components: Map<String, CreateVueComponent> = _uM()
     }

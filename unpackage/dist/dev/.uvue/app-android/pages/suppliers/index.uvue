@@ -9,6 +9,7 @@ const __sfc__ = defineComponent({
         const __ins = getCurrentInstance()!;
         const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
         const _cache = __ins.renderCache;
+        const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index';
         const keyword = ref('');
         const filterVisible = ref(false);
         const isLoading = ref(false);
@@ -30,6 +31,8 @@ const __sfc__ = defineComponent({
         ]);
         const menuActions = ref<UTSJSONObject[]>([
             { key: 'edit', text: '编辑' } as UTSJSONObject,
+            { key: 'Detail', text: '详情' } as UTSJSONObject,
+            { key: 'add', text: '增加采购记录' } as UTSJSONObject,
             { key: 'delete', text: '删除' } as UTSJSONObject,
         ]);
         function applySupplierResponse(response: SupplierListResponse) {
@@ -50,7 +53,7 @@ const __sfc__ = defineComponent({
             if (error != null) {
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:168");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:177");
                     if (parsedError != null) {
                         const rawMessage = parsedError!['message'];
                         if (rawMessage != null) {
@@ -93,6 +96,18 @@ const __sfc__ = defineComponent({
             finally {
                 isLoading.value = false;
             }
+        }
+        function consumeSupplierListRefreshNeeded(): boolean {
+            const storedValue = uni.getStorageSync(supplierListRefreshStorageKey);
+            if (storedValue == null) {
+                return false;
+            }
+            const storedText = '' + storedValue;
+            if (storedText == '') {
+                return false;
+            }
+            uni.removeStorageSync(supplierListRefreshStorageKey);
+            return true;
         }
         function getDisplayText(value: string | null): string {
             if (value == null || value == '') {
@@ -346,6 +361,18 @@ const __sfc__ = defineComponent({
                 });
             }
         }
+        function navigateToTransactionsPage(pagePath: string, supplierId: string) {
+            if (supplierId == '') {
+                uni.showToast({
+                    title: '供应商ID缺失',
+                    icon: 'none',
+                });
+                return;
+            }
+            uni.navigateTo({
+                url: pagePath + '?supplier_id=' + supplierId,
+            });
+        }
         function handleMenu(payload: UTSJSONObject) {
             const action = payload['action'];
             const item = payload['item'];
@@ -365,6 +392,14 @@ const __sfc__ = defineComponent({
                 uni.navigateTo({
                     url: '/pages/suppliers/from?id=' + supplierId,
                 });
+                return;
+            }
+            if (key == 'Detail') {
+                navigateToTransactionsPage('/pages/transactions/index', supplierId);
+                return;
+            }
+            if (key == 'add') {
+                navigateToTransactionsPage('/pages/transactions/from', supplierId);
                 return;
             }
             if (key == 'delete') {
@@ -404,6 +439,11 @@ const __sfc__ = defineComponent({
                     },
                 });
             }
+        }
+        function handleCreateSupplier() {
+            uni.navigateTo({
+                url: '/pages/suppliers/from',
+            });
         }
         const listItems = computed((): UTSJSONObject[] => {
             const result: UTSJSONObject[] = [];
@@ -455,7 +495,9 @@ const __sfc__ = defineComponent({
             loadSuppliers();
         });
         onShow(() => {
-            loadSuppliers();
+            if (consumeSupplierListRefreshNeeded()) {
+                loadSuppliers();
+            }
         });
         return (): any | null => {
             const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", _easycom_lili_universal_filter);
@@ -579,6 +621,8 @@ const __sfc__ = defineComponent({
                             fields: unref(fieldConfig),
                             loading: unref(isLoading),
                             loadingText: "正在加载供应商",
+                            keepContentOnLoading: true,
+                            inlineLoadingText: "供应商数据刷新中...",
                             emptyText: emptyText.value,
                             emptyIcon: "◎",
                             showMenu: true,
@@ -588,12 +632,15 @@ const __sfc__ = defineComponent({
                             currentPage: unref(currentPage),
                             totalPages: unref(totalPages),
                             totalCount: unref(totalCount),
+                            showFloatingAdd: true,
+                            floatingAddText: "新增",
                             onItemClick: handleItemClick,
                             onSubtitleClick: handleSubtitleClick,
                             onMetaClick: handleMetaClick,
                             onFieldClick: handleFieldClick,
                             onMenu: handleMenu,
-                            onPageChange: handlePageChange
+                            onPageChange: handlePageChange,
+                            onFloatingAdd: handleCreateSupplier
                         }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount"])
                     ])
                 ], 4 /* STYLE */)
@@ -602,5 +649,5 @@ const __sfc__ = defineComponent({
     }
 });
 export default __sfc__;
-const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 24]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["flexDirection", "row"]]))], ["summary-item", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["summary-item-gap", _pS(_uM([["marginRight", 10]]))], ["summary-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["summary-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginTop", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["supplier-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["supplier-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["supplier-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["supplier-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["supplier-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["supplier-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["supplier-filter-state", _pS(_uM([["height", 140], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["supplier-filter-scroll", _pS(_uM([["height", 360]]))], ["supplier-filter-group", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 8]]))], ["supplier-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["supplier-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["supplier-filter-option", _pS(_uM([["minWidth", 56], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["supplier-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["supplier-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["supplier-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))]])];
+const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 96]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["flexDirection", "row"]]))], ["summary-item", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["summary-item-gap", _pS(_uM([["marginRight", 10]]))], ["summary-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["summary-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginTop", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["supplier-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["supplier-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["supplier-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["supplier-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["supplier-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["supplier-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["supplier-filter-state", _pS(_uM([["height", 140], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["supplier-filter-scroll", _pS(_uM([["height", 360]]))], ["supplier-filter-group", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 8]]))], ["supplier-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["supplier-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["supplier-filter-option", _pS(_uM([["minWidth", 56], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["supplier-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["supplier-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["supplier-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))]])];
 //# sourceMappingURL=index.uvue.map

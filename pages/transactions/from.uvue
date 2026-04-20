@@ -1,0 +1,115 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="新增采购记录"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			homePath="/pages/suppliers/index"
+			backgroundColor="#EEF2F7"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="hero-card">
+					<text class="hero-title">采购记录录入页</text>
+					<text class="hero-desc">当前已接入从供应商菜单进入的跳转，后续可以在这里补采购单表单。</text>
+				</view>
+
+				<view class="info-card">
+					<text class="info-label">供应商ID</text>
+					<text class="info-value">{{ supplierIdText }}</text>
+				</view>
+
+				<view class="hint-card">
+					<text class="hint-text">请基于该供应商补充采购时间、采购金额、备注和附件等字段。</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+const supplierId = ref('')
+
+const supplierIdText = computed(() : string => {
+	return supplierId.value == '' ? '未传入' : supplierId.value
+})
+
+onLoad((event : OnLoadOptions) => {
+	const supplierIdValue = event['supplier_id']
+	supplierId.value = supplierIdValue == null ? '' : (supplierIdValue as string)
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #EEF2F7;
+}
+
+.page-scroll {
+	flex: 1;
+}
+
+.page-content {
+	padding: 12px;
+}
+
+.hero-card {
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+}
+
+.hero-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: #1F2937;
+}
+
+.hero-desc {
+	margin-top: 8px;
+	font-size: 14px;
+	line-height: 1.5em;
+	color: #6B7280;
+}
+
+.info-card {
+	margin-top: 12px;
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+}
+
+.info-label {
+	font-size: 13px;
+	color: #6B7280;
+}
+
+.info-value {
+	margin-top: 8px;
+	font-size: 16px;
+	font-weight: 600;
+	color: #111827;
+}
+
+.hint-card {
+	margin-top: 12px;
+	padding: 16px;
+	border-radius: 12px;
+	background-color: #DBEAFE;
+}
+
+.hint-text {
+	font-size: 14px;
+	line-height: 1.5em;
+	color: #1E3A8A;
+}
+</style>

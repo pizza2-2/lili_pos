@@ -1,6 +1,6 @@
 <template>
 	<view class="lul-root">
-		<view v-if="loading" class="lul-state-card">
+		<view v-if="showBlockingLoading" class="lul-state-card">
 			<view class="lul-loading-dot"></view>
 			<text class="lul-state-title">{{ loadingText }}</text>
 			<text class="lul-state-desc">请稍候，列表正在更新。</text>
@@ -15,6 +15,11 @@
 		</view>
 
 		<view v-else class="lul-list">
+			<view v-if="showInlineLoading" class="lul-inline-loading">
+				<view class="lul-inline-loading-dot"></view>
+				<text class="lul-inline-loading-text">{{ inlineLoadingText }}</text>
+			</view>
+
 			<view
 				v-for="(item, itemIndex) in items"
 				:key="itemKey(item, itemIndex)"
@@ -103,9 +108,11 @@
 		</view>
 
 		<lili-preview
+			v-if="previewVisible"
 			:images="previewImages"
 			:initialIndex="previewIndex"
 			:visible="previewVisible"
+			:showList="false"
 			:enableSave="enablePreviewSave"
 			:enableShare="enablePreviewShare"
 			@update:visible="handlePreviewVisibleChange"
@@ -113,6 +120,10 @@
 			@preview="handlePreviewOpen"
 			@close="handlePreviewClose"
 		/>
+
+		<view v-if="props.showFloatingAdd" class="lul-floating-add" @click="handleFloatingAdd">
+			<text class="lul-floating-add-text">{{ props.floatingAddText }}</text>
+		</view>
 	</view>
 </template>
 
@@ -135,6 +146,8 @@ type Props = {
 	selectedItems?: string[]
 	loading?: boolean
 	loadingText?: string
+	keepContentOnLoading?: boolean
+	inlineLoadingText?: string
 	emptyText?: string
 	emptyIcon?: string
 	showChevron?: boolean
@@ -144,6 +157,8 @@ type Props = {
 	currentPage?: number
 	totalPages?: number
 	totalCount?: number
+	showFloatingAdd?: boolean
+	floatingAddText?: string
 	enablePreviewSave?: boolean
 	enablePreviewShare?: boolean
 }
@@ -180,6 +195,8 @@ const props = withDefaults(defineProps<Props>(), {
 	selectedItems: () : string[] => [],
 	loading: false,
 	loadingText: '加载中...',
+	keepContentOnLoading: false,
+	inlineLoadingText: '刷新中...',
 	emptyText: '暂无数据',
 	emptyIcon: '◌',
 	showChevron: true,
@@ -189,6 +206,8 @@ const props = withDefaults(defineProps<Props>(), {
 	currentPage: 1,
 	totalPages: 1,
 	totalCount: 0,
+	showFloatingAdd: false,
+	floatingAddText: '新增',
 	enablePreviewSave: true,
 	enablePreviewShare: true,
 })
@@ -205,12 +224,27 @@ const emit = defineEmits<{
 	(e: 'subtitle-click', payload: UTSJSONObject): void
 	(e: 'field-click', payload: UTSJSONObject): void
 	(e: 'meta-click', payload: UTSJSONObject): void
+	(e: 'floating-add'): void
 }>()
 
 const previewImages = ref<string[]>([])
 const previewIndex = ref<number>(0)
 const previewVisible = ref<boolean>(false)
 const previewItem = ref<UTSJSONObject | null>(null)
+
+const showBlockingLoading = computed<boolean>(() : boolean => {
+	if (!props.loading) {
+		return false
+	}
+	if (!props.keepContentOnLoading) {
+		return true
+	}
+	return props.items.length == 0
+})
+
+const showInlineLoading = computed<boolean>(() : boolean => {
+	return props.loading && props.keepContentOnLoading && props.items.length > 0
+})
 
 function stringValue(value: any | null) : string {
 	if (value == null) return ''
@@ -598,6 +632,10 @@ function goNextPage() {
 	}
 	emitPageChange(safeCurrentPage() + 1)
 }
+
+function handleFloatingAdd() {
+	emit('floating-add')
+}
 </script>
 
 <style>
@@ -607,6 +645,36 @@ function goNextPage() {
 
 .lul-list {
 	width: 100%;
+}
+
+.lul-inline-loading {
+	flex-direction: row;
+	align-items: center;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background-color: #EFF6FF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #BFDBFE;
+}
+
+.lul-inline-loading-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	background-color: #2563EB;
+}
+
+.lul-inline-loading-text {
+	margin-left: 8px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #1D4ED8;
+	font-weight: 600;
 }
 
 .lul-card {
@@ -1086,6 +1154,25 @@ function goNextPage() {
 
 .lul-page-btn-text-disabled-light {
 	color: #E2E8F0;
+}
+
+.lul-floating-add {
+	position: fixed;
+	right: 14px;
+	bottom: 18px;
+	height: 36px;
+	padding-left: 14px;
+	padding-right: 14px;
+	border-radius: 18px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.92);
+}
+
+.lul-floating-add-text {
+	font-size: 13px;
+	line-height: 16px;
+	color: #FFFFFF;
 }
 
 </style>

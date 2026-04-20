@@ -4,7 +4,7 @@ import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 139, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 146, 6>;
 	mode?: string
 	formSections?: UTSJSONObject[]
 	initialData?: UTSJSONObject
@@ -12,6 +12,9 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	enableBackConfirm?: boolean
 	leaveSignal?: number
 	uploadContentTypeModel?: string
+	showFloatingAction?: boolean
+	floatingActionText?: string
+	floatingActionDisabled?: boolean
 }
 
 
@@ -26,9 +29,12 @@ const __sfc__ = defineComponent({
     showFooter: { type: Boolean, required: false, default: true },
     enableBackConfirm: { type: Boolean, required: false, default: true },
     leaveSignal: { type: Number, required: false, default: 0 },
-    uploadContentTypeModel: { type: String, required: false, default: '' }
+    uploadContentTypeModel: { type: String, required: false, default: '' },
+    showFloatingAction: { type: Boolean, required: false, default: false },
+    floatingActionText: { type: String, required: false, default: '快捷' },
+    floatingActionDisabled: { type: Boolean, required: false, default: false }
   },
-  emits: ["submit", "cancel", "field-change", "form-change", "dirty-change", "save-request", "discard-leave", "upload", "upload-delete", "upload-error", "bottom-select-add", "bottom-select-edit"],
+  emits: ["submit", "cancel", "field-change", "form-change", "dirty-change", "save-request", "discard-leave", "upload", "upload-delete", "upload-error", "bottom-select-add", "bottom-select-edit", "floating-action"],
   setup(__props, __setupCtx: SetupContext) {
 const __expose = __setupCtx.expose
 const __ins = getCurrentInstance()!;
@@ -55,7 +61,7 @@ function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
 }
 
 function cloneObject(source: UTSJSONObject) : UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 190, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 204, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -349,7 +355,7 @@ function clearFieldError(key: string) {
 }
 
 function emitFieldChange(field: UTSJSONObject, value: any) {
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 484, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 498, 8), 
 		field: field,
 		key: getFieldKey(field),
 		value: value,
@@ -361,7 +367,7 @@ function emitFieldChange(field: UTSJSONObject, value: any) {
 }
 
 function serializeState() : string {
-	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 496, 8), 
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 510, 8), 
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject
@@ -385,7 +391,7 @@ function markSnapshot() {
 }
 
 function applyInitialValues() {
-	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 520, 8), } as UTSJSONObject
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 534, 8), } as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
 		for (let j = 0; j < fields.length; j++) {
@@ -523,7 +529,7 @@ function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
 	const nextItems: UTSJSONObject[] = []
 	for (let index = 0; index < sourceItems.length; index++) {
 		const sourceItem = sourceItems[index]
-		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 658, 9), } as UTSJSONObject
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 672, 9), } as UTSJSONObject
 		for (const key in sourceItem) {
 			clonedItem[key] = sourceItem[key]
 		}
@@ -595,7 +601,7 @@ function validateField(field: UTSJSONObject) : string {
 }
 
 function validate() : boolean {
-	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 730, 8), } as UTSJSONObject
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 744, 8), } as UTSJSONObject
 	let hasError = false
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
@@ -662,6 +668,15 @@ function handleCancel() {
 		return
 	}
 	confirmLeave()
+}
+
+function handleFloatingActionClick() {
+	if (props.floatingActionDisabled) {
+		return
+	}
+	const payload = buildSubmitPayload()
+	payload['source'] = 'floating-action'
+	emit('floating-action', payload)
 }
 
 watch(
@@ -885,7 +900,6 @@ const _component_switch = resolveComponent("switch")
                                           }), [
                                             _cV(unref(liliUpload), _uM({
                                               modelValue: getUploadValue(field),
-                                              fileItems: getUploadFileItems(field),
                                               action: getUploadAction(field),
                                               name: getUploadName(field),
                                               headers: getUploadHeaders(field),
@@ -898,7 +912,7 @@ const _component_switch = resolveComponent("switch")
                                               onUpload: ($event: any) => {handleUploadSuccess(field, $event)},
                                               onDelete: ($event: any) => {handleUploadDelete(field, $event)},
                                               onError: ($event: any) => {handleUploadError(field, $event)}
-                                            }), null, 8 /* PROPS */, ["modelValue", "fileItems", "action", "name", "headers", "formData", "max", "disabled", "uploadText", "onUpdate:modelValue", "onUpdate:fileItems", "onUpload", "onDelete", "onError"])
+                                            }), null, 8 /* PROPS */, ["modelValue", "action", "name", "headers", "formData", "max", "disabled", "uploadText", "onUpdate:modelValue", "onUpdate:fileItems", "onUpload", "onDelete", "onError"])
                                           ])
                                         : _cE("view", _uM({
                                             key: 6,
@@ -936,6 +950,15 @@ const _component_switch = resolveComponent("switch")
             onClick: handleSubmit
           }), _tD(props.mode == 'edit' ? '保存修改' : '创建'), 1 /* TEXT */)
         ])
+      : _cC("v-if", true),
+    isTrue(props.showFloatingAction)
+      ? _cE("view", _uM({
+          key: 1,
+          class: "uf-floating-action",
+          onClick: handleFloatingActionClick
+        }), [
+          _cE("text", _uM({ class: "uf-floating-action-text" }), _tD(props.floatingActionText), 1 /* TEXT */)
+        ])
       : _cC("v-if", true)
   ])
 }
@@ -944,4 +967,4 @@ const _component_switch = resolveComponent("switch")
 })
 export default __sfc__
 export type LiliUniversaFormComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))]])]
+const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))], ["uf-floating-action", _pS(_uM([["position", "absolute"], ["left", 12], ["bottom", 84], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(37,99,235,0.92)"]]))], ["uf-floating-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]

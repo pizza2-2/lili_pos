@@ -52,8 +52,8 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 			timeout: timeOut,
 			success:(res) => {
 				//这里首先是判断网络请求的状态码
-				if(res.statusCode == 200){
-					// 再判断服务器自定义请求状态码
+				if(res.statusCode >= 200 && res.statusCode < 300){
+					// 优先兼容统一响应格式: { success, message, data }
 					if (res.data != null && res.data.success == true) {
 						
 						//这里可以判断返回的header中是否有token，做到无感刷新token的功能
@@ -65,14 +65,17 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 						
 						resolve(res.data.data);	//直接resolve服务器返回的data内容
 						return
-					}else{
-						//可以做其它判断....
-						reject(new Error(res.data?.message ?? "请求失败"))
 					}
-				}else{
-					//可以做其它判断....
-					reject(new Error("HTTP状态码错误: " + res.statusCode))
+					if (res.data != null && res.data.success == false) {
+						reject(new Error(res.data?.message ?? "请求失败"))
+						return
+					}
+					// 兼容后端直接返回对象/数组（无 success 包裹）
+					resolve(res.data)
+					return
 				}
+				//可以做其它判断....
+				reject(new Error("HTTP状态码错误: " + res.statusCode))
 			},
 			fail:(err) => {
 				let message = '网络请求失败'

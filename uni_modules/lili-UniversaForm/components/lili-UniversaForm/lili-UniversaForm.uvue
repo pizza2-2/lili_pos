@@ -94,7 +94,6 @@
 							<view v-else-if="isUploadField(field)" class="uf-upload-wrap">
 								<liliUpload
 									:modelValue="getUploadValue(field)"
-									:fileItems="getUploadFileItems(field)"
 									:action="getUploadAction(field)"
 									:name="getUploadName(field)"
 									:headers="getUploadHeaders(field)"
@@ -126,6 +125,14 @@
 			<button class="uf-btn uf-btn-light" @click="handleCancel">取消</button>
 			<button class="uf-btn uf-btn-primary" @click="handleSubmit">{{ props.mode == 'edit' ? '保存修改' : '创建' }}</button>
 		</view>
+
+		<view
+			v-if="props.showFloatingAction"
+			class="uf-floating-action"
+			@click="handleFloatingActionClick"
+		>
+			<text class="uf-floating-action-text">{{ props.floatingActionText }}</text>
+		</view>
 	</view>
 </template>
 
@@ -144,6 +151,9 @@ type Props = {
 	enableBackConfirm?: boolean
 	leaveSignal?: number
 	uploadContentTypeModel?: string
+	showFloatingAction?: boolean
+	floatingActionText?: string
+	floatingActionDisabled?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -156,6 +166,9 @@ const props = withDefaults(defineProps<Props>(), {
 	enableBackConfirm: true,
 	leaveSignal: 0,
 	uploadContentTypeModel: '',
+	showFloatingAction: false,
+	floatingActionText: '快捷',
+	floatingActionDisabled: false,
 })
 
 const emit = defineEmits<{
@@ -171,6 +184,7 @@ const emit = defineEmits<{
 	(e: 'upload-error', payload: UTSJSONObject): void
 	(e: 'bottom-select-add', payload: UTSJSONObject): void
 	(e: 'bottom-select-edit', payload: UTSJSONObject): void
+	(e: 'floating-action', payload: UTSJSONObject): void
 }>()
 
 const formData = ref<UTSJSONObject>({} as UTSJSONObject)
@@ -796,6 +810,15 @@ function handleCancel() {
 	confirmLeave()
 }
 
+function handleFloatingActionClick() {
+	if (props.floatingActionDisabled) {
+		return
+	}
+	const payload = buildSubmitPayload()
+	payload['source'] = 'floating-action'
+	emit('floating-action', payload)
+}
+
 watch(
 	() : UTSJSONObject[] => props.formSections,
 	() => {
@@ -1054,5 +1077,24 @@ defineExpose({
 .uf-btn-primary {
 	color: #FFFFFF;
 	background-color: #2563EB;
+}
+
+.uf-floating-action {
+	position: absolute;
+	left: 12px;
+	bottom: 84px;
+	height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 17px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(37, 99, 235, 0.92);
+}
+
+.uf-floating-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
 }
 </style>

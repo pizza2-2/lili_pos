@@ -15,6 +15,7 @@ import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
 import io.dcloud.uniapp.extapi.reLaunch as uni_reLaunch
+import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesSuppliersFrom : BasePage {
@@ -25,10 +26,13 @@ open class GenPagesSuppliersFrom : BasePage {
             val __ins = getCurrentInstance()!!
             val _ctx = __ins.proxy as GenPagesSuppliersFrom
             val _cache = __ins.renderCache
+            val supplierListRefreshStorageKey = "refresh:pages:suppliers:index"
             val formMode = ref("create")
             val supplierId = ref("")
             val leaveSignal = ref(0)
             val submitting = ref(false)
+            val savingVisible = ref(false)
+            val savingText = ref("处理中...")
             val initialData = ref<UTSJSONObject>(_uO("code" to "", "name" to "", "contact" to "", "phone" to "", "address" to "", "description" to "", "is_active" to "true", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
             val statusOptions = ref(_uA<SelectOption>(SelectOption(value = "true", text = "启用"), SelectOption(value = "false", text = "停用")))
             fun getStringField(obj: UTSJSONObject, key: String, fallback: String = ""): String {
@@ -96,7 +100,7 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val buildInitialDataFromSupplier = ::gen_buildInitialDataFromSupplier_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 125, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 135, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -106,9 +110,13 @@ open class GenPagesSuppliersFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
+                    val directMessage = (error as UTSError).message
+                    if (directMessage != null && directMessage != "") {
+                        message = directMessage
+                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:137")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:151")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -152,7 +160,7 @@ open class GenPagesSuppliersFrom : BasePage {
                 })
             }
             val fetchStatusOptions = ::gen_fetchStatusOptions_fn
-            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "创建和编辑共用这一组字段。", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "供应商名称", "type" to "input", "required" to true, "placeholder" to "请输入供应商名称"), _uO("key" to "code", "label" to "供应商编码", "type" to "input", "placeholder" to "请输入编码"), _uO("key" to "contact", "label" to "联系人", "type" to "input", "placeholder" to "请输入联系人"), _uO("key" to "phone", "label" to "联系电话", "type" to "input", "placeholder" to "请输入联系电话"), _uO("key" to "address", "label" to "地址", "type" to "textarea", "placeholder" to "请输入地址"), _uO("key" to "description", "label" to "备注", "type" to "textarea", "placeholder" to "请输入备注"))), _uO("key" to "status", "title" to "状态设置", "description" to "这里使用现有 bottom-select 组件。", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "bottomSelect", "title" to "选择启用状态", "placeholder" to "请选择启用状态", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchStatusOptions))), _uO("key" to "media", "title" to "图片资料", "description" to "这里使用现有 lili-upload 组件。", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "images", "label" to "供应商图片", "type" to "upload", "action" to "", "name" to "files", "max" to 6, "uploadText" to "上传图片", "fileItemsKey" to "imageItems", "headers" to buildUploadHeaders(), "formData" to _uO())))))
+            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "。", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "供应商名称", "type" to "input", "required" to true, "placeholder" to "请输入供应商名称"), _uO("key" to "code", "label" to "供应商编码", "type" to "input", "placeholder" to "请输入编码"), _uO("key" to "contact", "label" to "联系人", "type" to "input", "placeholder" to "请输入联系人"), _uO("key" to "phone", "label" to "联系电话", "type" to "input", "placeholder" to "请输入联系电话"), _uO("key" to "address", "label" to "地址", "type" to "textarea", "placeholder" to "请输入地址"), _uO("key" to "description", "label" to "备注", "type" to "textarea", "placeholder" to "请输入备注"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "bottomSelect", "title" to "选择启用状态", "placeholder" to "请选择启用状态", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchStatusOptions))), _uO("key" to "media", "title" to "图片资料", "description" to "可同时上传多张图片", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "images", "label" to "供应商图片", "type" to "upload", "action" to "", "name" to "files", "max" to 6, "uploadText" to "上传图片", "fileItemsKey" to "imageItems", "headers" to buildUploadHeaders(), "formData" to _uO())))))
             val pageTitle = computed(fun(): String {
                 return if (formMode.value == "edit") {
                     "编辑供应商"
@@ -170,7 +178,7 @@ open class GenPagesSuppliersFrom : BasePage {
                         }
                         try {
                             val detail = await(getSupplierDetail(idText))
-                            console.log(detail, " at pages/suppliers/from.uvue:278")
+                            console.log(detail, " at pages/suppliers/from.uvue:292")
                             initialData.value = buildInitialDataFromSupplier(detail)
                         }
                          catch (error: Throwable) {
@@ -190,6 +198,10 @@ open class GenPagesSuppliersFrom : BasePage {
                 , 16)
             }
             val goBackToList = ::gen_goBackToList_fn
+            fun gen_markSupplierListRefreshNeeded_fn() {
+                uni_setStorageSync(supplierListRefreshStorageKey, "1")
+            }
+            val markSupplierListRefreshNeeded = ::gen_markSupplierListRefreshNeeded_fn
             fun gen_stringifyPayload_fn(payload: UTSJSONObject): String {
                 val text = JSON.stringify(payload)
                 if (text == null) {
@@ -265,15 +277,15 @@ open class GenPagesSuppliersFrom : BasePage {
             val collectPendingImagePaths = ::gen_collectPendingImagePaths_fn
             fun gen_uploadPendingSupplierImages_fn(formDataObject: UTSJSONObject, contentTypeModel: String): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
-                        if (formMode.value != "edit" || supplierId.value == "") {
+                        if (supplierId.value == "") {
                             return@w1
-                        }
-                        if (contentTypeModel == "") {
-                            throw UTSError("缺少上传参数: content_type_model")
                         }
                         val pendingImagePaths = collectPendingImagePaths(formDataObject)
                         if (pendingImagePaths.length == 0) {
                             return@w1
+                        }
+                        if (contentTypeModel == "") {
+                            throw UTSError("缺少上传参数: content_type_model")
                         }
                         val uploadItems: UTSArray<MediaBatchUploadItem> = _uA()
                         run {
@@ -310,16 +322,30 @@ open class GenPagesSuppliersFrom : BasePage {
                             "创建供应商"
                         }
                         submitting.value = true
-                        uni_showLoading(ShowLoadingOptions(title = actionText + "中...", mask = true))
+                        savingText.value = actionText + "中..."
+                        savingVisible.value = true
+                        uni_showLoading(ShowLoadingOptions(title = savingText.value, mask = true))
                         try {
-                            await(uploadPendingSupplierImages(data, uploadContentTypeModel))
                             val body = buildSupplierMutationPayload(data)
                             if (formMode.value == "edit" && supplierId.value != "") {
+                                savingText.value = "上传图片中..."
+                                await(uploadPendingSupplierImages(data, uploadContentTypeModel))
+                                savingText.value = "保存修改中..."
                                 await(updateSupplier(supplierId.value, body))
                             } else {
-                                await(createSupplier(body))
+                                savingText.value = "创建供应商中..."
+                                val createdSupplier = await(createSupplier(body))
+                                supplierId.value = createdSupplier.id.toString(10)
+                                try {
+                                    savingText.value = "上传图片中..."
+                                    await(uploadPendingSupplierImages(data, uploadContentTypeModel))
+                                }
+                                 catch (uploadError: Throwable) {
+                                    throw UTSError("供应商已创建，但图片上传失败")
+                                }
                             }
                             clearDraftStorage()
+                            markSupplierListRefreshNeeded()
                             uni_showToast(ShowToastOptions(title = actionText + "成功", icon = "success"))
                             goBackToList()
                         }
@@ -327,6 +353,7 @@ open class GenPagesSuppliersFrom : BasePage {
                             uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
                         }
                          finally {
+                            savingVisible.value = false
                             uni_hideLoading(null)
                             submitting.value = false
                         }
@@ -424,7 +451,16 @@ open class GenPagesSuppliersFrom : BasePage {
                             "initialData",
                             "leaveSignal"
                         ))
-                    ))
+                    )),
+                    if (isTrue(unref(savingVisible))) {
+                        _cE("view", _uM("key" to 0, "class" to "page-saving-mask"), _uA(
+                            _cE("view", _uM("class" to "page-saving-card"), _uA(
+                                _cE("text", _uM("class" to "page-saving-text"), _tD(unref(savingText)), 1)
+                            ))
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
                 ))
             }
         }
@@ -435,7 +471,7 @@ open class GenPagesSuppliersFrom : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#EEF2F7")), "page-header" to _pS(_uM("paddingTop" to 8, "paddingRight" to 10, "paddingBottom" to 6, "paddingLeft" to 10, "backgroundColor" to "#EEF2F7")), "page-mode" to _pS(_uM("alignSelf" to "flex-start", "paddingTop" to 4, "paddingRight" to 10, "paddingBottom" to 4, "paddingLeft" to 10, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 12, "lineHeight" to "16px", "color" to "#155E75", "backgroundColor" to "#CFFAFE")), "page-desc" to _pS(_uM("marginTop" to 8, "fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "page-content" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingLeft" to 0, "paddingRight" to 0, "paddingBottom" to 0)))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "position" to "relative", "backgroundColor" to "#EEF2F7")), "page-header" to _pS(_uM("paddingTop" to 8, "paddingRight" to 10, "paddingBottom" to 6, "paddingLeft" to 10, "backgroundColor" to "#EEF2F7")), "page-mode" to _pS(_uM("alignSelf" to "flex-start", "paddingTop" to 4, "paddingRight" to 10, "paddingBottom" to 4, "paddingLeft" to 10, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 12, "lineHeight" to "16px", "color" to "#155E75", "backgroundColor" to "#CFFAFE")), "page-desc" to _pS(_uM("marginTop" to 8, "fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "page-content" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingLeft" to 0, "paddingRight" to 0, "paddingBottom" to 0)), "page-saving-mask" to _pS(_uM("position" to "absolute", "left" to 0, "top" to 0, "right" to 0, "bottom" to 0, "zIndex" to 9999, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(15,23,42,0.28)")), "page-saving-card" to _pS(_uM("height" to 44, "paddingLeft" to 16, "paddingRight" to 16, "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 22, "borderBottomLeftRadius" to 22, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(15,23,42,0.86)")), "page-saving-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "16px", "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

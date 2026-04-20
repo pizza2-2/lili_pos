@@ -124,7 +124,7 @@ fun tryConnectSocket(host: String, port: String, id: String): UTSPromise<SocketT
 fun initRuntimeSocketService(): UTSPromise<Boolean> {
     val hosts: String = "192.168.0.163,127.0.0.1,172.27.192.1"
     val port: String = "8090"
-    val id: String = "app-android_yrzwe5"
+    val id: String = "app-android_sg-u87"
     if (hosts == "" || port == "" || id == "") {
         return UTSPromise.resolve(false)
     }
@@ -520,23 +520,26 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                 val interceptMap = requestIntercept(reqData)
                 console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:46")
                 uni_request<RootType>(RequestOptions(url = baseUrl + url, method = method, header = interceptMap.get("header"), data = interceptMap.get("data"), timeout = timeOut, success = fun(res){
-                    if (res.statusCode == 200) {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
                         if (res.data != null && res.data!!.success == true) {
                             resolve(res.data!!.data)
                             return
-                        } else {
-                            reject(UTSError(res.data?.message ?: "请求失败"))
                         }
-                    } else {
-                        reject(UTSError("HTTP状态码错误: " + res.statusCode))
+                        if (res.data != null && res.data!!.success == false) {
+                            reject(UTSError(res.data?.message ?: "请求失败"))
+                            return
+                        }
+                        resolve(res.data)
+                        return
                     }
+                    reject(UTSError("HTTP状态码错误: " + res.statusCode))
                 }
                 , fail = fun(err){
                     var message = "网络请求失败"
                     if (err != null) {
                         val errorText = JSON.stringify(err)
                         if (errorText != null && errorText != "") {
-                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:75")
+                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:76")
                             if (parsedError != null) {
                                 val errMsg = parsedError!!["errMsg"]
                                 if (errMsg != null) {
@@ -2512,6 +2515,21 @@ fun tryParseArray(text: String): UTSArray<UTSJSONObject>? {
         return null
     }
 }
+fun firstJsonToken(text: String): String {
+    run {
+        var index: Number = 0
+        while(index < text.length){
+            val char = text.substring(index, index + 1)
+            if (char == " " || char == "\n" || char == "\r" || char == "\t") {
+                index += 1
+                continue
+            }
+            return char
+            index += 1
+        }
+    }
+    return ""
+}
 fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
     if (value == null) {
         return _uA()
@@ -2520,9 +2538,15 @@ fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
     if (valueText == null || valueText == "") {
         return _uA()
     }
-    val uploadedArray = tryParseArray(valueText)
-    if (uploadedArray != null) {
-        return uploadedArray!!
+    val token = firstJsonToken(valueText)
+    if (token == "[") {
+        val uploadedArray = tryParseArray(valueText)
+        if (uploadedArray != null) {
+            return uploadedArray!!
+        }
+    }
+    if (token != "{") {
+        return _uA()
     }
     val valueObject = tryParseObject(valueText)
     if (valueObject == null) {
@@ -2531,13 +2555,14 @@ fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
     val uploadedValue = valueObject["uploaded"]
     if (uploadedValue != null) {
         val uploadedText = JSON.stringify(uploadedValue)
-        val parsedUploadedArray = if (uploadedText == null || uploadedText == "") {
-            null
-        } else {
-            tryParseArray(uploadedText)
-        }
-        if (parsedUploadedArray != null) {
-            return parsedUploadedArray!!
+        if (uploadedText != null && uploadedText != "") {
+            val uploadedToken = firstJsonToken(uploadedText)
+            if (uploadedToken == "[") {
+                val parsedUploadedArray = tryParseArray(uploadedText)
+                if (parsedUploadedArray != null) {
+                    return parsedUploadedArray!!
+                }
+            }
         }
     }
     if (valueObject["id"] != null || valueObject["original_filename"] != null || valueObject["file_url"] != null || valueObject["signed_url"] != null) {
@@ -2562,13 +2587,13 @@ fun buildUploadFailMessage(err: UploadFileFail): String {
     var message = stringValue__1(err.errMsg)
     val rawText = JSON.stringify(err)
     if (rawText != null && rawText != "") {
-        val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:449")
+        val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:470")
         if (rawObject != null) {
             val causeValue = rawObject!!["cause"]
             if (causeValue != null) {
                 val causeText = JSON.stringify(causeValue)
                 if (causeText != null && causeText != "") {
-                    val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:455")
+                    val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:476")
                     if (causeObject != null) {
                         val causeMessage = stringValue__1(causeObject!!["message"])
                         if (causeMessage != "") {
@@ -2605,10 +2630,10 @@ fun uploadBatchMediaFilesRequest(items: UTSArray<MediaBatchUploadItem>, formData
                 index += 1
             }
         }
-        console.log("media batch upload start:", baseUrl + "/api/media/files/batch-upload/", files.length, " at pkg/api/modules/media.uts:521")
+        console.log("media batch upload start:", baseUrl + "/api/media/files/batch-upload/", files.length, " at pkg/api/modules/media.uts:543")
         try {
             uni_uploadFile(UploadFileOptions(url = baseUrl + "/api/media/files/batch-upload/", files = files, header = headers, formData = formData, timeout = uploadTimeout, success = fun(res: UploadFileSuccess){
-                console.log("media batch upload success:", res.statusCode, items.length, " at pkg/api/modules/media.uts:531")
+                console.log("media batch upload success:", res.statusCode, items.length, " at pkg/api/modules/media.uts:553")
                 if (res.statusCode < 200 || res.statusCode >= 300) {
                     val responseMessage = parseResponseErrorMessage(res.data)
                     reject(UTSError(if (responseMessage == "") {
@@ -2628,7 +2653,7 @@ fun uploadBatchMediaFilesRequest(items: UTSArray<MediaBatchUploadItem>, formData
             }
             , fail = fun(err: UploadFileFail){
                 val failMessage = buildUploadFailMessage(err)
-                console.log("media batch upload fail:", failMessage, err.errCode, " at pkg/api/modules/media.uts:545")
+                console.log("media batch upload fail:", failMessage, err.errCode, " at pkg/api/modules/media.uts:567")
                 reject(UTSError(failMessage))
             }
             ))
@@ -2644,7 +2669,7 @@ fun deleteMediaFileRequest(id: Any): UTSPromise<Boolean> {
         val headers = buildUploadHeaders()
         headers["content-type"] = "application/json"
         val requestUrl = baseUrl + mediaFilePath(id)
-        console.log("请求地址:", requestUrl, " at pkg/api/modules/media.uts:602")
+        console.log("请求地址:", requestUrl, " at pkg/api/modules/media.uts:624")
         uni_request<Any>(RequestOptions(url = requestUrl, method = "DELETE", header = headers, timeout = timeOut, success = fun(res){
             if (res.statusCode == 204 || res.statusCode == 200) {
                 resolve(true)
@@ -2666,7 +2691,7 @@ fun batchUploadMediaFiles(items: UTSArray<MediaBatchUploadItem>): UTSPromise<Med
     return wrapUTSPromise(suspend w@{
             val successItems: UTSArray<UTSJSONObject> = _uA()
             val failItems: UTSArray<UTSJSONObject> = _uA()
-            console.log("media batch upload count:", items.length, " at pkg/api/modules/media.uts:687")
+            console.log("media batch upload count:", items.length, " at pkg/api/modules/media.uts:709")
             if (items.length == 0) {
                 return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
             }
@@ -2738,7 +2763,7 @@ open class SelectOption (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 40, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 48, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2793,6 +2818,820 @@ val GenPagesSuppliersFromClass = CreateVueComponent(GenPagesSuppliersFrom::class
     return GenPagesSuppliersFrom(instance, renderer)
 }
 )
+open class TransactionListQuery (
+    open var search: String? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+    open var transaction_type: String? = null,
+    open var supplier: String? = null,
+    open var supplier_id: String? = null,
+    open var date_from: String? = null,
+    open var start_date: String? = null,
+    open var date_to: String? = null,
+    open var end_date: String? = null,
+    open var amount_min: String? = null,
+    open var amount_max: String? = null,
+    open var ordering: String? = null,
+    open var sort_by: String? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionListQuery", "pkg/api/modules/transactions.uts", 2, 13)
+    }
+}
+open class TransactionMediaFile (
+    @JsonNotNull
+    open var id: String,
+    @JsonNotNull
+    open var company: Number,
+    @JsonNotNull
+    open var original_filename: String,
+    @JsonNotNull
+    open var file_type: String,
+    @JsonNotNull
+    open var file_type_display: String,
+    @JsonNotNull
+    open var mime_type: String,
+    @JsonNotNull
+    open var file_size: Number,
+    @JsonNotNull
+    open var file_size_display: String,
+    @JsonNotNull
+    open var file_url: String,
+    @JsonNotNull
+    open var thumbnail_url: String,
+    @JsonNotNull
+    open var signed_url: String,
+    @JsonNotNull
+    open var signed_thumbnail_url: String,
+    @JsonNotNull
+    open var object_id: String,
+    @JsonNotNull
+    open var is_deleted: Boolean = false,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionMediaFile", "pkg/api/modules/transactions.uts", 18, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return TransactionMediaFileReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class TransactionMediaFileReactiveObject : TransactionMediaFile, IUTSReactive<TransactionMediaFile> {
+    override var __v_raw: TransactionMediaFile
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: TransactionMediaFile, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, original_filename = __v_raw.original_filename, file_type = __v_raw.file_type, file_type_display = __v_raw.file_type_display, mime_type = __v_raw.mime_type, file_size = __v_raw.file_size, file_size_display = __v_raw.file_size_display, file_url = __v_raw.file_url, thumbnail_url = __v_raw.thumbnail_url, signed_url = __v_raw.signed_url, signed_thumbnail_url = __v_raw.signed_thumbnail_url, object_id = __v_raw.object_id, is_deleted = __v_raw.is_deleted, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): TransactionMediaFileReactiveObject {
+        return TransactionMediaFileReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: String
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var company: Number
+        get() {
+            return _tRG(__v_raw, "company", __v_raw.company, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("company")) {
+                return
+            }
+            val oldValue = __v_raw.company
+            __v_raw.company = value
+            _tRS(__v_raw, "company", oldValue, value)
+        }
+    override var original_filename: String
+        get() {
+            return _tRG(__v_raw, "original_filename", __v_raw.original_filename, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("original_filename")) {
+                return
+            }
+            val oldValue = __v_raw.original_filename
+            __v_raw.original_filename = value
+            _tRS(__v_raw, "original_filename", oldValue, value)
+        }
+    override var file_type: String
+        get() {
+            return _tRG(__v_raw, "file_type", __v_raw.file_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type")) {
+                return
+            }
+            val oldValue = __v_raw.file_type
+            __v_raw.file_type = value
+            _tRS(__v_raw, "file_type", oldValue, value)
+        }
+    override var file_type_display: String
+        get() {
+            return _tRG(__v_raw, "file_type_display", __v_raw.file_type_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_type_display
+            __v_raw.file_type_display = value
+            _tRS(__v_raw, "file_type_display", oldValue, value)
+        }
+    override var mime_type: String
+        get() {
+            return _tRG(__v_raw, "mime_type", __v_raw.mime_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("mime_type")) {
+                return
+            }
+            val oldValue = __v_raw.mime_type
+            __v_raw.mime_type = value
+            _tRS(__v_raw, "mime_type", oldValue, value)
+        }
+    override var file_size: Number
+        get() {
+            return _tRG(__v_raw, "file_size", __v_raw.file_size, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size")) {
+                return
+            }
+            val oldValue = __v_raw.file_size
+            __v_raw.file_size = value
+            _tRS(__v_raw, "file_size", oldValue, value)
+        }
+    override var file_size_display: String
+        get() {
+            return _tRG(__v_raw, "file_size_display", __v_raw.file_size_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_size_display
+            __v_raw.file_size_display = value
+            _tRS(__v_raw, "file_size_display", oldValue, value)
+        }
+    override var file_url: String
+        get() {
+            return _tRG(__v_raw, "file_url", __v_raw.file_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_url")) {
+                return
+            }
+            val oldValue = __v_raw.file_url
+            __v_raw.file_url = value
+            _tRS(__v_raw, "file_url", oldValue, value)
+        }
+    override var thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "thumbnail_url", __v_raw.thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.thumbnail_url
+            __v_raw.thumbnail_url = value
+            _tRS(__v_raw, "thumbnail_url", oldValue, value)
+        }
+    override var signed_url: String
+        get() {
+            return _tRG(__v_raw, "signed_url", __v_raw.signed_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_url
+            __v_raw.signed_url = value
+            _tRS(__v_raw, "signed_url", oldValue, value)
+        }
+    override var signed_thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "signed_thumbnail_url", __v_raw.signed_thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_thumbnail_url
+            __v_raw.signed_thumbnail_url = value
+            _tRS(__v_raw, "signed_thumbnail_url", oldValue, value)
+        }
+    override var object_id: String
+        get() {
+            return _tRG(__v_raw, "object_id", __v_raw.object_id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("object_id")) {
+                return
+            }
+            val oldValue = __v_raw.object_id
+            __v_raw.object_id = value
+            _tRS(__v_raw, "object_id", oldValue, value)
+        }
+    override var is_deleted: Boolean
+        get() {
+            return _tRG(__v_raw, "is_deleted", __v_raw.is_deleted, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_deleted")) {
+                return
+            }
+            val oldValue = __v_raw.is_deleted
+            __v_raw.is_deleted = value
+            _tRS(__v_raw, "is_deleted", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class TransactionItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var supplier: Number,
+    @JsonNotNull
+    open var supplier_name: String,
+    @JsonNotNull
+    open var transaction_type: Number,
+    @JsonNotNull
+    open var transaction_type_display: String,
+    @JsonNotNull
+    open var amount: String,
+    @JsonNotNull
+    open var transaction_date: String,
+    @JsonNotNull
+    open var transaction_number: String,
+    open var note: String? = null,
+    @JsonNotNull
+    open var media_files: UTSArray<TransactionMediaFile>,
+    @JsonNotNull
+    open var files_count: Number,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionItem", "pkg/api/modules/transactions.uts", 36, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return TransactionItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class TransactionItemReactiveObject : TransactionItem, IUTSReactive<TransactionItem> {
+    override var __v_raw: TransactionItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: TransactionItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, transaction_type = __v_raw.transaction_type, transaction_type_display = __v_raw.transaction_type_display, amount = __v_raw.amount, transaction_date = __v_raw.transaction_date, transaction_number = __v_raw.transaction_number, note = __v_raw.note, media_files = __v_raw.media_files, files_count = __v_raw.files_count, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): TransactionItemReactiveObject {
+        return TransactionItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var supplier: Number
+        get() {
+            return _tRG(__v_raw, "supplier", __v_raw.supplier, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("supplier")) {
+                return
+            }
+            val oldValue = __v_raw.supplier
+            __v_raw.supplier = value
+            _tRS(__v_raw, "supplier", oldValue, value)
+        }
+    override var supplier_name: String
+        get() {
+            return _tRG(__v_raw, "supplier_name", __v_raw.supplier_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("supplier_name")) {
+                return
+            }
+            val oldValue = __v_raw.supplier_name
+            __v_raw.supplier_name = value
+            _tRS(__v_raw, "supplier_name", oldValue, value)
+        }
+    override var transaction_type: Number
+        get() {
+            return _tRG(__v_raw, "transaction_type", __v_raw.transaction_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("transaction_type")) {
+                return
+            }
+            val oldValue = __v_raw.transaction_type
+            __v_raw.transaction_type = value
+            _tRS(__v_raw, "transaction_type", oldValue, value)
+        }
+    override var transaction_type_display: String
+        get() {
+            return _tRG(__v_raw, "transaction_type_display", __v_raw.transaction_type_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("transaction_type_display")) {
+                return
+            }
+            val oldValue = __v_raw.transaction_type_display
+            __v_raw.transaction_type_display = value
+            _tRS(__v_raw, "transaction_type_display", oldValue, value)
+        }
+    override var amount: String
+        get() {
+            return _tRG(__v_raw, "amount", __v_raw.amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("amount")) {
+                return
+            }
+            val oldValue = __v_raw.amount
+            __v_raw.amount = value
+            _tRS(__v_raw, "amount", oldValue, value)
+        }
+    override var transaction_date: String
+        get() {
+            return _tRG(__v_raw, "transaction_date", __v_raw.transaction_date, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("transaction_date")) {
+                return
+            }
+            val oldValue = __v_raw.transaction_date
+            __v_raw.transaction_date = value
+            _tRS(__v_raw, "transaction_date", oldValue, value)
+        }
+    override var transaction_number: String
+        get() {
+            return _tRG(__v_raw, "transaction_number", __v_raw.transaction_number, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("transaction_number")) {
+                return
+            }
+            val oldValue = __v_raw.transaction_number
+            __v_raw.transaction_number = value
+            _tRS(__v_raw, "transaction_number", oldValue, value)
+        }
+    override var note: String?
+        get() {
+            return _tRG(__v_raw, "note", __v_raw.note, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("note")) {
+                return
+            }
+            val oldValue = __v_raw.note
+            __v_raw.note = value
+            _tRS(__v_raw, "note", oldValue, value)
+        }
+    override var media_files: UTSArray<TransactionMediaFile>
+        get() {
+            return _tRG(__v_raw, "media_files", __v_raw.media_files, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("media_files")) {
+                return
+            }
+            val oldValue = __v_raw.media_files
+            __v_raw.media_files = value
+            _tRS(__v_raw, "media_files", oldValue, value)
+        }
+    override var files_count: Number
+        get() {
+            return _tRG(__v_raw, "files_count", __v_raw.files_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("files_count")) {
+                return
+            }
+            val oldValue = __v_raw.files_count
+            __v_raw.files_count = value
+            _tRS(__v_raw, "files_count", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class TransactionSummary (
+    @JsonNotNull
+    open var purchase_amount: String,
+    @JsonNotNull
+    open var arrears_amount: String,
+    @JsonNotNull
+    open var payment_amount: String,
+    @JsonNotNull
+    open var net_amount: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionSummary", "pkg/api/modules/transactions.uts", 51, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return TransactionSummaryReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class TransactionSummaryReactiveObject : TransactionSummary, IUTSReactive<TransactionSummary> {
+    override var __v_raw: TransactionSummary
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: TransactionSummary, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(purchase_amount = __v_raw.purchase_amount, arrears_amount = __v_raw.arrears_amount, payment_amount = __v_raw.payment_amount, net_amount = __v_raw.net_amount) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): TransactionSummaryReactiveObject {
+        return TransactionSummaryReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var purchase_amount: String
+        get() {
+            return _tRG(__v_raw, "purchase_amount", __v_raw.purchase_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("purchase_amount")) {
+                return
+            }
+            val oldValue = __v_raw.purchase_amount
+            __v_raw.purchase_amount = value
+            _tRS(__v_raw, "purchase_amount", oldValue, value)
+        }
+    override var arrears_amount: String
+        get() {
+            return _tRG(__v_raw, "arrears_amount", __v_raw.arrears_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("arrears_amount")) {
+                return
+            }
+            val oldValue = __v_raw.arrears_amount
+            __v_raw.arrears_amount = value
+            _tRS(__v_raw, "arrears_amount", oldValue, value)
+        }
+    override var payment_amount: String
+        get() {
+            return _tRG(__v_raw, "payment_amount", __v_raw.payment_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_amount")) {
+                return
+            }
+            val oldValue = __v_raw.payment_amount
+            __v_raw.payment_amount = value
+            _tRS(__v_raw, "payment_amount", oldValue, value)
+        }
+    override var net_amount: String
+        get() {
+            return _tRG(__v_raw, "net_amount", __v_raw.net_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("net_amount")) {
+                return
+            }
+            val oldValue = __v_raw.net_amount
+            __v_raw.net_amount = value
+            _tRS(__v_raw, "net_amount", oldValue, value)
+        }
+}
+open class TransactionListResponse (
+    @JsonNotNull
+    open var results: UTSArray<TransactionItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+    open var summary: TransactionSummary? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionListResponse", "pkg/api/modules/transactions.uts", 57, 13)
+    }
+}
+fun normalizeServerUrl__1(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun intValue__1(value: Any?): Number {
+    if (value == null) {
+        return 0
+    }
+    val text = "" + value
+    if (text == "") {
+        return 0
+    }
+    val parsed = parseInt(text)
+    if (isNaN(parsed)) {
+        return 0
+    }
+    return parsed
+}
+fun stringValue__2(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun booleanValue(value: Any?): Boolean {
+    return stringValue__2(value) == "true"
+}
+fun buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/transactions.uts", 168, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.transaction_type != null && data.transaction_type != "") {
+        query["transaction_type"] = data.transaction_type
+    }
+    if (data.supplier != null && data.supplier != "") {
+        query["supplier"] = data.supplier
+    }
+    if (data.supplier_id != null && data.supplier_id != "") {
+        query["supplier_id"] = data.supplier_id
+    }
+    if (data.date_from != null && data.date_from != "") {
+        query["date_from"] = data.date_from
+    }
+    if (data.start_date != null && data.start_date != "") {
+        query["start_date"] = data.start_date
+    }
+    if (data.date_to != null && data.date_to != "") {
+        query["date_to"] = data.date_to
+    }
+    if (data.end_date != null && data.end_date != "") {
+        query["end_date"] = data.end_date
+    }
+    if (data.amount_min != null && data.amount_min != "") {
+        query["amount_min"] = data.amount_min
+    }
+    if (data.amount_max != null && data.amount_max != "") {
+        query["amount_max"] = data.amount_max
+    }
+    if (data.ordering != null && data.ordering != "") {
+        query["ordering"] = data.ordering
+    }
+    if (data.sort_by != null && data.sort_by != "") {
+        query["sort_by"] = data.sort_by
+    }
+    return query
+}
+fun buildTransactionMediaFileFromObject(rawObject: UTSJSONObject): TransactionMediaFile {
+    return TransactionMediaFile(id = stringValue__2(rawObject["id"]), company = intValue__1(rawObject["company"]), original_filename = stringValue__2(rawObject["original_filename"]), file_type = stringValue__2(rawObject["file_type"]), file_type_display = stringValue__2(rawObject["file_type_display"]), mime_type = stringValue__2(rawObject["mime_type"]), file_size = intValue__1(rawObject["file_size"]), file_size_display = stringValue__2(rawObject["file_size_display"]), file_url = normalizeServerUrl__1(stringValue__2(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__1(stringValue__2(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__1(stringValue__2(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__1(stringValue__2(rawObject["signed_thumbnail_url"])), object_id = stringValue__2(rawObject["object_id"]), is_deleted = booleanValue(rawObject["is_deleted"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+}
+fun buildTransactionMediaFilesFromValue(value: Any?): UTSArray<TransactionMediaFile> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    val rawArray = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:235")
+    }
+    if (rawArray == null) {
+        return _uA()
+    }
+    val result: UTSArray<TransactionMediaFile> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rawArray!!.length){
+            result.push(buildTransactionMediaFileFromObject(rawArray!![index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildTransactionItemFromObject(rawObject: UTSJSONObject): TransactionItem {
+    return TransactionItem(id = intValue__1(rawObject["id"]), supplier = intValue__1(rawObject["supplier"]), supplier_name = stringValue__2(rawObject["supplier_name"]), transaction_type = intValue__1(rawObject["transaction_type"]), transaction_type_display = stringValue__2(rawObject["transaction_type_display"]), amount = stringValue__2(rawObject["amount"]), transaction_date = stringValue__2(rawObject["transaction_date"]), transaction_number = stringValue__2(rawObject["transaction_number"]), note = if (rawObject["note"] == null) {
+        null
+    } else {
+        stringValue__2(rawObject["note"])
+    }
+    , media_files = buildTransactionMediaFilesFromValue(rawObject["media_files"]), files_count = intValue__1(rawObject["files_count"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+}
+fun buildTransactionSummary(value: Any?): TransactionSummary? {
+    if (value == null) {
+        return null
+    }
+    val text = JSON.stringify(value)
+    val rawObject = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:267")
+    }
+    if (rawObject == null) {
+        return null
+    }
+    return TransactionSummary(purchase_amount = stringValue__2(rawObject["purchase_amount"]), arrears_amount = stringValue__2(rawObject["arrears_amount"]), payment_amount = stringValue__2(rawObject["payment_amount"]), net_amount = stringValue__2(rawObject["net_amount"]))
+}
+fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): TransactionListResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:280")
+    }
+    if (rawObject == null) {
+        throw UTSError("往来记录列表响应解析失败")
+    }
+    var paginationObject: UTSJSONObject? = null
+    val rawPagination = rawObject["pagination"]
+    if (rawPagination != null) {
+        val paginationText = JSON.stringify(rawPagination)
+        if (paginationText != null && paginationText != "") {
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/transactions.uts:289")
+        }
+    }
+    var results: UTSArray<TransactionItem> = _uA()
+    val rawResults = rawObject["results"]
+    if (rawResults != null) {
+        val resultText = JSON.stringify(rawResults)
+        val parsedResults = if (resultText == null || resultText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(resultText), " at pkg/api/modules/transactions.uts:296")
+        }
+        if (parsedResults != null) {
+            val nextResults: UTSArray<TransactionItem> = _uA()
+            run {
+                var index: Number = 0
+                while(index < parsedResults!!.length){
+                    nextResults.push(buildTransactionItemFromObject(parsedResults!![index]))
+                    index += 1
+                }
+            }
+            results = nextResults
+        }
+    }
+    var totalCount = intValue__1(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue__1(rawObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue__1(rawObject["total_count"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__1(paginationObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__1(paginationObject["count"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue__1(rawObject["page"])
+    if (currentPage <= 0) {
+        currentPage = intValue__1(rawObject["current_page"])
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue__1(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = query.page
+    }
+    var pageSize = intValue__1(rawObject["page_size"])
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__1(paginationObject["page_size"])
+    }
+    if (pageSize <= 0) {
+        pageSize = query.page_size
+    }
+    var totalPages = intValue__1(rawObject["total_pages"])
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__1(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return TransactionListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize, summary = buildTransactionSummary(rawObject["summary"]))
+}
+fun getTransactionList(data: TransactionListQuery): UTSPromise<TransactionListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/transactions/", "GET", buildTransactionListQuery(data), true))
+            return@w buildTransactionListResponse(raw, data)
+    })
+}
+val GenPagesTransactionsIndexClass = CreateVueComponent(GenPagesTransactionsIndex::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTransactionsIndex.inheritAttrs, inject = GenPagesTransactionsIndex.inject, props = GenPagesTransactionsIndex.props, propsNeedCastKeys = GenPagesTransactionsIndex.propsNeedCastKeys, emits = GenPagesTransactionsIndex.emits, components = GenPagesTransactionsIndex.components, styles = GenPagesTransactionsIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesTransactionsIndex.setup(props as GenPagesTransactionsIndex)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesTransactionsIndex {
+    return GenPagesTransactionsIndex(instance, renderer)
+}
+)
+val GenPagesTransactionsFromClass = CreateVueComponent(GenPagesTransactionsFrom::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTransactionsFrom.inheritAttrs, inject = GenPagesTransactionsFrom.inject, props = GenPagesTransactionsFrom.props, propsNeedCastKeys = GenPagesTransactionsFrom.propsNeedCastKeys, emits = GenPagesTransactionsFrom.emits, components = GenPagesTransactionsFrom.components, styles = GenPagesTransactionsFrom.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesTransactionsFrom.setup(props as GenPagesTransactionsFrom)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesTransactionsFrom {
+    return GenPagesTransactionsFrom(instance, renderer)
+}
+)
 fun createApp(): UTSJSONObject {
     val app = createSSRApp(GenAppClass)
     return _uO("app" to app)
@@ -2821,6 +3660,8 @@ fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/privacy/privacy", component = GenPagesPrivacyPrivacyClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/suppliers/index", component = GenPagesSuppliersIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/suppliers/from", component = GenPagesSuppliersFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/transactions/index", component = GenPagesTransactionsIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/transactions/from", component = GenPagesTransactionsFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
 }
 val __uniTabBar: Map<String, Any?>? = _uM("color" to "#94A3B8", "selectedColor" to "#0F172A", "backgroundColor" to "#FFFFFF", "borderStyle" to "black", "list" to _uA(
     _uM("pagePath" to "pages/tabbar/reports", "iconPath" to "static/tabBar/Report.png", "selectedIconPath" to "static/tabBar/Report (1).png", "text" to "报表"),

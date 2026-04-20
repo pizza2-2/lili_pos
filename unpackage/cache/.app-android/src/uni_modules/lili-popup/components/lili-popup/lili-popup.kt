@@ -65,7 +65,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
             val confirmDangerValue = ref<Boolean>(props.confirmDanger)
             val autoCloseValue = ref<Boolean>(props.autoClose)
             fun gen_syncStyle_fn() {
-                panelStyle.value = "width:" + props.width + ";"
+                panelStyle.value = "width:" + props.width + ";max-width:100%;"
                 rootStyle.value = "z-index:" + props.zIndex + ";"
             }
             val syncStyle = ::gen_syncStyle_fn
@@ -126,7 +126,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                 changeVisible(true)
             }
             fun openSaveConfirm(config: UTSJSONObject? = null) {
-                val defaultConfig: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 145, 8), "title" to "是否保存", "content" to "当前内容已修改，是否保存后再退出？", "auxiliaryText" to "退出", "cancelText" to "取消保存", "confirmText" to "保存", "showCloseIcon" to false, "closeOnMask" to false, "confirmDanger" to false, "autoClose" to true)
+                val defaultConfig: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 159, 8), "title" to "是否保存", "content" to "当前内容已修改，是否保存后再退出？", "auxiliaryText" to "退出", "cancelText" to "取消保存", "confirmText" to "保存", "showCloseIcon" to false, "closeOnMask" to false, "confirmDanger" to false, "autoClose" to true)
                 if (config != null) {
                     for(key in resolveUTSKeyIterator(config)){
                         defaultConfig[key] = config[key]
@@ -171,6 +171,12 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                 close("icon")
             }
             val handleCloseIcon = ::gen_handleCloseIcon_fn
+            fun gen_syncBasePropsWhenClosed_fn() {
+                if (!renderVisible.value) {
+                    applyBaseProps()
+                }
+            }
+            val syncBasePropsWhenClosed = ::gen_syncBasePropsWhenClosed_fn
             watch(fun(): Boolean {
                 return props.visible
             }
@@ -182,45 +188,63 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                 return props.title
             }
             , fun(){
-                if (!renderVisible.value) {
-                    applyBaseProps()
-                }
+                syncBasePropsWhenClosed()
             }
             )
             watch(fun(): String {
                 return props.content
             }
             , fun(){
-                if (!renderVisible.value) {
-                    applyBaseProps()
-                }
+                syncBasePropsWhenClosed()
             }
             )
             watch(fun(): String {
                 return props.cancelText
             }
             , fun(){
-                if (!renderVisible.value) {
-                    applyBaseProps()
-                }
+                syncBasePropsWhenClosed()
             }
             )
             watch(fun(): String {
                 return props.confirmText
             }
             , fun(){
-                if (!renderVisible.value) {
-                    applyBaseProps()
-                }
+                syncBasePropsWhenClosed()
             }
             )
             watch(fun(): String {
                 return props.auxiliaryText
             }
             , fun(){
-                if (!renderVisible.value) {
-                    applyBaseProps()
-                }
+                syncBasePropsWhenClosed()
+            }
+            )
+            watch(fun(): Boolean {
+                return props.closeOnMask
+            }
+            , fun(){
+                syncBasePropsWhenClosed()
+            }
+            )
+            watch(fun(): Boolean {
+                return props.showCloseIcon
+            }
+            , fun(){
+                syncBasePropsWhenClosed()
+            }
+            )
+            watch(fun(): Boolean {
+                return props.confirmDanger
+            }
+            , fun(){
+                syncBasePropsWhenClosed()
+            }
+            )
+            watch(fun(): Boolean {
+                return props.autoClose
+            }
+            , fun(){
+                syncBasePropsWhenClosed()
             }
             )
             watch(fun(): String {
@@ -255,9 +279,13 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                             } else {
                                 _cC("v-if", true)
                             },
-                            _cE("view", _uM("class" to "lp-header"), _uA(
+                            _cE("view", _uM("class" to _nC(if (unref(showCloseIconValue)) {
+                                "lp-header lp-header-has-close"
+                            } else {
+                                "lp-header"
+                            })), _uA(
                                 _cE("text", _uM("class" to "lp-title"), _tD(unref(currentTitle)), 1)
-                            )),
+                            ), 2),
                             _cE("view", _uM("class" to "lp-body"), _uA(
                                 renderSlot(_ctx.`$slots`, "default", _uO(), fun(): UTSArray<Any> {
                                     return _uA(
@@ -271,25 +299,25 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
                             )),
                             _cE("view", _uM("class" to "lp-footer"), _uA(
                                 if (unref(auxiliaryTextValue) != "") {
-                                    _cE("view", _uM("key" to 0, "class" to "lp-btn lp-btn-gap-right lp-btn-light", "onClick" to handleAuxiliary), _uA(
+                                    _cE("view", _uM("key" to 0, "class" to "lp-btn lp-btn-light", "onClick" to handleAuxiliary), _uA(
                                         _cE("text", _uM("class" to "lp-btn-light-text"), _tD(unref(auxiliaryTextValue)), 1)
                                     ))
                                 } else {
                                     _cC("v-if", true)
                                 },
                                 _cE("view", _uM("class" to _nC(if (unref(auxiliaryTextValue) != "") {
-                                    "lp-btn lp-btn-gap-right lp-btn-light"
+                                    "lp-btn lp-btn-gap-left lp-btn-light"
                                 } else {
                                     "lp-btn lp-btn-light"
                                 }), "onClick" to handleCancel), _uA(
                                     _cE("text", _uM("class" to "lp-btn-light-text"), _tD(unref(cancelTextValue)), 1)
                                 ), 2),
                                 _cE("view", _uM("class" to _nC(if (unref(confirmDangerValue)) {
-                                    "lp-btn lp-btn-danger"
+                                    "lp-btn lp-btn-gap-left lp-btn-danger"
                                 } else {
-                                    "lp-btn lp-btn-primary"
+                                    "lp-btn lp-btn-gap-left lp-btn-primary"
                                 }), "onClick" to handleConfirm), _uA(
-                                    _cE("text", _uM("class" to "lp-btn-primary-text"), _tD(unref(confirmTextValue)), 1)
+                                    _cE("text", _uM("class" to "lp-btn-solid-text"), _tD(unref(confirmTextValue)), 1)
                                 ), 2)
                             ))
                         ), 4)
@@ -306,7 +334,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("lp-root" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 24, "paddingRight" to 24)), "lp-mask" to _pS(_uM("position" to "absolute", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(15,23,42,0.48)")), "lp-panel" to _pS(_uM("position" to "relative", "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 24, "borderTopRightRadius" to 24, "borderBottomRightRadius" to 24, "borderBottomLeftRadius" to 24, "paddingTop" to 28, "paddingLeft" to 24, "paddingRight" to 24, "paddingBottom" to 20)), "lp-close" to _pS(_uM("position" to "absolute", "top" to 16, "right" to 16, "width" to 28, "height" to 28, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F3F4F6")), "lp-close-text" to _pS(_uM("fontSize" to 18, "lineHeight" to "18px", "color" to "#475569")), "lp-header" to _pS(_uM("alignItems" to "center", "paddingRight" to 36)), "lp-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "26px", "color" to "#0F172A", "fontWeight" to "600", "textAlign" to "center")), "lp-body" to _pS(_uM("minHeight" to 56, "paddingTop" to 16, "paddingBottom" to 24, "alignItems" to "center", "justifyContent" to "center")), "lp-content" to _pS(_uM("fontSize" to 15, "lineHeight" to "23px", "color" to "#475569", "textAlign" to "center")), "lp-footer" to _pS(_uM("flexDirection" to "row")), "lp-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12)), "lp-btn-gap-right" to _pS(_uM("marginLeft" to 12)), "lp-btn-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lp-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "lp-btn-danger" to _pS(_uM("backgroundColor" to "#DC2626")), "lp-btn-light-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#334155", "fontWeight" to "500")), "lp-btn-primary-text" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#FFFFFF", "fontWeight" to "600")))
+                return _uM("lp-root" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to "40rpx", "paddingRight" to "40rpx")), "lp-mask" to _pS(_uM("position" to "absolute", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(15,23,42,0.42)")), "lp-panel" to _pS(_uM("position" to "relative", "width" to "100%", "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to "28rpx", "borderTopRightRadius" to "28rpx", "borderBottomRightRadius" to "28rpx", "borderBottomLeftRadius" to "28rpx", "paddingTop" to "34rpx", "paddingLeft" to "32rpx", "paddingRight" to "32rpx", "paddingBottom" to "28rpx", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#F1F5F9", "borderRightColor" to "#F1F5F9", "borderBottomColor" to "#F1F5F9", "borderLeftColor" to "#F1F5F9", "boxShadow" to "0 16rpx 48rpx rgba(15, 23, 42, 0.10)", "boxSizing" to "border-box", "overflow" to "hidden")), "lp-close" to _pS(_uM("position" to "absolute", "top" to "20rpx", "right" to "20rpx", "width" to "52rpx", "height" to "52rpx", "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to "26rpx", "borderTopRightRadius" to "26rpx", "borderBottomRightRadius" to "26rpx", "borderBottomLeftRadius" to "26rpx", "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lp-close-text" to _pS(_uM("fontSize" to "34rpx", "lineHeight" to "34rpx", "color" to "#64748B", "fontWeight" to "500")), "lp-header" to _pS(_uM("alignItems" to "center", "justifyContent" to "center")), "lp-header-has-close" to _pS(_uM("paddingRight" to "60rpx")), "lp-title" to _pS(_uM("width" to "100%", "fontSize" to "34rpx", "lineHeight" to "44rpx", "color" to "#0F172A", "fontWeight" to "600", "textAlign" to "center")), "lp-body" to _pS(_uM("minHeight" to "80rpx", "paddingTop" to "24rpx", "paddingBottom" to "30rpx", "alignItems" to "center", "justifyContent" to "center")), "lp-content" to _pS(_uM("width" to "100%", "fontSize" to "28rpx", "lineHeight" to "42rpx", "color" to "#64748B", "textAlign" to "center")), "lp-footer" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center")), "lp-btn" to _pS(_uM("height" to "72rpx", "minWidth" to "156rpx", "paddingLeft" to "28rpx", "paddingRight" to "28rpx", "borderTopLeftRadius" to "18rpx", "borderTopRightRadius" to "18rpx", "borderBottomRightRadius" to "18rpx", "borderBottomLeftRadius" to "18rpx", "alignItems" to "center", "justifyContent" to "center", "boxSizing" to "border-box")), "lp-btn-gap-left" to _pS(_uM("marginLeft" to "16rpx")), "lp-btn-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lp-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A", "boxShadow" to "0 8rpx 20rpx rgba(15, 23, 42, 0.10)")), "lp-btn-danger" to _pS(_uM("backgroundColor" to "#EF4444", "boxShadow" to "0 8rpx 20rpx rgba(239, 68, 68, 0.14)")), "lp-btn-light-text" to _pS(_uM("fontSize" to "28rpx", "lineHeight" to "28rpx", "color" to "#334155", "fontWeight" to "500", "textAlign" to "center")), "lp-btn-solid-text" to _pS(_uM("fontSize" to "28rpx", "lineHeight" to "28rpx", "color" to "#FFFFFF", "fontWeight" to "600", "textAlign" to "center")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

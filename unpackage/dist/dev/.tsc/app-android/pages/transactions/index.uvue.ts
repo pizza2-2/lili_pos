@@ -1,0 +1,448 @@
+import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
+import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
+import { computed } from 'vue'
+import { getTransactionList, TransactionItem, TransactionListResponse, TransactionSummary } from '@/pkg/api/modules/transactions.uts'
+
+
+const __sfc__ = defineComponent({
+  __name: 'index',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const supplierId = ref('')
+const keyword = ref('')
+const transactions = ref<TransactionItem[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const summary = ref<TransactionSummary | null>(null)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'transactionTypeText', label: '类型:' } as UTSJSONObject,
+	{ key: 'noteText', label: '备注:' } as UTSJSONObject,
+])
+
+function applyTransactionResponse(response: TransactionListResponse) {
+	transactions.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+	summary.value = response.summary
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '采购记录加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:122")
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '采购记录加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+async function loadTransactions() {
+	if (isLoading.value) {
+		return
+	}
+
+	if (supplierId.value == '') {
+		transactions.value = []
+		totalCount.value = 0
+		totalPages.value = 1
+		errorMessage.value = '缺少供应商ID'
+		return
+	}
+
+	isLoading.value = true
+	errorMessage.value = ''
+
+	try {
+		const response = await getTransactionList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			transaction_type: null,
+			supplier: null,
+			supplier_id: supplierId.value,
+			date_from: null,
+			start_date: null,
+			date_to: null,
+			end_date: null,
+			amount_min: null,
+			amount_max: null,
+			ordering: null,
+			sort_by: null,
+		})
+		applyTransactionResponse(response)
+	} catch (error) {
+		transactions.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		summary.value = null
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function getDisplayText(value: string | null): string {
+	if (value == null || value == '') {
+		return '-'
+	}
+	return value
+}
+
+function buildImages(item: TransactionItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaFile = item.media_files[index]
+		if (mediaFile.signed_thumbnail_url != '') {
+			result.push(mediaFile.signed_thumbnail_url)
+			continue
+		}
+		if (mediaFile.thumbnail_url != '') {
+			result.push(mediaFile.thumbnail_url)
+			continue
+		}
+		if (mediaFile.signed_url != '') {
+			result.push(mediaFile.signed_url)
+			continue
+		}
+		if (mediaFile.file_url != '') {
+			result.push(mediaFile.file_url)
+		}
+	}
+	return result
+}
+
+function getTransactionImage(item: TransactionItem): string {
+	if (item.media_files.length == 0) {
+		return ''
+	}
+
+	const mediaFile = item.media_files[0]
+	if (mediaFile.signed_thumbnail_url != '') {
+		return mediaFile.signed_thumbnail_url
+	}
+	if (mediaFile.thumbnail_url != '') {
+		return mediaFile.thumbnail_url
+	}
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	return mediaFile.file_url
+}
+
+function formatDateText(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	if (value.length >= 16) {
+		return value.substring(0, 16)
+	}
+	return value
+}
+
+function transactionToListItem(item: TransactionItem): UTSJSONObject {
+	const cover = getTransactionImage(item)
+	const images = buildImages(item)
+	const title = item.transaction_number != '' ? item.transaction_number : ('采购记录 #' + item.id.toString())
+	return {
+		id: item.id.toString(),
+		title: title,
+		transactionDateText: '日期：' + formatDateText(item.transaction_date),
+		amountText: '金额：' + item.amount,
+		transactionTypeText: getDisplayText(item.transaction_type_display),
+		filesText: item.files_count.toString() + ' 个',
+		noteText: getDisplayText(item.note),
+		updatedText: formatDateText(item.updated_at),
+		cover: cover,
+		images: images,
+		rawId: item.id.toString(),
+	} as UTSJSONObject
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadTransactions()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadTransactions()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) {
+		return
+	}
+
+	const nextPageText = '' + pageValue
+	const nextPage = parseInt(nextPageText)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+		return
+	}
+
+	currentPage.value = nextPage
+	loadTransactions()
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const titleValue = payload['title']
+	const titleText = titleValue == null ? '采购记录' : (titleValue as string)
+	uni.showToast({
+		title: titleText,
+		icon: 'none',
+	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+
+	const item = itemValue as UTSJSONObject
+	const transactionDateValue = item['transactionDateText']
+	const transactionDateText = transactionDateValue == null ? '' : (transactionDateValue as string)
+	uni.setClipboardData({
+		data: transactionDateText,
+		success: () => {
+			uni.showToast({
+				title: '日期已复制',
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+
+	const item = itemValue as UTSJSONObject
+	const amountValue = item['amountText']
+	const amountText = amountValue == null ? '' : (amountValue as string)
+	uni.setClipboardData({
+		data: amountText,
+		success: () => {
+			uni.showToast({
+				title: '金额已复制',
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) {
+		return
+	}
+
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+	const rawValue = item[key]
+	if (rawValue == null) {
+		return
+	}
+
+	uni.setClipboardData({
+		data: rawValue as string,
+		success: () => {
+			uni.showToast({
+				title: '内容已复制',
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function handleCreateTransaction() {
+	if (supplierId.value == '') {
+		uni.showToast({
+			title: '供应商ID缺失',
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.navigateTo({
+		url: '/pages/transactions/from?supplier_id=' + supplierId.value,
+	})
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < transactions.value.length; index += 1) {
+		result.push(transactionToListItem(transactions.value[index]))
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (supplierId.value == '') {
+		return '缺少供应商ID'
+	}
+	if (keyword.value != '') {
+		return '没有匹配的采购记录'
+	}
+	return '暂无采购记录'
+})
+
+const transactionCountText = computed(() : string => {
+	return totalCount.value.toString()
+})
+
+const supplierIdText = computed(() : string => {
+	return supplierId.value == '' ? '-' : supplierId.value
+})
+
+const purchaseAmountText = computed(() : string => {
+	if (summary.value == null || summary.value.purchase_amount == '') {
+		return '0.00'
+	}
+	return summary.value.purchase_amount
+})
+
+const arrearsAmountText = computed(() : string => {
+	if (summary.value == null || summary.value.arrears_amount == '') {
+		return '0.00'
+	}
+	return summary.value.arrears_amount
+})
+
+onLoad((event : OnLoadOptions) => {
+	const supplierIdValue = event['supplier_id']
+	supplierId.value = supplierIdValue == null ? '' : (supplierIdValue as string)
+	loadTransactions()
+})
+
+return (): any | null => {
+
+const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
+const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",_easycom_lili_UniversalList)
+
+  return _cE("view", _uM({ class: "page" }), [
+    _cV(_component_lili_universal_filter, _uM({
+      title: "采购详情",
+      searchPlaceholder: "输入单号、备注搜索采购记录",
+      searchValue: unref(keyword),
+      showBack: true,
+      showSearch: true,
+      showFilter: false,
+      showHome: true,
+      homePath: "/pages/suppliers/index",
+      onSearchInput: handleSearchInput,
+      onSearchConfirm: handleSearchConfirm,
+      onSearchClear: handleSearchClear
+    }), null, 8 /* PROPS */, ["searchValue"]),
+    _cE("scroll-view", _uM({
+      style: _nS(_uM({"flex":"1"})),
+      class: "page-scroll"
+    }), [
+      _cE("view", _uM({ class: "page-content" }), [
+        _cE("view", _uM({ class: "summary-row" }), [
+          _cE("view", _uM({ class: "summary-card" }), [
+            _cE("text", _uM({ class: "summary-label" }), "记录数"),
+            _cE("text", _uM({ class: "summary-value" }), _tD(transactionCountText.value), 1 /* TEXT */)
+          ]),
+          _cE("view", _uM({ class: "summary-gap" })),
+          _cE("view", _uM({ class: "summary-card" }), [
+            _cE("text", _uM({ class: "summary-label" }), "采购金额"),
+            _cE("text", _uM({ class: "summary-value" }), _tD(purchaseAmountText.value), 1 /* TEXT */)
+          ])
+        ]),
+        _cE("view", _uM({ class: "summary-row" }), [
+          _cE("view", _uM({ class: "summary-card" }), [
+            _cE("text", _uM({ class: "summary-label" }), "待付金额"),
+            _cE("text", _uM({ class: "summary-value" }), _tD(arrearsAmountText.value), 1 /* TEXT */)
+          ]),
+          _cE("view", _uM({ class: "summary-gap" })),
+          _cE("view", _uM({ class: "summary-card" }), [
+            _cE("text", _uM({ class: "summary-label" }), "供应商ID"),
+            _cE("text", _uM({ class: "summary-value" }), _tD(supplierIdText.value), 1 /* TEXT */)
+          ])
+        ]),
+        isTrue(unref(errorMessage) != '' && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 0,
+              class: "error-card"
+            }), [
+              _cE("text", _uM({ class: "error-title" }), "加载失败"),
+              _cE("text", _uM({ class: "error-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */),
+              _cE("button", _uM({
+                class: "retry-btn",
+                onClick: loadTransactions
+              }), [
+                _cE("text", _uM({ class: "retry-btn-text" }), "重新加载")
+              ])
+            ])
+          : _cC("v-if", true),
+        _cV(_component_lili_UniversalList, _uM({
+          items: listItems.value,
+          keyField: "id",
+          titleField: "title",
+          subtitleField: "transactionDateText",
+          metaField: "amountText",
+          imageField: "cover",
+          imageListField: "images",
+          fields: unref(fieldConfig),
+          loading: unref(isLoading),
+          loadingText: "正在加载采购记录",
+          emptyText: emptyText.value,
+          emptyIcon: "◎",
+          showMenu: false,
+          showChevron: false,
+          showPagination: true,
+          currentPage: unref(currentPage),
+          totalPages: unref(totalPages),
+          totalCount: unref(totalCount),
+          showFloatingAdd: true,
+          floatingAddText: "新增",
+          onItemClick: handleItemClick,
+          onSubtitleClick: handleSubtitleClick,
+          onMetaClick: handleMetaClick,
+          onFieldClick: handleFieldClick,
+          onPageChange: handlePageChange,
+          onFloatingAdd: handleCreateTransaction
+        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "currentPage", "totalPages", "totalCount"])
+      ])
+    ], 4 /* STYLE */)
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesTransactionsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["page-content", _pS(_uM([["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 88], ["paddingLeft", 12]]))], ["summary-row", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["summary-card", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"]]))], ["summary-gap", _pS(_uM([["width", 10]]))], ["summary-label", _pS(_uM([["fontSize", 13], ["color", "#6B7280"]]))], ["summary-value", _pS(_uM([["marginTop", 8], ["fontSize", 18], ["fontWeight", "600"], ["color", "#111827"]]))], ["error-card", _pS(_uM([["marginBottom", 12], ["paddingTop", 18], ["paddingRight", 16], ["paddingBottom", 18], ["paddingLeft", 16], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#FFFFFF"]]))], ["error-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#111827"]]))], ["error-desc", _pS(_uM([["marginTop", 8], ["fontSize", 14], ["lineHeight", "1.5em"], ["color", "#6B7280"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#111827"], ["borderTopWidth", 0], ["borderRightWidth", 0], ["borderBottomWidth", 0], ["borderLeftWidth", 0]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["fontWeight", "600"], ["color", "#FFFFFF"]]))]])]

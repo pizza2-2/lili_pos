@@ -1,0 +1,689 @@
+import { baseUrl, request } from '../index.uts'
+
+export type TransactionListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	transaction_type: string | null
+	supplier: string | null
+	supplier_id: string | null
+	date_from: string | null
+	start_date: string | null
+	date_to: string | null
+	end_date: string | null
+	amount_min: string | null
+	amount_max: string | null
+	ordering: string | null
+	sort_by: string | null
+}
+
+export type TransactionMediaFile = {
+	id: string
+	company: number
+	original_filename: string
+	file_type: string
+	file_type_display: string
+	mime_type: string
+	file_size: number
+	file_size_display: string
+	file_url: string
+	thumbnail_url: string
+	signed_url: string
+	signed_thumbnail_url: string
+	object_id: string
+	is_deleted: boolean
+	created_at: string
+	updated_at: string
+}
+
+export type TransactionItem = {
+	id: number
+	supplier: number
+	supplier_name: string
+	transaction_type: number
+	transaction_type_display: string
+	amount: string
+	transaction_date: string
+	transaction_number: string
+	note: string | null
+	media_files: TransactionMediaFile[]
+	files_count: number
+	created_at: string
+	updated_at: string
+}
+
+export type TransactionSummary = {
+	purchase_amount: string
+	arrears_amount: string
+	payment_amount: string
+	net_amount: string
+}
+
+export type TransactionListResponse = {
+	results: TransactionItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+	summary: TransactionSummary | null
+}
+
+export type TransactionFilterOption = {
+	value: string
+	label: string
+}
+
+export type TransactionFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: TransactionFilterOption[]
+}
+
+export type TransactionFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: TransactionFilterDefinition[]
+}
+
+export type TransactionOptionItem = {
+	value: string
+	label: string
+	extra: UTSJSONObject
+}
+
+export type TransactionOptionGroup = {
+	key: string
+	label: string
+	control: string
+	count: number
+	items: TransactionOptionItem[]
+}
+
+export type TransactionOptionsResponse = {
+	resource: string
+	total_groups: number
+	groups: TransactionOptionGroup[]
+}
+
+export type TransactionStatisticsResponse = {
+	data: UTSJSONObject
+}
+
+export type TransactionMutationData = {
+	supplier: number | string
+	transaction_type: number | string
+	amount: string | number
+	transaction_date: string
+	note: string | null
+}
+
+function normalizeServerUrl(url: string): string {
+	if (url == '') {
+		return ''
+	}
+
+	if (url.startsWith('http://localhost:8000')) {
+		return baseUrl + url.substring('http://localhost:8000'.length)
+	}
+
+	if (url.startsWith('https://localhost:8000')) {
+		return baseUrl + url.substring('https://localhost:8000'.length)
+	}
+
+	if (url.startsWith('http://127.0.0.1:8000')) {
+		return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	}
+
+	if (url.startsWith('https://127.0.0.1:8000')) {
+		return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	}
+
+	return url
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+
+	const text = '' + value
+	if (text == '') {
+		return 0
+	}
+
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+
+	return parsed
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+
+	return '' + value
+}
+
+function booleanValue(value: any | null): boolean {
+	return stringValue(value) == 'true'
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<any>(text)
+	if (parsed == null) {
+		return []
+	}
+
+	const result: string[] = []
+	for (let index = 0; index < parsed!.length; index += 1) {
+		result.push(stringValue(parsed![index]))
+	}
+	return result
+}
+
+function buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+	if (data.transaction_type != null && data.transaction_type != '') {
+		query['transaction_type'] = data.transaction_type
+	}
+	if (data.supplier != null && data.supplier != '') {
+		query['supplier'] = data.supplier
+	}
+	if (data.supplier_id != null && data.supplier_id != '') {
+		query['supplier_id'] = data.supplier_id
+	}
+	if (data.date_from != null && data.date_from != '') {
+		query['date_from'] = data.date_from
+	}
+	if (data.start_date != null && data.start_date != '') {
+		query['start_date'] = data.start_date
+	}
+	if (data.date_to != null && data.date_to != '') {
+		query['date_to'] = data.date_to
+	}
+	if (data.end_date != null && data.end_date != '') {
+		query['end_date'] = data.end_date
+	}
+	if (data.amount_min != null && data.amount_min != '') {
+		query['amount_min'] = data.amount_min
+	}
+	if (data.amount_max != null && data.amount_max != '') {
+		query['amount_max'] = data.amount_max
+	}
+	if (data.ordering != null && data.ordering != '') {
+		query['ordering'] = data.ordering
+	}
+	if (data.sort_by != null && data.sort_by != '') {
+		query['sort_by'] = data.sort_by
+	}
+
+	return query
+}
+
+function buildTransactionMediaFileFromObject(rawObject: UTSJSONObject): TransactionMediaFile {
+	return {
+		id: stringValue(rawObject['id']),
+		company: intValue(rawObject['company']),
+		original_filename: stringValue(rawObject['original_filename']),
+		file_type: stringValue(rawObject['file_type']),
+		file_type_display: stringValue(rawObject['file_type_display']),
+		mime_type: stringValue(rawObject['mime_type']),
+		file_size: intValue(rawObject['file_size']),
+		file_size_display: stringValue(rawObject['file_size_display']),
+		file_url: normalizeServerUrl(stringValue(rawObject['file_url'])),
+		thumbnail_url: normalizeServerUrl(stringValue(rawObject['thumbnail_url'])),
+		signed_url: normalizeServerUrl(stringValue(rawObject['signed_url'])),
+		signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject['signed_thumbnail_url'])),
+		object_id: stringValue(rawObject['object_id']),
+		is_deleted: booleanValue(rawObject['is_deleted']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as TransactionMediaFile
+}
+
+function buildTransactionMediaFilesFromValue(value: any | null): TransactionMediaFile[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	const rawArray = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text)
+	if (rawArray == null) {
+		return []
+	}
+
+	const result: TransactionMediaFile[] = []
+	for (let index = 0; index < rawArray!.length; index += 1) {
+		result.push(buildTransactionMediaFileFromObject(rawArray![index]))
+	}
+	return result
+}
+
+function buildTransactionItemFromObject(rawObject: UTSJSONObject): TransactionItem {
+	return {
+		id: intValue(rawObject['id']),
+		supplier: intValue(rawObject['supplier']),
+		supplier_name: stringValue(rawObject['supplier_name']),
+		transaction_type: intValue(rawObject['transaction_type']),
+		transaction_type_display: stringValue(rawObject['transaction_type_display']),
+		amount: stringValue(rawObject['amount']),
+		transaction_date: stringValue(rawObject['transaction_date']),
+		transaction_number: stringValue(rawObject['transaction_number']),
+		note: rawObject['note'] == null ? null : stringValue(rawObject['note']),
+		media_files: buildTransactionMediaFilesFromValue(rawObject['media_files']),
+		files_count: intValue(rawObject['files_count']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as TransactionItem
+}
+
+function buildTransactionSummary(value: any | null): TransactionSummary | null {
+	if (value == null) {
+		return null
+	}
+
+	const text = JSON.stringify(value)
+	const rawObject = text == null || text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	if (rawObject == null) {
+		return null
+	}
+
+	return {
+		purchase_amount: stringValue(rawObject['purchase_amount']),
+		arrears_amount: stringValue(rawObject['arrears_amount']),
+		payment_amount: stringValue(rawObject['payment_amount']),
+		net_amount: stringValue(rawObject['net_amount']),
+	} as TransactionSummary
+}
+
+function buildTransactionListResponse(raw: any, query: TransactionListQuery): TransactionListResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('往来记录列表响应解析失败')
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) {
+		const paginationText = JSON.stringify(rawPagination)
+		if (paginationText != null && paginationText != '') {
+			paginationObject = JSON.parseObject<UTSJSONObject>(paginationText)
+		}
+	}
+
+	let results: TransactionItem[] = []
+	const rawResults = rawObject['results']
+	if (rawResults != null) {
+		const resultText = JSON.stringify(rawResults)
+		const parsedResults = resultText == null || resultText == '' ? null : JSON.parseArray<UTSJSONObject>(resultText)
+		if (parsedResults != null) {
+			const nextResults: TransactionItem[] = []
+			for (let index = 0; index < parsedResults!.length; index += 1) {
+				nextResults.push(buildTransactionItemFromObject(parsedResults![index]))
+			}
+			results = nextResults
+		}
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total_count'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['count'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) {
+		currentPage = intValue(rawObject['current_page'])
+	}
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+		summary: buildTransactionSummary(rawObject['summary']),
+	} as TransactionListResponse
+}
+
+function buildTransactionFilterOptionsResponse(raw: any): TransactionFilterOptionsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('往来记录过滤选项解析失败')
+	}
+
+	let filters: TransactionFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filtersText = JSON.stringify(rawFilters)
+		const filterObjects = filtersText == null || filtersText == '' ? null : JSON.parseArray<UTSJSONObject>(filtersText)
+		if (filterObjects != null) {
+			const nextFilters: TransactionFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects!.length; filterIndex += 1) {
+				const filterObject = filterObjects![filterIndex]
+				let options: TransactionFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionsText = JSON.stringify(rawOptions)
+					const optionObjects = optionsText == null || optionsText == '' ? null : JSON.parseArray<UTSJSONObject>(optionsText)
+					if (optionObjects != null) {
+						const nextOptions: TransactionFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects!.length; optionIndex += 1) {
+							const optionObject = optionObjects![optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as TransactionFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: booleanValue(filterObject['multiple']),
+					options: options,
+				} as TransactionFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as TransactionFilterOptionsResponse
+}
+
+function buildTransactionOptionsResponse(raw: any): TransactionOptionsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('往来记录表单选项解析失败')
+	}
+
+	let groups: TransactionOptionGroup[] = []
+	const rawGroups = rawObject['groups']
+	if (rawGroups != null) {
+		const groupsText = JSON.stringify(rawGroups)
+		const groupObjects = groupsText == null || groupsText == '' ? null : JSON.parseArray<UTSJSONObject>(groupsText)
+		if (groupObjects != null) {
+			const nextGroups: TransactionOptionGroup[] = []
+			for (let groupIndex = 0; groupIndex < groupObjects!.length; groupIndex += 1) {
+				const groupObject = groupObjects![groupIndex]
+				let items: TransactionOptionItem[] = []
+				const rawItems = groupObject['items']
+				if (rawItems != null) {
+					const itemsText = JSON.stringify(rawItems)
+					const itemObjects = itemsText == null || itemsText == '' ? null : JSON.parseArray<UTSJSONObject>(itemsText)
+					if (itemObjects != null) {
+						const nextItems: TransactionOptionItem[] = []
+						for (let itemIndex = 0; itemIndex < itemObjects!.length; itemIndex += 1) {
+							const itemObject = itemObjects![itemIndex]
+							nextItems.push({
+								value: stringValue(itemObject['value']),
+								label: stringValue(itemObject['label']),
+								extra: itemObject,
+							} as TransactionOptionItem)
+						}
+						items = nextItems
+					}
+				}
+
+				nextGroups.push({
+					key: stringValue(groupObject['key']),
+					label: stringValue(groupObject['label']),
+					control: stringValue(groupObject['control']),
+					count: intValue(groupObject['count']),
+					items: items,
+				} as TransactionOptionGroup)
+			}
+			groups = nextGroups
+		}
+	}
+
+	return {
+		resource: stringValue(rawObject['resource']),
+		total_groups: intValue(rawObject['total_groups']),
+		groups: groups,
+	} as TransactionOptionsResponse
+}
+
+function buildTransactionStatisticsResponse(raw: any): TransactionStatisticsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('往来记录统计解析失败')
+	}
+
+	return {
+		data: rawObject,
+	} as TransactionStatisticsResponse
+}
+
+function buildTransactionMutationBody(data: TransactionMutationData): UTSJSONObject {
+	const body = {
+		supplier: data.supplier,
+		transaction_type: data.transaction_type,
+		amount: data.amount,
+		transaction_date: data.transaction_date,
+	} as UTSJSONObject
+
+	if (data.note != null) {
+		body['note'] = data.note
+	}
+
+	return body
+}
+
+function transactionDetailPath(id: number | string): string {
+	return '/api/procurement/transactions/' + stringValue(id) + '/'
+}
+
+export async function getTransactionList(data: TransactionListQuery): Promise<TransactionListResponse> {
+	const raw = await request(
+		'/api/procurement/transactions/',
+		'GET',
+		buildTransactionListQuery(data),
+		true
+	)
+
+	return buildTransactionListResponse(raw, data)
+}
+
+export async function getTransactionFilterOptions(): Promise<TransactionFilterOptionsResponse> {
+	const raw = await request(
+		'/api/procurement/transactions/filter-options/',
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+
+	return buildTransactionFilterOptionsResponse(raw)
+}
+
+export async function getTransactionOptions(key: string | null = null, search: string | null = null, limit: number = 20): Promise<TransactionOptionsResponse> {
+	const query = {} as UTSJSONObject
+	if (key != null && key != '') {
+		query['key'] = key
+	}
+	if (search != null && search != '') {
+		query['search'] = search
+	}
+	if (limit > 0) {
+		query['limit'] = limit
+	}
+
+	const raw = await request(
+		'/api/procurement/transactions/options/',
+		'GET',
+		query,
+		true
+	)
+
+	return buildTransactionOptionsResponse(raw)
+}
+
+export async function getTransactionDetail(id: number | string): Promise<TransactionItem> {
+	const raw = await request(
+		transactionDetailPath(id),
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('往来记录详情响应解析失败')
+	}
+
+	return buildTransactionItemFromObject(rawObject)
+}
+
+export async function createTransaction(data: TransactionMutationData): Promise<TransactionItem> {
+	const raw = await request(
+		'/api/procurement/transactions/',
+		'POST',
+		buildTransactionMutationBody(data),
+		true
+	)
+
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('创建往来记录响应解析失败')
+	}
+
+	return buildTransactionItemFromObject(rawObject)
+}
+
+export async function updateTransaction(id: number | string, data: TransactionMutationData): Promise<TransactionItem> {
+	const raw = await request(
+		transactionDetailPath(id),
+		'PUT',
+		buildTransactionMutationBody(data),
+		true
+	)
+
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('更新往来记录响应解析失败')
+	}
+
+	return buildTransactionItemFromObject(rawObject)
+}
+
+export async function patchTransaction(id: number | string, data: TransactionMutationData): Promise<TransactionItem> {
+	const raw = await request(
+		transactionDetailPath(id),
+		'PATCH',
+		buildTransactionMutationBody(data),
+		true
+	)
+
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('部分更新往来记录响应解析失败')
+	}
+
+	return buildTransactionItemFromObject(rawObject)
+}
+
+export function deleteTransaction(id: number | string): Promise<any> {
+	return request(
+		transactionDetailPath(id),
+		'DELETE',
+		{} as UTSJSONObject,
+		true
+	)
+}
+
+export async function getTransactionAllImages(id: number | string): Promise<TransactionMediaFile[]> {
+	const raw = await request(
+		transactionDetailPath(id) + 'all_images/',
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+
+	return buildTransactionMediaFilesFromValue(raw)
+}
+
+export async function getTransactionStatistics(query: TransactionListQuery | null = null): Promise<TransactionStatisticsResponse> {
+	const requestQuery = query == null ? {} as UTSJSONObject : buildTransactionListQuery(query)
+	const raw = await request(
+		'/api/procurement/transactions/statistics/',
+		'GET',
+		requestQuery,
+		true
+	)
+
+	return buildTransactionStatisticsResponse(raw)
+}

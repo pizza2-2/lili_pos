@@ -89,6 +89,8 @@
 					:fields="fieldConfig"
 					:loading="isLoading"
 					loadingText="正在加载供应商"
+					:keepContentOnLoading="true"
+					inlineLoadingText="供应商数据刷新中..."
 					:emptyText="emptyText"
 					emptyIcon="◎"
 					:showMenu="true"
@@ -98,12 +100,15 @@
 					:currentPage="currentPage"
 					:totalPages="totalPages"
 					:totalCount="totalCount"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
 					@item-click="handleItemClick"
 					@subtitle-click="handleSubtitleClick"
 					@meta-click="handleMetaClick"
 					@field-click="handleFieldClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
+					@floating-add="handleCreateSupplier"
 				/>
 			</view>
 		<!-- #ifdef APP -->
@@ -115,6 +120,8 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { deleteSupplier, getSupplierList, getSupplierFilterOptions, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse } from '@/pkg/api/modules/suppliers'
+
+const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
 
 const keyword = ref('')
 const filterVisible = ref(false)
@@ -140,6 +147,8 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'Detail', text: '详情' } as UTSJSONObject,
+	{ key: 'add', text: '增加采购记录' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
@@ -209,6 +218,21 @@ async function loadSuppliers() {
 	} finally {
 		isLoading.value = false
 	}
+}
+
+function consumeSupplierListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(supplierListRefreshStorageKey)
+	if (storedValue == null) {
+		return false
+	}
+
+	const storedText = '' + storedValue
+	if (storedText == '') {
+		return false
+	}
+
+	uni.removeStorageSync(supplierListRefreshStorageKey)
+	return true
 }
 
 function getDisplayText(value: string | null): string {
@@ -496,6 +520,20 @@ async function confirmDeleteSupplier(supplierId: string) {
 	}
 }
 
+function navigateToTransactionsPage(pagePath: string, supplierId: string) {
+	if (supplierId == '') {
+		uni.showToast({
+			title: '供应商ID缺失',
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.navigateTo({
+		url: pagePath + '?supplier_id=' + supplierId,
+	})
+}
+
 function handleMenu(payload: UTSJSONObject) {
 	const action = payload['action']
 	const item = payload['item']
@@ -518,6 +556,16 @@ function handleMenu(payload: UTSJSONObject) {
 		uni.navigateTo({
 			url: '/pages/suppliers/from?id=' + supplierId,
 		})
+		return
+	}
+
+	if (key == 'Detail') {
+		navigateToTransactionsPage('/pages/transactions/index', supplierId)
+		return
+	}
+
+	if (key == 'add') {
+		navigateToTransactionsPage('/pages/transactions/from', supplierId)
 		return
 	}
 
@@ -561,6 +609,12 @@ function handleMenu(payload: UTSJSONObject) {
 			},
 		})
 	}
+}
+
+function handleCreateSupplier() {
+	uni.navigateTo({
+		url: '/pages/suppliers/from',
+	})
 }
 
 const listItems = computed((): UTSJSONObject[] => {
@@ -621,7 +675,9 @@ onLoad(() => {
 })
 
 onShow(() => {
-	loadSuppliers()
+	if (consumeSupplierListRefreshNeeded()) {
+		loadSuppliers()
+	}
 })
 </script>
 
@@ -640,7 +696,7 @@ onShow(() => {
 	padding-left: 16px;
 	padding-right: 16px;
 	padding-top: 12px;
-	padding-bottom: 24px;
+	padding-bottom: 96px;
 }
 
 .summary-card {

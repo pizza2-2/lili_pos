@@ -1,4 +1,4 @@
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 35, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 48, 6>;
 	visible?: boolean
 	title?: string
 	content?: string
@@ -57,17 +57,17 @@ const confirmDangerValue = ref<boolean>(props.confirmDanger)
 const autoCloseValue = ref<boolean>(props.autoClose)
 
 function syncStyle() {
-	panelStyle.value = `width:${props.width};`
+	panelStyle.value = `width:${props.width};max-width:100%;`
 	rootStyle.value = `z-index:${props.zIndex};`
 }
 
-function readString(config: UTSJSONObject, key: string, fallback: string) : string {
+function readString(config: UTSJSONObject, key: string, fallback: string): string {
 	const value = config[key]
 	if (value == null) return fallback
 	return '' + value
 }
 
-function readBoolean(config: UTSJSONObject, key: string, fallback: boolean) : boolean {
+function readBoolean(config: UTSJSONObject, key: string, fallback: boolean): boolean {
 	const value = config[key]
 	if (value == null) return fallback
 	return value as boolean
@@ -88,6 +88,7 @@ function applyBaseProps() {
 function applyConfig(config: UTSJSONObject | null) {
 	applyBaseProps()
 	if (config == null) return
+
 	currentTitle.value = readString(config, 'title', currentTitle.value)
 	currentContent.value = readString(config, 'content', currentContent.value)
 	cancelTextValue.value = readString(config, 'cancelText', cancelTextValue.value)
@@ -113,7 +114,7 @@ function open(config: UTSJSONObject | null = null) {
 }
 
 function openSaveConfirm(config: UTSJSONObject | null = null) {
-	const defaultConfig: UTSJSONObject = {__$originalPosition: new UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 145, 8),
+	const defaultConfig: UTSJSONObject = {__$originalPosition: new UTSSourceMapPosition("defaultConfig", "uni_modules/lili-popup/components/lili-popup/lili-popup.uvue", 159, 8),
 		title: '是否保存',
 		content: '当前内容已修改，是否保存后再退出？',
 		auxiliaryText: '退出',
@@ -124,11 +125,13 @@ function openSaveConfirm(config: UTSJSONObject | null = null) {
 		confirmDanger: false,
 		autoClose: true,
 	}
+
 	if (config != null) {
 		for (var key in config) {
 			defaultConfig[key] = config[key]
 		}
 	}
+
 	open(defaultConfig)
 }
 
@@ -168,67 +171,91 @@ function handleCloseIcon() {
 	close('icon')
 }
 
+function syncBasePropsWhenClosed() {
+	if (!renderVisible.value) {
+		applyBaseProps()
+	}
+}
+
 watch(
-	() : boolean => props.visible,
+	(): boolean => props.visible,
 	(newValue: boolean) => {
 		renderVisible.value = newValue
 	}
 )
 
 watch(
-	() : string => props.title,
+	(): string => props.title,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.content,
+	(): string => props.content,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.cancelText,
+	(): string => props.cancelText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.confirmText,
+	(): string => props.confirmText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.auxiliaryText,
+	(): string => props.auxiliaryText,
 	() => {
-		if (!renderVisible.value) {
-			applyBaseProps()
-		}
+		syncBasePropsWhenClosed()
 	}
 )
 
 watch(
-	() : string => props.width,
+	(): boolean => props.closeOnMask,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.showCloseIcon,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.confirmDanger,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): boolean => props.autoClose,
+	() => {
+		syncBasePropsWhenClosed()
+	}
+)
+
+watch(
+	(): string => props.width,
 	() => {
 		syncStyle()
 	}
 )
 
 watch(
-	() : number => props.zIndex,
+	(): number => props.zIndex,
 	() => {
 		syncStyle()
 	}
@@ -270,9 +297,11 @@ return (): any | null => {
                 _cE("text", _uM({ class: "lp-close-text" }), "×")
               ])
             : _cC("v-if", true),
-          _cE("view", _uM({ class: "lp-header" }), [
+          _cE("view", _uM({
+            class: _nC(unref(showCloseIconValue) ? 'lp-header lp-header-has-close' : 'lp-header')
+          }), [
             _cE("text", _uM({ class: "lp-title" }), _tD(unref(currentTitle)), 1 /* TEXT */)
-          ]),
+          ], 2 /* CLASS */),
           _cE("view", _uM({ class: "lp-body" }), [
             renderSlot(_ctx.$slots, "default", {}, (): any[] => [
               unref(currentContent) != ''
@@ -287,23 +316,23 @@ return (): any | null => {
             unref(auxiliaryTextValue) != ''
               ? _cE("view", _uM({
                   key: 0,
-                  class: "lp-btn lp-btn-gap-right lp-btn-light",
+                  class: "lp-btn lp-btn-light",
                   onClick: handleAuxiliary
                 }), [
                   _cE("text", _uM({ class: "lp-btn-light-text" }), _tD(unref(auxiliaryTextValue)), 1 /* TEXT */)
                 ])
               : _cC("v-if", true),
             _cE("view", _uM({
-              class: _nC(unref(auxiliaryTextValue) != '' ? 'lp-btn lp-btn-gap-right lp-btn-light' : 'lp-btn lp-btn-light'),
+              class: _nC(unref(auxiliaryTextValue) != '' ? 'lp-btn lp-btn-gap-left lp-btn-light' : 'lp-btn lp-btn-light'),
               onClick: handleCancel
             }), [
               _cE("text", _uM({ class: "lp-btn-light-text" }), _tD(unref(cancelTextValue)), 1 /* TEXT */)
             ], 2 /* CLASS */),
             _cE("view", _uM({
-              class: _nC(unref(confirmDangerValue) ? 'lp-btn lp-btn-danger' : 'lp-btn lp-btn-primary'),
+              class: _nC(unref(confirmDangerValue) ? 'lp-btn lp-btn-gap-left lp-btn-danger' : 'lp-btn lp-btn-gap-left lp-btn-primary'),
               onClick: handleConfirm
             }), [
-              _cE("text", _uM({ class: "lp-btn-primary-text" }), _tD(unref(confirmTextValue)), 1 /* TEXT */)
+              _cE("text", _uM({ class: "lp-btn-solid-text" }), _tD(unref(confirmTextValue)), 1 /* TEXT */)
             ], 2 /* CLASS */)
           ])
         ], 4 /* STYLE */)
@@ -315,4 +344,4 @@ return (): any | null => {
 })
 export default __sfc__
 export type LiliPopupComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliPopupComponentsLiliPopupLiliPopupStyles = [_uM([["lp-root", _pS(_uM([["position", "fixed"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 24], ["paddingRight", 24]]))], ["lp-mask", _pS(_uM([["position", "absolute"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "rgba(15,23,42,0.48)"]]))], ["lp-panel", _pS(_uM([["position", "relative"], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 24], ["borderTopRightRadius", 24], ["borderBottomRightRadius", 24], ["borderBottomLeftRadius", 24], ["paddingTop", 28], ["paddingLeft", 24], ["paddingRight", 24], ["paddingBottom", 20]]))], ["lp-close", _pS(_uM([["position", "absolute"], ["top", 16], ["right", 16], ["width", 28], ["height", 28], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F3F4F6"]]))], ["lp-close-text", _pS(_uM([["fontSize", 18], ["lineHeight", "18px"], ["color", "#475569"]]))], ["lp-header", _pS(_uM([["alignItems", "center"], ["paddingRight", 36]]))], ["lp-title", _pS(_uM([["fontSize", 18], ["lineHeight", "26px"], ["color", "#0F172A"], ["fontWeight", "600"], ["textAlign", "center"]]))], ["lp-body", _pS(_uM([["minHeight", 56], ["paddingTop", 16], ["paddingBottom", 24], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lp-content", _pS(_uM([["fontSize", 15], ["lineHeight", "23px"], ["color", "#475569"], ["textAlign", "center"]]))], ["lp-footer", _pS(_uM([["flexDirection", "row"]]))], ["lp-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["lp-btn-gap-right", _pS(_uM([["marginLeft", 12]]))], ["lp-btn-light", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lp-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["lp-btn-danger", _pS(_uM([["backgroundColor", "#DC2626"]]))], ["lp-btn-light-text", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#334155"], ["fontWeight", "500"]]))], ["lp-btn-primary-text", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#FFFFFF"], ["fontWeight", "600"]]))]])]
+const GenUniModulesLiliPopupComponentsLiliPopupLiliPopupStyles = [_uM([["lp-root", _pS(_uM([["position", "fixed"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", "40rpx"], ["paddingRight", "40rpx"]]))], ["lp-mask", _pS(_uM([["position", "absolute"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "rgba(15,23,42,0.42)"]]))], ["lp-panel", _pS(_uM([["position", "relative"], ["width", "100%"], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", "28rpx"], ["borderTopRightRadius", "28rpx"], ["borderBottomRightRadius", "28rpx"], ["borderBottomLeftRadius", "28rpx"], ["paddingTop", "34rpx"], ["paddingLeft", "32rpx"], ["paddingRight", "32rpx"], ["paddingBottom", "28rpx"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#F1F5F9"], ["borderRightColor", "#F1F5F9"], ["borderBottomColor", "#F1F5F9"], ["borderLeftColor", "#F1F5F9"], ["boxShadow", "0 16rpx 48rpx rgba(15, 23, 42, 0.10)"], ["boxSizing", "border-box"], ["overflow", "hidden"]]))], ["lp-close", _pS(_uM([["position", "absolute"], ["top", "20rpx"], ["right", "20rpx"], ["width", "52rpx"], ["height", "52rpx"], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", "26rpx"], ["borderTopRightRadius", "26rpx"], ["borderBottomRightRadius", "26rpx"], ["borderBottomLeftRadius", "26rpx"], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lp-close-text", _pS(_uM([["fontSize", "34rpx"], ["lineHeight", "34rpx"], ["color", "#64748B"], ["fontWeight", "500"]]))], ["lp-header", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"]]))], ["lp-header-has-close", _pS(_uM([["paddingRight", "60rpx"]]))], ["lp-title", _pS(_uM([["width", "100%"], ["fontSize", "34rpx"], ["lineHeight", "44rpx"], ["color", "#0F172A"], ["fontWeight", "600"], ["textAlign", "center"]]))], ["lp-body", _pS(_uM([["minHeight", "80rpx"], ["paddingTop", "24rpx"], ["paddingBottom", "30rpx"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lp-content", _pS(_uM([["width", "100%"], ["fontSize", "28rpx"], ["lineHeight", "42rpx"], ["color", "#64748B"], ["textAlign", "center"]]))], ["lp-footer", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lp-btn", _pS(_uM([["height", "72rpx"], ["minWidth", "156rpx"], ["paddingLeft", "28rpx"], ["paddingRight", "28rpx"], ["borderTopLeftRadius", "18rpx"], ["borderTopRightRadius", "18rpx"], ["borderBottomRightRadius", "18rpx"], ["borderBottomLeftRadius", "18rpx"], ["alignItems", "center"], ["justifyContent", "center"], ["boxSizing", "border-box"]]))], ["lp-btn-gap-left", _pS(_uM([["marginLeft", "16rpx"]]))], ["lp-btn-light", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lp-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"], ["boxShadow", "0 8rpx 20rpx rgba(15, 23, 42, 0.10)"]]))], ["lp-btn-danger", _pS(_uM([["backgroundColor", "#EF4444"], ["boxShadow", "0 8rpx 20rpx rgba(239, 68, 68, 0.14)"]]))], ["lp-btn-light-text", _pS(_uM([["fontSize", "28rpx"], ["lineHeight", "28rpx"], ["color", "#334155"], ["fontWeight", "500"], ["textAlign", "center"]]))], ["lp-btn-solid-text", _pS(_uM([["fontSize", "28rpx"], ["lineHeight", "28rpx"], ["color", "#FFFFFF"], ["fontWeight", "600"], ["textAlign", "center"]]))]])]

@@ -30,6 +30,8 @@ import GenPagesWebviewWebviewClass from './pages/webview/webview.uvue';
 import GenPagesPrivacyPrivacyClass from './pages/privacy/privacy.uvue';
 import GenPagesSuppliersIndexClass from './pages/suppliers/index.uvue';
 import GenPagesSuppliersFromClass from './pages/suppliers/from.uvue';
+import GenPagesTransactionsIndexClass from './pages/transactions/index.uvue';
+import GenPagesTransactionsFromClass from './pages/transactions/from.uvue';
 function definePageRoutes() {
     __uniRoutes.push({ path: "pages/login/login", component: GenPagesLoginLoginClass, meta: { isQuit: true } as UniPageMeta, style: _uM([["navigationStyle", "custom"]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/tabbar/reports", component: GenPagesTabbarReportsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "报表"]]) } as UniPageRoute);
@@ -41,6 +43,8 @@ function definePageRoutes() {
     __uniRoutes.push({ path: "pages/privacy/privacy", component: GenPagesPrivacyPrivacyClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/suppliers/index", component: GenPagesSuppliersIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/suppliers/from", component: GenPagesSuppliersFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
+    __uniRoutes.push({ path: "pages/transactions/index", component: GenPagesTransactionsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
+    __uniRoutes.push({ path: "pages/transactions/from", component: GenPagesTransactionsFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
 }
 const __uniTabBar: Map<string, any | null> | null = _uM([["color", "#94A3B8"], ["selectedColor", "#0F172A"], ["backgroundColor", "#FFFFFF"], ["borderStyle", "black"], ["list", [_uM([["pagePath", "pages/tabbar/reports"], ["iconPath", "static/tabBar/Report.png"], ["selectedIconPath", "static/tabBar/Report (1).png"], ["text", "报表"]]), _uM([["pagePath", "pages/tabbar/products"], ["iconPath", "static/tabBar/product (1).png"], ["selectedIconPath", "static/tabBar/product (2).png"], ["text", "商品"]]), _uM([["pagePath", "pages/tabbar/settings"], ["iconPath", "static/tabBar/set.png"], ["selectedIconPath", "static/tabBar/set (1).png"], ["text", "功能"]]), _uM([["pagePath", "pages/tabbar/mine"], ["iconPath", "static/tabBar/me.png"], ["selectedIconPath", "static/tabBar/me (1).png"], ["text", "我的"]])]]]);
 const __uniLaunchPage: Map<string, any | null> = _uM([["url", "pages/login/login"], ["style", _uM([["navigationStyle", "custom"]])]]);
