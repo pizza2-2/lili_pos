@@ -39,10 +39,11 @@ open class GenPagesSuppliersIndex : BasePage {
             val filterOptionsLoading = ref(false)
             val filterOptionsError = ref("")
             val filterOptions = ref<SupplierFilterOptionsResponse?>(null)
+            val globalStatistics = ref<SupplierGlobalStatisticsResponse?>(null)
             val selectedIsActive = ref<String?>(null)
             val selectedHasArrears = ref<String?>(null)
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "phone", "label" to "电话"), _uO("key" to "address", "label" to "地址"), _uO("key" to "arrears_amount", "label" to "欠款")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "详情"), _uO("key" to "add", "text" to "增加采购记录"), _uO("key" to "delete", "text" to "删除")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "详情"), _uO("key" to "add", "text" to "增加"), _uO("key" to "delete", "text" to "删除")))
             fun gen_applySupplierResponse_fn(response: SupplierListResponse) {
                 suppliers.value = response.results
                 currentPage.value = response.current_page
@@ -64,7 +65,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:177")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:181")
                         if (parsedError != null) {
                             val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
@@ -96,6 +97,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 keyword.value
                             }
                             , page = currentPage.value, page_size = pageSize.value, is_active = selectedIsActive.value, has_arrears = selectedHasArrears.value)))
+                            console.log(response, " at pages/suppliers/index.uvue:215")
                             applySupplierResponse(response)
                         }
                          catch (error: Throwable) {
@@ -111,6 +113,33 @@ open class GenPagesSuppliersIndex : BasePage {
                 })
             }
             val loadSuppliers = ::gen_loadSuppliers_fn
+            fun gen_getGlobalStatisticsNumberText_fn(key: String, fallback: String): String {
+                if (globalStatistics.value == null) {
+                    return fallback
+                }
+                val rawValue = globalStatistics.value!!.data[key]
+                if (rawValue == null) {
+                    return fallback
+                }
+                val text = "" + rawValue
+                if (text == "") {
+                    return fallback
+                }
+                return text
+            }
+            val getGlobalStatisticsNumberText = ::gen_getGlobalStatisticsNumberText_fn
+            fun gen_loadSupplierGlobalStatistics_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend {
+                        try {
+                            val response = await(getSupplierGlobalStatistics())
+                            globalStatistics.value = response
+                        }
+                         catch (error: Throwable) {
+                            globalStatistics.value = null
+                        }
+                })
+            }
+            val loadSupplierGlobalStatistics = ::gen_loadSupplierGlobalStatistics_fn
             fun gen_consumeSupplierListRefreshNeeded_fn(): Boolean {
                 val storedValue = uni_getStorageSync(supplierListRefreshStorageKey)
                 if (storedValue == null) {
@@ -505,32 +534,11 @@ open class GenPagesSuppliersIndex : BasePage {
                 return totalCount.value.toString(10)
             }
             )
-            val activeCountText = computed(fun(): String {
-                var count: Number = 0
-                run {
-                    var index: Number = 0
-                    while(index < suppliers.value.length){
-                        if (suppliers.value[index].is_active) {
-                            count += 1
-                        }
-                        index += 1
-                    }
-                }
-                return count.toString(10)
-            }
-            )
-            val withFileCountText = computed(fun(): String {
-                var count: Number = 0
-                run {
-                    var index: Number = 0
-                    while(index < suppliers.value.length){
-                        if (suppliers.value[index].files_count > 0) {
-                            count += 1
-                        }
-                        index += 1
-                    }
-                }
-                return count.toString(10)
+            val summaryItems = computed(fun(): UTSArray<UTSJSONObject> {
+                return _uA(
+                    _uO("key" to "total", "label" to "供应商总数", "value" to getGlobalStatisticsNumberText("total_suppliers", supplierCountText.value)),
+                    _uO("key" to "arrears", "label" to "总欠款金额", "value" to getGlobalStatisticsNumberText("total_arrears_amount", "0"))
+                )
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
@@ -556,11 +564,13 @@ open class GenPagesSuppliersIndex : BasePage {
             )
             onLoad(fun(_options){
                 loadSuppliers()
+                loadSupplierGlobalStatistics()
             }
             )
             onShow(fun(){
                 if (consumeSupplierListRefreshNeeded()) {
                     loadSuppliers()
+                    loadSupplierGlobalStatistics()
                 }
             }
             )
@@ -650,7 +660,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "contactText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载供应商", "keepContentOnLoading" to true, "inlineLoadingText" to "供应商数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "showFloatingAdd" to true, "floatingAddText" to "新增", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateSupplier), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "contactText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载供应商", "keepContentOnLoading" to true, "inlineLoadingText" to "供应商数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "供应商统计", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateSupplier), null, 8, _uA(
                                 "items",
                                 "fields",
                                 "loading",
@@ -658,7 +668,8 @@ open class GenPagesSuppliersIndex : BasePage {
                                 "menuActions",
                                 "currentPage",
                                 "totalPages",
-                                "totalCount"
+                                "totalCount",
+                                "summaryItems"
                             ))
                         ))
                     ), 4)
@@ -672,7 +683,7 @@ open class GenPagesSuppliersIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 16, "paddingRight" to 16, "paddingTop" to 12, "paddingBottom" to 96)), "summary-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 16, "paddingRight" to 16, "paddingBottom" to 16, "paddingLeft" to 16, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5E7EB", "borderRightColor" to "#E5E7EB", "borderBottomColor" to "#E5E7EB", "borderLeftColor" to "#E5E7EB", "flexDirection" to "row")), "summary-item" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "summary-item-gap" to _pS(_uM("marginRight" to 10)), "summary-value" to _pS(_uM("fontSize" to 22, "lineHeight" to "28px", "color" to "#0F172A", "fontWeight" to "bold")), "summary-label" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#94A3B8", "marginTop" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "supplier-filter-panel" to _pS(_uM("paddingBottom" to 8)), "supplier-filter-actions" to _pS(_uM("flexDirection" to "row", "marginBottom" to 12)), "supplier-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "supplier-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "supplier-filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#475569")), "supplier-filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "supplier-filter-state" to _pS(_uM("height" to 140, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-state-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "supplier-filter-scroll" to _pS(_uM("height" to 360)), "supplier-filter-group" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 8)), "supplier-filter-group-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold")), "supplier-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "supplier-filter-option" to _pS(_uM("minWidth" to 56, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "supplier-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "supplier-filter-option-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "supplier-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "supplier-filter-panel" to _pS(_uM("paddingBottom" to 8)), "supplier-filter-actions" to _pS(_uM("flexDirection" to "row", "marginBottom" to 12)), "supplier-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "supplier-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "supplier-filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#475569")), "supplier-filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "supplier-filter-state" to _pS(_uM("height" to 140, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-state-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "supplier-filter-scroll" to _pS(_uM("height" to 360)), "supplier-filter-group" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 8)), "supplier-filter-group-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold")), "supplier-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "supplier-filter-option" to _pS(_uM("minWidth" to 56, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "supplier-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "supplier-filter-option-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "supplier-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

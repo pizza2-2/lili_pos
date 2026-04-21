@@ -63,6 +63,30 @@
 								@input="handleNumberInput(field, $event)"
 							/>
 
+							<view v-else-if="isDatetimeField(field)" class="uf-datetime-wrap">
+								<picker
+									mode="date"
+									:value="getDatetimeDateValue(field)"
+									:disabled="isReadonly(field)"
+									@change="handleDatetimeDateChange(field, $event)"
+								>
+									<view :class="getDatetimeValueClass(field, getDatetimeDateValue(field))">
+										<text :class="getDatetimeTextClass(field, getDatetimeDateValue(field))">{{ getDatetimeDateText(field) }}</text>
+									</view>
+								</picker>
+								<view class="uf-datetime-gap"></view>
+								<picker
+									mode="time"
+									:value="getDatetimeTimeValue(field)"
+									:disabled="isReadonly(field)"
+									@change="handleDatetimeTimeChange(field, $event)"
+								>
+									<view :class="getDatetimeValueClass(field, getDatetimeTimeValue(field))">
+										<text :class="getDatetimeTextClass(field, getDatetimeTimeValue(field))">{{ getDatetimeTimeText(field) }}</text>
+									</view>
+								</picker>
+							</view>
+
 							<switch
 								v-else-if="isSwitchField(field)"
 								:checked="getBooleanFieldValue(field)"
@@ -133,6 +157,7 @@
 		>
 			<text class="uf-floating-action-text">{{ props.floatingActionText }}</text>
 		</view>
+
 	</view>
 </template>
 
@@ -294,6 +319,10 @@ function isNumberField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'number'
 }
 
+function isDatetimeField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'datetime'
+}
+
 function isSwitchField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'switch'
 }
@@ -431,6 +460,77 @@ function getBottomSelectSearchDelay(field: UTSJSONObject) : number {
 	const value = getNumberField(field, 'searchDelay', 300)
 	if (value <= 0) return 300
 	return value
+}
+
+function getDatetimeDateValue(field: UTSJSONObject) : string {
+	const value = getStringFieldValue(field)
+	if (value.length >= 10) {
+		return value.substring(0, 10)
+	}
+	return ''
+}
+
+function getDatetimeTimeValue(field: UTSJSONObject) : string {
+	const value = getStringFieldValue(field)
+	if (value.length >= 16) {
+		return value.substring(11, 16)
+	}
+	return ''
+}
+
+function getDatetimeDateText(field: UTSJSONObject) : string {
+	const value = getDatetimeDateValue(field)
+	if (value != '') {
+		return value
+	}
+	const placeholder = getStringField(field, 'datePlaceholder')
+	if (placeholder != '') {
+		return placeholder
+	}
+	return '请选择日期'
+}
+
+function getDatetimeTimeText(field: UTSJSONObject) : string {
+	const value = getDatetimeTimeValue(field)
+	if (value != '') {
+		return value
+	}
+	const placeholder = getStringField(field, 'timePlaceholder')
+	if (placeholder != '') {
+		return placeholder
+	}
+	return '请选择时间'
+}
+
+function getDatetimeValueClass(field: UTSJSONObject, value: string) : string {
+	if (value == '') {
+		return 'uf-datetime-box uf-datetime-box-placeholder'
+	}
+	if (isReadonly(field)) {
+		return 'uf-datetime-box uf-datetime-box-readonly'
+	}
+	return 'uf-datetime-box'
+}
+
+function getDatetimeTextClass(field: UTSJSONObject, value: string) : string {
+	if (value == '') {
+		return 'uf-datetime-text uf-datetime-text-placeholder'
+	}
+	if (isReadonly(field)) {
+		return 'uf-datetime-text uf-datetime-text-readonly'
+	}
+	return 'uf-datetime-text'
+}
+
+function buildDatetimeValue(dateText: string, timeText: string) : string {
+	if (dateText == '' && timeText == '') {
+		return ''
+	}
+	if (dateText == '') {
+		return ''
+	}
+	const normalizedTime = timeText == '' ? '00:00' : timeText
+	return dateText + ' ' + normalizedTime + ':00'
 }
 
 function showBottomSelectEdit(field: UTSJSONObject) : boolean {
@@ -603,6 +703,32 @@ function handleNumberInput(field: UTSJSONObject, event: any) {
 	setFieldValueByKey(key, value)
 	clearFieldError(key)
 	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
+function setDatetimeFieldValue(key: string, value: string) {
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+}
+
+function handleDatetimeDateChange(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const nextDate = readEventValue(event)
+	const currentTime = getDatetimeTimeValue(field)
+	const value = buildDatetimeValue(nextDate, currentTime)
+	setDatetimeFieldValue(key, value)
+	emitFieldChange(field, value)
+}
+
+function handleDatetimeTimeChange(field: UTSJSONObject, event: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const nextTime = readEventValue(event)
+	const currentDate = getDatetimeDateValue(field)
+	const value = buildDatetimeValue(currentDate, nextTime)
+	setDatetimeFieldValue(key, value)
 	emitFieldChange(field, value)
 }
 
@@ -1017,6 +1143,46 @@ defineExpose({
 	background-color: #F8FAFC;
 	font-size: 14px;
 	color: #111827;
+}
+
+.uf-datetime-wrap {
+	flex-direction: row;
+}
+
+.uf-datetime-box {
+	flex: 1;
+	min-height: 44px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 10px;
+	justify-content: center;
+	background-color: #F8FAFC;
+}
+
+.uf-datetime-box-placeholder {
+	background-color: #F8FAFC;
+}
+
+.uf-datetime-box-readonly {
+	background-color: #F3F4F6;
+}
+
+.uf-datetime-text {
+	font-size: 14px;
+	color: #111827;
+	line-height: 20px;
+}
+
+.uf-datetime-text-placeholder {
+	color: #9CA3AF;
+}
+
+.uf-datetime-text-readonly {
+	color: #6B7280;
+}
+
+.uf-datetime-gap {
+	width: 8px;
 }
 
 .uf-bottom-select-wrap {

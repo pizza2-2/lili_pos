@@ -1894,6 +1894,44 @@ class SupplierFilterOptionsResponseReactiveObject : SupplierFilterOptionsRespons
             _tRS(__v_raw, "filters", oldValue, value)
         }
 }
+open class SupplierGlobalStatisticsResponse (
+    @JsonNotNull
+    open var data: UTSJSONObject,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierGlobalStatisticsResponse", "pkg/api/modules/suppliers.uts", 77, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SupplierGlobalStatisticsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SupplierGlobalStatisticsResponseReactiveObject : SupplierGlobalStatisticsResponse, IUTSReactive<SupplierGlobalStatisticsResponse> {
+    override var __v_raw: SupplierGlobalStatisticsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SupplierGlobalStatisticsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(data = __v_raw.data) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SupplierGlobalStatisticsResponseReactiveObject {
+        return SupplierGlobalStatisticsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var data: UTSJSONObject
+        get() {
+            return _tRG(__v_raw, "data", __v_raw.data, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("data")) {
+                return
+            }
+            val oldValue = __v_raw.data
+            __v_raw.data = value
+            _tRS(__v_raw, "data", oldValue, value)
+        }
+}
 open class SupplierMutationData (
     open var code: String? = null,
     @JsonNotNull
@@ -2210,6 +2248,18 @@ fun buildSupplierItemResponse(raw: Any): SupplierItem {
     }
     )(), is_deleted = stringValue(rawObject!!["is_deleted"]) == "true", created_at = stringValue(rawObject!!["created_at"]), updated_at = stringValue(rawObject!!["updated_at"]), media_files = buildSupplierMediaFilesFromValue(rawObject!!["media_files"]))
 }
+fun buildSupplierGlobalStatisticsResponse(raw: Any): SupplierGlobalStatisticsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:406")
+    }
+    if (rawObject == null) {
+        throw UTSError("供应商全局统计解析失败")
+    }
+    return SupplierGlobalStatisticsResponse(data = rawObject!!)
+}
 fun buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
     val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/suppliers.uts", 415, 11), "name" to data.name)
     if (data.code != null) {
@@ -2270,6 +2320,12 @@ fun updateSupplier(id: Any, data: SupplierMutationData): UTSPromise<SupplierItem
 }
 fun deleteSupplier(id: Any): UTSPromise<Any> {
     return request(supplierDetailPath(id), "DELETE", _uO(), true)
+}
+fun getSupplierGlobalStatistics(): UTSPromise<SupplierGlobalStatisticsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/suppliers/global_statistics/", "GET", _uO(), true))
+            return@w buildSupplierGlobalStatisticsResponse(raw)
+    })
 }
 val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
@@ -3392,6 +3448,100 @@ open class TransactionListResponse (
         return UTSSourceMapPosition("TransactionListResponse", "pkg/api/modules/transactions.uts", 57, 13)
     }
 }
+open class TransactionOptionItem (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var extra: UTSJSONObject,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionOptionItem", "pkg/api/modules/transactions.uts", 84, 13)
+    }
+}
+open class TransactionOptionGroup (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var control: String,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var items: UTSArray<TransactionOptionItem>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionOptionGroup", "pkg/api/modules/transactions.uts", 89, 13)
+    }
+}
+open class TransactionOptionsResponse (
+    @JsonNotNull
+    open var resource: String,
+    @JsonNotNull
+    open var total_groups: Number,
+    @JsonNotNull
+    open var groups: UTSArray<TransactionOptionGroup>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionOptionsResponse", "pkg/api/modules/transactions.uts", 96, 13)
+    }
+}
+open class TransactionStatisticsResponse (
+    @JsonNotNull
+    open var data: UTSJSONObject,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionStatisticsResponse", "pkg/api/modules/transactions.uts", 101, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return TransactionStatisticsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class TransactionStatisticsResponseReactiveObject : TransactionStatisticsResponse, IUTSReactive<TransactionStatisticsResponse> {
+    override var __v_raw: TransactionStatisticsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: TransactionStatisticsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(data = __v_raw.data) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): TransactionStatisticsResponseReactiveObject {
+        return TransactionStatisticsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var data: UTSJSONObject
+        get() {
+            return _tRG(__v_raw, "data", __v_raw.data, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("data")) {
+                return
+            }
+            val oldValue = __v_raw.data
+            __v_raw.data = value
+            _tRS(__v_raw, "data", oldValue, value)
+        }
+}
+open class TransactionMutationData (
+    @JsonNotNull
+    open var supplier: Any,
+    @JsonNotNull
+    open var transaction_type: Any,
+    @JsonNotNull
+    open var amount: Any,
+    @JsonNotNull
+    open var transaction_date: String,
+    open var transaction_number: String? = null,
+    open var note: String? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TransactionMutationData", "pkg/api/modules/transactions.uts", 104, 13)
+    }
+}
 fun normalizeServerUrl__1(url: String): String {
     if (url == "") {
         return ""
@@ -3434,7 +3584,7 @@ fun booleanValue(value: Any?): Boolean {
     return stringValue__2(value) == "true"
 }
 fun buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/transactions.uts", 168, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/transactions.uts", 169, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -3484,7 +3634,7 @@ fun buildTransactionMediaFilesFromValue(value: Any?): UTSArray<TransactionMediaF
     val rawArray = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:235")
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:236")
     }
     if (rawArray == null) {
         return _uA()
@@ -3515,7 +3665,7 @@ fun buildTransactionSummary(value: Any?): TransactionSummary? {
     val rawObject = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:267")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/transactions.uts:268")
     }
     if (rawObject == null) {
         return null
@@ -3527,7 +3677,7 @@ fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): Transac
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:280")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:281")
     }
     if (rawObject == null) {
         throw UTSError("往来记录列表响应解析失败")
@@ -3537,7 +3687,7 @@ fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): Transac
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/transactions.uts:289")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/transactions.uts:290")
         }
     }
     var results: UTSArray<TransactionItem> = _uA()
@@ -3547,7 +3697,7 @@ fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): Transac
         val parsedResults = if (resultText == null || resultText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(resultText), " at pkg/api/modules/transactions.uts:296")
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(resultText), " at pkg/api/modules/transactions.uts:297")
         }
         if (parsedResults != null) {
             val nextResults: UTSArray<TransactionItem> = _uA()
@@ -3606,10 +3756,166 @@ fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): Transac
     }
     return TransactionListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize, summary = buildTransactionSummary(rawObject["summary"]))
 }
+fun buildTransactionOptionsResponse(raw: Any): TransactionOptionsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:412")
+    }
+    if (rawObject == null) {
+        throw UTSError("往来记录表单选项解析失败")
+    }
+    var groups: UTSArray<TransactionOptionGroup> = _uA()
+    val rawGroups = rawObject["groups"]
+    if (rawGroups != null) {
+        val groupsText = JSON.stringify(rawGroups)
+        val groupObjects = if (groupsText == null || groupsText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(groupsText), " at pkg/api/modules/transactions.uts:420")
+        }
+        if (groupObjects != null) {
+            val nextGroups: UTSArray<TransactionOptionGroup> = _uA()
+            run {
+                var groupIndex: Number = 0
+                while(groupIndex < groupObjects!!.length){
+                    val groupObject = groupObjects!![groupIndex]
+                    var items: UTSArray<TransactionOptionItem> = _uA()
+                    val rawItems = groupObject["items"]
+                    if (rawItems != null) {
+                        val itemsText = JSON.stringify(rawItems)
+                        val itemObjects = if (itemsText == null || itemsText == "") {
+                            null
+                        } else {
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(itemsText), " at pkg/api/modules/transactions.uts:429")
+                        }
+                        if (itemObjects != null) {
+                            val nextItems: UTSArray<TransactionOptionItem> = _uA()
+                            run {
+                                var itemIndex: Number = 0
+                                while(itemIndex < itemObjects!!.length){
+                                    val itemObject = itemObjects!![itemIndex]
+                                    nextItems.push(TransactionOptionItem(value = stringValue__2(itemObject["value"]), label = stringValue__2(itemObject["label"]), extra = itemObject))
+                                    itemIndex += 1
+                                }
+                            }
+                            items = nextItems
+                        }
+                    }
+                    nextGroups.push(TransactionOptionGroup(key = stringValue__2(groupObject["key"]), label = stringValue__2(groupObject["label"]), control = stringValue__2(groupObject["control"]), count = intValue__1(groupObject["count"]), items = items))
+                    groupIndex += 1
+                }
+            }
+            groups = nextGroups
+        }
+    }
+    return TransactionOptionsResponse(resource = stringValue__2(rawObject["resource"]), total_groups = intValue__1(rawObject["total_groups"]), groups = groups)
+}
+fun buildTransactionStatisticsResponse(raw: Any): TransactionStatisticsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:462")
+    }
+    if (rawObject == null) {
+        throw UTSError("往来记录统计解析失败")
+    }
+    return TransactionStatisticsResponse(data = rawObject)
+}
+fun buildTransactionMutationBody(data: TransactionMutationData): UTSJSONObject {
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/transactions.uts", 471, 11), "supplier" to data.supplier, "transaction_type" to data.transaction_type, "amount" to data.amount, "transaction_date" to data.transaction_date)
+    if (data.transaction_number != null && data.transaction_number != "") {
+        body["transaction_number"] = data.transaction_number
+    }
+    if (data.note != null) {
+        body["note"] = data.note
+    }
+    return body
+}
+fun transactionDetailPath(id: Any): String {
+    return "/api/procurement/transactions/" + stringValue__2(id) + "/"
+}
 fun getTransactionList(data: TransactionListQuery): UTSPromise<TransactionListResponse> {
     return wrapUTSPromise(suspend w@{
             val raw = await(request("/api/procurement/transactions/", "GET", buildTransactionListQuery(data), true))
             return@w buildTransactionListResponse(raw, data)
+    })
+}
+fun getTransactionOptions(key: String? = null, search: String? = null, limit: Number = 20): UTSPromise<TransactionOptionsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/transactions.uts", 497, 11))
+            if (key != null && key != "") {
+                query["key"] = key
+            }
+            if (search != null && search != "") {
+                query["search"] = search
+            }
+            if (limit > 0) {
+                query["limit"] = limit
+            }
+            val raw = await(request("/api/procurement/transactions/options/", "GET", query, true))
+            return@w buildTransactionOptionsResponse(raw)
+    })
+}
+fun getTransactionDetail(id: Any): UTSPromise<TransactionItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(transactionDetailPath(id), "GET", _uO(), true))
+            val rawText = JSON.stringify(raw)
+            val rawObject = if (rawText == null || rawText == "") {
+                null
+            } else {
+                UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:513")
+            }
+            if (rawObject == null) {
+                throw UTSError("往来记录详情响应解析失败")
+            }
+            return@w buildTransactionItemFromObject(rawObject)
+    })
+}
+fun createTransaction(data: TransactionMutationData): UTSPromise<TransactionItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/transactions/", "POST", buildTransactionMutationBody(data), true))
+            val rawText = JSON.stringify(raw)
+            val rawObject = if (rawText == null || rawText == "") {
+                null
+            } else {
+                UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:522")
+            }
+            if (rawObject == null) {
+                throw UTSError("创建往来记录响应解析失败")
+            }
+            return@w buildTransactionItemFromObject(rawObject)
+    })
+}
+fun updateTransaction(id: Any, data: TransactionMutationData): UTSPromise<TransactionItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(transactionDetailPath(id), "PUT", buildTransactionMutationBody(data), true))
+            val rawText = JSON.stringify(raw)
+            val rawObject = if (rawText == null || rawText == "") {
+                null
+            } else {
+                UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/transactions.uts:531")
+            }
+            if (rawObject == null) {
+                throw UTSError("更新往来记录响应解析失败")
+            }
+            return@w buildTransactionItemFromObject(rawObject)
+    })
+}
+fun deleteTransaction(id: Any): UTSPromise<Any> {
+    return request(transactionDetailPath(id), "DELETE", _uO(), true)
+}
+fun getTransactionStatistics(query: TransactionListQuery? = null): UTSPromise<TransactionStatisticsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val requestQuery = if (query == null) {
+                _uO()
+            } else {
+                buildTransactionListQuery(query)
+            }
+            val raw = await(request("/api/procurement/transactions/statistics/", "GET", requestQuery, true))
+            return@w buildTransactionStatisticsResponse(raw)
     })
 }
 val GenPagesTransactionsIndexClass = CreateVueComponent(GenPagesTransactionsIndex::class.java, fun(): VueComponentOptions {
@@ -3622,6 +3928,16 @@ val GenPagesTransactionsIndexClass = CreateVueComponent(GenPagesTransactionsInde
     return GenPagesTransactionsIndex(instance, renderer)
 }
 )
+open class SelectOption__1 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/transactions/from.uvue", 49, 6)
+    }
+}
 val GenPagesTransactionsFromClass = CreateVueComponent(GenPagesTransactionsFrom::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTransactionsFrom.inheritAttrs, inject = GenPagesTransactionsFrom.inject, props = GenPagesTransactionsFrom.props, propsNeedCastKeys = GenPagesTransactionsFrom.propsNeedCastKeys, emits = GenPagesTransactionsFrom.emits, components = GenPagesTransactionsFrom.components, styles = GenPagesTransactionsFrom.styles, setup = fun(props: ComponentPublicInstance): Any? {
         return GenPagesTransactionsFrom.setup(props as GenPagesTransactionsFrom)

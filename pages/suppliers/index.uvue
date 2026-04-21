@@ -100,6 +100,9 @@
 					:currentPage="currentPage"
 					:totalPages="totalPages"
 					:totalCount="totalCount"
+					summaryTitle="供应商统计"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
 					:showFloatingAdd="true"
 					floatingAddText="新增"
 					@item-click="handleItemClick"
@@ -119,7 +122,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { deleteSupplier, getSupplierList, getSupplierFilterOptions, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse } from '@/pkg/api/modules/suppliers'
+import { deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
 
@@ -135,6 +138,7 @@ const pageSize = ref(20)
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<SupplierFilterOptionsResponse | null>(null)
+const globalStatistics = ref<SupplierGlobalStatisticsResponse | null>(null)
 const selectedIsActive = ref<string | null>(null)
 const selectedHasArrears = ref<string | null>(null)
 
@@ -148,7 +152,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'Detail', text: '详情' } as UTSJSONObject,
-	{ key: 'add', text: '增加采购记录' } as UTSJSONObject,
+	{ key: 'add', text: '增加' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
@@ -208,6 +212,7 @@ async function loadSuppliers() {
 			is_active: selectedIsActive.value,
 			has_arrears: selectedHasArrears.value,
 		})
+		console.log(response)
 		applySupplierResponse(response)
 	} catch (error) {
 		suppliers.value = []
@@ -217,6 +222,33 @@ async function loadSuppliers() {
 		errorMessage.value = parseErrorMessage(error)
 	} finally {
 		isLoading.value = false
+	}
+}
+
+function getGlobalStatisticsNumberText(key: string, fallback: string): string {
+	if (globalStatistics.value == null) {
+		return fallback
+	}
+
+	const rawValue = globalStatistics.value.data[key]
+	if (rawValue == null) {
+		return fallback
+	}
+
+	const text = '' + rawValue
+	if (text == '') {
+		return fallback
+	}
+
+	return text
+}
+
+async function loadSupplierGlobalStatistics() {
+	try {
+		const response = await getSupplierGlobalStatistics()
+		globalStatistics.value = response
+	} catch (error) {
+		globalStatistics.value = null
 	}
 }
 
@@ -629,24 +661,19 @@ const supplierCountText = computed((): string => {
 	return totalCount.value.toString()
 })
 
-const activeCountText = computed((): string => {
-	let count = 0
-	for (let index = 0; index < suppliers.value.length; index += 1) {
-		if (suppliers.value[index].is_active) {
-			count += 1
-		}
-	}
-	return count.toString()
-})
-
-const withFileCountText = computed((): string => {
-	let count = 0
-	for (let index = 0; index < suppliers.value.length; index += 1) {
-		if (suppliers.value[index].files_count > 0) {
-			count += 1
-		}
-	}
-	return count.toString()
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{
+			key: 'total',
+			label: '供应商总数',
+			value: getGlobalStatisticsNumberText('total_suppliers', supplierCountText.value)
+		} as UTSJSONObject,
+		{
+			key: 'arrears',
+			label: '总欠款金额',
+			value: getGlobalStatisticsNumberText('total_arrears_amount', '0')
+		} as UTSJSONObject,
+	]
 })
 
 const hasActiveFilter = computed((): boolean => {
@@ -672,11 +699,13 @@ const filterDefinitions = computed((): SupplierFilterDefinition[] => {
 
 onLoad(() => {
 	loadSuppliers()
+	loadSupplierGlobalStatistics()
 })
 
 onShow(() => {
 	if (consumeSupplierListRefreshNeeded()) {
 		loadSuppliers()
+		loadSupplierGlobalStatistics()
 	}
 })
 </script>
@@ -693,43 +722,10 @@ onShow(() => {
 }
 
 .page-content {
-	padding-left: 16px;
-	padding-right: 16px;
-	padding-top: 12px;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
 	padding-bottom: 96px;
-}
-
-.summary-card {
-	background-color: #FFFFFF;
-	border-radius: 18px;
-	padding: 16px;
-	margin-bottom: 14px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E5E7EB;
-	flex-direction: row;
-}
-
-.summary-item {
-	flex: 1;
-}
-
-.summary-item-gap {
-	margin-right: 10px;
-}
-
-.summary-value {
-	font-size: 22px;
-	line-height: 28px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.summary-label {
-	font-size: 12px;
-	line-height: 18px;
-	color: #94A3B8;
-	margin-top: 6px;
 }
 
 .error-card {

@@ -119,6 +119,7 @@ export type TransactionMutationData = {
 	transaction_type: number | string
 	amount: string | number
 	transaction_date: string
+	transaction_number: string | null
 	note: string | null
 }
 
@@ -533,6 +534,9 @@ function buildTransactionMutationBody(data: TransactionMutationData): UTSJSONObj
 		transaction_date: data.transaction_date,
 	} as UTSJSONObject
 
+	if (data.transaction_number != null && data.transaction_number != '') {
+		body['transaction_number'] = data.transaction_number
+	}
 	if (data.note != null) {
 		body['note'] = data.note
 	}

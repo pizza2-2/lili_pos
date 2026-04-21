@@ -12,8 +12,12 @@ import io.dcloud.uts.Map
 import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
+import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
+import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
+import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
+import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesTransactionsIndex : BasePage {
     constructor(__ins: ComponentInternalInstance, __renderer: String?) : super(__ins, __renderer) {}
@@ -23,6 +27,7 @@ open class GenPagesTransactionsIndex : BasePage {
             val __ins = getCurrentInstance()!!
             val _ctx = __ins.proxy as GenPagesTransactionsIndex
             val _cache = __ins.renderCache
+            val transactionListRefreshStorageKey = "refresh:pages:transactions:index"
             val supplierId = ref("")
             val keyword = ref("")
             val transactions = ref(_uA<TransactionItem>())
@@ -33,7 +38,9 @@ open class GenPagesTransactionsIndex : BasePage {
             val totalCount = ref(0)
             val pageSize = ref(20)
             val summary = ref<TransactionSummary?>(null)
+            val statistics = ref<TransactionStatisticsResponse?>(null)
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "transactionTypeText", "label" to "类型:"), _uO("key" to "noteText", "label" to "备注:")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "详情"), _uO("key" to "add", "text" to "增加"), _uO("key" to "delete", "text" to "删除")))
             fun gen_applyTransactionResponse_fn(response: TransactionListResponse) {
                 transactions.value = response.results
                 currentPage.value = response.current_page
@@ -48,7 +55,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:122")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:113")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -66,6 +73,23 @@ open class GenPagesTransactionsIndex : BasePage {
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
+            fun gen_markTransactionListRefreshNeeded_fn() {
+                uni_setStorageSync(transactionListRefreshStorageKey, "1")
+            }
+            val markTransactionListRefreshNeeded = ::gen_markTransactionListRefreshNeeded_fn
+            fun gen_consumeTransactionListRefreshNeeded_fn(): Boolean {
+                val storedValue = uni_getStorageSync(transactionListRefreshStorageKey)
+                if (storedValue == null) {
+                    return false
+                }
+                val storedText = "" + storedValue
+                if (storedText == "") {
+                    return false
+                }
+                uni_removeStorageSync(transactionListRefreshStorageKey)
+                return true
+            }
+            val consumeTransactionListRefreshNeeded = ::gen_consumeTransactionListRefreshNeeded_fn
             fun gen_loadTransactions_fn(): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (isLoading.value) {
@@ -103,6 +127,41 @@ open class GenPagesTransactionsIndex : BasePage {
                 })
             }
             val loadTransactions = ::gen_loadTransactions_fn
+            fun gen_getStatisticsText_fn(key: String, fallback: String): String {
+                if (statistics.value == null) {
+                    return fallback
+                }
+                val rawValue = statistics.value!!.data[key]
+                if (rawValue == null) {
+                    return fallback
+                }
+                val text = "" + rawValue
+                if (text == "") {
+                    return fallback
+                }
+                return text
+            }
+            val getStatisticsText = ::gen_getStatisticsText_fn
+            fun gen_loadTransactionStatistics_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (supplierId.value == "") {
+                            statistics.value = null
+                            return@w1
+                        }
+                        try {
+                            statistics.value = await(getTransactionStatistics(TransactionListQuery(search = if (keyword.value == "") {
+                                null
+                            } else {
+                                keyword.value
+                            }
+                            , page = currentPage.value, page_size = pageSize.value, transaction_type = null, supplier = supplierId.value, supplier_id = supplierId.value, date_from = null, start_date = null, date_to = null, end_date = null, amount_min = null, amount_max = null, ordering = null, sort_by = null)))
+                        }
+                         catch (error: Throwable) {
+                            statistics.value = null
+                        }
+                })
+            }
+            val loadTransactionStatistics = ::gen_loadTransactionStatistics_fn
             fun gen_getDisplayText_fn(value: String?): String {
                 if (value == null || value == "") {
                     return "-"
@@ -186,12 +245,14 @@ open class GenPagesTransactionsIndex : BasePage {
                 keyword.value = value
                 currentPage.value = 1
                 loadTransactions()
+                loadTransactionStatistics()
             }
             val handleSearchConfirm = ::gen_handleSearchConfirm_fn
             fun gen_handleSearchClear_fn() {
                 keyword.value = ""
                 currentPage.value = 1
                 loadTransactions()
+                loadTransactionStatistics()
             }
             val handleSearchClear = ::gen_handleSearchClear_fn
             fun gen_handlePageChange_fn(payload: UTSJSONObject) {
@@ -206,6 +267,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 }
                 currentPage.value = nextPage
                 loadTransactions()
+                loadTransactionStatistics()
             }
             val handlePageChange = ::gen_handlePageChange_fn
             fun gen_handleItemClick_fn(payload: UTSJSONObject) {
@@ -280,6 +342,67 @@ open class GenPagesTransactionsIndex : BasePage {
                 uni_navigateTo(NavigateToOptions(url = "/pages/transactions/from?supplier_id=" + supplierId.value))
             }
             val handleCreateTransaction = ::gen_handleCreateTransaction_fn
+            fun gen_confirmDeleteTransaction_fn(transactionId: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend {
+                        try {
+                            await(deleteTransaction(transactionId))
+                            uni_showToast(ShowToastOptions(title = "删除成功", icon = "success"))
+                            markTransactionListRefreshNeeded()
+                            loadTransactions()
+                            loadTransactionStatistics()
+                        }
+                         catch (error: Throwable) {
+                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                        }
+                })
+            }
+            val confirmDeleteTransaction = ::gen_confirmDeleteTransaction_fn
+            fun gen_handleMenu_fn(payload: UTSJSONObject) {
+                val action = payload["action"]
+                val item = payload["item"]
+                if (action == null || item == null) {
+                    return
+                }
+                val actionObject = action as UTSJSONObject
+                val itemObject = item as UTSJSONObject
+                val actionKey = actionObject["key"]
+                if (actionKey == null) {
+                    return
+                }
+                val key = actionKey as String
+                val transactionIdValue = itemObject["rawId"]
+                val transactionId = if (transactionIdValue == null) {
+                    ""
+                } else {
+                    (transactionIdValue as String)
+                }
+                if (transactionId == "") {
+                    uni_showToast(ShowToastOptions(title = "采购记录ID缺失", icon = "none"))
+                    return
+                }
+                if (key == "edit") {
+                    uni_navigateTo(NavigateToOptions(url = "/pages/transactions/from?id=" + transactionId + "&supplier_id=" + supplierId.value))
+                    return
+                }
+                if (key == "Detail") {
+                    uni_showToast(ShowToastOptions(title = "当前已在详情页", icon = "none"))
+                    return
+                }
+                if (key == "add") {
+                    uni_navigateTo(NavigateToOptions(url = "/pages/transactions/from?supplier_id=" + supplierId.value))
+                    return
+                }
+                if (key == "delete") {
+                    uni_showModal(ShowModalOptions(title = "删除采购记录", content = "确定删除这条采购记录吗？", success = fun(res){
+                        if (!res.confirm) {
+                            return
+                        }
+                        confirmDeleteTransaction(transactionId)
+                    }
+                    ))
+                }
+            }
+            val handleMenu = ::gen_handleMenu_fn
             val listItems = computed(fun(): UTSArray<UTSJSONObject> {
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -303,29 +426,33 @@ open class GenPagesTransactionsIndex : BasePage {
             }
             )
             val transactionCountText = computed(fun(): String {
-                return totalCount.value.toString(10)
-            }
-            )
-            val supplierIdText = computed(fun(): String {
-                return if (supplierId.value == "") {
-                    "-"
-                } else {
-                    supplierId.value
-                }
+                return getStatisticsText("purchaseCount", totalCount.value.toString(10))
             }
             )
             val purchaseAmountText = computed(fun(): String {
-                if (summary.value == null || summary.value!!.purchase_amount == "") {
-                    return "0.00"
+                val summaryValue = if (summary.value == null || summary.value!!.purchase_amount == "") {
+                    "0.00"
+                } else {
+                    summary.value!!.purchase_amount
                 }
-                return summary.value!!.purchase_amount
+                return getStatisticsText("purchaseAmount", summaryValue)
             }
             )
             val arrearsAmountText = computed(fun(): String {
-                if (summary.value == null || summary.value!!.arrears_amount == "") {
-                    return "0.00"
+                val summaryValue = if (summary.value == null || summary.value!!.arrears_amount == "") {
+                    "0.00"
+                } else {
+                    summary.value!!.arrears_amount
                 }
-                return summary.value!!.arrears_amount
+                return getStatisticsText("actualDebt", summaryValue)
+            }
+            )
+            val summaryItems = computed(fun(): UTSArray<UTSJSONObject> {
+                return _uA(
+                    _uO("key" to "purchase-count", "label" to "采购次数", "value" to transactionCountText.value),
+                    _uO("key" to "purchase-amount", "label" to "采购总数", "value" to purchaseAmountText.value),
+                    _uO("key" to "arrears-amount", "label" to "欠款总数", "value" to arrearsAmountText.value)
+                )
             }
             )
             onLoad(fun(event: OnLoadOptions){
@@ -336,6 +463,15 @@ open class GenPagesTransactionsIndex : BasePage {
                     (supplierIdValue as String)
                 }
                 loadTransactions()
+                loadTransactionStatistics()
+            }
+            )
+            onShow(fun(){
+                if (!consumeTransactionListRefreshNeeded()) {
+                    return
+                }
+                loadTransactions()
+                loadTransactionStatistics()
             }
             )
             return fun(): Any? {
@@ -347,28 +483,6 @@ open class GenPagesTransactionsIndex : BasePage {
                     )),
                     _cE("scroll-view", _uM("style" to _nS(_uM("flex" to "1")), "class" to "page-scroll"), _uA(
                         _cE("view", _uM("class" to "page-content"), _uA(
-                            _cE("view", _uM("class" to "summary-row"), _uA(
-                                _cE("view", _uM("class" to "summary-card"), _uA(
-                                    _cE("text", _uM("class" to "summary-label"), "记录数"),
-                                    _cE("text", _uM("class" to "summary-value"), _tD(transactionCountText.value), 1)
-                                )),
-                                _cE("view", _uM("class" to "summary-gap")),
-                                _cE("view", _uM("class" to "summary-card"), _uA(
-                                    _cE("text", _uM("class" to "summary-label"), "采购金额"),
-                                    _cE("text", _uM("class" to "summary-value"), _tD(purchaseAmountText.value), 1)
-                                ))
-                            )),
-                            _cE("view", _uM("class" to "summary-row"), _uA(
-                                _cE("view", _uM("class" to "summary-card"), _uA(
-                                    _cE("text", _uM("class" to "summary-label"), "待付金额"),
-                                    _cE("text", _uM("class" to "summary-value"), _tD(arrearsAmountText.value), 1)
-                                )),
-                                _cE("view", _uM("class" to "summary-gap")),
-                                _cE("view", _uM("class" to "summary-card"), _uA(
-                                    _cE("text", _uM("class" to "summary-label"), "供应商ID"),
-                                    _cE("text", _uM("class" to "summary-value"), _tD(supplierIdText.value), 1)
-                                ))
-                            )),
                             if (isTrue(unref(errorMessage) != "" && !unref(isLoading))) {
                                 _cE("view", _uM("key" to 0, "class" to "error-card"), _uA(
                                     _cE("text", _uM("class" to "error-title"), "加载失败"),
@@ -381,14 +495,16 @@ open class GenPagesTransactionsIndex : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "transactionDateText", "metaField" to "amountText", "imageField" to "cover", "imageListField" to "images", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载采购记录", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to false, "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "showFloatingAdd" to true, "floatingAddText" to "新增", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateTransaction), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "transactionDateText", "metaField" to "amountText", "imageField" to "cover", "imageListField" to "images", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载采购记录", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "采购统计", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateTransaction), null, 8, _uA(
                                 "items",
                                 "fields",
                                 "loading",
                                 "emptyText",
+                                "menuActions",
                                 "currentPage",
                                 "totalPages",
-                                "totalCount"
+                                "totalCount",
+                                "summaryItems"
                             ))
                         ))
                     ), 4)
@@ -402,7 +518,7 @@ open class GenPagesTransactionsIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "position" to "relative", "backgroundColor" to "#EEF2F7")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "page-content" to _pS(_uM("paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 88, "paddingLeft" to 12)), "summary-row" to _pS(_uM("flexDirection" to "row", "marginBottom" to 12)), "summary-card" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingTop" to 14, "paddingRight" to 14, "paddingBottom" to 14, "paddingLeft" to 14, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#FFFFFF")), "summary-gap" to _pS(_uM("width" to 10)), "summary-label" to _pS(_uM("fontSize" to 13, "color" to "#6B7280")), "summary-value" to _pS(_uM("marginTop" to 8, "fontSize" to 18, "fontWeight" to "600", "color" to "#111827")), "error-card" to _pS(_uM("marginBottom" to 12, "paddingTop" to 18, "paddingRight" to 16, "paddingBottom" to 18, "paddingLeft" to 16, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#FFFFFF")), "error-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#111827")), "error-desc" to _pS(_uM("marginTop" to 8, "fontSize" to 14, "lineHeight" to "1.5em", "color" to "#6B7280")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#111827", "borderTopWidth" to 0, "borderRightWidth" to 0, "borderBottomWidth" to 0, "borderLeftWidth" to 0)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "fontWeight" to "600", "color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "position" to "relative", "backgroundColor" to "#EEF2F7")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 88)), "error-card" to _pS(_uM("marginBottom" to 12, "paddingTop" to 18, "paddingRight" to 16, "paddingBottom" to 18, "paddingLeft" to 16, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#FFFFFF")), "error-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#111827")), "error-desc" to _pS(_uM("marginTop" to 8, "fontSize" to 14, "lineHeight" to "1.5em", "color" to "#6B7280")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#111827", "borderTopWidth" to 0, "borderRightWidth" to 0, "borderBottomWidth" to 0, "borderLeftWidth" to 0)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "fontWeight" to "600", "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

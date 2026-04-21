@@ -1,7 +1,7 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
-import { deleteSupplier, getSupplierList, getSupplierFilterOptions, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse } from '@/pkg/api/modules/suppliers'
+import { deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 
 const __sfc__ = defineComponent({
@@ -25,6 +25,7 @@ const pageSize = ref(20)
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<SupplierFilterOptionsResponse | null>(null)
+const globalStatistics = ref<SupplierGlobalStatisticsResponse | null>(null)
 const selectedIsActive = ref<string | null>(null)
 const selectedHasArrears = ref<string | null>(null)
 
@@ -38,7 +39,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'Detail', text: '详情' } as UTSJSONObject,
-	{ key: 'add', text: '增加采购记录' } as UTSJSONObject,
+	{ key: 'add', text: '增加' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
@@ -64,7 +65,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:177")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:181")
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
@@ -98,6 +99,7 @@ async function loadSuppliers() {
 			is_active: selectedIsActive.value,
 			has_arrears: selectedHasArrears.value,
 		})
+		console.log(response, " at pages/suppliers/index.uvue:215")
 		applySupplierResponse(response)
 	} catch (error) {
 		suppliers.value = []
@@ -107,6 +109,33 @@ async function loadSuppliers() {
 		errorMessage.value = parseErrorMessage(error)
 	} finally {
 		isLoading.value = false
+	}
+}
+
+function getGlobalStatisticsNumberText(key: string, fallback: string): string {
+	if (globalStatistics.value == null) {
+		return fallback
+	}
+
+	const rawValue = globalStatistics.value.data[key]
+	if (rawValue == null) {
+		return fallback
+	}
+
+	const text = '' + rawValue
+	if (text == '') {
+		return fallback
+	}
+
+	return text
+}
+
+async function loadSupplierGlobalStatistics() {
+	try {
+		const response = await getSupplierGlobalStatistics()
+		globalStatistics.value = response
+	} catch (error) {
+		globalStatistics.value = null
 	}
 }
 
@@ -519,24 +548,19 @@ const supplierCountText = computed((): string => {
 	return totalCount.value.toString()
 })
 
-const activeCountText = computed((): string => {
-	let count = 0
-	for (let index = 0; index < suppliers.value.length; index += 1) {
-		if (suppliers.value[index].is_active) {
-			count += 1
-		}
-	}
-	return count.toString()
-})
-
-const withFileCountText = computed((): string => {
-	let count = 0
-	for (let index = 0; index < suppliers.value.length; index += 1) {
-		if (suppliers.value[index].files_count > 0) {
-			count += 1
-		}
-	}
-	return count.toString()
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{
+			key: 'total',
+			label: '供应商总数',
+			value: getGlobalStatisticsNumberText('total_suppliers', supplierCountText.value)
+		} as UTSJSONObject,
+		{
+			key: 'arrears',
+			label: '总欠款金额',
+			value: getGlobalStatisticsNumberText('total_arrears_amount', '0')
+		} as UTSJSONObject,
+	]
 })
 
 const hasActiveFilter = computed((): boolean => {
@@ -562,11 +586,13 @@ const filterDefinitions = computed((): SupplierFilterDefinition[] => {
 
 onLoad(() => {
 	loadSuppliers()
+	loadSupplierGlobalStatistics()
 })
 
 onShow(() => {
 	if (consumeSupplierListRefreshNeeded()) {
 		loadSuppliers()
+		loadSupplierGlobalStatistics()
 	}
 })
 
@@ -705,6 +731,9 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           currentPage: unref(currentPage),
           totalPages: unref(totalPages),
           totalCount: unref(totalCount),
+          summaryTitle: "供应商统计",
+          summaryItems: summaryItems.value,
+          summaryCollapsedByDefault: true,
           showFloatingAdd: true,
           floatingAddText: "新增",
           onItemClick: handleItemClick,
@@ -714,7 +743,7 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           onMenu: handleMenu,
           onPageChange: handlePageChange,
           onFloatingAdd: handleCreateSupplier
-        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount"])
+        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
       ])
     ], 4 /* STYLE */)
   ])
@@ -723,4 +752,4 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
 
 })
 export default __sfc__
-const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 96]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["flexDirection", "row"]]))], ["summary-item", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["summary-item-gap", _pS(_uM([["marginRight", 10]]))], ["summary-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["summary-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginTop", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["supplier-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["supplier-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["supplier-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["supplier-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["supplier-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["supplier-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["supplier-filter-state", _pS(_uM([["height", 140], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["supplier-filter-scroll", _pS(_uM([["height", 360]]))], ["supplier-filter-group", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 8]]))], ["supplier-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["supplier-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["supplier-filter-option", _pS(_uM([["minWidth", 56], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["supplier-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["supplier-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["supplier-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))]])]
+const GenPagesSuppliersIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["supplier-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["supplier-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["supplier-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["supplier-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["supplier-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["supplier-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["supplier-filter-state", _pS(_uM([["height", 140], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["supplier-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["supplier-filter-scroll", _pS(_uM([["height", 360]]))], ["supplier-filter-group", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 8]]))], ["supplier-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["supplier-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["supplier-filter-option", _pS(_uM([["minWidth", 56], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["supplier-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["supplier-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["supplier-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))]])]

@@ -1,7 +1,7 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
-import { getTransactionList, TransactionItem, TransactionListResponse, TransactionSummary } from '@/pkg/api/modules/transactions.uts'
+import { deleteTransaction, getTransactionList, getTransactionStatistics, TransactionItem, TransactionListResponse, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
 
 
 const __sfc__ = defineComponent({
@@ -10,6 +10,8 @@ const __sfc__ = defineComponent({
 const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
 const _cache = __ins.renderCache;
+
+const transactionListRefreshStorageKey = 'refresh:pages:transactions:index'
 
 const supplierId = ref('')
 const keyword = ref('')
@@ -21,10 +23,18 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const summary = ref<TransactionSummary | null>(null)
+const statistics = ref<TransactionStatisticsResponse | null>(null)
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'transactionTypeText', label: '类型:' } as UTSJSONObject,
 	{ key: 'noteText', label: '备注:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'Detail', text: '详情' } as UTSJSONObject,
+	{ key: 'add', text: '增加' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
 function applyTransactionResponse(response: TransactionListResponse) {
@@ -41,7 +51,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:122")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:113")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -57,6 +67,25 @@ function parseErrorMessage(error: any): string {
 		}
 	}
 	return message
+}
+
+function markTransactionListRefreshNeeded() {
+	uni.setStorageSync(transactionListRefreshStorageKey, '1')
+}
+
+function consumeTransactionListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(transactionListRefreshStorageKey)
+	if (storedValue == null) {
+		return false
+	}
+
+	const storedText = '' + storedValue
+	if (storedText == '') {
+		return false
+	}
+
+	uni.removeStorageSync(transactionListRefreshStorageKey)
+	return true
 }
 
 async function loadTransactions() {
@@ -102,6 +131,52 @@ async function loadTransactions() {
 		errorMessage.value = parseErrorMessage(error)
 	} finally {
 		isLoading.value = false
+	}
+}
+
+function getStatisticsText(key: string, fallback: string): string {
+	if (statistics.value == null) {
+		return fallback
+	}
+
+	const rawValue = statistics.value.data[key]
+	if (rawValue == null) {
+		return fallback
+	}
+
+	const text = '' + rawValue
+	if (text == '') {
+		return fallback
+	}
+
+	return text
+}
+
+async function loadTransactionStatistics() {
+	if (supplierId.value == '') {
+		statistics.value = null
+		return
+	}
+
+	try {
+		statistics.value = await getTransactionStatistics({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			transaction_type: null,
+			supplier: supplierId.value,
+			supplier_id: supplierId.value,
+			date_from: null,
+			start_date: null,
+			date_to: null,
+			end_date: null,
+			amount_min: null,
+			amount_max: null,
+			ordering: null,
+			sort_by: null,
+		})
+	} catch (error) {
+		statistics.value = null
 	}
 }
 
@@ -190,12 +265,14 @@ function handleSearchConfirm(value: string) {
 	keyword.value = value
 	currentPage.value = 1
 	loadTransactions()
+	loadTransactionStatistics()
 }
 
 function handleSearchClear() {
 	keyword.value = ''
 	currentPage.value = 1
 	loadTransactions()
+	loadTransactionStatistics()
 }
 
 function handlePageChange(payload: UTSJSONObject) {
@@ -212,6 +289,7 @@ function handlePageChange(payload: UTSJSONObject) {
 
 	currentPage.value = nextPage
 	loadTransactions()
+	loadTransactionStatistics()
 }
 
 function handleItemClick(payload: UTSJSONObject) {
@@ -302,6 +380,85 @@ function handleCreateTransaction() {
 	})
 }
 
+async function confirmDeleteTransaction(transactionId: string) {
+	try {
+		await deleteTransaction(transactionId)
+		uni.showToast({
+			title: '删除成功',
+			icon: 'success',
+		})
+		markTransactionListRefreshNeeded()
+		loadTransactions()
+		loadTransactionStatistics()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) {
+		return
+	}
+
+	const actionObject = action as UTSJSONObject
+	const itemObject = item as UTSJSONObject
+	const actionKey = actionObject['key']
+	if (actionKey == null) {
+		return
+	}
+
+	const key = actionKey as string
+	const transactionIdValue = itemObject['rawId']
+	const transactionId = transactionIdValue == null ? '' : (transactionIdValue as string)
+	if (transactionId == '') {
+		uni.showToast({
+			title: '采购记录ID缺失',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (key == 'edit') {
+		uni.navigateTo({
+			url: '/pages/transactions/from?id=' + transactionId + '&supplier_id=' + supplierId.value,
+		})
+		return
+	}
+
+	if (key == 'Detail') {
+		uni.showToast({
+			title: '当前已在详情页',
+			icon: 'none',
+		})
+		return
+	}
+
+	if (key == 'add') {
+		uni.navigateTo({
+			url: '/pages/transactions/from?supplier_id=' + supplierId.value,
+		})
+		return
+	}
+
+	if (key == 'delete') {
+		uni.showModal({
+			title: '删除采购记录',
+			content: '确定删除这条采购记录吗？',
+			success: (res) => {
+				if (!res.confirm) {
+					return
+				}
+				confirmDeleteTransaction(transactionId)
+			},
+		})
+	}
+}
+
 const listItems = computed((): UTSJSONObject[] => {
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < transactions.value.length; index += 1) {
@@ -321,31 +478,40 @@ const emptyText = computed((): string => {
 })
 
 const transactionCountText = computed(() : string => {
-	return totalCount.value.toString()
-})
-
-const supplierIdText = computed(() : string => {
-	return supplierId.value == '' ? '-' : supplierId.value
+	return getStatisticsText('purchaseCount', totalCount.value.toString())
 })
 
 const purchaseAmountText = computed(() : string => {
-	if (summary.value == null || summary.value.purchase_amount == '') {
-		return '0.00'
-	}
-	return summary.value.purchase_amount
+	const summaryValue = summary.value == null || summary.value.purchase_amount == '' ? '0.00' : summary.value.purchase_amount
+	return getStatisticsText('purchaseAmount', summaryValue)
 })
 
 const arrearsAmountText = computed(() : string => {
-	if (summary.value == null || summary.value.arrears_amount == '') {
-		return '0.00'
-	}
-	return summary.value.arrears_amount
+	const summaryValue = summary.value == null || summary.value.arrears_amount == '' ? '0.00' : summary.value.arrears_amount
+	return getStatisticsText('actualDebt', summaryValue)
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'purchase-count', label: '采购次数', value: transactionCountText.value } as UTSJSONObject,
+		{ key: 'purchase-amount', label: '采购总数', value: purchaseAmountText.value } as UTSJSONObject,
+		{ key: 'arrears-amount', label: '欠款总数', value: arrearsAmountText.value } as UTSJSONObject,
+	]
 })
 
 onLoad((event : OnLoadOptions) => {
 	const supplierIdValue = event['supplier_id']
 	supplierId.value = supplierIdValue == null ? '' : (supplierIdValue as string)
 	loadTransactions()
+	loadTransactionStatistics()
+})
+
+onShow(() => {
+	if (!consumeTransactionListRefreshNeeded()) {
+		return
+	}
+	loadTransactions()
+	loadTransactionStatistics()
 })
 
 return (): any | null => {
@@ -372,28 +538,6 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
       class: "page-scroll"
     }), [
       _cE("view", _uM({ class: "page-content" }), [
-        _cE("view", _uM({ class: "summary-row" }), [
-          _cE("view", _uM({ class: "summary-card" }), [
-            _cE("text", _uM({ class: "summary-label" }), "记录数"),
-            _cE("text", _uM({ class: "summary-value" }), _tD(transactionCountText.value), 1 /* TEXT */)
-          ]),
-          _cE("view", _uM({ class: "summary-gap" })),
-          _cE("view", _uM({ class: "summary-card" }), [
-            _cE("text", _uM({ class: "summary-label" }), "采购金额"),
-            _cE("text", _uM({ class: "summary-value" }), _tD(purchaseAmountText.value), 1 /* TEXT */)
-          ])
-        ]),
-        _cE("view", _uM({ class: "summary-row" }), [
-          _cE("view", _uM({ class: "summary-card" }), [
-            _cE("text", _uM({ class: "summary-label" }), "待付金额"),
-            _cE("text", _uM({ class: "summary-value" }), _tD(arrearsAmountText.value), 1 /* TEXT */)
-          ]),
-          _cE("view", _uM({ class: "summary-gap" })),
-          _cE("view", _uM({ class: "summary-card" }), [
-            _cE("text", _uM({ class: "summary-label" }), "供应商ID"),
-            _cE("text", _uM({ class: "summary-value" }), _tD(supplierIdText.value), 1 /* TEXT */)
-          ])
-        ]),
         isTrue(unref(errorMessage) != '' && !unref(isLoading))
           ? _cE("view", _uM({
               key: 0,
@@ -422,21 +566,26 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           loadingText: "正在加载采购记录",
           emptyText: emptyText.value,
           emptyIcon: "◎",
-          showMenu: false,
+          showMenu: true,
+          menuActions: unref(menuActions),
           showChevron: false,
           showPagination: true,
           currentPage: unref(currentPage),
           totalPages: unref(totalPages),
           totalCount: unref(totalCount),
+          summaryTitle: "采购统计",
+          summaryItems: summaryItems.value,
+          summaryCollapsedByDefault: true,
           showFloatingAdd: true,
           floatingAddText: "新增",
           onItemClick: handleItemClick,
           onSubtitleClick: handleSubtitleClick,
           onMetaClick: handleMetaClick,
           onFieldClick: handleFieldClick,
+          onMenu: handleMenu,
           onPageChange: handlePageChange,
           onFloatingAdd: handleCreateTransaction
-        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "currentPage", "totalPages", "totalCount"])
+        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
       ])
     ], 4 /* STYLE */)
   ])
@@ -445,4 +594,4 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
 
 })
 export default __sfc__
-const GenPagesTransactionsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["page-content", _pS(_uM([["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 88], ["paddingLeft", 12]]))], ["summary-row", _pS(_uM([["flexDirection", "row"], ["marginBottom", 12]]))], ["summary-card", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"]]))], ["summary-gap", _pS(_uM([["width", 10]]))], ["summary-label", _pS(_uM([["fontSize", 13], ["color", "#6B7280"]]))], ["summary-value", _pS(_uM([["marginTop", 8], ["fontSize", 18], ["fontWeight", "600"], ["color", "#111827"]]))], ["error-card", _pS(_uM([["marginBottom", 12], ["paddingTop", 18], ["paddingRight", 16], ["paddingBottom", 18], ["paddingLeft", 16], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#FFFFFF"]]))], ["error-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#111827"]]))], ["error-desc", _pS(_uM([["marginTop", 8], ["fontSize", 14], ["lineHeight", "1.5em"], ["color", "#6B7280"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#111827"], ["borderTopWidth", 0], ["borderRightWidth", 0], ["borderBottomWidth", 0], ["borderLeftWidth", 0]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["fontWeight", "600"], ["color", "#FFFFFF"]]))]])]
+const GenPagesTransactionsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 88]]))], ["error-card", _pS(_uM([["marginBottom", 12], ["paddingTop", 18], ["paddingRight", 16], ["paddingBottom", 18], ["paddingLeft", 16], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#FFFFFF"]]))], ["error-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#111827"]]))], ["error-desc", _pS(_uM([["marginTop", 8], ["fontSize", 14], ["lineHeight", "1.5em"], ["color", "#6B7280"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#111827"], ["borderTopWidth", 0], ["borderRightWidth", 0], ["borderBottomWidth", 0], ["borderLeftWidth", 0]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["fontWeight", "600"], ["color", "#FFFFFF"]]))]])]

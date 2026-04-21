@@ -1,7 +1,7 @@
 <template>
 	<view class="page">
 		<lili-universal-filter
-			title="新增采购记录"
+			:title="pageTitle"
 			:showBack="true"
 			:showSearch="false"
 			:showHome="true"
@@ -9,107 +9,642 @@
 			backgroundColor="#EEF2F7"
 		/>
 
-		<!-- #ifdef APP -->
-		<scroll-view style="flex:1" class="page-scroll">
-		<!-- #endif -->
-			<view class="page-content">
-				<view class="hero-card">
-					<text class="hero-title">采购记录录入页</text>
-					<text class="hero-desc">当前已接入从供应商菜单进入的跳转，后续可以在这里补采购单表单。</text>
-				</view>
+		<view class="page-content">
+			<lili-UniversaForm
+				:mode="formMode"
+				:formSections="formSections"
+				:initialData="initialData"
+				:leaveSignal="leaveSignal"
+				uploadContentTypeModel="suppliertransaction"
+				@submit="handleSubmit"
+				@cancel="handleCancel"
+				@discard-leave="handleDiscardLeave"
+				@save-request="handleSaveRequest"
+				@dirty-change="handleDirtyChange"
+				@bottom-select-add="handleBottomSelectAdd"
+				@bottom-select-edit="handleBottomSelectEdit"
+				@upload="handleUpload"
+				@upload-delete="handleUploadDelete"
+				@upload-error="handleUploadError"
+			/>
+		</view>
 
-				<view class="info-card">
-					<text class="info-label">供应商ID</text>
-					<text class="info-value">{{ supplierIdText }}</text>
-				</view>
-
-				<view class="hint-card">
-					<text class="hint-text">请基于该供应商补充采购时间、采购金额、备注和附件等字段。</text>
-				</view>
+		<view v-if="savingVisible" class="page-saving-mask">
+			<view class="page-saving-card">
+				<text class="page-saving-text">{{ savingText }}</text>
 			</view>
-		<!-- #ifdef APP -->
-		</scroll-view>
-		<!-- #endif -->
+		</view>
 	</view>
 </template>
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getSupplierDetail } from '@/pkg/api/modules/suppliers'
+import { authState } from '@/store/auth'
+import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
+import { createTransaction, getTransactionDetail, getTransactionOptions, TransactionItem, TransactionMutationData, TransactionOptionGroup, updateTransaction } from '@/pkg/api/modules/transactions.uts'
 
+const transactionListRefreshStorageKey = 'refresh:pages:transactions:index'
+
+type SelectOption = {
+	value: string
+	text: string
+}
+
+const formMode = ref('create')
+const transactionId = ref('')
 const supplierId = ref('')
+const leaveSignal = ref(0)
+const submitting = ref(false)
+const savingVisible = ref(false)
+const savingText = ref('处理中...')
+const initialData = ref<UTSJSONObject>({
+	supplier_id: '',
+	supplier_name: '',
+	transaction_number: '',
+	transaction_type: '',
+	amount: '',
+	transaction_date: '',
+	note: '',
+	images: [] as string[],
+	imageItems: [] as UTSJSONObject[],
+} as UTSJSONObject)
 
-const supplierIdText = computed(() : string => {
-	return supplierId.value == '' ? '未传入' : supplierId.value
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
+	const value = obj[key]
+	if (value == null) {
+		return fallback
+	}
+	return '' + value
+}
+
+function getArrayField(obj: UTSJSONObject, key: string) : string[] {
+	const value = obj[key]
+	if (value == null) {
+		return []
+	}
+	return value as string[]
+}
+
+function buildUploadHeaders() : UTSJSONObject {
+	const headers = {} as UTSJSONObject
+	if (authState.token != '') {
+		headers['Authorization'] = authState.token
+	}
+	return headers
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function buildInitialDataFromTransaction(item: TransactionItem) : UTSJSONObject {
+	const images: string[] = []
+	const imageItems: UTSJSONObject[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaFile = item.media_files[index]
+		let imageUrl = ''
+		if (mediaFile.signed_thumbnail_url != '') {
+			imageUrl = mediaFile.signed_thumbnail_url
+		} else if (mediaFile.thumbnail_url != '') {
+			imageUrl = mediaFile.thumbnail_url
+		} else if (mediaFile.signed_url != '') {
+			imageUrl = mediaFile.signed_url
+		} else if (mediaFile.file_url != '') {
+			imageUrl = mediaFile.file_url
+		}
+		if (imageUrl != '') {
+			images.push(imageUrl)
+			imageItems.push({
+				id: mediaFile.id,
+				path: imageUrl,
+				url: imageUrl,
+				isRemote: true,
+			} as UTSJSONObject)
+		}
+	}
+	return {
+		supplier_id: item.supplier.toString(),
+		supplier_name: item.supplier_name,
+		transaction_number: item.transaction_number,
+		transaction_type: item.transaction_type.toString(),
+		amount: item.amount,
+		transaction_date: item.transaction_date,
+		note: item.note == null ? '' : item.note,
+		images: images,
+		imageItems: imageItems,
+	} as UTSJSONObject
+}
+
+function buildSelectResponse(source: SelectOption[], params: UTSJSONObject) : UTSJSONObject {
+	const keyword = getStringField(params, 'keyword').toLowerCase()
+	const id = getStringField(params, 'id')
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (id != '' && option.value != id) {
+			continue
+		}
+		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
+			continue
+		}
+		result.push({
+			value: option.value,
+			text: option.text,
+		} as UTSJSONObject)
+	}
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+function buildOptionsFromGroup(group: TransactionOptionGroup | null): SelectOption[] {
+	if (group == null) {
+		return []
+	}
+	const result: SelectOption[] = []
+	for (let index = 0; index < group.items.length; index += 1) {
+		const item = group.items[index]
+		result.push({
+			value: item.value,
+			text: item.label,
+		} as SelectOption)
+	}
+	return result
+}
+
+function findTransactionTypeGroup(groups: TransactionOptionGroup[]): TransactionOptionGroup | null {
+	for (let index = 0; index < groups.length; index += 1) {
+		const group = groups[index]
+		if (group.key == 'transaction_type' || group.key == 'transaction_types') {
+			return group
+		}
+	}
+	for (let index = 0; index < groups.length; index += 1) {
+		const group = groups[index]
+		if (group.label.indexOf('类型') >= 0) {
+			return group
+		}
+	}
+	if (groups.length > 0) {
+		return groups[0]
+	}
+	return null
+}
+
+async function fetchTransactionTypeOptions(params: UTSJSONObject) : Promise<UTSJSONObject> {
+	const keyword = getStringField(params, 'keyword')
+	const id = getStringField(params, 'id')
+	const response = await getTransactionOptions('transaction_type', keyword == '' ? null : keyword, 50)
+	let options = buildOptionsFromGroup(findTransactionTypeGroup(response.groups))
+	if (options.length == 0) {
+		const fallbackResponse = await getTransactionOptions(null, keyword == '' ? null : keyword, 50)
+		options = buildOptionsFromGroup(findTransactionTypeGroup(fallbackResponse.groups))
+	}
+	return buildSelectResponse(options, {
+		keyword: keyword,
+		id: id,
+	} as UTSJSONObject)
+}
+
+async function loadSupplierName() {
+	if (supplierId.value == '') {
+		return
+	}
+	try {
+		const supplierDetail = await getSupplierDetail(supplierId.value)
+		initialData.value = {
+			supplier_id: getStringField(initialData.value, 'supplier_id'),
+			supplier_name: supplierDetail.name,
+			transaction_number: getStringField(initialData.value, 'transaction_number'),
+			transaction_type: getStringField(initialData.value, 'transaction_type'),
+			amount: getStringField(initialData.value, 'amount'),
+			transaction_date: getStringField(initialData.value, 'transaction_date'),
+			note: getStringField(initialData.value, 'note'),
+			images: getArrayField(initialData.value, 'images'),
+			imageItems: initialData.value['imageItems'] == null ? ([] as UTSJSONObject[]) : (initialData.value['imageItems'] as UTSJSONObject[]),
+		} as UTSJSONObject
+	} catch (error) {
+		initialData.value = {
+			supplier_id: getStringField(initialData.value, 'supplier_id'),
+			supplier_name: '',
+			transaction_number: getStringField(initialData.value, 'transaction_number'),
+			transaction_type: getStringField(initialData.value, 'transaction_type'),
+			amount: getStringField(initialData.value, 'amount'),
+			transaction_date: getStringField(initialData.value, 'transaction_date'),
+			note: getStringField(initialData.value, 'note'),
+			images: getArrayField(initialData.value, 'images'),
+			imageItems: initialData.value['imageItems'] == null ? ([] as UTSJSONObject[]) : (initialData.value['imageItems'] as UTSJSONObject[]),
+		} as UTSJSONObject
+	}
+}
+
+const formSections = ref<UTSJSONObject[]>([
+	{
+		key: 'base',
+		title: '基础信息',
+		description: '',
+		defaultOpen: true,
+		fields: [
+			{
+				key: 'supplier_id',
+				type: 'input',
+				hidden: true,
+			} as UTSJSONObject,
+			{
+				key: 'supplier_name',
+				label: '供应商',
+				type: 'input',
+				readonly: true,
+				placeholder: '供应商名称',
+			} as UTSJSONObject,
+			{
+				key: 'transaction_number',
+				label: '采购单号',
+				type: 'input',
+				readonly: true,
+				placeholder: '提交后由系统自动生成',
+			} as UTSJSONObject,
+			{
+				key: 'transaction_type',
+				label: '采购类型',
+				type: 'bottomSelect',
+				title: '选择采购类型',
+				placeholder: '请选择采购类型',
+				required: true,
+				showAddAction: false,
+				showEditAction: false,
+				fetchData: fetchTransactionTypeOptions,
+			} as UTSJSONObject,
+			{
+				key: 'amount',
+				label: '金额',
+				type: 'number',
+				required: true,
+				placeholder: '请输入金额',
+			} as UTSJSONObject,
+			{
+				key: 'transaction_date',
+				label: '采购时间',
+				type: 'datetime',
+				required: true,
+				datePlaceholder: '选择日期',
+				timePlaceholder: '选择时间',
+			} as UTSJSONObject,
+			{
+				key: 'note',
+				label: '备注',
+				type: 'textarea',
+				placeholder: '请输入备注',
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
+		key: 'media',
+		title: '图片资料',
+		description: '可同时上传多张图片',
+		defaultOpen: true,
+		fields: [
+			{
+				key: 'images',
+				label: '采购图片',
+				type: 'upload',
+				action: '',
+				name: 'files',
+				max: 9,
+				uploadText: '上传图片',
+				fileItemsKey: 'imageItems',
+				headers: buildUploadHeaders(),
+				formData: {} as UTSJSONObject,
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+])
+
+const pageTitle = computed(() : string => {
+	return formMode.value == 'edit' ? '编辑采购记录' : '新建采购记录'
 })
 
+function clearDraftStorage() {
+}
+
+function markTransactionListRefreshNeeded() {
+	uni.setStorageSync(transactionListRefreshStorageKey, '1')
+}
+
+async function loadTransactionDetailData(idText: string) {
+	if (idText == '') {
+		return
+	}
+	try {
+		const detail = await getTransactionDetail(idText)
+		supplierId.value = detail.supplier.toString()
+		initialData.value = buildInitialDataFromTransaction(detail)
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '采购记录详情加载失败'),
+			icon: 'none',
+		})
+	}
+}
+
+function goBackToList() {
+	leaveSignal.value = leaveSignal.value + 1
+	setTimeout(() => {
+		uni.navigateBack({
+			delta: 1,
+			fail: () => {
+				if (supplierId.value != '') {
+					uni.reLaunch({
+						url: '/pages/transactions/index?supplier_id=' + supplierId.value,
+					})
+					return
+				}
+				uni.reLaunch({
+					url: '/pages/suppliers/index',
+				})
+			},
+		})
+	}, 16)
+}
+
+function buildTransactionMutationPayload(formDataObject: UTSJSONObject) : TransactionMutationData {
+	const supplierValue = getStringField(formDataObject, 'supplier_id')
+	const transactionTypeValue = getStringField(formDataObject, 'transaction_type')
+	const amountValue = getStringField(formDataObject, 'amount')
+	const transactionDateValue = getStringField(formDataObject, 'transaction_date')
+	const noteValue = getStringField(formDataObject, 'note')
+	const transactionNumberValue = getStringField(formDataObject, 'transaction_number')
+	return {
+		supplier: supplierValue,
+		transaction_type: transactionTypeValue,
+		amount: amountValue,
+		transaction_date: transactionDateValue,
+		transaction_number: transactionNumberValue == '' ? null : transactionNumberValue,
+		note: noteValue == '' ? null : noteValue,
+	} as TransactionMutationData
+}
+
+function isRemoteImagePath(path: string) : boolean {
+	if (path == '') {
+		return false
+	}
+	return path.startsWith('http://') || path.startsWith('https://')
+}
+
+function collectPendingImagePaths(formDataObject: UTSJSONObject) : string[] {
+	const images = getArrayField(formDataObject, 'images')
+	const result: string[] = []
+	for (let index = 0; index < images.length; index += 1) {
+		const imagePath = images[index]
+		if (imagePath == '') {
+			continue
+		}
+		if (isRemoteImagePath(imagePath)) {
+			continue
+		}
+		result.push(imagePath)
+	}
+	return result
+}
+
+async function uploadPendingTransactionImages(formDataObject: UTSJSONObject, contentTypeModel: string) {
+	if (transactionId.value == '') {
+		return
+	}
+	const pendingImagePaths = collectPendingImagePaths(formDataObject)
+	if (pendingImagePaths.length == 0) {
+		return
+	}
+	if (contentTypeModel == '') {
+		throw new Error('缺少上传参数: content_type_model')
+	}
+	const uploadItems: MediaBatchUploadItem[] = []
+	for (let index = 0; index < pendingImagePaths.length; index += 1) {
+		uploadItems.push({
+			filePath: pendingImagePaths[index],
+			name: 'files',
+			formData: {
+				content_type_model: contentTypeModel,
+				object_id: transactionId.value,
+			} as UTSJSONObject,
+		} as MediaBatchUploadItem)
+	}
+	const uploadResult = await batchUploadMediaFiles(uploadItems)
+	if (uploadResult.failItems.length > 0) {
+		const firstFail = uploadResult.failItems[0]
+		const failMessage = getStringField(firstFail, 'message', '图片上传失败')
+		throw new Error(failMessage)
+	}
+}
+
+async function persistForm(payload: UTSJSONObject) {
+	if (submitting.value) {
+		return
+	}
+	const formDataValue = payload['formData']
+	const data = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
+	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
+	const actionText = formMode.value == 'edit' ? '保存修改' : '创建采购记录'
+	submitting.value = true
+	savingText.value = actionText + '中...'
+	savingVisible.value = true
+	uni.showLoading({
+		title: savingText.value,
+		mask: true,
+	})
+	try {
+		const body = buildTransactionMutationPayload(data)
+		if (body.supplier == '') {
+			throw new Error('供应商ID缺失')
+		}
+		if (formMode.value == 'edit' && transactionId.value != '') {
+			savingText.value = '保存修改中...'
+			await updateTransaction(transactionId.value, body)
+			savingText.value = '上传图片中...'
+			await uploadPendingTransactionImages(data, uploadContentTypeModel)
+		} else {
+			savingText.value = '创建采购记录中...'
+			const createdTransaction = await createTransaction(body)
+			transactionId.value = createdTransaction.id.toString()
+			supplierId.value = createdTransaction.supplier.toString()
+			try {
+				savingText.value = '上传图片中...'
+				await uploadPendingTransactionImages(data, uploadContentTypeModel)
+			} catch (uploadError) {
+				throw new Error('采购记录已创建，但图片上传失败')
+			}
+		}
+		clearDraftStorage()
+		markTransactionListRefreshNeeded()
+		uni.showToast({
+			title: actionText + '成功',
+			icon: 'success',
+		})
+		goBackToList()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, actionText + '失败'),
+			icon: 'none',
+		})
+	} finally {
+		savingVisible.value = false
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+async function handleSubmit(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+async function handleSaveRequest(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+function handleCancel(payload: UTSJSONObject) {
+	const hasChangesValue = payload['hasChanges']
+	const changed = hasChangesValue != null && (hasChangesValue as boolean)
+	if (changed) {
+		return
+	}
+	goBackToList()
+}
+
+function handleDiscardLeave(payload: UTSJSONObject) {
+	clearDraftStorage()
+	goBackToList()
+}
+
+function handleDirtyChange(value: boolean) {
+}
+
+function handleBottomSelectAdd(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '采购类型不支持新增',
+		icon: 'none',
+	})
+}
+
+function handleBottomSelectEdit(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '采购类型不支持编辑',
+		icon: 'none',
+	})
+}
+
+function handleUpload(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '图片已加入待保存列表',
+		icon: 'none',
+	})
+}
+
+function handleUploadDelete(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '图片已删除',
+		icon: 'success',
+	})
+}
+
+function handleUploadError(payload: UTSJSONObject) {
+	const rawPayload = payload['payload']
+	if (rawPayload != null) {
+		const payloadObject = rawPayload as UTSJSONObject
+		const message = getStringField(payloadObject, 'message')
+		if (message != '') {
+			uni.showToast({
+				title: message,
+				icon: 'none',
+			})
+			return
+		}
+	}
+	uni.showToast({
+		title: '图片上传失败',
+		icon: 'none',
+	})
+}
+
 onLoad((event : OnLoadOptions) => {
+	leaveSignal.value = 0
+	const idValue = event['id']
+	transactionId.value = idValue == null ? '' : (idValue as string)
 	const supplierIdValue = event['supplier_id']
 	supplierId.value = supplierIdValue == null ? '' : (supplierIdValue as string)
+	initialData.value = {
+		supplier_id: supplierId.value,
+		supplier_name: '',
+		transaction_number: '',
+		transaction_type: '',
+		amount: '',
+		transaction_date: '',
+		note: '',
+		images: [] as string[],
+		imageItems: [] as UTSJSONObject[],
+	} as UTSJSONObject
+	formMode.value = transactionId.value == '' ? 'create' : 'edit'
+	if (formMode.value == 'edit') {
+		loadTransactionDetailData(transactionId.value)
+		return
+	}
+	loadSupplierName()
+	clearDraftStorage()
 })
 </script>
 
 <style>
 .page {
 	flex: 1;
+	position: relative;
 	background-color: #EEF2F7;
 }
 
-.page-scroll {
+.page-content {
 	flex: 1;
 }
 
-.page-content {
-	padding: 12px;
+.page-saving-mask {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(17, 24, 39, 0.18);
 }
 
-.hero-card {
-	padding: 16px;
+.page-saving-card {
+	padding: 16px 20px;
 	border-radius: 12px;
-	background-color: #FFFFFF;
+	background-color: #111827;
 }
 
-.hero-title {
-	font-size: 18px;
-	font-weight: 600;
-	color: #1F2937;
-}
-
-.hero-desc {
-	margin-top: 8px;
+.page-saving-text {
 	font-size: 14px;
-	line-height: 1.5em;
-	color: #6B7280;
-}
-
-.info-card {
-	margin-top: 12px;
-	padding: 16px;
-	border-radius: 12px;
-	background-color: #FFFFFF;
-}
-
-.info-label {
-	font-size: 13px;
-	color: #6B7280;
-}
-
-.info-value {
-	margin-top: 8px;
-	font-size: 16px;
 	font-weight: 600;
-	color: #111827;
-}
-
-.hint-card {
-	margin-top: 12px;
-	padding: 16px;
-	border-radius: 12px;
-	background-color: #DBEAFE;
-}
-
-.hint-text {
-	font-size: 14px;
-	line-height: 1.5em;
-	color: #1E3A8A;
+	color: #FFFFFF;
 }
 </style>

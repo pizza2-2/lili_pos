@@ -1,5 +1,25 @@
 <template>
 	<view class="lul-root">
+		<view v-if="showSummaryBar" class="lul-summary-wrap">
+			<view class="lul-summary-toggle" @click.stop="toggleSummaryExpanded">
+				<view class="lul-summary-toggle-main">
+					<text class="lul-summary-toggle-title">{{ props.summaryTitle }}</text>
+				</view>
+				<text class="lul-summary-toggle-arrow">{{ summaryArrowText }}</text>
+			</view>
+
+			<view v-if="summaryExpanded" class="lul-summary-panel">
+				<view
+					v-for="(summaryItem, summaryIndex) in props.summaryItems"
+					:key="summaryItemKey(summaryItem, summaryIndex)"
+					class="lul-summary-item"
+				>
+					<text class="lul-summary-item-label">{{ summaryItemLabel(summaryItem) }}</text>
+					<text class="lul-summary-item-value">{{ summaryItemValue(summaryItem) }}</text>
+				</view>
+			</view>
+		</view>
+
 		<view v-if="showBlockingLoading" class="lul-state-card">
 			<view class="lul-loading-dot"></view>
 			<text class="lul-state-title">{{ loadingText }}</text>
@@ -157,6 +177,9 @@ type Props = {
 	currentPage?: number
 	totalPages?: number
 	totalCount?: number
+	summaryTitle?: string
+	summaryItems?: UTSJSONObject[]
+	summaryCollapsedByDefault?: boolean
 	showFloatingAdd?: boolean
 	floatingAddText?: string
 	enablePreviewSave?: boolean
@@ -206,6 +229,9 @@ const props = withDefaults(defineProps<Props>(), {
 	currentPage: 1,
 	totalPages: 1,
 	totalCount: 0,
+	summaryTitle: '统计信息',
+	summaryItems: () : UTSJSONObject[] => [],
+	summaryCollapsedByDefault: true,
 	showFloatingAdd: false,
 	floatingAddText: '新增',
 	enablePreviewSave: true,
@@ -231,6 +257,7 @@ const previewImages = ref<string[]>([])
 const previewIndex = ref<number>(0)
 const previewVisible = ref<boolean>(false)
 const previewItem = ref<UTSJSONObject | null>(null)
+const summaryExpanded = ref<boolean>(!props.summaryCollapsedByDefault)
 
 const showBlockingLoading = computed<boolean>(() : boolean => {
 	if (!props.loading) {
@@ -246,9 +273,37 @@ const showInlineLoading = computed<boolean>(() : boolean => {
 	return props.loading && props.keepContentOnLoading && props.items.length > 0
 })
 
+const showSummaryBar = computed<boolean>(() : boolean => {
+	return props.summaryItems.length > 0
+})
+
+const summaryArrowText = computed<string>(() : string => {
+	return summaryExpanded.value ? '⌃' : '⌄'
+})
+
 function stringValue(value: any | null) : string {
 	if (value == null) return ''
 	return '' + value
+}
+
+function summaryItemLabel(item: UTSJSONObject) : string {
+	return stringValue(item['label'])
+}
+
+function summaryItemValue(item: UTSJSONObject) : string {
+	return stringValue(item['value'])
+}
+
+function summaryItemKey(item: UTSJSONObject, index: number) : string {
+	const key = stringValue(item['key'])
+	if (key != '') {
+		return key
+	}
+	return 'summary-' + index
+}
+
+function toggleSummaryExpanded() {
+	summaryExpanded.value = !summaryExpanded.value
 }
 
 function safeCurrentPage() : number {
@@ -645,6 +700,79 @@ function handleFloatingAdd() {
 
 .lul-list {
 	width: 100%;
+}
+
+.lul-summary-wrap {
+	margin-bottom: 4px;
+}
+
+.lul-summary-toggle {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+	border-radius: 12px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.lul-summary-toggle-main {
+	flex: 1;
+	min-height: 16px;
+	justify-content: center;
+}
+
+.lul-summary-toggle-title {
+	font-size: 12px;
+	line-height: 14px;
+	font-weight: 700;
+	color: #0F172A;
+}
+
+.lul-summary-toggle-arrow {
+	margin-left: 8px;
+	font-size: 12px;
+	line-height: 12px;
+	color: #475569;
+}
+
+.lul-summary-panel {
+	margin-top: 4px;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.lul-summary-item {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 3px;
+	padding-bottom: 3px;
+}
+
+.lul-summary-item-label {
+	font-size: 11px;
+	line-height: 14px;
+	color: #64748B;
+}
+
+.lul-summary-item-value {
+	font-size: 12px;
+	line-height: 14px;
+	font-weight: 700;
+	color: #0F172A;
 }
 
 .lul-inline-loading {
