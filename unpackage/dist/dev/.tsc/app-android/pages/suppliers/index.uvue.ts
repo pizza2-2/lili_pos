@@ -1,7 +1,7 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
-import { deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
+import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 
 const __sfc__ = defineComponent({
@@ -28,6 +28,8 @@ const filterOptions = ref<SupplierFilterOptionsResponse | null>(null)
 const globalStatistics = ref<SupplierGlobalStatisticsResponse | null>(null)
 const selectedIsActive = ref<string | null>(null)
 const selectedHasArrears = ref<string | null>(null)
+const selectionMode = ref(false)
+const selectedSupplierIds = ref<string[]>([])
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'phone', label: '电话' } as UTSJSONObject,
@@ -41,6 +43,16 @@ const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'Detail', text: '详情' } as UTSJSONObject,
 	{ key: 'add', text: '增加' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
+])
+
+const batchToolbarActions = ref<UTSJSONObject[]>([
+	{ key: 'more', text: '操作' } as UTSJSONObject,
+])
+
+const defaultBatchActionMap = ref<UTSJSONObject[]>([
+	{ key: 'activate', text: '批量启用' } as UTSJSONObject,
+	{ key: 'deactivate', text: '批量停用' } as UTSJSONObject,
+	{ key: 'delete', text: '批量删除' } as UTSJSONObject,
 ])
 
 
@@ -65,7 +77,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:181")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:200")
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
@@ -81,6 +93,98 @@ function parseErrorMessage(error: any): string {
 		}
 	}
 	return message
+}
+
+function currentSelectedSuppliers() : SupplierItem[] {
+	const result: SupplierItem[] = []
+	for (let index = 0; index < suppliers.value.length; index += 1) {
+		const supplier = suppliers.value[index]
+		const supplierId = supplier.id.toString()
+		if (selectedSupplierIds.value.includes(supplierId)) {
+			result.push(supplier)
+		}
+	}
+	return result
+}
+
+function clearSelectionState() {
+	selectionMode.value = false
+	selectedSupplierIds.value = [] as string[]
+}
+
+function handleSelectionModeChange(value: boolean) {
+	selectionMode.value = value
+	if (!value) {
+		selectedSupplierIds.value = [] as string[]
+	}
+}
+
+function handleSelectedSupplierIdsChange(value: string[]) {
+	const nextIds: string[] = []
+	for (let index = 0; index < value.length; index += 1) {
+		nextIds.push(value[index])
+	}
+	selectedSupplierIds.value = nextIds
+}
+
+function handleSelectionExit(payload: UTSJSONObject) {
+	clearSelectionState()
+}
+
+function fieldStringFromObject(obj: UTSJSONObject, key: string) : string {
+	const value = obj[key]
+	if (value == null) {
+		return ''
+	}
+	return '' + value
+}
+
+function batchActionCandidatesFromSupplier(item: SupplierItem) : string[] {
+	const rawItemText = JSON.stringify(item)
+	const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:264")
+	if (rawItem == null) {
+		return []
+	}
+	const rawActions = rawItem['batch_actions']
+	if (rawActions == null) {
+		return []
+	}
+	const text = JSON.stringify(rawActions)
+	const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:273")
+	if (parsed == null) {
+		return []
+	}
+	const result: string[] = []
+	for (let index = 0; index < parsed!.length; index += 1) {
+		const key = fieldStringFromObject(parsed![index], 'key')
+		if (key != '') {
+			result.push(key)
+		}
+	}
+	return result
+}
+
+function resolveBatchActions(): UTSJSONObject[] {
+	const selectedSuppliers = currentSelectedSuppliers()
+	if (selectedSuppliers.length == 0) {
+		return [] as UTSJSONObject[]
+	}
+	const firstActionKeys = batchActionCandidatesFromSupplier(selectedSuppliers[0])
+	if (firstActionKeys.length == 0) {
+		return defaultBatchActionMap.value
+	}
+	const result: UTSJSONObject[] = []
+	for (let mapIndex = 0; mapIndex < defaultBatchActionMap.value.length; mapIndex += 1) {
+		const action = defaultBatchActionMap.value[mapIndex]
+		const actionKey = fieldStringFromObject(action, 'key')
+		if (firstActionKeys.includes(actionKey)) {
+			result.push(action)
+		}
+	}
+	if (result.length == 0) {
+		return defaultBatchActionMap.value
+	}
+	return result
 }
 
 async function loadSuppliers() {
@@ -99,7 +203,7 @@ async function loadSuppliers() {
 			is_active: selectedIsActive.value,
 			has_arrears: selectedHasArrears.value,
 		})
-		console.log(response, " at pages/suppliers/index.uvue:215")
+		console.log(response, " at pages/suppliers/index.uvue:326")
 		applySupplierResponse(response)
 	} catch (error) {
 		suppliers.value = []
@@ -136,6 +240,115 @@ async function loadSupplierGlobalStatistics() {
 		globalStatistics.value = response
 	} catch (error) {
 		globalStatistics.value = null
+	}
+}
+
+function batchActionTitle(actionKey: string) : string {
+	if (actionKey == 'activate') return '批量启用'
+	if (actionKey == 'deactivate') return '批量停用'
+	if (actionKey == 'delete') return '批量删除'
+	if (actionKey == 'restore') return '批量恢复'
+	return '批量操作'
+}
+
+function batchActionConfirmText(actionKey: string, count: number) : string {
+	if (actionKey == 'activate') return '确定批量启用选中的 ' + count + ' 个供应商吗？'
+	if (actionKey == 'deactivate') return '确定批量停用选中的 ' + count + ' 个供应商吗？'
+	if (actionKey == 'delete') return '确定批量删除选中的 ' + count + ' 个供应商吗？'
+	if (actionKey == 'restore') return '确定批量恢复选中的 ' + count + ' 个供应商吗？'
+	return '确定执行批量操作吗？'
+}
+
+async function executeSupplierBatchAction(actionKey: string) {
+	const ids = selectedSupplierIds.value
+	if (ids.length == 0) {
+		uni.showToast({
+			title: '请先选择供应商',
+			icon: 'none',
+		})
+		return
+	}
+	try {
+		if (actionKey == 'activate') {
+			await batchActivateSuppliers(ids)
+		} else if (actionKey == 'deactivate') {
+			await batchDeactivateSuppliers(ids)
+		} else if (actionKey == 'delete') {
+			await batchDeleteSuppliers(ids)
+		} else {
+			uni.showToast({
+				title: '暂不支持该操作',
+				icon: 'none',
+			})
+			return
+		}
+		uni.showToast({
+			title: batchActionTitle(actionKey) + '成功',
+			icon: 'success',
+		})
+		clearSelectionState()
+		loadSuppliers()
+		loadSupplierGlobalStatistics()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
+}
+
+function confirmSupplierBatchAction(actionKey: string) {
+	const count = selectedSupplierIds.value.length
+	uni.showModal({
+		title: batchActionTitle(actionKey),
+		content: batchActionConfirmText(actionKey, count),
+		success: (res) => {
+			if (!res.confirm) {
+				return
+			}
+			executeSupplierBatchAction(actionKey)
+		},
+	})
+}
+
+function openSupplierBatchActionSheet() {
+	const availableActions = resolveBatchActions()
+	if (availableActions.length == 0) {
+		uni.showToast({
+			title: '暂无可执行操作',
+			icon: 'none',
+		})
+		return
+	}
+	const itemList: string[] = []
+	for (let index = 0; index < availableActions.length; index += 1) {
+		itemList.push(fieldStringFromObject(availableActions[index], 'text'))
+	}
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const selectedIndex = res.tapIndex
+			if (selectedIndex < 0 || selectedIndex >= availableActions.length) {
+				return
+			}
+			const actionKey = fieldStringFromObject(availableActions[selectedIndex], 'key')
+			if (actionKey == '') {
+				return
+			}
+			confirmSupplierBatchAction(actionKey)
+		},
+	})
+}
+
+function handleBatchToolbarAction(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	if (actionValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const actionKey = fieldStringFromObject(action, 'key')
+	if (actionKey == 'more') {
+		openSupplierBatchActionSheet()
 	}
 }
 
@@ -731,11 +944,18 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           currentPage: unref(currentPage),
           totalPages: unref(totalPages),
           totalCount: unref(totalCount),
+          selectionMode: unref(selectionMode),
+          selectedItems: unref(selectedSupplierIds),
+          batchActions: unref(batchToolbarActions),
           summaryTitle: "供应商统计",
           summaryItems: summaryItems.value,
           summaryCollapsedByDefault: true,
           showFloatingAdd: true,
           floatingAddText: "新增",
+          "onUpdate:selectionMode": handleSelectionModeChange,
+          "onUpdate:selectedItems": handleSelectedSupplierIdsChange,
+          onSelectionExit: handleSelectionExit,
+          onBatchAction: handleBatchToolbarAction,
           onItemClick: handleItemClick,
           onSubtitleClick: handleSubtitleClick,
           onMetaClick: handleMetaClick,
@@ -743,7 +963,7 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           onMenu: handleMenu,
           onPageChange: handlePageChange,
           onFloatingAdd: handleCreateSupplier
-        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
+        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "selectionMode", "selectedItems", "batchActions", "summaryItems"])
       ])
     ], 4 /* STYLE */)
   ])

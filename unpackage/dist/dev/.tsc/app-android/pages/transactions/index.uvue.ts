@@ -32,8 +32,6 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
-	{ key: 'Detail', text: '详情' } as UTSJSONObject,
-	{ key: 'add', text: '增加' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
@@ -51,7 +49,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:113")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:109")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -576,8 +574,6 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           summaryTitle: "采购统计",
           summaryItems: summaryItems.value,
           summaryCollapsedByDefault: true,
-          showFloatingAdd: true,
-          floatingAddText: "新增",
           onItemClick: handleItemClick,
           onSubtitleClick: handleSubtitleClick,
           onMetaClick: handleMetaClick,

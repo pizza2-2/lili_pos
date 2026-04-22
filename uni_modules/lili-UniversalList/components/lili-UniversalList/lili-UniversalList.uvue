@@ -45,10 +45,11 @@
 				:key="itemKey(item, itemIndex)"
 				:class="isSelected(item) ? 'lul-card lul-card-selected' : 'lul-card'"
 				@click="handleItemClick(item)"
+				@longpress="handleItemLongPress(item)"
 			>
 				<view class="lul-card-top">
 					<view class="lul-card-top-left">
-						<view v-if="selectionMode" class="lul-check-wrap" @click.stop="toggleSelection(item)">
+						<view v-if="selectionModeActive" class="lul-check-wrap" @click.stop="toggleSelection(item)">
 							<view :class="isSelected(item) ? 'lul-check lul-check-active' : 'lul-check'">
 								<text v-if="isSelected(item)" class="lul-check-icon">✓</text>
 							</view>
@@ -76,10 +77,10 @@
 										@click.stop="handleMetaClick(item)"
 									>{{ fieldText(item, metaField) }}</text>
 								</view>
-								<view v-if="showMenu" class="lul-menu-wrap" @click.stop="handleMenu(item)">
+								<view v-if="showMenu && !selectionModeActive" class="lul-menu-wrap" @click.stop="handleMenu(item)">
 									<image class="lul-menu-image" src="/static/icon/更多.png" mode="aspectFit"></image>
 								</view>
-								<view v-if="showChevron" class="lul-chevron-wrap">
+								<view v-if="showChevron && !selectionModeActive" class="lul-chevron-wrap">
 									<text class="lul-chevron">›</text>
 								</view>
 							</view>
@@ -141,7 +142,40 @@
 			@close="handlePreviewClose"
 		/>
 
-		<view v-if="props.showFloatingAdd" class="lul-floating-add" @click="handleFloatingAdd">
+		<view v-if="showBatchBar" class="lul-batch-spacer"></view>
+
+		<view v-if="showBatchBar" class="lul-batch-bar">
+			<view class="lul-batch-bar-main">
+				<view v-if="props.showSelectAll" class="lul-batch-select-all" @click="toggleSelectAll">
+					<view :class="allSelected ? 'lul-check lul-check-active' : 'lul-check'">
+						<text v-if="allSelected" class="lul-check-icon">✓</text>
+					</view>
+					<text class="lul-batch-select-all-text">{{ allSelected ? '取消全选' : '全选' }}</text>
+				</view>
+
+				<view class="lul-batch-info">
+					<text class="lul-batch-info-text">{{ batchInfoText }}</text>
+				</view>
+
+				<scroll-view scroll-x="true" class="lul-batch-actions-scroll">
+					<view class="lul-batch-actions">
+						<view
+							v-for="(action, actionIndex) in props.batchActions"
+							:key="actionKey(action, actionIndex)"
+							class="lul-batch-action"
+							@click="handleBatchAction(action)"
+						>
+							<text class="lul-batch-action-text">{{ actionText(action) }}</text>
+						</view>
+						<view class="lul-batch-action lul-batch-action-light" @click="exitSelectionMode">
+							<text class="lul-batch-action-text lul-batch-action-text-light">取消</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
+
+		<view v-if="props.showFloatingAdd && !showBatchBar" class="lul-floating-add" @click="handleFloatingAdd">
 			<text class="lul-floating-add-text">{{ props.floatingAddText }}</text>
 		</view>
 	</view>
@@ -164,6 +198,10 @@ type Props = {
 	actions?: UTSJSONObject[]
 	selectionMode?: boolean
 	selectedItems?: string[]
+	longPressToSelect?: boolean
+	showSelectAll?: boolean
+	batchActions?: UTSJSONObject[]
+	batchInfoText?: string
 	loading?: boolean
 	loadingText?: string
 	keepContentOnLoading?: boolean
@@ -216,6 +254,10 @@ const props = withDefaults(defineProps<Props>(), {
 	],
 	selectionMode: false,
 	selectedItems: () : string[] => [],
+	longPressToSelect: true,
+	showSelectAll: true,
+	batchActions: () : UTSJSONObject[] => [],
+	batchInfoText: '',
 	loading: false,
 	loadingText: '加载中...',
 	keepContentOnLoading: false,
@@ -241,8 +283,13 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
 	(e: 'item-click', payload: UTSJSONObject): void
 	(e: 'action', payload: UTSJSONObject): void
+	(e: 'batch-action', payload: UTSJSONObject): void
 	(e: 'update:selectedItems', payload: string[]): void
+	(e: 'update:selectionMode', value: boolean): void
 	(e: 'selection-change', payload: string[]): void
+	(e: 'selection-enter', payload: UTSJSONObject): void
+	(e: 'selection-exit', payload: UTSJSONObject): void
+	(e: 'select-all', payload: UTSJSONObject): void
 	(e: 'image-preview', payload: UTSJSONObject): void
 	(e: 'preview-close', payload: UTSJSONObject): void
 	(e: 'menu', payload: UTSJSONObject): void
@@ -258,6 +305,8 @@ const previewIndex = ref<number>(0)
 const previewVisible = ref<boolean>(false)
 const previewItem = ref<UTSJSONObject | null>(null)
 const summaryExpanded = ref<boolean>(!props.summaryCollapsedByDefault)
+const internalSelectionMode = ref<boolean>(props.selectionMode)
+const internalSelectedItems = ref<string[]>([...props.selectedItems])
 
 const showBlockingLoading = computed<boolean>(() : boolean => {
 	if (!props.loading) {
@@ -275,6 +324,26 @@ const showInlineLoading = computed<boolean>(() : boolean => {
 
 const showSummaryBar = computed<boolean>(() : boolean => {
 	return props.summaryItems.length > 0
+})
+
+const selectionModeActive = computed<boolean>(() : boolean => {
+	return props.selectionMode || internalSelectionMode.value
+})
+
+const showBatchBar = computed<boolean>(() : boolean => {
+	return selectionModeActive.value
+})
+
+const batchInfoText = computed<string>(() : string => {
+	if (props.batchInfoText != '') {
+		return props.batchInfoText
+	}
+	return '已选 ' + internalSelectedItems.value.length + ' 项'
+})
+
+const allSelected = computed<boolean>(() : boolean => {
+	if (props.items.length == 0) return false
+	return internalSelectedItems.value.length > 0 && internalSelectedItems.value.length == props.items.length
 })
 
 const summaryArrowText = computed<string>(() : string => {
@@ -426,12 +495,45 @@ function itemKey(item: UTSJSONObject, index: number) : string {
 function isSelected(item: UTSJSONObject) : boolean {
 	const id = itemId(item)
 	if (id == '') return false
-	for (let i = 0; i < props.selectedItems.length; i++) {
-		if (props.selectedItems[i] == id) {
+	for (let i = 0; i < internalSelectedItems.value.length; i++) {
+		if (internalSelectedItems.value[i] == id) {
 			return true
 		}
 	}
 	return false
+}
+
+function emitSelectedItems(nextSelected: string[]) {
+	internalSelectedItems.value = nextSelected
+	emit('update:selectedItems', nextSelected)
+	emit('selection-change', nextSelected)
+}
+
+function enterSelectionMode(seedItem: UTSJSONObject | null = null) {
+	if (selectionModeActive.value) {
+		return
+	}
+	internalSelectionMode.value = true
+	emit('update:selectionMode', true)
+	if (seedItem != null) {
+		const seedId = itemId(seedItem!)
+		if (seedId != '') {
+			emitSelectedItems([seedId])
+		}
+	}
+	emit('selection-enter', {
+		item: seedItem,
+		selectedItems: internalSelectedItems.value,
+	} as UTSJSONObject)
+}
+
+function exitSelectionMode() {
+	internalSelectionMode.value = false
+	emitSelectedItems([] as string[])
+	emit('update:selectionMode', false)
+	emit('selection-exit', {
+		selectedItems: [] as string[],
+	} as UTSJSONObject)
 }
 
 function toggleSelection(item: UTSJSONObject) {
@@ -439,8 +541,8 @@ function toggleSelection(item: UTSJSONObject) {
 	if (id == '') return
 	const nextSelected: string[] = []
 	let removed = false
-	for (let i = 0; i < props.selectedItems.length; i++) {
-		const current = props.selectedItems[i]
+	for (let i = 0; i < internalSelectedItems.value.length; i++) {
+		const current = internalSelectedItems.value[i]
 		if (current == id) {
 			removed = true
 			continue
@@ -450,16 +552,45 @@ function toggleSelection(item: UTSJSONObject) {
 	if (!removed) {
 		nextSelected.push(id)
 	}
-	emit('update:selectedItems', nextSelected)
-	emit('selection-change', nextSelected)
+	emitSelectedItems(nextSelected)
 }
 
 function handleItemClick(item: UTSJSONObject) {
-	if (props.selectionMode) {
+	if (selectionModeActive.value) {
 		toggleSelection(item)
 		return
 	}
 	emit('item-click', item)
+}
+
+function handleItemLongPress(item: UTSJSONObject) {
+	if (!props.longPressToSelect) {
+		return
+	}
+	enterSelectionMode(item)
+}
+
+function toggleSelectAll() {
+	if (allSelected.value) {
+		emitSelectedItems([] as string[])
+		emit('select-all', {
+			selected: false,
+			selectedItems: [] as string[],
+		} as UTSJSONObject)
+		return
+	}
+	const nextSelected: string[] = []
+	for (let i = 0; i < props.items.length; i++) {
+		const id = itemId(props.items[i])
+		if (id != '') {
+			nextSelected.push(id)
+		}
+	}
+	emitSelectedItems(nextSelected)
+	emit('select-all', {
+		selected: true,
+		selectedItems: nextSelected,
+	} as UTSJSONObject)
 }
 
 function handleSubtitleClick(item: UTSJSONObject) {
@@ -691,6 +822,54 @@ function goNextPage() {
 function handleFloatingAdd() {
 	emit('floating-add')
 }
+
+function selectedItemObjects() : UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let i = 0; i < props.items.length; i++) {
+		if (isSelected(props.items[i])) {
+			result.push(props.items[i])
+		}
+	}
+	return result
+}
+
+function handleBatchAction(action: UTSJSONObject) {
+	emit('batch-action', {
+		action: action,
+		selectedItems: internalSelectedItems.value,
+		selectedRows: selectedItemObjects(),
+	} as UTSJSONObject)
+}
+
+watch(
+	() : string[] => props.selectedItems,
+	(newValue: string[]) => {
+		const nextSelected: string[] = []
+		for (let i = 0; i < newValue.length; i++) {
+			nextSelected.push(newValue[i])
+		}
+		internalSelectedItems.value = nextSelected
+	}
+)
+
+watch(
+	() : boolean => props.selectionMode,
+	(newValue: boolean) => {
+		internalSelectionMode.value = newValue
+		if (!newValue && internalSelectedItems.value.length > 0) {
+			internalSelectedItems.value = [] as string[]
+		}
+	}
+)
+
+defineExpose({
+	enterSelectionMode,
+	exitSelectionMode,
+	toggleSelectAll,
+	getSelectedItems: () : string[] => {
+		return internalSelectedItems.value
+	},
+})
 </script>
 
 <style>
@@ -1301,6 +1480,94 @@ function handleFloatingAdd() {
 	font-size: 13px;
 	line-height: 16px;
 	color: #FFFFFF;
+}
+
+.lul-batch-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 10px;
+	padding-bottom: 14px;
+	background-color: rgba(255, 255, 255, 0.98);
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #E2E8F0;
+}
+
+.lul-batch-spacer {
+	height: 72px;
+}
+
+.lul-batch-bar-main {
+	flex-direction: row;
+	align-items: center;
+}
+
+.lul-batch-select-all {
+	flex-direction: row;
+	align-items: center;
+	min-width: 84px;
+}
+
+.lul-batch-select-all-text {
+	margin-left: 8px;
+	font-size: 13px;
+	line-height: 16px;
+	color: #0F172A;
+	font-weight: 600;
+}
+
+.lul-batch-info {
+	margin-left: 12px;
+	margin-right: 12px;
+}
+
+.lul-batch-info-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.lul-batch-actions-scroll {
+	flex: 1;
+}
+
+.lul-batch-actions {
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.lul-batch-action {
+	height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 17px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+	margin-left: 8px;
+}
+
+.lul-batch-action-light {
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.lul-batch-action-text {
+	font-size: 12px;
+	line-height: 14px;
+	color: #FFFFFF;
+	font-weight: 700;
+}
+
+.lul-batch-action-text-light {
+	color: #475569;
 }
 
 </style>

@@ -25,16 +25,18 @@ import io.dcloud.uniapp.extapi.getPushClientId as uni_getPushClientId
 import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.hideToast as uni_hideToast
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.onPrivacyAuthorizationChange as uni_onPrivacyAuthorizationChange
 import io.dcloud.uniapp.extapi.onPushMessage as uni_onPushMessage
 import io.dcloud.uniapp.extapi.openDialogPage as uni_openDialogPage
+import io.dcloud.uniapp.extapi.reLaunch as uni_reLaunch
 import uts.sdk.modules.uniRegisterRequestPermissionTips.registerRequestPermissionTipsListener
 import uts.sdk.modules.uniRegisterRequestPermissionTips.unregisterRequestPermissionTipsListener
 import uts.sdk.modules.uniRegisterRequestPermissionTips.setRequestPermissionTips
 import io.dcloud.uniapp.extapi.removeInterceptor as uni_removeInterceptor
-import io.dcloud.uniapp.extapi.removeStorage as uni_removeStorage
+import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.request as uni_request
-import io.dcloud.uniapp.extapi.setStorage as uni_setStorage
+import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 import io.dcloud.uniapp.extapi.uploadFile as uni_uploadFile
@@ -305,15 +307,55 @@ class UserInfoStateReactiveObject : UserInfoState, IUTSReactive<UserInfoState> {
             _tRS(__v_raw, "avatar", oldValue, value)
         }
 }
+val loginPageUrl = "/pages/login/login"
+var redirectingToLogin = false
 @JvmField
 val authState = reactive(AuthState(token = "", userInfo = UserInfoState(id = 0, name = "", avatar = "")))
 fun authLocalStorage() {
-    uni_setStorage(SetStorageOptions(key = "authStateKey", data = JSON.stringify(authState)))
+    uni_setStorageSync("authStateKey", JSON.stringify(authState))
 }
 val clearAuthState = fun(){
     authState.token = ""
     authState.userInfo = null
-    uni_removeStorage(RemoveStorageOptions(key = "authStateKey"))
+    uni_removeStorageSync("authStateKey")
+}
+fun isLoginPageActive(): Boolean {
+    val pages = getCurrentPages()
+    if (pages.length == 0) {
+        return false
+    }
+    val currentPage = pages[pages.length - 1]
+    val currentRoute = currentPage.route
+    if (currentRoute == null) {
+        return false
+    }
+    return "/" + currentRoute == loginPageUrl
+}
+fun resetRedirectFlagWithDelay() {
+    setTimeout(fun(){
+        redirectingToLogin = false
+    }
+    , 1500)
+}
+fun redirectToLogin(message: String = "登录已过期，请重新登录") {
+    clearAuthState()
+    if (redirectingToLogin) {
+        return
+    }
+    if (isLoginPageActive()) {
+        return
+    }
+    redirectingToLogin = true
+    if (message != "") {
+        uni_showToast(ShowToastOptions(title = message, icon = "none"))
+    }
+    uni_reLaunch(ReLaunchOptions(url = loginPageUrl, fail = fun(_){
+        uni_navigateTo(NavigateToOptions(url = loginPageUrl))
+    }
+    , complete = fun(_){
+        resetRedirectFlagWithDelay()
+    }
+    ))
 }
 val setAuthToken = fun(value: String){
     authState.token = value
@@ -331,7 +373,7 @@ fun setAuthState(value: AuthState) {
 fun getAuthStateByStorageSync() {
     var authStateString = uni_getStorageSync("authStateKey") as String
     if (authStateString != "") {
-        var storageResult = UTSAndroid.consoleDebugError(JSON.parse<AuthState>(authStateString), " at store/auth.uts:56")
+        var storageResult = UTSAndroid.consoleDebugError(JSON.parse<AuthState>(authStateString), " at store/auth.uts:99")
         setAuthState(storageResult as AuthState)
     }
 }
@@ -481,6 +523,7 @@ val GenAppClass = CreateVueAppComponent(GenApp::class.java, fun(): VueComponentO
 )
 val baseUrl: String = "http://192.168.0.163:8000"
 val timeOut: Number = 10000
+val loginApiUrl = "/api/accounts/auth/login/"
 open class RootType (
     @JsonNotNull
     open var success: Boolean = false,
@@ -496,12 +539,12 @@ open class RootType (
     open var timestamp: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("RootType", "pkg/api/index.uts", 5, 6)
+        return UTSSourceMapPosition("RootType", "pkg/api/index.uts", 6, 6)
     }
 }
 fun requestIntercept(reqData: UTSJSONObject): Map<String, UTSJSONObject> {
     val map = Map<String, UTSJSONObject>()
-    val header: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("header", "pkg/api/index.uts", 17, 11), "content-type" to "application/json")
+    val header: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("header", "pkg/api/index.uts", 18, 11), "content-type" to "application/json")
     if (authState.token != "") {
         header["Authorization"] = authState.token
     }
@@ -511,6 +554,12 @@ fun requestIntercept(reqData: UTSJSONObject): Map<String, UTSJSONObject> {
     map.set("data", reqData as UTSJSONObject)
     return map
 }
+fun shouldHandleUnauthorized(url: String): Boolean {
+    if (url == loginApiUrl) {
+        return false
+    }
+    return true
+}
 fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), showLoading: Boolean = false): UTSPromise<Any> {
     return wrapUTSPromise(suspend w@{
             return@w UTSPromise(fun(resolve, reject){
@@ -518,7 +567,7 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                     uni_showLoading(ShowLoadingOptions(title = "loading"))
                 }
                 val interceptMap = requestIntercept(reqData)
-                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:46")
+                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:54")
                 uni_request<RootType>(RequestOptions(url = baseUrl + url, method = method, header = interceptMap.get("header"), data = interceptMap.get("data"), timeout = timeOut, success = fun(res){
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         if (res.data != null && res.data!!.success == true) {
@@ -532,6 +581,13 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                         resolve(res.data)
                         return
                     }
+                    if (res.statusCode == 401) {
+                        if (shouldHandleUnauthorized(url)) {
+                            redirectToLogin("登录状态已失效，请重新登录")
+                        }
+                        reject(UTSError("登录状态已失效"))
+                        return
+                    }
                     reject(UTSError("HTTP状态码错误: " + res.statusCode))
                 }
                 , fail = fun(err){
@@ -539,7 +595,7 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                     if (err != null) {
                         val errorText = JSON.stringify(err)
                         if (errorText != null && errorText != "") {
-                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:76")
+                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:90")
                             if (parsedError != null) {
                                 val errMsg = parsedError!!["errMsg"]
                                 if (errMsg != null) {
@@ -678,6 +734,7 @@ open class MenuItem (
     open var label: String,
     @JsonNotNull
     open var icon: String,
+    open var iconPath: String? = null,
     open var path: String? = null,
     @JsonNotNull
     open var action: String,
@@ -685,7 +742,7 @@ open class MenuItem (
     open var disabled: Boolean = false,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MenuItem", "pages/tabbar/settings.uvue", 34, 6)
+        return UTSSourceMapPosition("MenuItem", "pages/tabbar/settings.uvue", 35, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return MenuItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -696,7 +753,7 @@ class MenuItemReactiveObject : MenuItem, IUTSReactive<MenuItem> {
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: MenuItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(label = __v_raw.label, icon = __v_raw.icon, path = __v_raw.path, action = __v_raw.action, disabled = __v_raw.disabled) {
+    constructor(__v_raw: MenuItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(label = __v_raw.label, icon = __v_raw.icon, iconPath = __v_raw.iconPath, path = __v_raw.path, action = __v_raw.action, disabled = __v_raw.disabled) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -728,6 +785,18 @@ class MenuItemReactiveObject : MenuItem, IUTSReactive<MenuItem> {
             val oldValue = __v_raw.icon
             __v_raw.icon = value
             _tRS(__v_raw, "icon", oldValue, value)
+        }
+    override var iconPath: String?
+        get() {
+            return _tRG(__v_raw, "iconPath", __v_raw.iconPath, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("iconPath")) {
+                return
+            }
+            val oldValue = __v_raw.iconPath
+            __v_raw.iconPath = value
+            _tRS(__v_raw, "iconPath", oldValue, value)
         }
     override var path: String?
         get() {
@@ -773,7 +842,7 @@ open class MenuGroup (
     open var rows: UTSArray<UTSArray<MenuItem>>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MenuGroup", "pages/tabbar/settings.uvue", 42, 6)
+        return UTSSourceMapPosition("MenuGroup", "pages/tabbar/settings.uvue", 44, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return MenuGroupReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1947,8 +2016,20 @@ open class SupplierMutationData (
         return UTSSourceMapPosition("SupplierMutationData", "pkg/api/modules/suppliers.uts", 80, 13)
     }
 }
+open class SupplierBatchActionResponse (
+    @JsonNotNull
+    open var success: Boolean = false,
+    @JsonNotNull
+    open var message: String,
+    @JsonNotNull
+    open var data: UTSJSONObject,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SupplierBatchActionResponse", "pkg/api/modules/suppliers.uts", 90, 13)
+    }
+}
 fun buildListQuery(data: SupplierListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/suppliers.uts", 91, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/suppliers.uts", 96, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -2027,7 +2108,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:166")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:171")
     }
     if (rawObject == null) {
         throw UTSError("供应商列表响应解析失败")
@@ -2037,7 +2118,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/suppliers.uts:175")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/suppliers.uts:180")
         }
     }
     var results: UTSArray<SupplierItem> = _uA()
@@ -2047,7 +2128,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
         val parsedResults = if (resultText == null || resultText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<SupplierItem>(resultText), " at pkg/api/modules/suppliers.uts:182")
+            UTSAndroid.consoleDebugError(JSON.parseArray<SupplierItem>(resultText), " at pkg/api/modules/suppliers.uts:187")
         }
         if (parsedResults != null) {
             results = parsedResults!!
@@ -2118,7 +2199,7 @@ fun stringArrayValue(value: Any?): UTSArray<String> {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/suppliers.uts:256")
+        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/suppliers.uts:261")
     }
     if (parsed == null) {
         return _uA()
@@ -2138,7 +2219,7 @@ fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse 
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:268")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:273")
     }
     if (rawObject == null) {
         throw UTSError("供应商过滤选项解析失败")
@@ -2150,7 +2231,7 @@ fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse 
         val filterObjects = if (filtersText == null || filtersText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/suppliers.uts:276")
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/suppliers.uts:281")
         }
         if (filterObjects != null) {
             val nextFilters: UTSArray<SupplierFilterDefinition> = _uA()
@@ -2165,7 +2246,7 @@ fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse 
                         val optionObjects = if (optionsText == null || optionsText == "") {
                             null
                         } else {
-                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/suppliers.uts:285")
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/suppliers.uts:290")
                         }
                         if (optionObjects != null) {
                             val nextOptions: UTSArray<SupplierFilterOption> = _uA()
@@ -2200,7 +2281,7 @@ fun buildSupplierMediaFilesFromValue(value: Any?): UTSArray<SupplierMediaFile> {
     val rawArray = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/suppliers.uts:342")
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/suppliers.uts:347")
     }
     if (rawArray == null) {
         return _uA()
@@ -2220,7 +2301,7 @@ fun buildSupplierItemResponse(raw: Any): SupplierItem {
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:354")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:359")
     }
     if (rawObject == null) {
         throw UTSError("供应商详情响应解析失败")
@@ -2239,7 +2320,7 @@ fun buildSupplierItemResponse(raw: Any): SupplierItem {
         val companyInfosArray = if (companyInfosText == null || companyInfosText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(companyInfosText), " at pkg/api/modules/suppliers.uts:377")
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(companyInfosText), " at pkg/api/modules/suppliers.uts:382")
         }
         if (companyInfosArray == null) {
             return _uA<UTSJSONObject>()
@@ -2253,7 +2334,7 @@ fun buildSupplierGlobalStatisticsResponse(raw: Any): SupplierGlobalStatisticsRes
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:406")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:411")
     }
     if (rawObject == null) {
         throw UTSError("供应商全局统计解析失败")
@@ -2261,7 +2342,7 @@ fun buildSupplierGlobalStatisticsResponse(raw: Any): SupplierGlobalStatisticsRes
     return SupplierGlobalStatisticsResponse(data = rawObject!!)
 }
 fun buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/suppliers.uts", 415, 11), "name" to data.name)
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/suppliers.uts", 420, 11), "name" to data.name)
     if (data.code != null) {
         body["code"] = data.code
     }
@@ -2287,6 +2368,42 @@ fun buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
 }
 fun supplierDetailPath(id: Any): String {
     return "/api/procurement/suppliers/" + stringValue(id) + "/"
+}
+fun buildBatchActionBody(ids: UTSArray<String>, remark: String? = null): UTSJSONObject {
+    val nextIds: UTSArray<Any> = _uA()
+    run {
+        var index: Number = 0
+        while(index < ids.length){
+            val text = stringValue(ids[index])
+            val parsed = parseInt(text)
+            if (!isNaN(parsed) && "" + parsed == text) {
+                nextIds.push(parsed)
+            } else {
+                nextIds.push(text)
+            }
+            index += 1
+        }
+    }
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/suppliers.uts", 461, 11), "ids" to nextIds)
+    if (remark != null && remark != "") {
+        body["remark"] = remark
+    }
+    return body
+}
+fun supplierBatchActionPath(action: String): String {
+    return "/api/procurement/suppliers/batch-actions/" + action + "/"
+}
+fun buildSupplierBatchActionResponse(raw: Any): SupplierBatchActionResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/suppliers.uts:474")
+    }
+    if (rawObject == null) {
+        return SupplierBatchActionResponse(success = true, message = "操作成功", data = _uO())
+    }
+    return SupplierBatchActionResponse(success = true, message = stringValue(rawObject["message"]), data = rawObject)
 }
 fun getSupplierList(data: SupplierListQuery): UTSPromise<SupplierListResponse> {
     return wrapUTSPromise(suspend w@{
@@ -2327,6 +2444,24 @@ fun getSupplierGlobalStatistics(): UTSPromise<SupplierGlobalStatisticsResponse> 
             return@w buildSupplierGlobalStatisticsResponse(raw)
     })
 }
+fun batchActivateSuppliers(ids: UTSArray<String>, remark: String? = null): UTSPromise<SupplierBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(supplierBatchActionPath("activate"), "POST", buildBatchActionBody(ids, remark), true))
+            return@w buildSupplierBatchActionResponse(raw)
+    })
+}
+fun batchDeactivateSuppliers(ids: UTSArray<String>, remark: String? = null): UTSPromise<SupplierBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(supplierBatchActionPath("deactivate"), "POST", buildBatchActionBody(ids, remark), true))
+            return@w buildSupplierBatchActionResponse(raw)
+    })
+}
+fun batchDeleteSuppliers(ids: UTSArray<String>, remark: String? = null): UTSPromise<SupplierBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(supplierBatchActionPath("delete"), "POST", buildBatchActionBody(ids, remark), true))
+            return@w buildSupplierBatchActionResponse(raw)
+    })
+}
 val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
         return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.setup(props as GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter)
@@ -2348,8 +2483,8 @@ val GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass = CreateVueCom
 }
 )
 val GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass = CreateVueComponent(GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList)
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, ctx)
     }
     )
 }
@@ -2365,6 +2500,16 @@ val GenPagesSuppliersIndexClass = CreateVueComponent(GenPagesSuppliersIndex::cla
 }
 , fun(instance, renderer): GenPagesSuppliersIndex {
     return GenPagesSuppliersIndex(instance, renderer)
+}
+)
+val GenUniModulesLiliDataComponentsLiliDataLiliDataClass = CreateVueComponent(GenUniModulesLiliDataComponentsLiliDataLiliData::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliDataComponentsLiliDataLiliData.inheritAttrs, inject = GenUniModulesLiliDataComponentsLiliDataLiliData.inject, props = GenUniModulesLiliDataComponentsLiliDataLiliData.props, propsNeedCastKeys = GenUniModulesLiliDataComponentsLiliDataLiliData.propsNeedCastKeys, emits = GenUniModulesLiliDataComponentsLiliDataLiliData.emits, components = GenUniModulesLiliDataComponentsLiliDataLiliData.components, styles = GenUniModulesLiliDataComponentsLiliDataLiliData.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliDataComponentsLiliDataLiliData.setup(props as GenUniModulesLiliDataComponentsLiliDataLiliData, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliDataComponentsLiliDataLiliData {
+    return GenUniModulesLiliDataComponentsLiliDataLiliData(instance)
 }
 )
 open class SelectChangePayload (
@@ -3948,6 +4093,829 @@ val GenPagesTransactionsFromClass = CreateVueComponent(GenPagesTransactionsFrom:
     return GenPagesTransactionsFrom(instance, renderer)
 }
 )
+val kasaCategoryBasePath = "/api/categories/kasa-categories/"
+open class KasaCategoryListQuery (
+    open var search: String? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+    open var id: Any? = null,
+    open var is_active: Any? = null,
+    open var tax_rate: Any? = null,
+    open var unique_kod: String? = null,
+    open var simple: Boolean? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryListQuery", "pkg/api/modules/kasa_category.uts", 3, 13)
+    }
+}
+open class KasaCategoryItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var name: String,
+    @JsonNotNull
+    open var name_cn: String,
+    @JsonNotNull
+    open var name_en: String,
+    @JsonNotNull
+    open var code: String,
+    @JsonNotNull
+    open var unique_kod: String,
+    @JsonNotNull
+    open var tax_rate: String,
+    @JsonNotNull
+    open var tax_rate_display: String,
+    @JsonNotNull
+    open var products_count: Number,
+    @JsonNotNull
+    open var is_active: Boolean = false,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+    @JsonNotNull
+    open var raw: UTSJSONObject,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryItem", "pkg/api/modules/kasa_category.uts", 13, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KasaCategoryItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KasaCategoryItemReactiveObject : KasaCategoryItem, IUTSReactive<KasaCategoryItem> {
+    override var __v_raw: KasaCategoryItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KasaCategoryItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, name = __v_raw.name, name_cn = __v_raw.name_cn, name_en = __v_raw.name_en, code = __v_raw.code, unique_kod = __v_raw.unique_kod, tax_rate = __v_raw.tax_rate, tax_rate_display = __v_raw.tax_rate_display, products_count = __v_raw.products_count, is_active = __v_raw.is_active, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, raw = __v_raw.raw) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KasaCategoryItemReactiveObject {
+        return KasaCategoryItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var name: String
+        get() {
+            return _tRG(__v_raw, "name", __v_raw.name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name")) {
+                return
+            }
+            val oldValue = __v_raw.name
+            __v_raw.name = value
+            _tRS(__v_raw, "name", oldValue, value)
+        }
+    override var name_cn: String
+        get() {
+            return _tRG(__v_raw, "name_cn", __v_raw.name_cn, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name_cn")) {
+                return
+            }
+            val oldValue = __v_raw.name_cn
+            __v_raw.name_cn = value
+            _tRS(__v_raw, "name_cn", oldValue, value)
+        }
+    override var name_en: String
+        get() {
+            return _tRG(__v_raw, "name_en", __v_raw.name_en, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name_en")) {
+                return
+            }
+            val oldValue = __v_raw.name_en
+            __v_raw.name_en = value
+            _tRS(__v_raw, "name_en", oldValue, value)
+        }
+    override var code: String
+        get() {
+            return _tRG(__v_raw, "code", __v_raw.code, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("code")) {
+                return
+            }
+            val oldValue = __v_raw.code
+            __v_raw.code = value
+            _tRS(__v_raw, "code", oldValue, value)
+        }
+    override var unique_kod: String
+        get() {
+            return _tRG(__v_raw, "unique_kod", __v_raw.unique_kod, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("unique_kod")) {
+                return
+            }
+            val oldValue = __v_raw.unique_kod
+            __v_raw.unique_kod = value
+            _tRS(__v_raw, "unique_kod", oldValue, value)
+        }
+    override var tax_rate: String
+        get() {
+            return _tRG(__v_raw, "tax_rate", __v_raw.tax_rate, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("tax_rate")) {
+                return
+            }
+            val oldValue = __v_raw.tax_rate
+            __v_raw.tax_rate = value
+            _tRS(__v_raw, "tax_rate", oldValue, value)
+        }
+    override var tax_rate_display: String
+        get() {
+            return _tRG(__v_raw, "tax_rate_display", __v_raw.tax_rate_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("tax_rate_display")) {
+                return
+            }
+            val oldValue = __v_raw.tax_rate_display
+            __v_raw.tax_rate_display = value
+            _tRS(__v_raw, "tax_rate_display", oldValue, value)
+        }
+    override var products_count: Number
+        get() {
+            return _tRG(__v_raw, "products_count", __v_raw.products_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("products_count")) {
+                return
+            }
+            val oldValue = __v_raw.products_count
+            __v_raw.products_count = value
+            _tRS(__v_raw, "products_count", oldValue, value)
+        }
+    override var is_active: Boolean
+        get() {
+            return _tRG(__v_raw, "is_active", __v_raw.is_active, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_active")) {
+                return
+            }
+            val oldValue = __v_raw.is_active
+            __v_raw.is_active = value
+            _tRS(__v_raw, "is_active", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+    override var raw: UTSJSONObject
+        get() {
+            return _tRG(__v_raw, "raw", __v_raw.raw, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("raw")) {
+                return
+            }
+            val oldValue = __v_raw.raw
+            __v_raw.raw = value
+            _tRS(__v_raw, "raw", oldValue, value)
+        }
+}
+open class KasaCategoryListResponse (
+    @JsonNotNull
+    open var results: UTSArray<KasaCategoryItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryListResponse", "pkg/api/modules/kasa_category.uts", 28, 13)
+    }
+}
+typealias KasaCategoryMutationData = UTSJSONObject
+open class KasaCategoryStatisticsResponse (
+    @JsonNotNull
+    open var data: UTSJSONObject,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryStatisticsResponse", "pkg/api/modules/kasa_category.uts", 37, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KasaCategoryStatisticsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KasaCategoryStatisticsResponseReactiveObject : KasaCategoryStatisticsResponse, IUTSReactive<KasaCategoryStatisticsResponse> {
+    override var __v_raw: KasaCategoryStatisticsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KasaCategoryStatisticsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(data = __v_raw.data) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KasaCategoryStatisticsResponseReactiveObject {
+        return KasaCategoryStatisticsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var data: UTSJSONObject
+        get() {
+            return _tRG(__v_raw, "data", __v_raw.data, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("data")) {
+                return
+            }
+            val oldValue = __v_raw.data
+            __v_raw.data = value
+            _tRS(__v_raw, "data", oldValue, value)
+        }
+}
+open class KasaCategoryTaxRatesResponse (
+    open var data: UTSJSONObject? = null,
+    @JsonNotNull
+    open var items: UTSArray<UTSJSONObject>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryTaxRatesResponse", "pkg/api/modules/kasa_category.uts", 40, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KasaCategoryTaxRatesResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KasaCategoryTaxRatesResponseReactiveObject : KasaCategoryTaxRatesResponse, IUTSReactive<KasaCategoryTaxRatesResponse> {
+    override var __v_raw: KasaCategoryTaxRatesResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KasaCategoryTaxRatesResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(data = __v_raw.data, items = __v_raw.items) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KasaCategoryTaxRatesResponseReactiveObject {
+        return KasaCategoryTaxRatesResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var data: UTSJSONObject?
+        get() {
+            return _tRG(__v_raw, "data", __v_raw.data, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("data")) {
+                return
+            }
+            val oldValue = __v_raw.data
+            __v_raw.data = value
+            _tRS(__v_raw, "data", oldValue, value)
+        }
+    override var items: UTSArray<UTSJSONObject>
+        get() {
+            return _tRG(__v_raw, "items", __v_raw.items, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("items")) {
+                return
+            }
+            val oldValue = __v_raw.items
+            __v_raw.items = value
+            _tRS(__v_raw, "items", oldValue, value)
+        }
+}
+fun stringValue__3(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun intValue__2(value: Any?): Number {
+    if (value == null) {
+        return 0
+    }
+    val text = stringValue__3(value)
+    if (text == "") {
+        return 0
+    }
+    val parsed = parseInt(text)
+    if (isNaN(parsed)) {
+        return 0
+    }
+    return parsed
+}
+fun booleanValue__1(value: Any?): Boolean {
+    val text = stringValue__3(value).toLowerCase()
+    return text == "true" || text == "1" || text == "yes"
+}
+fun parseObject(value: Any?): UTSJSONObject? {
+    if (value == null) {
+        return null
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return null
+    }
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:76")
+}
+fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return _uA()
+    }
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:86")
+    if (parsed == null) {
+        return _uA()
+    }
+    return parsed!!
+}
+fun buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem {
+    val nestedRawObject = parseObject(rawObject["raw"])
+    val nameCn = if (stringValue__3(rawObject["name_cn"]) != "") {
+        stringValue__3(rawObject["name_cn"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["name_cn"]
+        } else {
+            null
+        }
+        )
+    }
+    val nameEn = if (stringValue__3(rawObject["name_en"]) != "") {
+        stringValue__3(rawObject["name_en"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["name_en"]
+        } else {
+            null
+        }
+        )
+    }
+    var displayName = stringValue__3(rawObject["name"])
+    if (displayName == "") {
+        if (nameCn != "" && nameEn != "") {
+            displayName = nameCn + " / " + nameEn
+        } else if (nameCn != "") {
+            displayName = nameCn
+        } else {
+            displayName = nameEn
+        }
+    }
+    return KasaCategoryItem(id = intValue__2(rawObject["id"]), name = displayName, name_cn = nameCn, name_en = nameEn, code = if (stringValue__3(rawObject["code"]) != "") {
+        stringValue__3(rawObject["code"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["code"]
+        } else {
+            null
+        }
+        )
+    }
+    , unique_kod = if (stringValue__3(rawObject["unique_kod"]) != "") {
+        stringValue__3(rawObject["unique_kod"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["unique_kod"]
+        } else {
+            null
+        }
+        )
+    }
+    , tax_rate = if (stringValue__3(rawObject["tax_rate"]) != "") {
+        stringValue__3(rawObject["tax_rate"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["tax_rate"]
+        } else {
+            null
+        }
+        )
+    }
+    , tax_rate_display = if (stringValue__3(rawObject["tax_rate_display"]) != "") {
+        stringValue__3(rawObject["tax_rate_display"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["tax_rate_display"]
+        } else {
+            null
+        }
+        )
+    }
+    , products_count = if (rawObject["products_count"] != null) {
+        intValue__2(rawObject["products_count"])
+    } else {
+        intValue__2(if (nestedRawObject != null) {
+            nestedRawObject["products_count"]
+        } else {
+            null
+        }
+        )
+    }
+    , is_active = if (rawObject["is_active"] != null) {
+        booleanValue__1(rawObject["is_active"])
+    } else {
+        booleanValue__1(if (nestedRawObject != null) {
+            nestedRawObject["is_active"]
+        } else {
+            null
+        }
+        )
+    }
+    , created_at = if (stringValue__3(rawObject["created_at"]) != "") {
+        stringValue__3(rawObject["created_at"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["created_at"]
+        } else {
+            null
+        }
+        )
+    }
+    , updated_at = if (stringValue__3(rawObject["updated_at"]) != "") {
+        stringValue__3(rawObject["updated_at"])
+    } else {
+        stringValue__3(if (nestedRawObject != null) {
+            nestedRawObject["updated_at"]
+        } else {
+            null
+        }
+        )
+    }
+    , raw = rawObject)
+}
+fun buildKasaCategoryArrayFromValue(value: Any?): UTSArray<KasaCategoryItem> {
+    val rawArray = parseObjectArray(value)
+    val result: UTSArray<KasaCategoryItem> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rawArray.length){
+            result.push(buildKasaCategoryItemFromObject(rawArray[index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildKasaCategoryListQuery(data: KasaCategoryListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/kasa_category.uts", 133, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.id != null && stringValue__3(data.id) != "") {
+        query["id"] = data.id
+    }
+    if (data.is_active != null && stringValue__3(data.is_active) != "") {
+        query["is_active"] = data.is_active
+    }
+    if (data.tax_rate != null && stringValue__3(data.tax_rate) != "") {
+        query["tax_rate"] = data.tax_rate
+    }
+    if (data.unique_kod != null && data.unique_kod != "") {
+        query["unique_kod"] = data.unique_kod
+    }
+    if (data.simple != null) {
+        query["simple"] = data.simple
+    }
+    return query
+}
+fun buildKasaCategoryListResponse(raw: Any, query: KasaCategoryListQuery): KasaCategoryListResponse {
+    val rawObject = parseObject(raw)
+    if (rawObject == null) {
+        val results = buildKasaCategoryArrayFromValue(raw)
+        return KasaCategoryListResponse(results = results, count = results.length, total_count = results.length, total_pages = 1, current_page = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+        , page_size = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+        )
+    }
+    var paginationObject: UTSJSONObject? = null
+    if (rawObject["pagination"] != null) {
+        paginationObject = parseObject(rawObject["pagination"])
+    }
+    var results: UTSArray<KasaCategoryItem> = _uA()
+    if (rawObject["results"] != null) {
+        results = buildKasaCategoryArrayFromValue(rawObject["results"])
+    } else if (rawObject["items"] != null) {
+        results = buildKasaCategoryArrayFromValue(rawObject["items"])
+    } else {
+        results = buildKasaCategoryArrayFromValue(raw)
+    }
+    var totalCount = intValue__2(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue__2(rawObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue__2(rawObject["total_count"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__2(paginationObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__2(paginationObject["count"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue__2(rawObject["page"])
+    if (currentPage <= 0) {
+        currentPage = intValue__2(rawObject["current_page"])
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue__2(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+    }
+    var pageSize = intValue__2(rawObject["page_size"])
+    if (pageSize <= 0) {
+        pageSize = intValue__2(rawObject["per_page"])
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__2(paginationObject["page_size"])
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__2(paginationObject["per_page"])
+    }
+    if (pageSize <= 0) {
+        pageSize = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+    }
+    var totalPages = intValue__2(rawObject["total_pages"])
+    if (totalPages <= 0) {
+        totalPages = intValue__2(rawObject["num_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__2(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__2(paginationObject["num_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return KasaCategoryListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
+}
+fun buildKasaCategoryItemResponse(raw: Any, errorMessage: String): KasaCategoryItem {
+    val rawObject = parseObject(raw)
+    if (rawObject == null) {
+        throw UTSError(errorMessage)
+    }
+    return buildKasaCategoryItemFromObject(rawObject)
+}
+fun buildObjectResponse(raw: Any, errorMessage: String): UTSJSONObject {
+    val rawObject = parseObject(raw)
+    if (rawObject == null) {
+        throw UTSError(errorMessage)
+    }
+    return rawObject
+}
+fun buildTaxRatesResponse(raw: Any): KasaCategoryTaxRatesResponse {
+    val rawObject = parseObject(raw)
+    if (rawObject != null) {
+        return KasaCategoryTaxRatesResponse(data = rawObject, items = parseObjectArray(if (rawObject["results"] != null) {
+            rawObject["results"]
+        } else {
+            rawObject["items"]
+        }
+        ))
+    }
+    return KasaCategoryTaxRatesResponse(data = null, items = parseObjectArray(raw))
+}
+fun kasaCategoryDetailPath(id: Any): String {
+    return kasaCategoryBasePath + stringValue__3(id) + "/"
+}
+fun getKasaCategoryList(data: KasaCategoryListQuery): UTSPromise<KasaCategoryListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryBasePath, "GET", buildKasaCategoryListQuery(data), true))
+            return@w buildKasaCategoryListResponse(raw, data)
+    })
+}
+fun getKasaCategoryDetail(id: Any): UTSPromise<KasaCategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryDetailPath(id), "GET", _uO(), true))
+            return@w buildKasaCategoryItemResponse(raw, "收银分类详情响应解析失败")
+    })
+}
+fun createKasaCategory(data: KasaCategoryMutationData): UTSPromise<KasaCategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryBasePath, "POST", data, true))
+            return@w buildKasaCategoryItemResponse(raw, "创建收银分类响应解析失败")
+    })
+}
+fun updateKasaCategory(id: Any, data: KasaCategoryMutationData): UTSPromise<KasaCategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryDetailPath(id), "PUT", data, true))
+            return@w buildKasaCategoryItemResponse(raw, "更新收银分类响应解析失败")
+    })
+}
+fun patchKasaCategory(id: Any, data: KasaCategoryMutationData): UTSPromise<KasaCategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryDetailPath(id), "PATCH", data, true))
+            return@w buildKasaCategoryItemResponse(raw, "部分更新收银分类响应解析失败")
+    })
+}
+fun deleteKasaCategory(id: Any): UTSPromise<Any> {
+    return request(kasaCategoryDetailPath(id), "DELETE", _uO(), true)
+}
+fun getKasaCategoryTaxRates(): UTSPromise<KasaCategoryTaxRatesResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(kasaCategoryBasePath + "tax_rates/", "GET", _uO(), true))
+            return@w buildTaxRatesResponse(raw)
+    })
+}
+fun getKasaCategoryStatistics(query: KasaCategoryListQuery? = null): UTSPromise<KasaCategoryStatisticsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val requestQuery = if (query == null) {
+                _uO()
+            } else {
+                buildKasaCategoryListQuery(query)
+            }
+            val raw = await(request(kasaCategoryBasePath + "statistics/", "GET", requestQuery, true))
+            return@w KasaCategoryStatisticsResponse(data = buildObjectResponse(raw, "收银分类统计响应解析失败"))
+    })
+}
+open class SelectOption__2 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/index.uvue", 134, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SelectOption__2ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SelectOption__2ReactiveObject : SelectOption__2, IUTSReactive<SelectOption__2> {
+    override var __v_raw: SelectOption__2
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SelectOption__2, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SelectOption__2ReactiveObject {
+        return SelectOption__2ReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+val GenPagesKasaCategoryIndexClass = CreateVueComponent(GenPagesKasaCategoryIndex::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesKasaCategoryIndex.inheritAttrs, inject = GenPagesKasaCategoryIndex.inject, props = GenPagesKasaCategoryIndex.props, propsNeedCastKeys = GenPagesKasaCategoryIndex.propsNeedCastKeys, emits = GenPagesKasaCategoryIndex.emits, components = GenPagesKasaCategoryIndex.components, styles = GenPagesKasaCategoryIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesKasaCategoryIndex.setup(props as GenPagesKasaCategoryIndex)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesKasaCategoryIndex {
+    return GenPagesKasaCategoryIndex(instance, renderer)
+}
+)
+open class SelectOption__3 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/form.uvue", 40, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SelectOption__3ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SelectOption__3ReactiveObject : SelectOption__3, IUTSReactive<SelectOption__3> {
+    override var __v_raw: SelectOption__3
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SelectOption__3, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SelectOption__3ReactiveObject {
+        return SelectOption__3ReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+val GenPagesKasaCategoryFormClass = CreateVueComponent(GenPagesKasaCategoryForm::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesKasaCategoryForm.inheritAttrs, inject = GenPagesKasaCategoryForm.inject, props = GenPagesKasaCategoryForm.props, propsNeedCastKeys = GenPagesKasaCategoryForm.propsNeedCastKeys, emits = GenPagesKasaCategoryForm.emits, components = GenPagesKasaCategoryForm.components, styles = GenPagesKasaCategoryForm.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesKasaCategoryForm.setup(props as GenPagesKasaCategoryForm)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesKasaCategoryForm {
+    return GenPagesKasaCategoryForm(instance, renderer)
+}
+)
 fun createApp(): UTSJSONObject {
     val app = createSSRApp(GenAppClass)
     return _uO("app" to app)
@@ -3978,6 +4946,8 @@ fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/suppliers/from", component = GenPagesSuppliersFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/transactions/index", component = GenPagesTransactionsIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/transactions/from", component = GenPagesTransactionsFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/kasa_category/index", component = GenPagesKasaCategoryIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/kasa_category/form", component = GenPagesKasaCategoryFormClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
 }
 val __uniTabBar: Map<String, Any?>? = _uM("color" to "#94A3B8", "selectedColor" to "#0F172A", "backgroundColor" to "#FFFFFF", "borderStyle" to "black", "list" to _uA(
     _uM("pagePath" to "pages/tabbar/reports", "iconPath" to "static/tabBar/Report.png", "selectedIconPath" to "static/tabBar/Report (1).png", "text" to "报表"),

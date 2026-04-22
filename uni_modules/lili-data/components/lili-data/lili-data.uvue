@@ -1,0 +1,688 @@
+<template>
+	<view class="dt-trigger-wrapper" @click="openPanel">
+		<slot name="trigger">
+			<view class="dt-trigger-default">
+				<text :class="displayText != '' ? 'dt-trigger-text' : 'dt-trigger-placeholder'">
+					{{ displayText != '' ? displayText : placeholder }}
+				</text>
+				<view class="dt-trigger-arrow">
+					<text class="dt-arrow-icon">{{ renderVisible ? '⌄' : '›' }}</text>
+				</view>
+			</view>
+		</slot>
+	</view>
+
+	<view
+		v-if="renderVisible"
+		:class="overlayVisible ? 'dt-overlay dt-overlay-active' : 'dt-overlay'"
+		@click="handleOverlayClick"
+	></view>
+
+	<view
+		v-if="renderVisible"
+		:class="panelVisible ? 'dt-panel dt-panel-active' : 'dt-panel'"
+	>
+		<view class="dt-handle-wrap">
+			<view class="dt-handle"></view>
+		</view>
+
+		<view class="dt-header">
+			<view class="dt-header-action" @click="cancelSelection">
+				<text class="dt-header-action-text dt-header-action-text-light">取消</text>
+			</view>
+			<text class="dt-header-title">{{ title }}</text>
+			<view class="dt-header-action" @click="confirmSelection">
+				<text class="dt-header-action-text">确定</text>
+			</view>
+		</view>
+
+		<view class="dt-preview-wrap">
+			<text class="dt-preview-text">{{ draftValue }}</text>
+		</view>
+
+		<picker-view
+			class="dt-picker"
+			:value="pickerIndexes"
+			indicator-style="height:48px;"
+			mask-class="dt-picker-mask"
+			@change="handlePickerChange"
+		>
+			<picker-view-column>
+				<view v-for="(item, index) in yearOptions" :key="'y_' + index" class="dt-picker-item">
+					<text class="dt-picker-item-text">{{ item }}</text>
+				</view>
+			</picker-view-column>
+			<picker-view-column>
+				<view v-for="(item, index) in monthOptions" :key="'m_' + index" class="dt-picker-item">
+					<text class="dt-picker-item-text">{{ item }}</text>
+				</view>
+			</picker-view-column>
+			<picker-view-column>
+				<view v-for="(item, index) in dayOptions" :key="'d_' + index" class="dt-picker-item">
+					<text class="dt-picker-item-text">{{ item }}</text>
+				</view>
+			</picker-view-column>
+			<picker-view-column v-if="showTime">
+				<view v-for="(item, index) in hourOptions" :key="'h_' + index" class="dt-picker-item">
+					<text class="dt-picker-item-text">{{ item }}</text>
+				</view>
+			</picker-view-column>
+			<picker-view-column v-if="showTime">
+				<view v-for="(item, index) in minuteOptions" :key="'i_' + index" class="dt-picker-item">
+					<text class="dt-picker-item-text">{{ item }}</text>
+				</view>
+			</picker-view-column>
+		</picker-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type DateTimePayload = {
+	value: string
+	date: string
+	time: string
+}
+
+type Props = {
+	value?: string
+	title?: string
+	placeholder?: string
+	disabled?: boolean
+	showTime?: boolean
+	defaultToToday?: boolean
+	startYear?: number
+	endYear?: number
+	minuteStep?: number
+	closeOnOverlay?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	value: '',
+	title: '选择时间',
+	placeholder: '请选择时间',
+	disabled: false,
+	showTime: true,
+	defaultToToday: false,
+	startYear: 2000,
+	endYear: 2099,
+	minuteStep: 1,
+	closeOnOverlay: true,
+})
+
+const emit = defineEmits<{
+	(e: 'change', payload: UTSJSONObject): void
+	(e: 'confirm', payload: UTSJSONObject): void
+	(e: 'cancel'): void
+	(e: 'open'): void
+	(e: 'close'): void
+}>()
+
+const renderVisible = ref<boolean>(false)
+const overlayVisible = ref<boolean>(false)
+const panelVisible = ref<boolean>(false)
+const internalValue = ref<string>('')
+const draftValue = ref<string>('')
+const pickerIndexes = ref<number[]>([0, 0, 0, 0, 0])
+
+let enterTimer: number | null = null
+let closeTimer: number | null = null
+const PANEL_ANIMATION_DURATION = 340
+
+function normalizeNumber(value: number) : string {
+	if (value < 10) {
+		return '0' + value
+	}
+	return '' + value
+}
+
+function parseNumber(text: string, fallback: number) : number {
+	const value = parseInt(text)
+	if (isNaN(value)) {
+		return fallback
+	}
+	return value
+}
+
+function normalizeDateTime(value: string) : string {
+	if (value.length >= 10 && value.length < 16) {
+		const yearText = value.substring(0, 4)
+		const monthText = value.substring(5, 7)
+		const dayText = value.substring(8, 10)
+		return `${yearText}-${monthText}-${dayText}`
+	}
+	if (value.length < 16) {
+		return ''
+	}
+	const yearText = value.substring(0, 4)
+	const monthText = value.substring(5, 7)
+	const dayText = value.substring(8, 10)
+	const hourText = value.substring(11, 13)
+	const minuteText = value.substring(14, 16)
+	const secondText = value.length >= 19 ? value.substring(17, 19) : '00'
+	return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:${secondText}`
+}
+
+function getSafeMinuteStep() : number {
+	if (props.minuteStep <= 0) {
+		return 1
+	}
+	if (props.minuteStep > 30) {
+		return 30
+	}
+	return props.minuteStep
+}
+
+function getCurrentYear() : number {
+	const now = new Date()
+	return now.getFullYear()
+}
+
+function getNormalizedEndYear() : number {
+	const fallback = getCurrentYear() + 10
+	return props.endYear > 0 ? props.endYear : fallback
+}
+
+function getNormalizedStartYear() : number {
+	const fallback = getCurrentYear() - 10
+	const startYear = props.startYear > 0 ? props.startYear : fallback
+	const endYear = getNormalizedEndYear()
+	if (startYear > endYear) {
+		return endYear
+	}
+	return startYear
+}
+
+function isLeapYear(year: number) : boolean {
+	if (year % 400 == 0) return true
+	if (year % 100 == 0) return false
+	return year % 4 == 0
+}
+
+function getDaysInMonth(year: number, month: number) : number {
+	if (month == 2) {
+		return isLeapYear(year) ? 29 : 28
+	}
+	if (month == 4 || month == 6 || month == 9 || month == 11) {
+		return 30
+	}
+	return 31
+}
+
+function buildDefaultValue() : string {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = now.getMonth() + 1
+	const day = now.getDate()
+	if (!props.showTime) {
+		return `${year}-${normalizeNumber(month)}-${normalizeNumber(day)}`
+	}
+	const hour = now.getHours()
+	const minuteStep = getSafeMinuteStep()
+	const minute = Math.floor(now.getMinutes() / minuteStep) * minuteStep
+	return `${year}-${normalizeNumber(month)}-${normalizeNumber(day)} ${normalizeNumber(hour)}:${normalizeNumber(minute)}:00`
+}
+
+function buildYearOptions() : string[] {
+	const result: string[] = []
+	const startYear = getNormalizedStartYear()
+	const endYear = getNormalizedEndYear()
+	for (let year = startYear; year <= endYear; year++) {
+		result.push('' + year)
+	}
+	return result
+}
+
+function buildMonthOptions() : string[] {
+	const result: string[] = []
+	for (let month = 1; month <= 12; month++) {
+		result.push(normalizeNumber(month))
+	}
+	return result
+}
+
+function buildHourOptions() : string[] {
+	const result: string[] = []
+	for (let hour = 0; hour < 24; hour++) {
+		result.push(normalizeNumber(hour))
+	}
+	return result
+}
+
+function buildMinuteOptions() : string[] {
+	const result: string[] = []
+	const step = getSafeMinuteStep()
+	for (let minute = 0; minute < 60; minute += step) {
+		result.push(normalizeNumber(minute))
+	}
+	return result
+}
+
+function buildDayOptions(year: number, month: number) : string[] {
+	const result: string[] = []
+	const maxDay = getDaysInMonth(year, month)
+	for (let day = 1; day <= maxDay; day++) {
+		result.push(normalizeNumber(day))
+	}
+	return result
+}
+
+const yearOptions = computed<string[]>(() : string[] => {
+	return buildYearOptions()
+})
+
+const showTime = computed<boolean>(() : boolean => {
+	return props.showTime
+})
+
+const monthOptions = computed<string[]>(() : string[] => {
+	return buildMonthOptions()
+})
+
+const hourOptions = computed<string[]>(() : string[] => {
+	return buildHourOptions()
+})
+
+const minuteOptions = computed<string[]>(() : string[] => {
+	return buildMinuteOptions()
+})
+
+const dayOptions = computed<string[]>(() : string[] => {
+	const source = draftValue.value != '' ? draftValue.value : buildDefaultValue()
+	const year = parseNumber(source.substring(0, 4), getCurrentYear())
+	const month = parseNumber(source.substring(5, 7), 1)
+	return buildDayOptions(year, month)
+})
+
+const displayText = computed<string>(() : string => {
+	return internalValue.value
+})
+
+function clampIndex(index: number, length: number) : number {
+	if (length <= 0) return 0
+	if (index < 0) return 0
+	if (index >= length) return length - 1
+	return index
+}
+
+function buildDateTimeText(yearText: string, monthText: string, dayText: string, hourText: string, minuteText: string) : string {
+	if (!props.showTime) {
+		return `${yearText}-${monthText}-${dayText}`
+	}
+	return `${yearText}-${monthText}-${dayText} ${hourText}:${minuteText}:00`
+}
+
+function syncPickerIndexesFromValue(value: string) {
+	const effectiveValue = value != '' ? value : buildDefaultValue()
+	const yearText = effectiveValue.substring(0, 4)
+	const monthText = effectiveValue.substring(5, 7)
+	const dayText = effectiveValue.substring(8, 10)
+	const hourText = props.showTime && effectiveValue.length >= 13 ? effectiveValue.substring(11, 13) : '00'
+	const minuteText = props.showTime && effectiveValue.length >= 16 ? effectiveValue.substring(14, 16) : '00'
+
+	let yearIndex = yearOptions.value.indexOf(yearText)
+	if (yearIndex < 0) yearIndex = 0
+	let monthIndex = monthOptions.value.indexOf(monthText)
+	if (monthIndex < 0) monthIndex = 0
+	const dayList = buildDayOptions(parseNumber(yearText, getCurrentYear()), parseNumber(monthText, 1))
+	let dayIndex = dayList.indexOf(dayText)
+	if (dayIndex < 0) dayIndex = 0
+	let hourIndex = hourOptions.value.indexOf(hourText)
+	if (hourIndex < 0) hourIndex = 0
+
+	const step = getSafeMinuteStep()
+	const minuteValue = parseNumber(minuteText, 0)
+	const alignedMinute = Math.floor(minuteValue / step) * step
+	let minuteIndex = minuteOptions.value.indexOf(normalizeNumber(alignedMinute))
+	if (minuteIndex < 0) minuteIndex = 0
+
+	if (props.showTime) {
+		pickerIndexes.value = [yearIndex, monthIndex, dayIndex, hourIndex, minuteIndex]
+	} else {
+		pickerIndexes.value = [yearIndex, monthIndex, dayIndex]
+	}
+	draftValue.value = buildDateTimeText(
+		yearOptions.value[yearIndex],
+		monthOptions.value[monthIndex],
+		dayList[dayIndex],
+		hourOptions.value[hourIndex],
+		minuteOptions.value[minuteIndex],
+	)
+}
+
+function clearAnimationTimers() {
+	if (enterTimer != null) {
+		clearTimeout(enterTimer!)
+		enterTimer = null
+	}
+	if (closeTimer != null) {
+		clearTimeout(closeTimer!)
+		closeTimer = null
+	}
+}
+
+function activatePanelAnimation() {
+	clearAnimationTimers()
+	enterTimer = setTimeout(() => {
+		overlayVisible.value = true
+		panelVisible.value = true
+		enterTimer = null
+	}, 16)
+}
+
+function openPanel() {
+	if (props.disabled) return
+	if (renderVisible.value) return
+	syncPickerIndexesFromValue(internalValue.value)
+	renderVisible.value = true
+	overlayVisible.value = false
+	panelVisible.value = false
+	activatePanelAnimation()
+	emit('open')
+}
+
+function closePanel() {
+	if (!renderVisible.value) return
+	clearAnimationTimers()
+	overlayVisible.value = false
+	panelVisible.value = false
+	closeTimer = setTimeout(() => {
+		renderVisible.value = false
+		closeTimer = null
+		emit('close')
+	}, PANEL_ANIMATION_DURATION)
+}
+
+function cancelSelection() {
+	emit('cancel')
+	closePanel()
+}
+
+function buildPayload(value: string) : UTSJSONObject {
+	if (!props.showTime) {
+		return {
+			value: value,
+			date: value,
+			time: '',
+		} as UTSJSONObject
+	}
+	return {
+		value: value,
+		date: value.substring(0, 10),
+		time: value.substring(11, 19),
+	} as UTSJSONObject
+}
+
+function confirmSelection() {
+	internalValue.value = draftValue.value
+	const payload = buildPayload(internalValue.value)
+	emit('change', payload)
+	emit('confirm', payload)
+	closePanel()
+}
+
+function handleOverlayClick() {
+	if (props.closeOnOverlay) {
+		cancelSelection()
+	}
+}
+
+function handlePickerChange(event: any) {
+	const pickerEvent = event as UniPickerViewChangeEvent
+	const detail = pickerEvent.detail
+	if (detail == null) return
+	const indexes = detail.value as number[]
+	const yearIndex = clampIndex(indexes[0], yearOptions.value.length)
+	const monthIndex = clampIndex(indexes[1], monthOptions.value.length)
+	const yearText = yearOptions.value[yearIndex]
+	const monthText = monthOptions.value[monthIndex]
+	const days = buildDayOptions(parseNumber(yearText, getCurrentYear()), parseNumber(monthText, 1))
+	const dayIndex = clampIndex(indexes[2], days.length)
+	const hourIndex = props.showTime ? clampIndex(indexes[3], hourOptions.value.length) : 0
+	const minuteIndex = props.showTime ? clampIndex(indexes[4], minuteOptions.value.length) : 0
+	if (props.showTime) {
+		pickerIndexes.value = [yearIndex, monthIndex, dayIndex, hourIndex, minuteIndex]
+	} else {
+		pickerIndexes.value = [yearIndex, monthIndex, dayIndex]
+	}
+	draftValue.value = buildDateTimeText(
+		yearText,
+		monthText,
+		days[dayIndex],
+		hourOptions.value[hourIndex],
+		minuteOptions.value[minuteIndex],
+	)
+}
+
+function setValue(value: string) {
+	internalValue.value = normalizeDateTime(value)
+	syncPickerIndexesFromValue(internalValue.value)
+}
+
+function getValue() : UTSJSONObject {
+	const value = internalValue.value
+	if (value == '') {
+		return {
+			value: '',
+			date: '',
+			time: '',
+		} as UTSJSONObject
+	}
+	return buildPayload(value)
+}
+
+function clearValue() {
+	internalValue.value = ''
+	draftValue.value = buildDefaultValue()
+	syncPickerIndexesFromValue(draftValue.value)
+}
+
+watch(
+	() : string => props.value,
+	(newValue: string) => {
+		const normalized = normalizeDateTime(newValue)
+		const nextValue = normalized == '' && props.defaultToToday ? buildDefaultValue() : normalized
+		if (nextValue != internalValue.value) {
+			internalValue.value = nextValue
+			if (!renderVisible.value) {
+				syncPickerIndexesFromValue(internalValue.value)
+			}
+		}
+	}
+)
+
+onMounted(() => {
+	internalValue.value = normalizeDateTime(props.value)
+	if (internalValue.value == '' && props.defaultToToday) {
+		internalValue.value = buildDefaultValue()
+	}
+	syncPickerIndexesFromValue(internalValue.value)
+})
+
+onUnmounted(() => {
+	clearAnimationTimers()
+})
+
+defineExpose({
+	openPanel,
+	closePanel,
+	setValue,
+	getValue,
+	clearValue,
+})
+</script>
+
+<style>
+.dt-trigger-wrapper {
+	flex-direction: row;
+	align-items: center;
+}
+
+.dt-trigger-default {
+	flex: 1;
+	min-height: 44px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+}
+
+.dt-trigger-text {
+	flex: 1;
+	font-size: 14px;
+	color: #111827;
+	line-height: 20px;
+}
+
+.dt-trigger-placeholder {
+	flex: 1;
+	font-size: 14px;
+	color: #9CA3AF;
+	line-height: 20px;
+}
+
+.dt-trigger-arrow {
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	margin-left: 8px;
+}
+
+.dt-arrow-icon {
+	font-size: 20px;
+	color: #CBD5E1;
+	line-height: 20px;
+}
+
+.dt-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.0);
+	z-index: 998;
+	opacity: 0;
+	transition-property: opacity, background-color;
+	transition-duration: 320ms;
+	transition-timing-function: ease;
+}
+
+.dt-overlay-active {
+	background-color: rgba(10, 18, 30, 0.32);
+	opacity: 1;
+}
+
+.dt-panel {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 360px;
+	background-color: #FFFFFF;
+	border-radius: 22px 22px 0 0;
+	z-index: 999;
+	flex-direction: column;
+	opacity: 0;
+	transform: translateY(48px);
+	box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.14);
+	transition-property: transform, opacity;
+	transition-duration: 340ms;
+	transition-timing-function: ease;
+}
+
+.dt-panel-active {
+	opacity: 1;
+	transform: translateY(0px);
+}
+
+.dt-handle-wrap {
+	align-items: center;
+	padding-top: 10px;
+	padding-bottom: 4px;
+}
+
+.dt-handle {
+	width: 44px;
+	height: 5px;
+	border-radius: 999px;
+	background-color: #D9DEE7;
+}
+
+.dt-header {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 10px;
+	padding-bottom: 16px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.dt-header-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #111827;
+	line-height: 20px;
+}
+
+.dt-header-action {
+	min-width: 44px;
+	align-items: center;
+	justify-content: center;
+}
+
+.dt-header-action-text {
+	font-size: 14px;
+	font-weight: 600;
+	color: #2563EB;
+	line-height: 20px;
+}
+
+.dt-header-action-text-light {
+	color: #94A3B8;
+}
+
+.dt-preview-wrap {
+	align-items: center;
+	justify-content: center;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	background-color: #F8FAFC;
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-top: 12px;
+	border-radius: 14px;
+}
+
+.dt-preview-text {
+	font-size: 15px;
+	font-weight: 600;
+	color: #0F172A;
+	line-height: 20px;
+}
+
+.dt-picker {
+	flex: 1;
+	height: 220px;
+	margin-top: 12px;
+}
+
+.dt-picker-item {
+	height: 48px;
+	align-items: center;
+	justify-content: center;
+}
+
+.dt-picker-item-text {
+	font-size: 16px;
+	color: #334155;
+	line-height: 20px;
+}
+</style>

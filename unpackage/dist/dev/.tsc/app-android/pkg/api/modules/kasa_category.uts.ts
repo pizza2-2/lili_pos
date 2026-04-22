@@ -1,0 +1,353 @@
+import { request } from '../index.uts'
+
+const kasaCategoryBasePath = '/api/categories/kasa-categories/'
+
+export type KasaCategoryListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	id: number | string | null
+	is_active: boolean | string | null
+	tax_rate: number | string | null
+	unique_kod: string | null
+	simple: boolean | null
+}
+
+export type KasaCategoryItem = {
+	id: number
+	name: string
+	name_cn: string
+	name_en: string
+	code: string
+	unique_kod: string
+	tax_rate: string
+	tax_rate_display: string
+	products_count: number
+	is_active: boolean
+	created_at: string
+	updated_at: string
+	raw: UTSJSONObject
+}
+
+export type KasaCategoryListResponse = {
+	results: KasaCategoryItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type KasaCategoryMutationData = UTSJSONObject
+
+export type KasaCategoryStatisticsResponse = {
+	data: UTSJSONObject
+}
+
+export type KasaCategoryTaxRatesResponse = {
+	data: UTSJSONObject | null
+	items: UTSJSONObject[]
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+	return '' + value
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+
+	const text = stringValue(value)
+	if (text == '') {
+		return 0
+	}
+
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+
+	return parsed
+}
+
+function booleanValue(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return []
+	}
+
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return []
+	}
+
+	return parsed!
+}
+
+function buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem {
+	const nestedRawObject = parseObject(rawObject['raw'])
+	const nameCn = stringValue(rawObject['name_cn']) != '' ? stringValue(rawObject['name_cn']) : stringValue(nestedRawObject != null ? nestedRawObject['name_cn'] : null)
+	const nameEn = stringValue(rawObject['name_en']) != '' ? stringValue(rawObject['name_en']) : stringValue(nestedRawObject != null ? nestedRawObject['name_en'] : null)
+	let displayName = stringValue(rawObject['name'])
+	if (displayName == '') {
+		if (nameCn != '' && nameEn != '') {
+			displayName = nameCn + ' / ' + nameEn
+		} else if (nameCn != '') {
+			displayName = nameCn
+		} else {
+			displayName = nameEn
+		}
+	}
+	return {
+		id: intValue(rawObject['id']),
+		name: displayName,
+		name_cn: nameCn,
+		name_en: nameEn,
+		code: stringValue(rawObject['code']) != '' ? stringValue(rawObject['code']) : stringValue(nestedRawObject != null ? nestedRawObject['code'] : null),
+		unique_kod: stringValue(rawObject['unique_kod']) != '' ? stringValue(rawObject['unique_kod']) : stringValue(nestedRawObject != null ? nestedRawObject['unique_kod'] : null),
+		tax_rate: stringValue(rawObject['tax_rate']) != '' ? stringValue(rawObject['tax_rate']) : stringValue(nestedRawObject != null ? nestedRawObject['tax_rate'] : null),
+		tax_rate_display: stringValue(rawObject['tax_rate_display']) != '' ? stringValue(rawObject['tax_rate_display']) : stringValue(nestedRawObject != null ? nestedRawObject['tax_rate_display'] : null),
+		products_count: rawObject['products_count'] != null ? intValue(rawObject['products_count']) : intValue(nestedRawObject != null ? nestedRawObject['products_count'] : null),
+		is_active: rawObject['is_active'] != null ? booleanValue(rawObject['is_active']) : booleanValue(nestedRawObject != null ? nestedRawObject['is_active'] : null),
+		created_at: stringValue(rawObject['created_at']) != '' ? stringValue(rawObject['created_at']) : stringValue(nestedRawObject != null ? nestedRawObject['created_at'] : null),
+		updated_at: stringValue(rawObject['updated_at']) != '' ? stringValue(rawObject['updated_at']) : stringValue(nestedRawObject != null ? nestedRawObject['updated_at'] : null),
+		raw: rawObject,
+	} as KasaCategoryItem
+}
+
+function buildKasaCategoryArrayFromValue(value: any | null): KasaCategoryItem[] {
+	const rawArray = parseObjectArray(value)
+	const result: KasaCategoryItem[] = []
+	for (let index = 0; index < rawArray.length; index += 1) {
+		result.push(buildKasaCategoryItemFromObject(rawArray[index]))
+	}
+	return result
+}
+
+function buildKasaCategoryListQuery(data: KasaCategoryListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+	if (data.id != null && stringValue(data.id) != '') {
+		query['id'] = data.id
+	}
+	if (data.is_active != null && stringValue(data.is_active) != '') {
+		query['is_active'] = data.is_active
+	}
+	if (data.tax_rate != null && stringValue(data.tax_rate) != '') {
+		query['tax_rate'] = data.tax_rate
+	}
+	if (data.unique_kod != null && data.unique_kod != '') {
+		query['unique_kod'] = data.unique_kod
+	}
+	if (data.simple != null) {
+		query['simple'] = data.simple
+	}
+
+	return query
+}
+
+function buildKasaCategoryListResponse(raw: any, query: KasaCategoryListQuery): KasaCategoryListResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		const results = buildKasaCategoryArrayFromValue(raw)
+		return {
+			results: results,
+			count: results.length,
+			total_count: results.length,
+			total_pages: 1,
+			current_page: query.page > 0 ? query.page : 1,
+			page_size: query.page_size > 0 ? query.page_size : results.length,
+		} as KasaCategoryListResponse
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	if (rawObject['pagination'] != null) {
+		paginationObject = parseObject(rawObject['pagination'])
+	}
+
+	let results: KasaCategoryItem[] = []
+	if (rawObject['results'] != null) {
+		results = buildKasaCategoryArrayFromValue(rawObject['results'])
+	} else if (rawObject['items'] != null) {
+		results = buildKasaCategoryArrayFromValue(rawObject['items'])
+	} else {
+		results = buildKasaCategoryArrayFromValue(raw)
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total_count'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['count'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) {
+		currentPage = intValue(rawObject['current_page'])
+	}
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page > 0 ? query.page : 1
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0) {
+		pageSize = intValue(rawObject['per_page'])
+	}
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['per_page'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size > 0 ? query.page_size : results.length
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0) {
+		totalPages = intValue(rawObject['num_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['num_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as KasaCategoryListResponse
+}
+
+function buildKasaCategoryItemResponse(raw: any, errorMessage: string): KasaCategoryItem {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error(errorMessage)
+	}
+	return buildKasaCategoryItemFromObject(rawObject)
+}
+
+function buildObjectResponse(raw: any, errorMessage: string): UTSJSONObject {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error(errorMessage)
+	}
+	return rawObject
+}
+
+function buildTaxRatesResponse(raw: any): KasaCategoryTaxRatesResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject != null) {
+		return {
+			data: rawObject,
+			items: parseObjectArray(rawObject['results'] != null ? rawObject['results'] : rawObject['items']),
+		} as KasaCategoryTaxRatesResponse
+	}
+
+	return {
+		data: null,
+		items: parseObjectArray(raw),
+	} as KasaCategoryTaxRatesResponse
+}
+
+function kasaCategoryDetailPath(id: number | string): string {
+	return kasaCategoryBasePath + stringValue(id) + '/'
+}
+
+export async function getKasaCategoryList(data: KasaCategoryListQuery): Promise<KasaCategoryListResponse> {
+	const raw = await request(kasaCategoryBasePath, 'GET', buildKasaCategoryListQuery(data), true)
+	return buildKasaCategoryListResponse(raw, data)
+}
+
+export async function getKasaCategoryDetail(id: number | string): Promise<KasaCategoryItem> {
+	const raw = await request(kasaCategoryDetailPath(id), 'GET', {} as UTSJSONObject, true)
+	return buildKasaCategoryItemResponse(raw, '收银分类详情响应解析失败')
+}
+
+export async function createKasaCategory(data: KasaCategoryMutationData): Promise<KasaCategoryItem> {
+	const raw = await request(kasaCategoryBasePath, 'POST', data, true)
+	return buildKasaCategoryItemResponse(raw, '创建收银分类响应解析失败')
+}
+
+export async function updateKasaCategory(id: number | string, data: KasaCategoryMutationData): Promise<KasaCategoryItem> {
+	const raw = await request(kasaCategoryDetailPath(id), 'PUT', data, true)
+	return buildKasaCategoryItemResponse(raw, '更新收银分类响应解析失败')
+}
+
+export async function patchKasaCategory(id: number | string, data: KasaCategoryMutationData): Promise<KasaCategoryItem> {
+	const raw = await request(kasaCategoryDetailPath(id), 'PATCH', data, true)
+	return buildKasaCategoryItemResponse(raw, '部分更新收银分类响应解析失败')
+}
+
+export function deleteKasaCategory(id: number | string): Promise<any> {
+	return request(kasaCategoryDetailPath(id), 'DELETE', {} as UTSJSONObject, true)
+}
+
+export async function getKasaCategoryTaxRates(): Promise<KasaCategoryTaxRatesResponse> {
+	const raw = await request(kasaCategoryBasePath + 'tax_rates/', 'GET', {} as UTSJSONObject, true)
+	return buildTaxRatesResponse(raw)
+}
+
+export async function getKasaCategoryStatistics(query: KasaCategoryListQuery | null = null): Promise<KasaCategoryStatisticsResponse> {
+	const requestQuery = query == null ? {} as UTSJSONObject : buildKasaCategoryListQuery(query)
+	const raw = await request(kasaCategoryBasePath + 'statistics/', 'GET', requestQuery, true)
+	return {
+		data: buildObjectResponse(raw, '收银分类统计响应解析失败'),
+	} as KasaCategoryStatisticsResponse
+}

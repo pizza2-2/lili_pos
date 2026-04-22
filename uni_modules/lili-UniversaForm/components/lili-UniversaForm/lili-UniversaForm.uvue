@@ -64,27 +64,18 @@
 							/>
 
 							<view v-else-if="isDatetimeField(field)" class="uf-datetime-wrap">
-								<picker
-									mode="date"
-									:value="getDatetimeDateValue(field)"
+								<liliData
+									:value="getStringFieldValue(field)"
+									:title="getDatetimeTitle(field)"
+									:placeholder="getDatetimePlaceholder(field)"
 									:disabled="isReadonly(field)"
-									@change="handleDatetimeDateChange(field, $event)"
-								>
-									<view :class="getDatetimeValueClass(field, getDatetimeDateValue(field))">
-										<text :class="getDatetimeTextClass(field, getDatetimeDateValue(field))">{{ getDatetimeDateText(field) }}</text>
-									</view>
-								</picker>
-								<view class="uf-datetime-gap"></view>
-								<picker
-									mode="time"
-									:value="getDatetimeTimeValue(field)"
-									:disabled="isReadonly(field)"
-									@change="handleDatetimeTimeChange(field, $event)"
-								>
-									<view :class="getDatetimeValueClass(field, getDatetimeTimeValue(field))">
-										<text :class="getDatetimeTextClass(field, getDatetimeTimeValue(field))">{{ getDatetimeTimeText(field) }}</text>
-									</view>
-								</picker>
+									:showTime="getDatetimeShowTime(field)"
+									:defaultToToday="getDatetimeDefaultToToday(field)"
+									:startYear="getDatetimeStartYear(field)"
+									:endYear="getDatetimeEndYear(field)"
+									:minuteStep="getDatetimeMinuteStep(field)"
+									@change="handleDatetimeChange(field, $event)"
+								/>
 							</view>
 
 							<switch
@@ -97,6 +88,7 @@
 							<view v-else-if="isBottomSelectField(field)" class="uf-bottom-select-wrap">
 								<liliBottomSelect
 									:value="getStringFieldValue(field)"
+									:valueText="getBottomSelectValueText(field)"
 									:title="getBottomSelectTitle(field)"
 									:placeholder="getFieldPlaceholder(field)"
 									:searchPlaceholder="getBottomSelectSearchPlaceholder(field)"
@@ -162,6 +154,7 @@
 </template>
 
 <script setup lang="uts">
+import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
 
@@ -362,11 +355,34 @@ function shouldShowField(field: UTSJSONObject) : boolean {
 	return true
 }
 
+function normalizeDateNumber(value: number) : string {
+	if (value < 10) {
+		return '0' + value
+	}
+	return '' + value
+}
+
+function buildCurrentDatetimeValue(showTime: boolean) : string {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = normalizeDateNumber(now.getMonth() + 1)
+	const day = normalizeDateNumber(now.getDate())
+	if (!showTime) {
+		return `${year}-${month}-${day}`
+	}
+	const hour = normalizeDateNumber(now.getHours())
+	const minute = normalizeDateNumber(now.getMinutes())
+	return `${year}-${month}-${day} ${hour}:${minute}:00`
+}
+
 function getDefaultValue(field: UTSJSONObject) : any {
 	const fieldType = getFieldType(field)
 	const customDefault = field['defaultValue']
 	if (customDefault != null) {
 		return customDefault
+	}
+	if (fieldType == 'datetime' && getBooleanField(field, 'defaultToToday', false)) {
+		return buildCurrentDatetimeValue(getBooleanField(field, 'showTime', true))
 	}
 	if (fieldType == 'switch') return false
 	if (fieldType == 'upload') return [] as string[]
@@ -450,6 +466,18 @@ function getBottomSelectValueKey(field: UTSJSONObject) : string {
 	return 'value'
 }
 
+function getBottomSelectTextKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'textKey')
+}
+
+function getBottomSelectValueText(field: UTSJSONObject) : string {
+	const textKey = getBottomSelectTextKey(field)
+	if (textKey == '') return ''
+	const value = formData.value[textKey]
+	if (value == null) return ''
+	return '' + value
+}
+
 function getBottomSelectPageSize(field: UTSJSONObject) : number {
 	const value = getNumberField(field, 'pageSize', 20)
 	if (value <= 0) return 20
@@ -462,75 +490,51 @@ function getBottomSelectSearchDelay(field: UTSJSONObject) : number {
 	return value
 }
 
-function getDatetimeDateValue(field: UTSJSONObject) : string {
-	const value = getStringFieldValue(field)
-	if (value.length >= 10) {
-		return value.substring(0, 10)
+function getDatetimeTitle(field: UTSJSONObject) : string {
+	const title = getStringField(field, 'title')
+	if (title != '') {
+		return title
 	}
-	return ''
+	return '选择' + getFieldLabel(field)
 }
 
-function getDatetimeTimeValue(field: UTSJSONObject) : string {
-	const value = getStringFieldValue(field)
-	if (value.length >= 16) {
-		return value.substring(11, 16)
-	}
-	return ''
-}
-
-function getDatetimeDateText(field: UTSJSONObject) : string {
-	const value = getDatetimeDateValue(field)
-	if (value != '') {
-		return value
-	}
-	const placeholder = getStringField(field, 'datePlaceholder')
+function getDatetimePlaceholder(field: UTSJSONObject) : string {
+	const placeholder = getStringField(field, 'placeholder')
 	if (placeholder != '') {
 		return placeholder
 	}
-	return '请选择日期'
+	const datePlaceholder = getStringField(field, 'datePlaceholder')
+	const timePlaceholder = getStringField(field, 'timePlaceholder')
+	if (datePlaceholder != '' && timePlaceholder != '') {
+		return datePlaceholder + ' ' + timePlaceholder
+	}
+	return '请选择' + getFieldLabel(field)
 }
 
-function getDatetimeTimeText(field: UTSJSONObject) : string {
-	const value = getDatetimeTimeValue(field)
-	if (value != '') {
-		return value
-	}
-	const placeholder = getStringField(field, 'timePlaceholder')
-	if (placeholder != '') {
-		return placeholder
-	}
-	return '请选择时间'
+function getDatetimeShowTime(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showTime', true)
 }
 
-function getDatetimeValueClass(field: UTSJSONObject, value: string) : string {
-	if (value == '') {
-		return 'uf-datetime-box uf-datetime-box-placeholder'
-	}
-	if (isReadonly(field)) {
-		return 'uf-datetime-box uf-datetime-box-readonly'
-	}
-	return 'uf-datetime-box'
+function getDatetimeDefaultToToday(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'defaultToToday', false)
 }
 
-function getDatetimeTextClass(field: UTSJSONObject, value: string) : string {
-	if (value == '') {
-		return 'uf-datetime-text uf-datetime-text-placeholder'
-	}
-	if (isReadonly(field)) {
-		return 'uf-datetime-text uf-datetime-text-readonly'
-	}
-	return 'uf-datetime-text'
+function getDatetimeStartYear(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'startYear', 2000)
+	if (value <= 0) return 2000
+	return value
 }
 
-function buildDatetimeValue(dateText: string, timeText: string) : string {
-	if (dateText == '' && timeText == '') {
-		return ''
-	}
-	if (dateText == '') {
-		return ''
-	}
-	const normalizedTime = timeText == '' ? '00:00' : timeText
-	return dateText + ' ' + normalizedTime + ':00'
+function getDatetimeEndYear(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'endYear', 2099)
+	if (value <= 0) return 2099
+	return value
+}
+
+function getDatetimeMinuteStep(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'minuteStep', 1)
+	if (value <= 0) return 1
+	return value
 }
 
 function showBottomSelectEdit(field: UTSJSONObject) : boolean {
@@ -644,6 +648,11 @@ function applyInitialValues() {
 			} else {
 				nextData[key] = getDefaultValue(field)
 			}
+			const textKey = getBottomSelectTextKey(field)
+			if (textKey != '') {
+				const incomingText = props.initialData[textKey]
+				nextData[textKey] = incomingText == null ? '' : incomingText
+			}
 			if (isUploadField(field)) {
 				const itemsKey = getUploadFileItemsKey(field)
 				const incomingItems = props.initialData[itemsKey]
@@ -706,29 +715,14 @@ function handleNumberInput(field: UTSJSONObject, event: any) {
 	emitFieldChange(field, value)
 }
 
-function setDatetimeFieldValue(key: string, value: string) {
+function handleDatetimeChange(field: UTSJSONObject, payload: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const payloadObject = payload as UTSJSONObject
+	const value = getStringField(payloadObject, 'value')
 	setFieldValueByKey(key, value)
 	clearFieldError(key)
 	refreshDirtyState()
-}
-
-function handleDatetimeDateChange(field: UTSJSONObject, event: any) {
-	const key = getFieldKey(field)
-	if (key == '') return
-	const nextDate = readEventValue(event)
-	const currentTime = getDatetimeTimeValue(field)
-	const value = buildDatetimeValue(nextDate, currentTime)
-	setDatetimeFieldValue(key, value)
-	emitFieldChange(field, value)
-}
-
-function handleDatetimeTimeChange(field: UTSJSONObject, event: any) {
-	const key = getFieldKey(field)
-	if (key == '') return
-	const nextTime = readEventValue(event)
-	const currentDate = getDatetimeDateValue(field)
-	const value = buildDatetimeValue(currentDate, nextTime)
-	setDatetimeFieldValue(key, value)
 	emitFieldChange(field, value)
 }
 
@@ -751,6 +745,10 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 	const payloadObject = payload as UTSJSONObject
 	const value = getStringField(payloadObject, 'value')
 	setFieldValueByKey(key, value)
+	const textKey = getBottomSelectTextKey(field)
+	if (textKey != '') {
+		setFieldValueByKey(textKey, getStringField(payloadObject, 'text'))
+	}
 	clearFieldError(key)
 	refreshDirtyState()
 	emitFieldChange(field, value)
@@ -1146,43 +1144,7 @@ defineExpose({
 }
 
 .uf-datetime-wrap {
-	flex-direction: row;
-}
-
-.uf-datetime-box {
-	flex: 1;
 	min-height: 44px;
-	padding-left: 12px;
-	padding-right: 12px;
-	border-radius: 10px;
-	justify-content: center;
-	background-color: #F8FAFC;
-}
-
-.uf-datetime-box-placeholder {
-	background-color: #F8FAFC;
-}
-
-.uf-datetime-box-readonly {
-	background-color: #F3F4F6;
-}
-
-.uf-datetime-text {
-	font-size: 14px;
-	color: #111827;
-	line-height: 20px;
-}
-
-.uf-datetime-text-placeholder {
-	color: #9CA3AF;
-}
-
-.uf-datetime-text-readonly {
-	color: #6B7280;
-}
-
-.uf-datetime-gap {
-	width: 8px;
 }
 
 .uf-bottom-select-wrap {

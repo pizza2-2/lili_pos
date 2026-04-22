@@ -20,7 +20,8 @@
 							:class="index != 3 ? 'grid-item grid-item-gap' : 'grid-item'"
 							@click="handleTap(item)"
 						>
-							<text class="grid-icon">{{ item.icon }}</text>
+							<image v-if="item.iconPath != null && item.iconPath != ''" class="grid-image-icon" :src="item.iconPath" mode="aspectFit"></image>
+							<text v-else class="grid-icon">{{ item.icon }}</text>
 							<text class="grid-text">{{ item.label }}</text>
 						</view>
 					</view>
@@ -34,6 +35,7 @@
 type MenuItem = {
 	label: string
 	icon: string
+	iconPath: string | null
 	path: string | null
 	action: string
 	disabled: boolean
@@ -49,10 +51,19 @@ const groups = ref<MenuGroup[]>([
 		label: '常用页面',
 		rows: [
 			[
-				{ label: '供应商', icon: '◫', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
-				{ label: '商品', icon: '□', path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
-				{ label: '我的', icon: '◉', path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
-				{ label: '隐私', icon: '◎', path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+				{ label: '供应商', icon: '◫', iconPath: null, path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+				{ label: '商品', icon: '□', iconPath: null, path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
+				{ label: '我的', icon: '◉', iconPath: null, path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
+				{ label: '隐私', icon: '◎', iconPath: null, path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+			],
+		],
+	},
+	{
+		label: '分类设置',
+		rows: [
+			[
+				{ label: '分类', icon: '', iconPath: '/static/muen/分类.png', path: '/pages/category/index', action: 'navigateTo', disabled: false },
+				{ label: '收银分类', icon: '', iconPath: '/static/muen/分类 (1).png', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
 			],
 		],
 	},
@@ -60,10 +71,10 @@ const groups = ref<MenuGroup[]>([
 		label: '门店配置',
 		rows: [
 			[
-				{ label: '收银台', icon: '¤', path: null, action: 'todo', disabled: true },
-				{ label: '打印机', icon: '▣', path: null, action: 'todo', disabled: true },
-				{ label: '支付', icon: '¥', path: null, action: 'todo', disabled: true },
-				{ label: '权限', icon: '⌂', path: null, action: 'todo', disabled: true },
+				{ label: '收银台', icon: '¤', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '打印机', icon: '▣', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '支付', icon: '¥', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '权限', icon: '⌂', iconPath: null, path: null, action: 'todo', disabled: true },
 			],
 		],
 	},
@@ -71,10 +82,10 @@ const groups = ref<MenuGroup[]>([
 		label: '系统工具',
 		rows: [
 			[
-				{ label: '同步', icon: '↻', path: null, action: 'todo', disabled: true },
-				{ label: '更新', icon: '↑', path: null, action: 'todo', disabled: true },
-				{ label: '日志', icon: '≡', path: null, action: 'todo', disabled: true },
-				{ label: '分享', icon: '⇪', path: null, action: 'todo', disabled: true },
+				{ label: '同步', icon: '↻', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '更新', icon: '↑', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '日志', icon: '≡', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '分享', icon: '⇪', iconPath: null, path: null, action: 'todo', disabled: true },
 			],
 		],
 	},
@@ -233,6 +244,11 @@ function getGroupCount(group: MenuGroup): number {
 	font-size: 18px;
 	line-height: 18px;
 	color: #111827;
+}
+
+.grid-image-icon {
+	width: 24px;
+	height: 24px;
 }
 
 .grid-text {

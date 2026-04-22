@@ -1,5 +1,5 @@
 import _easycom_lili_preview from '@/uni_modules/lili-preview/components/lili-preview/lili-preview.uvue'
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue", 151, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue", 185, 6>;
 	items?: UTSJSONObject[]
 	keyField?: string
 	titleField?: string
@@ -15,6 +15,10 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	actions?: UTSJSONObject[]
 	selectionMode?: boolean
 	selectedItems?: string[]
+	longPressToSelect?: boolean
+	showSelectAll?: boolean
+	batchActions?: UTSJSONObject[]
+	batchInfoText?: string
 	loading?: boolean
 	loadingText?: string
 	keepContentOnLoading?: boolean
@@ -70,6 +74,10 @@ const __sfc__ = defineComponent({
 	] },
     selectionMode: { type: Boolean, required: false, default: false },
     selectedItems: { type: Array as PropType<string[]>, required: false, default: () : string[] => [] },
+    longPressToSelect: { type: Boolean, required: false, default: true },
+    showSelectAll: { type: Boolean, required: false, default: true },
+    batchActions: { type: Array as PropType<UTSJSONObject[]>, required: false, default: () : UTSJSONObject[] => [] },
+    batchInfoText: { type: String, required: false, default: '' },
     loading: { type: Boolean, required: false, default: false },
     loadingText: { type: String, required: false, default: '加载中...' },
     keepContentOnLoading: { type: Boolean, required: false, default: false },
@@ -91,8 +99,9 @@ const __sfc__ = defineComponent({
     enablePreviewSave: { type: Boolean, required: false, default: true },
     enablePreviewShare: { type: Boolean, required: false, default: true }
   },
-  emits: ["item-click", "action", "update:selectedItems", "selection-change", "image-preview", "preview-close", "menu", "page-change", "subtitle-click", "field-click", "meta-click", "floating-add"],
-  setup(__props) {
+  emits: ["item-click", "action", "batch-action", "update:selectedItems", "update:selectionMode", "selection-change", "selection-enter", "selection-exit", "select-all", "image-preview", "preview-close", "menu", "page-change", "subtitle-click", "field-click", "meta-click", "floating-add"],
+  setup(__props, __setupCtx: SetupContext) {
+const __expose = __setupCtx.expose
 const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
 const _cache = __ins.renderCache;
@@ -108,6 +117,8 @@ const previewIndex = ref<number>(0)
 const previewVisible = ref<boolean>(false)
 const previewItem = ref<UTSJSONObject | null>(null)
 const summaryExpanded = ref<boolean>(!props.summaryCollapsedByDefault)
+const internalSelectionMode = ref<boolean>(props.selectionMode)
+const internalSelectedItems = ref<string[]>([...props.selectedItems])
 
 const showBlockingLoading = computed<boolean>(() : boolean => {
 	if (!props.loading) {
@@ -125,6 +136,26 @@ const showInlineLoading = computed<boolean>(() : boolean => {
 
 const showSummaryBar = computed<boolean>(() : boolean => {
 	return props.summaryItems.length > 0
+})
+
+const selectionModeActive = computed<boolean>(() : boolean => {
+	return props.selectionMode || internalSelectionMode.value
+})
+
+const showBatchBar = computed<boolean>(() : boolean => {
+	return selectionModeActive.value
+})
+
+const batchInfoText = computed<string>(() : string => {
+	if (props.batchInfoText != '') {
+		return props.batchInfoText
+	}
+	return '已选 ' + internalSelectedItems.value.length + ' 项'
+})
+
+const allSelected = computed<boolean>(() : boolean => {
+	if (props.items.length == 0) return false
+	return internalSelectedItems.value.length > 0 && internalSelectedItems.value.length == props.items.length
 })
 
 const summaryArrowText = computed<string>(() : string => {
@@ -276,12 +307,45 @@ function itemKey(item: UTSJSONObject, index: number) : string {
 function isSelected(item: UTSJSONObject) : boolean {
 	const id = itemId(item)
 	if (id == '') return false
-	for (let i = 0; i < props.selectedItems.length; i++) {
-		if (props.selectedItems[i] == id) {
+	for (let i = 0; i < internalSelectedItems.value.length; i++) {
+		if (internalSelectedItems.value[i] == id) {
 			return true
 		}
 	}
 	return false
+}
+
+function emitSelectedItems(nextSelected: string[]) {
+	internalSelectedItems.value = nextSelected
+	emit('update:selectedItems', nextSelected)
+	emit('selection-change', nextSelected)
+}
+
+function enterSelectionMode(seedItem: UTSJSONObject | null = null) {
+	if (selectionModeActive.value) {
+		return
+	}
+	internalSelectionMode.value = true
+	emit('update:selectionMode', true)
+	if (seedItem != null) {
+		const seedId = itemId(seedItem!)
+		if (seedId != '') {
+			emitSelectedItems([seedId])
+		}
+	}
+	emit('selection-enter', {
+		item: seedItem,
+		selectedItems: internalSelectedItems.value,
+	} as UTSJSONObject)
+}
+
+function exitSelectionMode() {
+	internalSelectionMode.value = false
+	emitSelectedItems([] as string[])
+	emit('update:selectionMode', false)
+	emit('selection-exit', {
+		selectedItems: [] as string[],
+	} as UTSJSONObject)
 }
 
 function toggleSelection(item: UTSJSONObject) {
@@ -289,8 +353,8 @@ function toggleSelection(item: UTSJSONObject) {
 	if (id == '') return
 	const nextSelected: string[] = []
 	let removed = false
-	for (let i = 0; i < props.selectedItems.length; i++) {
-		const current = props.selectedItems[i]
+	for (let i = 0; i < internalSelectedItems.value.length; i++) {
+		const current = internalSelectedItems.value[i]
 		if (current == id) {
 			removed = true
 			continue
@@ -300,16 +364,45 @@ function toggleSelection(item: UTSJSONObject) {
 	if (!removed) {
 		nextSelected.push(id)
 	}
-	emit('update:selectedItems', nextSelected)
-	emit('selection-change', nextSelected)
+	emitSelectedItems(nextSelected)
 }
 
 function handleItemClick(item: UTSJSONObject) {
-	if (props.selectionMode) {
+	if (selectionModeActive.value) {
 		toggleSelection(item)
 		return
 	}
 	emit('item-click', item)
+}
+
+function handleItemLongPress(item: UTSJSONObject) {
+	if (!props.longPressToSelect) {
+		return
+	}
+	enterSelectionMode(item)
+}
+
+function toggleSelectAll() {
+	if (allSelected.value) {
+		emitSelectedItems([] as string[])
+		emit('select-all', {
+			selected: false,
+			selectedItems: [] as string[],
+		} as UTSJSONObject)
+		return
+	}
+	const nextSelected: string[] = []
+	for (let i = 0; i < props.items.length; i++) {
+		const id = itemId(props.items[i])
+		if (id != '') {
+			nextSelected.push(id)
+		}
+	}
+	emitSelectedItems(nextSelected)
+	emit('select-all', {
+		selected: true,
+		selectedItems: nextSelected,
+	} as UTSJSONObject)
 }
 
 function handleSubtitleClick(item: UTSJSONObject) {
@@ -542,6 +635,54 @@ function handleFloatingAdd() {
 	emit('floating-add')
 }
 
+function selectedItemObjects() : UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let i = 0; i < props.items.length; i++) {
+		if (isSelected(props.items[i])) {
+			result.push(props.items[i])
+		}
+	}
+	return result
+}
+
+function handleBatchAction(action: UTSJSONObject) {
+	emit('batch-action', {
+		action: action,
+		selectedItems: internalSelectedItems.value,
+		selectedRows: selectedItemObjects(),
+	} as UTSJSONObject)
+}
+
+watch(
+	() : string[] => props.selectedItems,
+	(newValue: string[]) => {
+		const nextSelected: string[] = []
+		for (let i = 0; i < newValue.length; i++) {
+			nextSelected.push(newValue[i])
+		}
+		internalSelectedItems.value = nextSelected
+	}
+)
+
+watch(
+	() : boolean => props.selectionMode,
+	(newValue: boolean) => {
+		internalSelectionMode.value = newValue
+		if (!newValue && internalSelectedItems.value.length > 0) {
+			internalSelectedItems.value = [] as string[]
+		}
+	}
+)
+
+__expose({
+	enterSelectionMode,
+	exitSelectionMode,
+	toggleSelectAll,
+	getSelectedItems: () : string[] => {
+		return internalSelectedItems.value
+	},
+})
+
 return (): any | null => {
 
 const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lili_preview)
@@ -616,11 +757,12 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
               return _cE("view", _uM({
                 key: itemKey(item, itemIndex),
                 class: _nC(isSelected(item) ? 'lul-card lul-card-selected' : 'lul-card'),
-                onClick: () => {handleItemClick(item)}
+                onClick: () => {handleItemClick(item)},
+                onLongpress: () => {handleItemLongPress(item)}
               }), [
                 _cE("view", _uM({ class: "lul-card-top" }), [
                   _cE("view", _uM({ class: "lul-card-top-left" }), [
-                    isTrue(_ctx.selectionMode)
+                    isTrue(unref(selectionModeActive))
                       ? _cE("view", _uM({
                           key: 0,
                           class: "lul-check-wrap",
@@ -683,7 +825,7 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
                               }), _tD(fieldText(item, _ctx.metaField)), 9 /* TEXT, PROPS */, ["onClick"])
                             : _cC("v-if", true)
                         ]),
-                        isTrue(_ctx.showMenu)
+                        isTrue(_ctx.showMenu && !unref(selectionModeActive))
                           ? _cE("view", _uM({
                               key: 0,
                               class: "lul-menu-wrap",
@@ -696,7 +838,7 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
                               }))
                             ], 8 /* PROPS */, ["onClick"])
                           : _cC("v-if", true),
-                        isTrue(_ctx.showChevron)
+                        isTrue(_ctx.showChevron && !unref(selectionModeActive))
                           ? _cE("view", _uM({
                               key: 1,
                               class: "lul-chevron-wrap"
@@ -753,7 +895,7 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
                       ])
                     : _cC("v-if", true)
                 ])
-              ], 10 /* CLASS, PROPS */, ["onClick"])
+              ], 42 /* CLASS, PROPS, NEED_HYDRATION */, ["onClick", "onLongpress"])
             }), 128 /* KEYED_FRAGMENT */),
             isTrue(_ctx.showPagination)
               ? _cE("view", _uM({
@@ -800,9 +942,68 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
           onClose: handlePreviewClose
         }), null, 8 /* PROPS */, ["images", "initialIndex", "visible", "enableSave", "enableShare"])
       : _cC("v-if", true),
-    isTrue(props.showFloatingAdd)
+    isTrue(unref(showBatchBar))
       ? _cE("view", _uM({
           key: 5,
+          class: "lul-batch-spacer"
+        }))
+      : _cC("v-if", true),
+    isTrue(unref(showBatchBar))
+      ? _cE("view", _uM({
+          key: 6,
+          class: "lul-batch-bar"
+        }), [
+          _cE("view", _uM({ class: "lul-batch-bar-main" }), [
+            isTrue(props.showSelectAll)
+              ? _cE("view", _uM({
+                  key: 0,
+                  class: "lul-batch-select-all",
+                  onClick: toggleSelectAll
+                }), [
+                  _cE("view", _uM({
+                    class: _nC(unref(allSelected) ? 'lul-check lul-check-active' : 'lul-check')
+                  }), [
+                    isTrue(unref(allSelected))
+                      ? _cE("text", _uM({
+                          key: 0,
+                          class: "lul-check-icon"
+                        }), "✓")
+                      : _cC("v-if", true)
+                  ], 2 /* CLASS */),
+                  _cE("text", _uM({ class: "lul-batch-select-all-text" }), _tD(unref(allSelected) ? '取消全选' : '全选'), 1 /* TEXT */)
+                ])
+              : _cC("v-if", true),
+            _cE("view", _uM({ class: "lul-batch-info" }), [
+              _cE("text", _uM({ class: "lul-batch-info-text" }), _tD(unref(batchInfoText)), 1 /* TEXT */)
+            ]),
+            _cE("scroll-view", _uM({
+              "scroll-x": "true",
+              class: "lul-batch-actions-scroll"
+            }), [
+              _cE("view", _uM({ class: "lul-batch-actions" }), [
+                _cE(Fragment, null, RenderHelpers.renderList(props.batchActions, (action, actionIndex, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: actionKey(action, actionIndex),
+                    class: "lul-batch-action",
+                    onClick: () => {handleBatchAction(action)}
+                  }), [
+                    _cE("text", _uM({ class: "lul-batch-action-text" }), _tD(actionText(action)), 1 /* TEXT */)
+                  ], 8 /* PROPS */, ["onClick"])
+                }), 128 /* KEYED_FRAGMENT */),
+                _cE("view", _uM({
+                  class: "lul-batch-action lul-batch-action-light",
+                  onClick: exitSelectionMode
+                }), [
+                  _cE("text", _uM({ class: "lul-batch-action-text lul-batch-action-text-light" }), "取消")
+                ])
+              ])
+            ])
+          ])
+        ])
+      : _cC("v-if", true),
+    isTrue(props.showFloatingAdd && !unref(showBatchBar))
+      ? _cE("view", _uM({
+          key: 7,
           class: "lul-floating-add",
           onClick: handleFloatingAdd
         }), [
@@ -816,4 +1017,4 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
 })
 export default __sfc__
 export type LiliUniversalListComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListStyles = [_uM([["lul-root", _pS(_uM([["width", "100%"]]))], ["lul-list", _pS(_uM([["width", "100%"]]))], ["lul-summary-wrap", _pS(_uM([["marginBottom", 4]]))], ["lul-summary-toggle", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 7], ["paddingBottom", 7], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-summary-toggle-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["minHeight", 16], ["justifyContent", "center"]]))], ["lul-summary-toggle-title", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["fontWeight", "700"], ["color", "#0F172A"]]))], ["lul-summary-toggle-arrow", _pS(_uM([["marginLeft", 8], ["fontSize", 12], ["lineHeight", "12px"], ["color", "#475569"]]))], ["lul-summary-panel", _pS(_uM([["marginTop", 4], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 6], ["paddingBottom", 6], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-summary-item", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 3], ["paddingBottom", 3]]))], ["lul-summary-item-label", _pS(_uM([["fontSize", 11], ["lineHeight", "14px"], ["color", "#64748B"]]))], ["lul-summary-item-value", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["fontWeight", "700"], ["color", "#0F172A"]]))], ["lul-inline-loading", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 10], ["paddingBottom", 10], ["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#EFF6FF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#BFDBFE"], ["borderRightColor", "#BFDBFE"], ["borderBottomColor", "#BFDBFE"], ["borderLeftColor", "#BFDBFE"]]))], ["lul-inline-loading-dot", _pS(_uM([["width", 8], ["height", 8], ["borderTopLeftRadius", 4], ["borderTopRightRadius", 4], ["borderBottomRightRadius", 4], ["borderBottomLeftRadius", 4], ["backgroundColor", "#2563EB"]]))], ["lul-inline-loading-text", _pS(_uM([["marginLeft", 8], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#1D4ED8"], ["fontWeight", "600"]]))], ["lul-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["marginBottom", 6], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-card-selected", _pS(_uM([["backgroundColor", "#F8FBFF"], ["borderTopColor", "#7CC4FF"], ["borderRightColor", "#7CC4FF"], ["borderBottomColor", "#7CC4FF"], ["borderLeftColor", "#7CC4FF"]]))], ["lul-card-top", _pS(_uM([["width", "100%"]]))], ["lul-card-top-left", _pS(_uM([["flexDirection", "row"]]))], ["lul-check-wrap", _pS(_uM([["width", 26], ["paddingTop", 4], ["alignItems", "flex-start"]]))], ["lul-check", _pS(_uM([["width", 18], ["height", 18], ["borderTopLeftRadius", 9], ["borderTopRightRadius", 9], ["borderBottomRightRadius", 9], ["borderBottomLeftRadius", 9], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#CBD5E1"], ["borderRightColor", "#CBD5E1"], ["borderBottomColor", "#CBD5E1"], ["borderLeftColor", "#CBD5E1"], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#FFFFFF"]]))], ["lul-check-active", _pS(_uM([["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"], ["backgroundColor", "#0F172A"]]))], ["lul-check-icon", _pS(_uM([["fontSize", 10], ["lineHeight", "10px"], ["color", "#FFFFFF"]]))], ["lul-cover-wrap", _pS(_uM([["width", 64], ["height", 64], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["overflow", "hidden"], ["backgroundColor", "#E2E8F0"], ["position", "relative"], ["marginRight", 8]]))], ["lul-cover", _pS(_uM([["width", 64], ["height", 64]]))], ["lul-cover-count", _pS(_uM([["position", "absolute"], ["right", 6], ["bottom", 6], ["paddingLeft", 5], ["paddingRight", 5], ["paddingTop", 2], ["paddingBottom", 2], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "rgba(15,23,42,0.72)"]]))], ["lul-cover-count-text", _pS(_uM([["fontSize", 10], ["lineHeight", "10px"], ["color", "#FFFFFF"]]))], ["lul-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["lul-headline-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"]]))], ["lul-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 6]]))], ["lul-title", _pS(_uM([["fontSize", 15], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "700"]]))], ["lul-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#64748B"], ["marginTop", 2]]))], ["lul-meta", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#475569"], ["marginTop", 2]]))], ["lul-menu-wrap", _pS(_uM([["width", 24], ["height", 24], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6]]))], ["lul-menu-icon", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#64748B"]]))], ["lul-menu-image", _pS(_uM([["width", 16], ["height", 16]]))], ["lul-chevron-wrap", _pS(_uM([["width", 16], ["alignItems", "flex-end"], ["paddingTop", 1]]))], ["lul-chevron", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["color", "#94A3B8"]]))], ["lul-tags", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 6], ["alignItems", "center"]]))], ["lul-tag", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["height", 22], ["paddingLeft", 8], ["paddingRight", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["marginRight", 5], ["marginBottom", 4]]))], ["lul-tag-info", _pS(_uM([["backgroundColor", "#E0F2FE"]]))], ["lul-tag-success", _pS(_uM([["backgroundColor", "#DCFCE7"]]))], ["lul-tag-warning", _pS(_uM([["backgroundColor", "#FEF3C7"]]))], ["lul-tag-danger", _pS(_uM([["backgroundColor", "#FEE2E2"]]))], ["lul-tag-violet", _pS(_uM([["backgroundColor", "#EDE9FE"]]))], ["lul-tag-muted", _pS(_uM([["backgroundColor", "#E2E8F0"]]))], ["lul-tag-text", _pS(_uM([["fontSize", 10], ["lineHeight", "16px"], ["fontWeight", "600"]]))], ["lul-tag-text-info", _pS(_uM([["color", "#0369A1"]]))], ["lul-tag-text-success", _pS(_uM([["color", "#15803D"]]))], ["lul-tag-text-warning", _pS(_uM([["color", "#B45309"]]))], ["lul-tag-text-danger", _pS(_uM([["color", "#B91C1C"]]))], ["lul-tag-text-violet", _pS(_uM([["color", "#6D28D9"]]))], ["lul-tag-text-muted", _pS(_uM([["color", "#475569"]]))], ["lul-fields", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8], ["paddingTop", 8], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E7ECF3"]]))], ["lul-field-chip", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 8], ["paddingRight", 8], ["paddingTop", 5], ["paddingBottom", 5], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["marginRight", 5], ["marginTop", 4], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-field-icon", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-field-label", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-field-value", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-actions", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 14]]))], ["lul-action", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 9], ["paddingBottom", 9], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["marginRight", 10], ["marginTop", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"]]))], ["lul-action-info", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopColor", "#BFDBFE"], ["borderRightColor", "#BFDBFE"], ["borderBottomColor", "#BFDBFE"], ["borderLeftColor", "#BFDBFE"]]))], ["lul-action-success", _pS(_uM([["backgroundColor", "#F0FDF4"], ["borderTopColor", "#BBF7D0"], ["borderRightColor", "#BBF7D0"], ["borderBottomColor", "#BBF7D0"], ["borderLeftColor", "#BBF7D0"]]))], ["lul-action-warning", _pS(_uM([["backgroundColor", "#FFF7ED"], ["borderTopColor", "#FED7AA"], ["borderRightColor", "#FED7AA"], ["borderBottomColor", "#FED7AA"], ["borderLeftColor", "#FED7AA"]]))], ["lul-action-danger", _pS(_uM([["backgroundColor", "#FEF2F2"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"]]))], ["lul-action-icon", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["marginRight", 4]]))], ["lul-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["fontWeight", "700"]]))], ["lul-action-text-info", _pS(_uM([["color", "#1D4ED8"]]))], ["lul-action-text-success", _pS(_uM([["color", "#15803D"]]))], ["lul-action-text-warning", _pS(_uM([["color", "#C2410C"]]))], ["lul-action-text-danger", _pS(_uM([["color", "#B91C1C"]]))], ["lul-state-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["paddingTop", 34], ["paddingBottom", 34], ["paddingLeft", 20], ["paddingRight", 20], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-empty-badge", _pS(_uM([["width", 56], ["height", 56], ["borderTopLeftRadius", 28], ["borderTopRightRadius", 28], ["borderBottomRightRadius", 28], ["borderBottomLeftRadius", 28], ["backgroundColor", "#F1F5F9"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lul-empty-badge-text", _pS(_uM([["fontSize", 24], ["lineHeight", "24px"], ["color", "#64748B"]]))], ["lul-loading-dot", _pS(_uM([["width", 18], ["height", 18], ["borderTopLeftRadius", 9], ["borderTopRightRadius", 9], ["borderBottomRightRadius", 9], ["borderBottomLeftRadius", 9], ["backgroundColor", "#0F172A"]]))], ["lul-state-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#0F172A"], ["fontWeight", "700"], ["marginTop", 14]]))], ["lul-state-desc", _pS(_uM([["fontSize", 13], ["lineHeight", "19px"], ["color", "#64748B"], ["marginTop", 6]]))], ["lul-pagination", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 14], ["paddingBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-pagination-summary", _pS(_uM([["flexDirection", "row"], ["justifyContent", "space-between"]]))], ["lul-pagination-summary-text", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["lul-pagination-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 12]]))], ["lul-page-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lul-page-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"], ["marginLeft", 10]]))], ["lul-page-btn-disabled", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"]]))], ["lul-page-btn-disabled-primary", _pS(_uM([["backgroundColor", "#CBD5E1"], ["borderTopColor", "#CBD5E1"], ["borderRightColor", "#CBD5E1"], ["borderBottomColor", "#CBD5E1"], ["borderLeftColor", "#CBD5E1"]]))], ["lul-page-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#334155"], ["fontWeight", "700"]]))], ["lul-page-btn-text-light", _pS(_uM([["color", "#FFFFFF"]]))], ["lul-page-btn-text-disabled", _pS(_uM([["color", "#94A3B8"]]))], ["lul-page-btn-text-disabled-light", _pS(_uM([["color", "#E2E8F0"]]))], ["lul-floating-add", _pS(_uM([["position", "fixed"], ["right", 14], ["bottom", 18], ["height", 36], ["paddingLeft", 14], ["paddingRight", 14], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.92)"]]))], ["lul-floating-add-text", _pS(_uM([["fontSize", 13], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]
+const GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListStyles = [_uM([["lul-root", _pS(_uM([["width", "100%"]]))], ["lul-list", _pS(_uM([["width", "100%"]]))], ["lul-summary-wrap", _pS(_uM([["marginBottom", 4]]))], ["lul-summary-toggle", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 7], ["paddingBottom", 7], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-summary-toggle-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["minHeight", 16], ["justifyContent", "center"]]))], ["lul-summary-toggle-title", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["fontWeight", "700"], ["color", "#0F172A"]]))], ["lul-summary-toggle-arrow", _pS(_uM([["marginLeft", 8], ["fontSize", 12], ["lineHeight", "12px"], ["color", "#475569"]]))], ["lul-summary-panel", _pS(_uM([["marginTop", 4], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 6], ["paddingBottom", 6], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-summary-item", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 3], ["paddingBottom", 3]]))], ["lul-summary-item-label", _pS(_uM([["fontSize", 11], ["lineHeight", "14px"], ["color", "#64748B"]]))], ["lul-summary-item-value", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["fontWeight", "700"], ["color", "#0F172A"]]))], ["lul-inline-loading", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 10], ["paddingBottom", 10], ["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#EFF6FF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#BFDBFE"], ["borderRightColor", "#BFDBFE"], ["borderBottomColor", "#BFDBFE"], ["borderLeftColor", "#BFDBFE"]]))], ["lul-inline-loading-dot", _pS(_uM([["width", 8], ["height", 8], ["borderTopLeftRadius", 4], ["borderTopRightRadius", 4], ["borderBottomRightRadius", 4], ["borderBottomLeftRadius", 4], ["backgroundColor", "#2563EB"]]))], ["lul-inline-loading-text", _pS(_uM([["marginLeft", 8], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#1D4ED8"], ["fontWeight", "600"]]))], ["lul-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["marginBottom", 6], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-card-selected", _pS(_uM([["backgroundColor", "#F8FBFF"], ["borderTopColor", "#7CC4FF"], ["borderRightColor", "#7CC4FF"], ["borderBottomColor", "#7CC4FF"], ["borderLeftColor", "#7CC4FF"]]))], ["lul-card-top", _pS(_uM([["width", "100%"]]))], ["lul-card-top-left", _pS(_uM([["flexDirection", "row"]]))], ["lul-check-wrap", _pS(_uM([["width", 26], ["paddingTop", 4], ["alignItems", "flex-start"]]))], ["lul-check", _pS(_uM([["width", 18], ["height", 18], ["borderTopLeftRadius", 9], ["borderTopRightRadius", 9], ["borderBottomRightRadius", 9], ["borderBottomLeftRadius", 9], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#CBD5E1"], ["borderRightColor", "#CBD5E1"], ["borderBottomColor", "#CBD5E1"], ["borderLeftColor", "#CBD5E1"], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#FFFFFF"]]))], ["lul-check-active", _pS(_uM([["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"], ["backgroundColor", "#0F172A"]]))], ["lul-check-icon", _pS(_uM([["fontSize", 10], ["lineHeight", "10px"], ["color", "#FFFFFF"]]))], ["lul-cover-wrap", _pS(_uM([["width", 64], ["height", 64], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["overflow", "hidden"], ["backgroundColor", "#E2E8F0"], ["position", "relative"], ["marginRight", 8]]))], ["lul-cover", _pS(_uM([["width", 64], ["height", 64]]))], ["lul-cover-count", _pS(_uM([["position", "absolute"], ["right", 6], ["bottom", 6], ["paddingLeft", 5], ["paddingRight", 5], ["paddingTop", 2], ["paddingBottom", 2], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "rgba(15,23,42,0.72)"]]))], ["lul-cover-count-text", _pS(_uM([["fontSize", 10], ["lineHeight", "10px"], ["color", "#FFFFFF"]]))], ["lul-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["lul-headline-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"]]))], ["lul-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 6]]))], ["lul-title", _pS(_uM([["fontSize", 15], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "700"]]))], ["lul-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#64748B"], ["marginTop", 2]]))], ["lul-meta", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#475569"], ["marginTop", 2]]))], ["lul-menu-wrap", _pS(_uM([["width", 24], ["height", 24], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6]]))], ["lul-menu-icon", _pS(_uM([["fontSize", 15], ["lineHeight", "15px"], ["color", "#64748B"]]))], ["lul-menu-image", _pS(_uM([["width", 16], ["height", 16]]))], ["lul-chevron-wrap", _pS(_uM([["width", 16], ["alignItems", "flex-end"], ["paddingTop", 1]]))], ["lul-chevron", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["color", "#94A3B8"]]))], ["lul-tags", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 6], ["alignItems", "center"]]))], ["lul-tag", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["height", 22], ["paddingLeft", 8], ["paddingRight", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["marginRight", 5], ["marginBottom", 4]]))], ["lul-tag-info", _pS(_uM([["backgroundColor", "#E0F2FE"]]))], ["lul-tag-success", _pS(_uM([["backgroundColor", "#DCFCE7"]]))], ["lul-tag-warning", _pS(_uM([["backgroundColor", "#FEF3C7"]]))], ["lul-tag-danger", _pS(_uM([["backgroundColor", "#FEE2E2"]]))], ["lul-tag-violet", _pS(_uM([["backgroundColor", "#EDE9FE"]]))], ["lul-tag-muted", _pS(_uM([["backgroundColor", "#E2E8F0"]]))], ["lul-tag-text", _pS(_uM([["fontSize", 10], ["lineHeight", "16px"], ["fontWeight", "600"]]))], ["lul-tag-text-info", _pS(_uM([["color", "#0369A1"]]))], ["lul-tag-text-success", _pS(_uM([["color", "#15803D"]]))], ["lul-tag-text-warning", _pS(_uM([["color", "#B45309"]]))], ["lul-tag-text-danger", _pS(_uM([["color", "#B91C1C"]]))], ["lul-tag-text-violet", _pS(_uM([["color", "#6D28D9"]]))], ["lul-tag-text-muted", _pS(_uM([["color", "#475569"]]))], ["lul-fields", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8], ["paddingTop", 8], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E7ECF3"]]))], ["lul-field-chip", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 8], ["paddingRight", 8], ["paddingTop", 5], ["paddingBottom", 5], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["marginRight", 5], ["marginTop", 4], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["lul-field-icon", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-field-label", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-field-value", _pS(_uM([["fontSize", 11], ["lineHeight", "15px"]]))], ["lul-actions", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 14]]))], ["lul-action", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 9], ["paddingBottom", 9], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["marginRight", 10], ["marginTop", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"]]))], ["lul-action-info", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopColor", "#BFDBFE"], ["borderRightColor", "#BFDBFE"], ["borderBottomColor", "#BFDBFE"], ["borderLeftColor", "#BFDBFE"]]))], ["lul-action-success", _pS(_uM([["backgroundColor", "#F0FDF4"], ["borderTopColor", "#BBF7D0"], ["borderRightColor", "#BBF7D0"], ["borderBottomColor", "#BBF7D0"], ["borderLeftColor", "#BBF7D0"]]))], ["lul-action-warning", _pS(_uM([["backgroundColor", "#FFF7ED"], ["borderTopColor", "#FED7AA"], ["borderRightColor", "#FED7AA"], ["borderBottomColor", "#FED7AA"], ["borderLeftColor", "#FED7AA"]]))], ["lul-action-danger", _pS(_uM([["backgroundColor", "#FEF2F2"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"]]))], ["lul-action-icon", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["marginRight", 4]]))], ["lul-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["fontWeight", "700"]]))], ["lul-action-text-info", _pS(_uM([["color", "#1D4ED8"]]))], ["lul-action-text-success", _pS(_uM([["color", "#15803D"]]))], ["lul-action-text-warning", _pS(_uM([["color", "#C2410C"]]))], ["lul-action-text-danger", _pS(_uM([["color", "#B91C1C"]]))], ["lul-state-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["paddingTop", 34], ["paddingBottom", 34], ["paddingLeft", 20], ["paddingRight", 20], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-empty-badge", _pS(_uM([["width", 56], ["height", 56], ["borderTopLeftRadius", 28], ["borderTopRightRadius", 28], ["borderBottomRightRadius", 28], ["borderBottomLeftRadius", 28], ["backgroundColor", "#F1F5F9"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lul-empty-badge-text", _pS(_uM([["fontSize", 24], ["lineHeight", "24px"], ["color", "#64748B"]]))], ["lul-loading-dot", _pS(_uM([["width", 18], ["height", 18], ["borderTopLeftRadius", 9], ["borderTopRightRadius", 9], ["borderBottomRightRadius", 9], ["borderBottomLeftRadius", 9], ["backgroundColor", "#0F172A"]]))], ["lul-state-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#0F172A"], ["fontWeight", "700"], ["marginTop", 14]]))], ["lul-state-desc", _pS(_uM([["fontSize", 13], ["lineHeight", "19px"], ["color", "#64748B"], ["marginTop", 6]]))], ["lul-pagination", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 14], ["paddingBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E7ECF3"], ["borderRightColor", "#E7ECF3"], ["borderBottomColor", "#E7ECF3"], ["borderLeftColor", "#E7ECF3"]]))], ["lul-pagination-summary", _pS(_uM([["flexDirection", "row"], ["justifyContent", "space-between"]]))], ["lul-pagination-summary-text", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["lul-pagination-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 12]]))], ["lul-page-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["lul-page-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"], ["marginLeft", 10]]))], ["lul-page-btn-disabled", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"]]))], ["lul-page-btn-disabled-primary", _pS(_uM([["backgroundColor", "#CBD5E1"], ["borderTopColor", "#CBD5E1"], ["borderRightColor", "#CBD5E1"], ["borderBottomColor", "#CBD5E1"], ["borderLeftColor", "#CBD5E1"]]))], ["lul-page-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#334155"], ["fontWeight", "700"]]))], ["lul-page-btn-text-light", _pS(_uM([["color", "#FFFFFF"]]))], ["lul-page-btn-text-disabled", _pS(_uM([["color", "#94A3B8"]]))], ["lul-page-btn-text-disabled-light", _pS(_uM([["color", "#E2E8F0"]]))], ["lul-floating-add", _pS(_uM([["position", "fixed"], ["right", 14], ["bottom", 18], ["height", 36], ["paddingLeft", 14], ["paddingRight", 14], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.92)"]]))], ["lul-floating-add-text", _pS(_uM([["fontSize", 13], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))], ["lul-batch-bar", _pS(_uM([["position", "fixed"], ["left", 0], ["right", 0], ["bottom", 0], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 10], ["paddingBottom", 14], ["backgroundColor", "rgba(255,255,255,0.98)"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E2E8F0"]]))], ["lul-batch-spacer", _pS(_uM([["height", 72]]))], ["lul-batch-bar-main", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["lul-batch-select-all", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["minWidth", 84]]))], ["lul-batch-select-all-text", _pS(_uM([["marginLeft", 8], ["fontSize", 13], ["lineHeight", "16px"], ["color", "#0F172A"], ["fontWeight", "600"]]))], ["lul-batch-info", _pS(_uM([["marginLeft", 12], ["marginRight", 12]]))], ["lul-batch-info-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#64748B"]]))], ["lul-batch-actions-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["lul-batch-actions", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "flex-end"]]))], ["lul-batch-action", _pS(_uM([["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 8]]))], ["lul-batch-action-light", _pS(_uM([["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))]]),_uM([["lul-batch-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#FFFFFF"], ["fontWeight", "700"]]))], ["lul-batch-action-text-light", _pS(_uM([["color", "#475569"]]))]])]

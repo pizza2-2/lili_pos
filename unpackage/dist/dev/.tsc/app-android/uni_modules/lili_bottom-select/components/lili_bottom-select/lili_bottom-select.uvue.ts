@@ -13,6 +13,7 @@ type MultiSelectChangePayload = { __$originalPosition?: UTSSourceMapPosition<"Mu
 type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 164, 6>;
 	fetchData: (params: UTSJSONObject) => Promise<UTSJSONObject>
 	value?: string
+	valueText?: string
 	values?: string[]
 	multiple?: boolean
 	placeholder?: string
@@ -37,6 +38,7 @@ const __sfc__ = defineComponent({
   props: {
     fetchData: { type: Function as PropType<(params: UTSJSONObject) => Promise<UTSJSONObject>>, required: true },
     value: { type: String, required: false, default: '' },
+    valueText: { type: String, required: false, default: '' },
     values: { type: Array as PropType<string[]>, required: false, default: () : string[] => [] },
     multiple: { type: Boolean, required: false, default: false },
     placeholder: { type: String, required: false, default: '请选择' },
@@ -71,8 +73,8 @@ const renderVisible = ref<boolean>(false)
 const overlayVisible = ref<boolean>(false)
 const panelVisible = ref<boolean>(false)
 const internalValue = ref<string>(props.value ?? '')
-const internalText = ref<string>('')
-const textInitialized = ref<boolean>(false)
+const internalText = ref<string>(props.valueText ?? '')
+const textInitialized = ref<boolean>((props.valueText ?? '') != '')
 const selectedItems = ref<UTSJSONObject[]>([])
 const keyword = ref<string>('')
 const displayList = ref<UTSJSONObject[]>([])
@@ -201,7 +203,7 @@ async function loadData(isReset: boolean) {
 			syncFromList(curVals)
 		}
 	} catch (e) {
-		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:348")
+		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:350")
 		uni.showToast({ title: '数据加载失败', icon: 'none' })
 	} finally {
 		loading.value = false
@@ -222,7 +224,7 @@ async function fetchTextByValue(value: string) {
 			}
 		}
 	} catch (e) {
-		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:369")
+		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:371")
 	}
 }
 
@@ -251,13 +253,31 @@ watch(
 		if (newVal != internalValue.value) {
 			internalValue.value = newVal
 			if (newVal != '') {
-				if (!textInitialized.value) {
+				if (props.valueText != '') {
+					internalText.value = props.valueText
+					textInitialized.value = true
+				} else if (!textInitialized.value) {
 					fetchTextByValue(newVal)
 				}
 			} else {
 				internalText.value = ''
 				textInitialized.value = false
 			}
+		}
+	}
+)
+
+watch(
+	() : string => props.valueText ?? '',
+	(newText: string) => {
+		if (newText != '') {
+			internalText.value = newText
+			textInitialized.value = true
+			return
+		}
+		if (internalValue.value == '') {
+			internalText.value = ''
+			textInitialized.value = false
 		}
 	}
 )
@@ -285,7 +305,12 @@ onMounted(() => {
 	panelStyle.value = `height:${panelH}px;`
 
 	if (!props.multiple && internalValue.value != '') {
-		fetchTextByValue(internalValue.value)
+		if (props.valueText != '') {
+			internalText.value = props.valueText
+			textInitialized.value = true
+		} else {
+			fetchTextByValue(internalValue.value)
+		}
 	}
 	if (props.multiple && props.values.length > 0) {
 		syncMultiValuesFromProps(props.values)

@@ -37,6 +37,7 @@
 	},
 	"uni_modules": {
 		"dependencies": [
+			"lili-data",
 			"lili_bottom-select",
 			"lili-upload"
 		],

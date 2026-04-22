@@ -1,0 +1,1025 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="收银分类"
+			searchPlaceholder="输入名称、编码、唯一编码"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="filter-panel">
+					<view class="filter-actions">
+						<view class="filter-btn filter-btn-light" @click="handleFilterReset">
+							<text class="filter-btn-light-text">重置</text>
+						</view>
+						<view class="filter-btn filter-btn-primary" @click="applySelectedFilters">
+							<text class="filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+
+					<scroll-view scroll-y="true" class="filter-scroll">
+						<view class="filter-group">
+							<text class="filter-group-title">启用状态</text>
+							<view class="filter-options">
+								<view
+									v-for="option in statusFilterOptions"
+									:key="'status-' + option.value"
+									:class="isSelectedStatusOption(option.value) ? 'filter-option filter-option-active' : 'filter-option'"
+									@click="toggleStatusFilter(option.value)"
+								>
+									<text :class="isSelectedStatusOption(option.value) ? 'filter-option-text filter-option-text-active' : 'filter-option-text'">{{ option.text }}</text>
+								</view>
+							</view>
+						</view>
+
+						<view class="filter-group">
+							<text class="filter-group-title">税率</text>
+							<view v-if="taxRateLoading" class="filter-state">
+								<text class="filter-state-text">税率选项加载中...</text>
+							</view>
+							<view v-else-if="taxRateOptions.length == 0" class="filter-state">
+								<text class="filter-state-text">暂无税率选项</text>
+							</view>
+							<view v-else class="filter-options">
+								<view
+									v-for="option in taxRateOptions"
+									:key="'tax-' + option.value"
+									:class="isSelectedTaxRateOption(option.value) ? 'filter-option filter-option-active' : 'filter-option'"
+									@click="toggleTaxRateFilter(option.value)"
+								>
+									<text :class="isSelectedTaxRateOption(option.value) ? 'filter-option-text filter-option-text-active' : 'filter-option-text'">{{ option.text }}</text>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<button class="retry-btn" @click="loadKasaCategories">
+						<text class="retry-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="englishNameText"
+					metaField="uniqueKodText"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载收银分类"
+					:keepContentOnLoading="true"
+					inlineLoadingText="收银分类数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					:selectionMode="selectionMode"
+					:selectedItems="selectedCategoryIds"
+					:batchActions="batchToolbarActions"
+					summaryTitle="收银分类统计"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@update:selectionMode="handleSelectionModeChange"
+					@update:selectedItems="handleSelectedCategoryIdsChange"
+					@selection-exit="handleSelectionExit"
+					@batch-action="handleBatchToolbarAction"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreateKasaCategory"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { deleteKasaCategory, getKasaCategoryList, getKasaCategoryStatistics, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryListResponse, KasaCategoryStatisticsResponse, KasaCategoryTaxRatesResponse, patchKasaCategory } from '@/pkg/api/modules/kasa_category'
+
+type SelectOption = {
+	value: string
+	text: string
+}
+
+const kasaCategoryListRefreshStorageKey = 'refresh:pages:kasa_category:index'
+
+const keyword = ref('')
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const kasaCategories = ref<KasaCategoryItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const statistics = ref<KasaCategoryStatisticsResponse | null>(null)
+const taxRateLoading = ref(false)
+const taxRateResponse = ref<KasaCategoryTaxRatesResponse | null>(null)
+const selectedIsActive = ref<string | null>(null)
+const selectedTaxRate = ref<string | null>(null)
+const selectionMode = ref(false)
+const selectedCategoryIds = ref<string[]>([])
+
+const statusFilterOptions = ref<SelectOption[]>([
+	{ value: 'true', text: '启用' } as SelectOption,
+	{ value: 'false', text: '停用' } as SelectOption,
+])
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'taxRateText', label: '税率' } as UTSJSONObject,
+	{ key: 'productsCountText', label: '商品数' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'toggle-status', text: '切换状态' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+])
+
+const batchToolbarActions = ref<UTSJSONObject[]>([
+	{ key: 'more', text: '操作' } as UTSJSONObject,
+])
+
+const defaultBatchActionMap = ref<UTSJSONObject[]>([
+	{ key: 'activate', text: '批量启用' } as UTSJSONObject,
+	{ key: 'deactivate', text: '批量停用' } as UTSJSONObject,
+	{ key: 'delete', text: '批量删除' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+	const text = '' + value
+	if (text == '') {
+		return 0
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '收银分类列表加载失败'
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function applyResponse(response: KasaCategoryListResponse) {
+	kasaCategories.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadKasaCategories() {
+	if (isLoading.value) {
+		return
+	}
+
+	isLoading.value = true
+	errorMessage.value = ''
+
+	try {
+		const response = await getKasaCategoryList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			id: null,
+			is_active: selectedIsActive.value,
+			tax_rate: selectedTaxRate.value,
+			unique_kod: null,
+			simple: null,
+		})
+		applyResponse(response)
+	} catch (error) {
+		kasaCategories.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+async function loadStatistics() {
+	try {
+		statistics.value = await getKasaCategoryStatistics({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			id: null,
+			is_active: selectedIsActive.value,
+			tax_rate: selectedTaxRate.value,
+			unique_kod: null,
+			simple: null,
+		})
+	} catch (error) {
+		statistics.value = null
+	}
+}
+
+function buildTaxRateLabel(item: UTSJSONObject): string {
+	const text = stringValue(item['text'])
+	if (text != '') {
+		return text
+	}
+	const label = stringValue(item['label'])
+	if (label != '') {
+		return label
+	}
+	const rate = stringValue(item['tax_rate'])
+	if (rate != '') {
+		return rate
+	}
+	const value = stringValue(item['value'])
+	if (value != '') {
+		return value
+	}
+	return '-'
+}
+
+function buildTaxRateValue(item: UTSJSONObject): string {
+	const value = stringValue(item['value'])
+	if (value != '') {
+		return value
+	}
+	const rate = stringValue(item['tax_rate'])
+	if (rate != '') {
+		return rate
+	}
+	const id = stringValue(item['id'])
+	if (id != '') {
+		return id
+	}
+	const code = stringValue(item['code'])
+	if (code != '') {
+		return code
+	}
+	return buildTaxRateLabel(item)
+}
+
+function normalizeTaxRateOptions(): SelectOption[] {
+	if (taxRateResponse.value == null) {
+		return []
+	}
+	const result: SelectOption[] = []
+	for (let index = 0; index < taxRateResponse.value.items.length; index += 1) {
+		const item = taxRateResponse.value.items[index]
+		const value = buildTaxRateValue(item)
+		if (value == '') {
+			continue
+		}
+		const text = buildTaxRateLabel(item)
+		let exists = false
+		for (let optionIndex = 0; optionIndex < result.length; optionIndex += 1) {
+			if (result[optionIndex].value == value) {
+				exists = true
+				break
+			}
+		}
+		if (!exists) {
+			result.push({
+				value: value,
+				text: text,
+			} as SelectOption)
+		}
+	}
+	return result
+}
+
+async function loadTaxRateOptions() {
+	if (taxRateResponse.value != null || taxRateLoading.value) {
+		return
+	}
+	taxRateLoading.value = true
+	try {
+		taxRateResponse.value = await getKasaCategoryTaxRates()
+	} catch (error) {
+		taxRateResponse.value = null
+	} finally {
+		taxRateLoading.value = false
+	}
+}
+
+function handleFilterOpen() {
+	loadTaxRateOptions()
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function isSelectedStatusOption(value: string): boolean {
+	return selectedIsActive.value == value
+}
+
+function isSelectedTaxRateOption(value: string): boolean {
+	return selectedTaxRate.value == value
+}
+
+function toggleStatusFilter(value: string) {
+	selectedIsActive.value = selectedIsActive.value == value ? null : value
+}
+
+function toggleTaxRateFilter(value: string) {
+	selectedTaxRate.value = selectedTaxRate.value == value ? null : value
+}
+
+function handleFilterReset() {
+	selectedIsActive.value = null
+	selectedTaxRate.value = null
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadKasaCategories()
+	loadStatistics()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadKasaCategories()
+	loadStatistics()
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadKasaCategories()
+	loadStatistics()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadKasaCategories()
+	loadStatistics()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) {
+		return
+	}
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+		return
+	}
+	currentPage.value = nextPage
+	loadKasaCategories()
+}
+
+function kasaCategoryToListItem(item: KasaCategoryItem): UTSJSONObject {
+	const chineseName = stringValue(item.name_cn, '-')
+	const englishName = stringValue(item.name_en, '-')
+	let displayName = chineseName
+	if (displayName == '-') {
+		displayName = englishName
+	}
+	return {
+		id: item.id.toString(),
+		name: displayName,
+		name_cn: chineseName,
+		name_en: englishName,
+		englishNameText: '英文名：' + englishName,
+		unique_kod: stringValue(item.unique_kod, '-'),
+		uniqueKodText: 'uniqueKod：' + stringValue(item.unique_kod, '-'),
+		taxRateText: stringValue(item.tax_rate_display, stringValue(item.tax_rate, '-')),
+		productsCountText: item.products_count.toString(),
+		statusText: item.is_active ? '启用' : '停用',
+		is_active: item.is_active,
+		rawId: item.id.toString(),
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({
+			title: emptyTitle,
+			icon: 'none',
+		})
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({
+				title: successTitle,
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+	const itemObject = item as UTSJSONObject
+	const rawId = stringValue(itemObject['rawId'])
+	if (rawId == '') {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/kasa_category/form?id=' + rawId,
+	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+	const itemObject = item as UTSJSONObject
+	copyText(stringValue(itemObject['name_en']), '英文名已复制', '暂无英文名')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+	const itemObject = item as UTSJSONObject
+	copyText(stringValue(itemObject['unique_kod']), 'uniqueKod已复制', '暂无uniqueKod')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const key = stringValue(payload['key'])
+	const itemValue = payload['item']
+	if (key == '' || itemValue == null) {
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	if (key == 'taxRateText') {
+		copyText(stringValue(item['taxRateText']), '税率已复制', '暂无税率')
+		return
+	}
+	if (key == 'uniqueKodText') {
+		copyText(stringValue(item['unique_kod']), '唯一编码已复制', '暂无唯一编码')
+		return
+	}
+	if (key == 'productsCountText') {
+		copyText(stringValue(item['productsCountText']), '商品数已复制', '暂无商品数')
+		return
+	}
+	if (key == 'statusText') {
+		copyText(stringValue(item['statusText']), '状态已复制', '暂无状态')
+	}
+}
+
+function selectedItems(): KasaCategoryItem[] {
+	const result: KasaCategoryItem[] = []
+	for (let index = 0; index < kasaCategories.value.length; index += 1) {
+		const item = kasaCategories.value[index]
+		if (selectedCategoryIds.value.includes(item.id.toString())) {
+			result.push(item)
+		}
+	}
+	return result
+}
+
+function clearSelectionState() {
+	selectionMode.value = false
+	selectedCategoryIds.value = [] as string[]
+}
+
+function handleSelectionModeChange(value: boolean) {
+	selectionMode.value = value
+	if (!value) {
+		selectedCategoryIds.value = [] as string[]
+	}
+}
+
+function handleSelectedCategoryIdsChange(value: string[]) {
+	const nextIds: string[] = []
+	for (let index = 0; index < value.length; index += 1) {
+		nextIds.push(value[index])
+	}
+	selectedCategoryIds.value = nextIds
+}
+
+function handleSelectionExit(payload: UTSJSONObject) {
+	clearSelectionState()
+}
+
+function batchActionTitle(actionKey: string): string {
+	if (actionKey == 'activate') return '批量启用'
+	if (actionKey == 'deactivate') return '批量停用'
+	if (actionKey == 'delete') return '批量删除'
+	return '批量操作'
+}
+
+function batchActionConfirmText(actionKey: string, count: number): string {
+	if (actionKey == 'activate') return '确定批量启用选中的 ' + count + ' 个收银分类吗？'
+	if (actionKey == 'deactivate') return '确定批量停用选中的 ' + count + ' 个收银分类吗？'
+	if (actionKey == 'delete') return '确定批量删除选中的 ' + count + ' 个收银分类吗？'
+	return '确定执行批量操作吗？'
+}
+
+async function executeBatchAction(actionKey: string) {
+	const items = selectedItems()
+	if (items.length == 0) {
+		uni.showToast({
+			title: '请先选择收银分类',
+			icon: 'none',
+		})
+		return
+	}
+	try {
+		for (let index = 0; index < items.length; index += 1) {
+			const item = items[index]
+			if (actionKey == 'delete') {
+				await deleteKasaCategory(item.id)
+				continue
+			}
+			if (actionKey == 'activate') {
+				await patchKasaCategory(item.id, {
+					is_active: true,
+				} as UTSJSONObject)
+				continue
+			}
+			if (actionKey == 'deactivate') {
+				await patchKasaCategory(item.id, {
+					is_active: false,
+				} as UTSJSONObject)
+				continue
+			}
+		}
+		uni.showToast({
+			title: batchActionTitle(actionKey) + '成功',
+			icon: 'success',
+		})
+		clearSelectionState()
+		loadKasaCategories()
+		loadStatistics()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
+}
+
+function confirmBatchAction(actionKey: string) {
+	const count = selectedCategoryIds.value.length
+	uni.showModal({
+		title: batchActionTitle(actionKey),
+		content: batchActionConfirmText(actionKey, count),
+		success: (res) => {
+			if (!res.confirm) {
+				return
+			}
+			executeBatchAction(actionKey)
+		},
+	})
+}
+
+function openBatchActionSheet() {
+	const itemList: string[] = []
+	for (let index = 0; index < defaultBatchActionMap.value.length; index += 1) {
+		itemList.push(stringValue(defaultBatchActionMap.value[index]['text']))
+	}
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const tapIndex = res.tapIndex
+			if (tapIndex < 0 || tapIndex >= defaultBatchActionMap.value.length) {
+				return
+			}
+			const action = defaultBatchActionMap.value[tapIndex]
+			const actionKey = stringValue(action['key'])
+			if (actionKey == '') {
+				return
+			}
+			confirmBatchAction(actionKey)
+		},
+	})
+}
+
+function handleBatchToolbarAction(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	if (actionValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const actionKey = stringValue(action['key'])
+	if (actionKey == 'more') {
+		openBatchActionSheet()
+	}
+}
+
+async function confirmDelete(id: string) {
+	try {
+		await deleteKasaCategory(id)
+		uni.showToast({
+			title: '删除成功',
+			icon: 'success',
+		})
+		loadKasaCategories()
+		loadStatistics()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
+}
+
+async function toggleSingleStatus(id: string, currentActive: boolean) {
+	try {
+		await patchKasaCategory(id, {
+			is_active: !currentActive,
+		} as UTSJSONObject)
+		uni.showToast({
+			title: '状态更新成功',
+			icon: 'success',
+		})
+		loadKasaCategories()
+		loadStatistics()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	const itemValue = payload['item']
+	if (actionValue == null || itemValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const item = itemValue as UTSJSONObject
+	const actionKey = stringValue(action['key'])
+	const rawId = stringValue(item['rawId'])
+	if (actionKey == 'edit') {
+		uni.navigateTo({
+			url: '/pages/kasa_category/form?id=' + rawId,
+		})
+		return
+	}
+	if (actionKey == 'toggle-status') {
+		const currentActive = stringValue(item['statusText']) == '启用'
+		toggleSingleStatus(rawId, currentActive)
+		return
+	}
+	if (actionKey == 'delete') {
+		uni.showModal({
+			title: '删除收银分类',
+			content: '确定删除这个收银分类吗？',
+			success: (res) => {
+				if (!res.confirm) {
+					return
+				}
+				confirmDelete(rawId)
+			},
+		})
+	}
+}
+
+function handleCreateKasaCategory() {
+	uni.navigateTo({
+		url: '/pages/kasa_category/form',
+	})
+}
+
+function consumeRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(kasaCategoryListRefreshStorageKey)
+	if (storedValue == null) {
+		return false
+	}
+	const storedText = '' + storedValue
+	if (storedText == '') {
+		return false
+	}
+	uni.removeStorageSync(kasaCategoryListRefreshStorageKey)
+	return true
+}
+
+function getStatisticsValue(keys: string[], fallback: string): string {
+	if (statistics.value == null) {
+		return fallback
+	}
+	for (let index = 0; index < keys.length; index += 1) {
+		const rawValue = statistics.value.data[keys[index]]
+		if (rawValue != null) {
+			const text = '' + rawValue
+			if (text != '') {
+				return text
+			}
+		}
+	}
+	return fallback
+}
+
+const taxRateOptions = computed((): SelectOption[] => {
+	return normalizeTaxRateOptions()
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < kasaCategories.value.length; index += 1) {
+		result.push(kasaCategoryToListItem(kasaCategories.value[index]))
+	}
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{
+			key: 'total',
+			label: '分类总数',
+			value: getStatisticsValue(['total', 'count', 'total_count', 'total_categories'], totalCount.value.toString()),
+		} as UTSJSONObject,
+		{
+			key: 'active',
+			label: '启用数量',
+			value: getStatisticsValue(['active_count', 'active', 'enabled_count'], '0'),
+		} as UTSJSONObject,
+		{
+			key: 'inactive',
+			label: '停用数量',
+			value: getStatisticsValue(['inactive_count', 'inactive', 'disabled_count'], '0'),
+		} as UTSJSONObject,
+	]
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedIsActive.value != null || selectedTaxRate.value != null
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) {
+		return '正在加载'
+	}
+	if (hasActiveFilter.value) {
+		return '没有匹配的收银分类'
+	}
+	return '暂无收银分类'
+})
+
+onLoad(() => {
+	loadKasaCategories()
+	loadStatistics()
+})
+
+onShow(() => {
+	if (consumeRefreshNeeded()) {
+		loadKasaCategories()
+		loadStatistics()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 12px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+
+.filter-panel {
+	padding-bottom: 8px;
+}
+
+.filter-actions {
+	flex-direction: row;
+	margin-bottom: 12px;
+}
+
+.filter-btn {
+	flex: 1;
+	height: 40px;
+	border-radius: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.filter-btn-light {
+	background-color: #F3F6FA;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	margin-right: 8px;
+}
+
+.filter-btn-primary {
+	background-color: #0F172A;
+}
+
+.filter-btn-light-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #475569;
+}
+
+.filter-btn-primary-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+
+.filter-scroll {
+	height: 360px;
+}
+
+.filter-group {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	margin-bottom: 8px;
+}
+
+.filter-group-title {
+	font-size: 14px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.filter-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.filter-option {
+	min-width: 56px;
+	height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 17px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.filter-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.filter-option-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #475569;
+}
+
+.filter-option-text-active {
+	color: #FFFFFF;
+}
+
+.filter-state {
+	height: 92px;
+	border-radius: 12px;
+	background-color: #F8FAFC;
+	align-items: center;
+	justify-content: center;
+	margin-top: 10px;
+}
+
+.filter-state-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+</style>

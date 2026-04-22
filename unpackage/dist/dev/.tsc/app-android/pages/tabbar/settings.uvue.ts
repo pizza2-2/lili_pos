@@ -1,12 +1,13 @@
-type MenuItem = { __$originalPosition?: UTSSourceMapPosition<"MenuItem", "pages/tabbar/settings.uvue", 34, 6>;
+type MenuItem = { __$originalPosition?: UTSSourceMapPosition<"MenuItem", "pages/tabbar/settings.uvue", 35, 6>;
 	label: string
 	icon: string
+	iconPath: string | null
 	path: string | null
 	action: string
 	disabled: boolean
 }
 
-type MenuGroup = { __$originalPosition?: UTSSourceMapPosition<"MenuGroup", "pages/tabbar/settings.uvue", 42, 6>;
+type MenuGroup = { __$originalPosition?: UTSSourceMapPosition<"MenuGroup", "pages/tabbar/settings.uvue", 44, 6>;
 	label: string
 	rows: MenuItem[][]
 }
@@ -24,10 +25,19 @@ const groups = ref<MenuGroup[]>([
 		label: '常用页面',
 		rows: [
 			[
-				{ label: '供应商', icon: '◫', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
-				{ label: '商品', icon: '□', path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
-				{ label: '我的', icon: '◉', path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
-				{ label: '隐私', icon: '◎', path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+				{ label: '供应商', icon: '◫', iconPath: null, path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+				{ label: '商品', icon: '□', iconPath: null, path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
+				{ label: '我的', icon: '◉', iconPath: null, path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
+				{ label: '隐私', icon: '◎', iconPath: null, path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+			],
+		],
+	},
+	{
+		label: '分类设置',
+		rows: [
+			[
+				{ label: '分类', icon: '', iconPath: '/static/muen/分类.png', path: '/pages/category/index', action: 'navigateTo', disabled: false },
+				{ label: '收银分类', icon: '', iconPath: '/static/muen/分类 (1).png', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
 			],
 		],
 	},
@@ -35,10 +45,10 @@ const groups = ref<MenuGroup[]>([
 		label: '门店配置',
 		rows: [
 			[
-				{ label: '收银台', icon: '¤', path: null, action: 'todo', disabled: true },
-				{ label: '打印机', icon: '▣', path: null, action: 'todo', disabled: true },
-				{ label: '支付', icon: '¥', path: null, action: 'todo', disabled: true },
-				{ label: '权限', icon: '⌂', path: null, action: 'todo', disabled: true },
+				{ label: '收银台', icon: '¤', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '打印机', icon: '▣', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '支付', icon: '¥', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '权限', icon: '⌂', iconPath: null, path: null, action: 'todo', disabled: true },
 			],
 		],
 	},
@@ -46,10 +56,10 @@ const groups = ref<MenuGroup[]>([
 		label: '系统工具',
 		rows: [
 			[
-				{ label: '同步', icon: '↻', path: null, action: 'todo', disabled: true },
-				{ label: '更新', icon: '↑', path: null, action: 'todo', disabled: true },
-				{ label: '日志', icon: '≡', path: null, action: 'todo', disabled: true },
-				{ label: '分享', icon: '⇪', path: null, action: 'todo', disabled: true },
+				{ label: '同步', icon: '↻', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '更新', icon: '↑', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '日志', icon: '≡', iconPath: null, path: null, action: 'todo', disabled: true },
+				{ label: '分享', icon: '⇪', iconPath: null, path: null, action: 'todo', disabled: true },
 			],
 		],
 	},
@@ -130,7 +140,17 @@ return (): any | null => {
                     class: _nC(index != 3 ? 'grid-item grid-item-gap' : 'grid-item'),
                     onClick: () => {handleTap(item)}
                   }), [
-                    _cE("text", _uM({ class: "grid-icon" }), _tD(item.icon), 1 /* TEXT */),
+                    isTrue(item.iconPath != null && item.iconPath != '')
+                      ? _cE("image", _uM({
+                          key: 0,
+                          class: "grid-image-icon",
+                          src: item.iconPath,
+                          mode: "aspectFit"
+                        }), null, 8 /* PROPS */, ["src"])
+                      : _cE("text", _uM({
+                          key: 1,
+                          class: "grid-icon"
+                        }), _tD(item.icon), 1 /* TEXT */),
                     _cE("text", _uM({ class: "grid-text" }), _tD(item.label), 1 /* TEXT */)
                   ], 10 /* CLASS, PROPS */, ["onClick"])
                 }), 128 /* KEYED_FRAGMENT */)
@@ -146,4 +166,4 @@ return (): any | null => {
 
 })
 export default __sfc__
-const GenPagesTabbarSettingsStyles = [_uM([["page-scroll", _pS(_uM([["backgroundColor", "#F7F7F7"]]))], ["page", _pS(_uM([["backgroundColor", "#F7F7F7"], ["paddingBottom", 20]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT]]))], ["topbar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12]]))], ["brand-box", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["brand-text", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["color", "#111827"], ["fontWeight", "bold"]]))], ["page-title", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 16], ["lineHeight", "20px"], ["color", "#111827"], ["fontWeight", "bold"], ["marginLeft", 8]]))], ["action-button", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["action-button-gap", _pS(_uM([["marginRight", 12], ["backgroundColor", "#64748B"]]))], ["action-icon", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["content", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12]]))], ["group", _pS(_uM([["marginBottom", 24]]))], ["group-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginLeft", 8], ["marginBottom", 8]]))], ["grid-row", _pS(_uM([["flexDirection", "row"], ["marginBottom", 8]]))], ["grid-item", _pS(_uM([["width", "23%"], ["height", 70], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["paddingTop", 18]]))], ["grid-item-gap", _pS(_uM([["marginRight", "2.6666%"]]))], ["grid-icon", _pS(_uM([["fontSize", 18], ["lineHeight", "18px"], ["color", "#111827"]]))], ["grid-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#111827"], ["textAlign", "center"], ["marginTop", 8]]))]])]
+const GenPagesTabbarSettingsStyles = [_uM([["page-scroll", _pS(_uM([["backgroundColor", "#F7F7F7"]]))], ["page", _pS(_uM([["backgroundColor", "#F7F7F7"], ["paddingBottom", 20]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT]]))], ["topbar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 12], ["paddingBottom", 12]]))], ["brand-box", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["brand-text", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["color", "#111827"], ["fontWeight", "bold"]]))], ["page-title", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 16], ["lineHeight", "20px"], ["color", "#111827"], ["fontWeight", "bold"], ["marginLeft", 8]]))], ["action-button", _pS(_uM([["width", 32], ["height", 32], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["action-button-gap", _pS(_uM([["marginRight", 12], ["backgroundColor", "#64748B"]]))], ["action-icon", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["content", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12]]))], ["group", _pS(_uM([["marginBottom", 24]]))], ["group-label", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#94A3B8"], ["marginLeft", 8], ["marginBottom", 8]]))], ["grid-row", _pS(_uM([["flexDirection", "row"], ["marginBottom", 8]]))], ["grid-item", _pS(_uM([["width", "23%"], ["height", 70], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["alignItems", "center"], ["paddingTop", 18]]))], ["grid-item-gap", _pS(_uM([["marginRight", "2.6666%"]]))], ["grid-icon", _pS(_uM([["fontSize", 18], ["lineHeight", "18px"], ["color", "#111827"]]))], ["grid-image-icon", _pS(_uM([["width", 24], ["height", 24]]))], ["grid-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#111827"], ["textAlign", "center"], ["marginTop", 8]]))]])]

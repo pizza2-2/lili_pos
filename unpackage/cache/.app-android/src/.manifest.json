@@ -4,85 +4,97 @@
     "compiler_version": "5.07"
   },
   "files": {
-    "pages/tabbar/settings.kt": {
-      "class": "GenPagesTabbarSettings",
-      "md5": "5002ff5842cba0930383aa88c796f6169ca376fe"
-    },
-    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
-      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter",
-      "md5": "7ad25fe6af3c1245510e9e4401967dc306ade90a"
-    },
-    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
-      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0",
-      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup"
-    },
-    "index.kt": {
-      "md5": "4458353ddfbe642fff5d4b7f8071195a4410e9e0",
-      "class": ""
-    },
-    "pages/tabbar/mine.kt": {
-      "md5": "03428cd13f0152c775caa5db9881229cc4c42a41",
-      "class": "GenPagesTabbarMine"
-    },
-    "pages/tabbar/products.kt": {
-      "md5": "e48a1ffda9a603b6463a8a6e0030b863b33915ff",
-      "class": "GenPagesTabbarProducts"
-    },
     "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
       "md5": "2b3cb94499bab2ae8d52400b3471310da1ad63d2",
       "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview"
     },
-    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
-      "md5": "1ace3aee20b16022ab8100efcbd5dc01bb0464a6",
-      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList"
+    "index.kt": {
+      "md5": "1d8d194dc0767d6f77b98f96df9b7ed598a4de16",
+      "class": ""
+    },
+    "pages/tabbar/reports.kt": {
+      "class": "GenPagesTabbarReports",
+      "md5": "b3f0189c2cc6112fbbf4e50456ba49b47ba62d2a"
+    },
+    "uni_modules/lili-data/components/lili-data/lili-data.kt": {
+      "class": "GenUniModulesLiliDataComponentsLiliDataLiliData",
+      "md5": "21923130043ff547bc8d94b7954fc5900b55eb72"
+    },
+    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
+      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup",
+      "md5": "6868a2f6ce9ab8691365790f413eec55b5663922"
+    },
+    "pages/tabbar/products.kt": {
+      "class": "GenPagesTabbarProducts",
+      "md5": "e48a1ffda9a603b6463a8a6e0030b863b33915ff"
+    },
+    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
+      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload",
+      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e"
+    },
+    "pages/tabbar/settings.kt": {
+      "class": "GenPagesTabbarSettings",
+      "md5": "f3449fefb2c098a410ae94ae6b647c839a07b645"
+    },
+    "pages/kasa_category/index.kt": {
+      "class": "GenPagesKasaCategoryIndex",
+      "md5": "205d87f046dcc3d8e66498de5ad37647c98cdfea"
+    },
+    "pages/privacy/privacy.kt": {
+      "md5": "dd937ccdef05b0913c68db2008109433b48cac44",
+      "class": "GenPagesPrivacyPrivacy"
+    },
+    "pages/transactions/index.kt": {
+      "md5": "89e5fdf33a3884c3c7772098206866927abbb493",
+      "class": "GenPagesTransactionsIndex"
+    },
+    "pages/kasa_category/form.kt": {
+      "class": "GenPagesKasaCategoryForm",
+      "md5": "afad19dab4e669beab53dfae81c0dd43488231ca"
+    },
+    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
+      "md5": "e738fbfef742935aabf39a5336cbda0ee6b40b3d",
+      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm"
     },
     "pages/suppliers/index.kt": {
-      "md5": "a30ad808ad3235173031a22ab96e2bafdebd68e3",
-      "class": "GenPagesSuppliersIndex"
+      "class": "GenPagesSuppliersIndex",
+      "md5": "a1ca04bf551ae944bfaf668617724a015c03f94f"
+    },
+    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
+      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList",
+      "md5": "730244a48a560051890270ac41646cf4cd916525"
+    },
+    "pages/webview/webview.kt": {
+      "md5": "138888d18d6368b3e324680ed4b11da16956b725",
+      "class": "GenPagesWebviewWebview"
     },
     "pages/login/login.kt": {
       "md5": "a909b3af7b084bd2a37dac5cbb194bd3e7f504ae",
       "class": "GenPagesLoginLogin"
     },
-    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
-      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e",
-      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
+    "pages/tabbar/mine.kt": {
+      "class": "GenPagesTabbarMine",
+      "md5": "03428cd13f0152c775caa5db9881229cc4c42a41"
     },
-    "pages/tabbar/reports.kt": {
-      "md5": "b3f0189c2cc6112fbbf4e50456ba49b47ba62d2a",
-      "class": "GenPagesTabbarReports"
-    },
-    "pages/suppliers/from.kt": {
-      "class": "GenPagesSuppliersFrom",
-      "md5": "82ef70ab217c76f92663a4dc2378230f1df6cfbc"
-    },
-    "pages/webview/webview.kt": {
-      "class": "GenPagesWebviewWebview",
-      "md5": "138888d18d6368b3e324680ed4b11da16956b725"
-    },
-    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
-      "md5": "6868a2f6ce9ab8691365790f413eec55b5663922",
-      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup"
-    },
-    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
-      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm",
-      "md5": "a1ada9a22ecd351a1b17d6dd85705ffe4ea8edd9"
-    },
-    "pages/transactions/index.kt": {
-      "class": "GenPagesTransactionsIndex",
-      "md5": "7d4015999414d767f2ed67327a1cd28a1540a7ed"
-    },
-    "pages/transactions/from.kt": {
-      "class": "GenPagesTransactionsFrom",
-      "md5": "c2a6758368e3cea39d1a31dbbc7228368a46da89"
+    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
+      "md5": "7ad25fe6af3c1245510e9e4401967dc306ade90a",
+      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
     },
     "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
       "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect",
-      "md5": "248c10a066b33e364aefe365017c387b154b33df"
+      "md5": "4b1a76d6731b969fe493fac62f6635dc9a1099cd"
     },
-    "pages/privacy/privacy.kt": {
-      "md5": "dd937ccdef05b0913c68db2008109433b48cac44",
-      "class": "GenPagesPrivacyPrivacy"
+    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
+      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup",
+      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0"
+    },
+    "pages/transactions/from.kt": {
+      "class": "GenPagesTransactionsFrom",
+      "md5": "f9cb030dad23623d970d85753cf901169fe54053"
+    },
+    "pages/suppliers/from.kt": {
+      "md5": "82ef70ab217c76f92663a4dc2378230f1df6cfbc",
+      "class": "GenPagesSuppliersFrom"
     }
   }
 }

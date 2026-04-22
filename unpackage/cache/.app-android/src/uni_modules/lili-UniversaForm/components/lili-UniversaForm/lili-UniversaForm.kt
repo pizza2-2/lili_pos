@@ -108,7 +108,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val getObjectField = ::gen_getObjectField_fn
             fun gen_cloneObject_fn(source: UTSJSONObject): UTSJSONObject {
-                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 229, 8))
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 222, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     target[key] = source[key]
                 }
@@ -269,11 +269,34 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return true
             }
             val shouldShowField = ::gen_shouldShowField_fn
+            fun gen_normalizeDateNumber_fn(value: Number): String {
+                if (value < 10) {
+                    return "0" + value
+                }
+                return "" + value
+            }
+            val normalizeDateNumber = ::gen_normalizeDateNumber_fn
+            fun gen_buildCurrentDatetimeValue_fn(showTime: Boolean): String {
+                val now = Date()
+                val year = now.getFullYear()
+                val month = normalizeDateNumber(now.getMonth() + 1)
+                val day = normalizeDateNumber(now.getDate())
+                if (!showTime) {
+                    return "" + year + "-" + month + "-" + day
+                }
+                val hour = normalizeDateNumber(now.getHours())
+                val minute = normalizeDateNumber(now.getMinutes())
+                return "" + year + "-" + month + "-" + day + " " + hour + ":" + minute + ":00"
+            }
+            val buildCurrentDatetimeValue = ::gen_buildCurrentDatetimeValue_fn
             fun gen_getDefaultValue_fn(field: UTSJSONObject): Any {
                 val fieldType = getFieldType(field)
                 val customDefault = field["defaultValue"]
                 if (customDefault != null) {
                     return customDefault
+                }
+                if (fieldType == "datetime" && getBooleanField(field, "defaultToToday", false)) {
+                    return buildCurrentDatetimeValue(getBooleanField(field, "showTime", true))
                 }
                 if (fieldType == "switch") {
                     return false
@@ -391,6 +414,22 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return "value"
             }
             val getBottomSelectValueKey = ::gen_getBottomSelectValueKey_fn
+            fun gen_getBottomSelectTextKey_fn(field: UTSJSONObject): String {
+                return getStringField(field, "textKey")
+            }
+            val getBottomSelectTextKey = ::gen_getBottomSelectTextKey_fn
+            fun gen_getBottomSelectValueText_fn(field: UTSJSONObject): String {
+                val textKey = getBottomSelectTextKey(field)
+                if (textKey == "") {
+                    return ""
+                }
+                val value = formData.value[textKey]
+                if (value == null) {
+                    return ""
+                }
+                return "" + value
+            }
+            val getBottomSelectValueText = ::gen_getBottomSelectValueText_fn
             fun gen_getBottomSelectPageSize_fn(field: UTSJSONObject): Number {
                 val value = getNumberField(field, "pageSize", 20)
                 if (value <= 0) {
@@ -407,81 +446,59 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return value
             }
             val getBottomSelectSearchDelay = ::gen_getBottomSelectSearchDelay_fn
-            fun gen_getDatetimeDateValue_fn(field: UTSJSONObject): String {
-                val value = getStringFieldValue(field)
-                if (value.length >= 10) {
-                    return value.substring(0, 10)
+            fun gen_getDatetimeTitle_fn(field: UTSJSONObject): String {
+                val title = getStringField(field, "title")
+                if (title != "") {
+                    return title
                 }
-                return ""
+                return "选择" + getFieldLabel(field)
             }
-            val getDatetimeDateValue = ::gen_getDatetimeDateValue_fn
-            fun gen_getDatetimeTimeValue_fn(field: UTSJSONObject): String {
-                val value = getStringFieldValue(field)
-                if (value.length >= 16) {
-                    return value.substring(11, 16)
-                }
-                return ""
-            }
-            val getDatetimeTimeValue = ::gen_getDatetimeTimeValue_fn
-            fun gen_getDatetimeDateText_fn(field: UTSJSONObject): String {
-                val value = getDatetimeDateValue(field)
-                if (value != "") {
-                    return value
-                }
-                val placeholder = getStringField(field, "datePlaceholder")
+            val getDatetimeTitle = ::gen_getDatetimeTitle_fn
+            fun gen_getDatetimePlaceholder_fn(field: UTSJSONObject): String {
+                val placeholder = getStringField(field, "placeholder")
                 if (placeholder != "") {
                     return placeholder
                 }
-                return "请选择日期"
+                val datePlaceholder = getStringField(field, "datePlaceholder")
+                val timePlaceholder = getStringField(field, "timePlaceholder")
+                if (datePlaceholder != "" && timePlaceholder != "") {
+                    return datePlaceholder + " " + timePlaceholder
+                }
+                return "请选择" + getFieldLabel(field)
             }
-            val getDatetimeDateText = ::gen_getDatetimeDateText_fn
-            fun gen_getDatetimeTimeText_fn(field: UTSJSONObject): String {
-                val value = getDatetimeTimeValue(field)
-                if (value != "") {
-                    return value
-                }
-                val placeholder = getStringField(field, "timePlaceholder")
-                if (placeholder != "") {
-                    return placeholder
-                }
-                return "请选择时间"
+            val getDatetimePlaceholder = ::gen_getDatetimePlaceholder_fn
+            fun gen_getDatetimeShowTime_fn(field: UTSJSONObject): Boolean {
+                return getBooleanField(field, "showTime", true)
             }
-            val getDatetimeTimeText = ::gen_getDatetimeTimeText_fn
-            fun gen_getDatetimeValueClass_fn(field: UTSJSONObject, value: String): String {
-                if (value == "") {
-                    return "uf-datetime-box uf-datetime-box-placeholder"
-                }
-                if (isReadonly(field)) {
-                    return "uf-datetime-box uf-datetime-box-readonly"
-                }
-                return "uf-datetime-box"
+            val getDatetimeShowTime = ::gen_getDatetimeShowTime_fn
+            fun gen_getDatetimeDefaultToToday_fn(field: UTSJSONObject): Boolean {
+                return getBooleanField(field, "defaultToToday", false)
             }
-            val getDatetimeValueClass = ::gen_getDatetimeValueClass_fn
-            fun gen_getDatetimeTextClass_fn(field: UTSJSONObject, value: String): String {
-                if (value == "") {
-                    return "uf-datetime-text uf-datetime-text-placeholder"
+            val getDatetimeDefaultToToday = ::gen_getDatetimeDefaultToToday_fn
+            fun gen_getDatetimeStartYear_fn(field: UTSJSONObject): Number {
+                val value = getNumberField(field, "startYear", 2000)
+                if (value <= 0) {
+                    return 2000
                 }
-                if (isReadonly(field)) {
-                    return "uf-datetime-text uf-datetime-text-readonly"
-                }
-                return "uf-datetime-text"
+                return value
             }
-            val getDatetimeTextClass = ::gen_getDatetimeTextClass_fn
-            fun gen_buildDatetimeValue_fn(dateText: String, timeText: String): String {
-                if (dateText == "" && timeText == "") {
-                    return ""
+            val getDatetimeStartYear = ::gen_getDatetimeStartYear_fn
+            fun gen_getDatetimeEndYear_fn(field: UTSJSONObject): Number {
+                val value = getNumberField(field, "endYear", 2099)
+                if (value <= 0) {
+                    return 2099
                 }
-                if (dateText == "") {
-                    return ""
-                }
-                val normalizedTime = if (timeText == "") {
-                    "00:00"
-                } else {
-                    timeText
-                }
-                return dateText + " " + normalizedTime + ":00"
+                return value
             }
-            val buildDatetimeValue = ::gen_buildDatetimeValue_fn
+            val getDatetimeEndYear = ::gen_getDatetimeEndYear_fn
+            fun gen_getDatetimeMinuteStep_fn(field: UTSJSONObject): Number {
+                val value = getNumberField(field, "minuteStep", 1)
+                if (value <= 0) {
+                    return 1
+                }
+                return value
+            }
+            val getDatetimeMinuteStep = ::gen_getDatetimeMinuteStep_fn
             fun gen_showBottomSelectEdit_fn(field: UTSJSONObject): Boolean {
                 return getBooleanField(field, "showEditAction", true)
             }
@@ -550,13 +567,13 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val clearFieldError = ::gen_clearFieldError_fn
             fun gen_emitFieldChange_fn(field: UTSJSONObject, value: Any) {
-                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 598, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
+                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 602, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
                 emit("field-change", payload)
                 emit("form-change", payload)
             }
             val emitFieldChange = ::gen_emitFieldChange_fn
             fun gen_serializeState_fn(): String {
-                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 610, 8), "mode" to props.mode, "formData" to formData.value)
+                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 614, 8), "mode" to props.mode, "formData" to formData.value)
                 return JSON.stringify(state)
             }
             val serializeState = ::gen_serializeState_fn
@@ -577,7 +594,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val markSnapshot = ::gen_markSnapshot_fn
             fun gen_applyInitialValues_fn() {
-                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 634, 8))
+                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 638, 8))
                 run {
                     var i: Number = 0
                     while(i < props.formSections.length){
@@ -596,6 +613,15 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                     nextData[key] = incoming
                                 } else {
                                     nextData[key] = getDefaultValue(field)
+                                }
+                                val textKey = getBottomSelectTextKey(field)
+                                if (textKey != "") {
+                                    val incomingText = props.initialData[textKey]
+                                    nextData[textKey] = if (incomingText == null) {
+                                        ""
+                                    } else {
+                                        incomingText
+                                    }
                                 }
                                 if (isUploadField(field)) {
                                     val itemsKey = getUploadFileItemsKey(field)
@@ -679,36 +705,19 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 emitFieldChange(field, value)
             }
             val handleNumberInput = ::gen_handleNumberInput_fn
-            fun gen_setDatetimeFieldValue_fn(key: String, value: String) {
+            fun gen_handleDatetimeChange_fn(field: UTSJSONObject, payload: Any) {
+                val key = getFieldKey(field)
+                if (key == "") {
+                    return
+                }
+                val payloadObject = payload as UTSJSONObject
+                val value = getStringField(payloadObject, "value")
                 setFieldValueByKey(key, value)
                 clearFieldError(key)
                 refreshDirtyState()
-            }
-            val setDatetimeFieldValue = ::gen_setDatetimeFieldValue_fn
-            fun gen_handleDatetimeDateChange_fn(field: UTSJSONObject, event: Any) {
-                val key = getFieldKey(field)
-                if (key == "") {
-                    return
-                }
-                val nextDate = readEventValue(event)
-                val currentTime = getDatetimeTimeValue(field)
-                val value = buildDatetimeValue(nextDate, currentTime)
-                setDatetimeFieldValue(key, value)
                 emitFieldChange(field, value)
             }
-            val handleDatetimeDateChange = ::gen_handleDatetimeDateChange_fn
-            fun gen_handleDatetimeTimeChange_fn(field: UTSJSONObject, event: Any) {
-                val key = getFieldKey(field)
-                if (key == "") {
-                    return
-                }
-                val nextTime = readEventValue(event)
-                val currentDate = getDatetimeDateValue(field)
-                val value = buildDatetimeValue(currentDate, nextTime)
-                setDatetimeFieldValue(key, value)
-                emitFieldChange(field, value)
-            }
-            val handleDatetimeTimeChange = ::gen_handleDatetimeTimeChange_fn
+            val handleDatetimeChange = ::gen_handleDatetimeChange_fn
             fun gen_handleSwitchChange_fn(field: UTSJSONObject, event: Any) {
                 val key = getFieldKey(field)
                 if (key == "") {
@@ -734,6 +743,10 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 val payloadObject = payload as UTSJSONObject
                 val value = getStringField(payloadObject, "value")
                 setFieldValueByKey(key, value)
+                val textKey = getBottomSelectTextKey(field)
+                if (textKey != "") {
+                    setFieldValueByKey(textKey, getStringField(payloadObject, "text"))
+                }
                 clearFieldError(key)
                 refreshDirtyState()
                 emitFieldChange(field, value)
@@ -775,7 +788,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     var index: Number = 0
                     while(index < sourceItems.length){
                         val sourceItem = sourceItems[index]
-                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 798, 9))
+                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 796, 9))
                         for(key in resolveUTSKeyIterator(sourceItem)){
                             clonedItem[key] = sourceItem[key]
                         }
@@ -839,7 +852,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val validateField = ::gen_validateField_fn
             fun gen_validate_fn(): Boolean {
-                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 870, 8))
+                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 868, 8))
                 var hasError = false
                 run {
                     var i: Number = 0
@@ -984,7 +997,6 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             , "confirmLeave" to confirmLeave, "submit" to handleSubmit))
             return fun(): Any? {
-                val _component_picker = resolveComponent("picker")
                 val _component_switch = resolveComponent("switch")
                 return _cE("view", _uM("class" to "uf-root"), _uA(
                     _cE("scroll-view", _uM("class" to "uf-scroll", "style" to _nS(_uM("flex" to "1")), "direction" to "vertical", "show-scrollbar" to "false"), _uA(
@@ -1078,31 +1090,18 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                     } else {
                                                                         if (isTrue(isDatetimeField(field))) {
                                                                             _cE("view", _uM("key" to 3, "class" to "uf-datetime-wrap"), _uA(
-                                                                                _cV(_component_picker, _uM("mode" to "date", "value" to getDatetimeDateValue(field), "disabled" to isReadonly(field), "onChange" to fun(`$event`: Any){
-                                                                                    handleDatetimeDateChange(field, `$event`)
-                                                                                }), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
-                                                                                    return _uA(
-                                                                                        _cE("view", _uM("class" to _nC(getDatetimeValueClass(field, getDatetimeDateValue(field)))), _uA(
-                                                                                            _cE("text", _uM("class" to _nC(getDatetimeTextClass(field, getDatetimeDateValue(field)))), _tD(getDatetimeDateText(field)), 3)
-                                                                                        ), 2)
-                                                                                    )
-                                                                                }), "_" to 2), 1032, _uA(
+                                                                                _cV(unref(GenUniModulesLiliDataComponentsLiliDataLiliDataClass), _uM("value" to getStringFieldValue(field), "title" to getDatetimeTitle(field), "placeholder" to getDatetimePlaceholder(field), "disabled" to isReadonly(field), "showTime" to getDatetimeShowTime(field), "defaultToToday" to getDatetimeDefaultToToday(field), "startYear" to getDatetimeStartYear(field), "endYear" to getDatetimeEndYear(field), "minuteStep" to getDatetimeMinuteStep(field), "onChange" to fun(`$event`: Any){
+                                                                                    handleDatetimeChange(field, `$event`)
+                                                                                }), null, 8, _uA(
                                                                                     "value",
+                                                                                    "title",
+                                                                                    "placeholder",
                                                                                     "disabled",
-                                                                                    "onChange"
-                                                                                )),
-                                                                                _cE("view", _uM("class" to "uf-datetime-gap")),
-                                                                                _cV(_component_picker, _uM("mode" to "time", "value" to getDatetimeTimeValue(field), "disabled" to isReadonly(field), "onChange" to fun(`$event`: Any){
-                                                                                    handleDatetimeTimeChange(field, `$event`)
-                                                                                }), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
-                                                                                    return _uA(
-                                                                                        _cE("view", _uM("class" to _nC(getDatetimeValueClass(field, getDatetimeTimeValue(field)))), _uA(
-                                                                                            _cE("text", _uM("class" to _nC(getDatetimeTextClass(field, getDatetimeTimeValue(field)))), _tD(getDatetimeTimeText(field)), 3)
-                                                                                        ), 2)
-                                                                                    )
-                                                                                }), "_" to 2), 1032, _uA(
-                                                                                    "value",
-                                                                                    "disabled",
+                                                                                    "showTime",
+                                                                                    "defaultToToday",
+                                                                                    "startYear",
+                                                                                    "endYear",
+                                                                                    "minuteStep",
                                                                                     "onChange"
                                                                                 ))
                                                                             ))
@@ -1118,7 +1117,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                             } else {
                                                                                 if (isTrue(isBottomSelectField(field))) {
                                                                                     _cE("view", _uM("key" to 5, "class" to "uf-bottom-select-wrap"), _uA(
-                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
+                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "valueText" to getBottomSelectValueText(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
                                                                                             handleBottomSelectChange(field, `$event`)
                                                                                         }, "onEdit" to fun(){
                                                                                             handleBottomSelectEdit(field)
@@ -1126,6 +1125,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                                             handleBottomSelectAdd(field)
                                                                                         }), null, 8, _uA(
                                                                                             "value",
+                                                                                            "valueText",
                                                                                             "title",
                                                                                             "placeholder",
                                                                                             "searchPlaceholder",
@@ -1233,7 +1233,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("uf-root" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F5F7FB")), "uf-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingTop" to 8, "paddingRight" to 8, "paddingBottom" to 96, "paddingLeft" to 8)), "uf-section" to _pS(_uM("marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF")), "uf-section-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingRight" to 16, "paddingBottom" to 14, "paddingLeft" to 16)), "uf-section-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-section-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#1F2937", "lineHeight" to "20px")), "uf-section-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#9CA3AF", "lineHeight" to "16px")), "uf-section-arrow" to _pS(_uM("fontSize" to 18, "color" to "#9CA3AF", "lineHeight" to "18px")), "uf-section-body" to _pS(_uM("paddingTop" to 0, "paddingRight" to 16, "paddingBottom" to 12, "paddingLeft" to 16)), "uf-field" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#F1F5F9")), "uf-field-head" to _pS(_uM("marginBottom" to 8)), "uf-field-title-line" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "uf-field-label" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "18px")), "uf-required" to _pS(_uM("marginLeft" to 4, "fontSize" to 14, "color" to "#DC2626", "lineHeight" to "18px")), "uf-mode-tag" to _pS(_uM("marginLeft" to 8, "paddingTop" to 2, "paddingRight" to 8, "paddingBottom" to 2, "paddingLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 11, "color" to "#92400E", "lineHeight" to "14px", "backgroundColor" to "#FEF3C7")), "uf-field-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#6B7280", "lineHeight" to "16px")), "uf-control" to _pS(_uM("minHeight" to 44)), "uf-input" to _pS(_uM("height" to 44, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-textarea" to _pS(_uM("height" to 96, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-datetime-wrap" to _pS(_uM("flexDirection" to "row")), "uf-datetime-box" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "minHeight" to 44, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "justifyContent" to "center", "backgroundColor" to "#F8FAFC")), "uf-datetime-box-placeholder" to _pS(_uM("backgroundColor" to "#F8FAFC")), "uf-datetime-box-readonly" to _pS(_uM("backgroundColor" to "#F3F4F6")), "uf-datetime-text" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "20px")), "uf-datetime-text-placeholder" to _pS(_uM("color" to "#9CA3AF")), "uf-datetime-text-readonly" to _pS(_uM("color" to "#6B7280")), "uf-datetime-gap" to _pS(_uM("width" to 8)), "uf-bottom-select-wrap" to _pS(_uM("minHeight" to 44)), "uf-upload-wrap" to _pS(_uM("paddingTop" to 4)), "uf-plain-value" to _pS(_uM("minHeight" to 44, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC")), "uf-plain-value-text" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "20px")), "uf-error-text" to _pS(_uM("marginTop" to 6, "fontSize" to 12, "color" to "#DC2626", "lineHeight" to "16px")), "uf-footer" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E5E7EB")), "uf-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "fontSize" to 15, "lineHeight" to "44px")), "uf-btn-light" to _pS(_uM("marginRight" to 10, "color" to "#374151", "backgroundColor" to "#E5E7EB")), "uf-btn-primary" to _pS(_uM("color" to "#FFFFFF", "backgroundColor" to "#2563EB")), "uf-floating-action" to _pS(_uM("position" to "absolute", "left" to 12, "bottom" to 84, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(37,99,235,0.92)")), "uf-floating-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#FFFFFF")))
+                return _uM("uf-root" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F5F7FB")), "uf-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingTop" to 8, "paddingRight" to 8, "paddingBottom" to 96, "paddingLeft" to 8)), "uf-section" to _pS(_uM("marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF")), "uf-section-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingRight" to 16, "paddingBottom" to 14, "paddingLeft" to 16)), "uf-section-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "uf-section-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "600", "color" to "#1F2937", "lineHeight" to "20px")), "uf-section-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#9CA3AF", "lineHeight" to "16px")), "uf-section-arrow" to _pS(_uM("fontSize" to 18, "color" to "#9CA3AF", "lineHeight" to "18px")), "uf-section-body" to _pS(_uM("paddingTop" to 0, "paddingRight" to 16, "paddingBottom" to 12, "paddingLeft" to 16)), "uf-field" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#F1F5F9")), "uf-field-head" to _pS(_uM("marginBottom" to 8)), "uf-field-title-line" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "uf-field-label" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "18px")), "uf-required" to _pS(_uM("marginLeft" to 4, "fontSize" to 14, "color" to "#DC2626", "lineHeight" to "18px")), "uf-mode-tag" to _pS(_uM("marginLeft" to 8, "paddingTop" to 2, "paddingRight" to 8, "paddingBottom" to 2, "paddingLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "fontSize" to 11, "color" to "#92400E", "lineHeight" to "14px", "backgroundColor" to "#FEF3C7")), "uf-field-desc" to _pS(_uM("marginTop" to 4, "fontSize" to 12, "color" to "#6B7280", "lineHeight" to "16px")), "uf-control" to _pS(_uM("minHeight" to 44)), "uf-input" to _pS(_uM("height" to 44, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-textarea" to _pS(_uM("height" to 96, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "fontSize" to 14, "color" to "#111827")), "uf-datetime-wrap" to _pS(_uM("minHeight" to 44)), "uf-bottom-select-wrap" to _pS(_uM("minHeight" to 44)), "uf-upload-wrap" to _pS(_uM("paddingTop" to 4)), "uf-plain-value" to _pS(_uM("minHeight" to 44, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC")), "uf-plain-value-text" to _pS(_uM("fontSize" to 14, "color" to "#111827", "lineHeight" to "20px")), "uf-error-text" to _pS(_uM("marginTop" to 6, "fontSize" to 12, "color" to "#DC2626", "lineHeight" to "16px")), "uf-footer" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E5E7EB")), "uf-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 44, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "fontSize" to 15, "lineHeight" to "44px")), "uf-btn-light" to _pS(_uM("marginRight" to 10, "color" to "#374151", "backgroundColor" to "#E5E7EB")), "uf-btn-primary" to _pS(_uM("color" to "#FFFFFF", "backgroundColor" to "#2563EB")), "uf-floating-action" to _pS(_uM("position" to "absolute", "left" to 12, "bottom" to 84, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(37,99,235,0.92)")), "uf-floating-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

@@ -1,10 +1,11 @@
+import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
 
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 171, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 164, 6>;
 	mode?: string
 	formSections?: UTSJSONObject[]
 	initialData?: UTSJSONObject
@@ -61,7 +62,7 @@ function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
 }
 
 function cloneObject(source: UTSJSONObject) : UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 229, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 222, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -197,11 +198,34 @@ function shouldShowField(field: UTSJSONObject) : boolean {
 	return true
 }
 
+function normalizeDateNumber(value: number) : string {
+	if (value < 10) {
+		return '0' + value
+	}
+	return '' + value
+}
+
+function buildCurrentDatetimeValue(showTime: boolean) : string {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = normalizeDateNumber(now.getMonth() + 1)
+	const day = normalizeDateNumber(now.getDate())
+	if (!showTime) {
+		return `${year}-${month}-${day}`
+	}
+	const hour = normalizeDateNumber(now.getHours())
+	const minute = normalizeDateNumber(now.getMinutes())
+	return `${year}-${month}-${day} ${hour}:${minute}:00`
+}
+
 function getDefaultValue(field: UTSJSONObject) : any {
 	const fieldType = getFieldType(field)
 	const customDefault = field['defaultValue']
 	if (customDefault != null) {
 		return customDefault
+	}
+	if (fieldType == 'datetime' && getBooleanField(field, 'defaultToToday', false)) {
+		return buildCurrentDatetimeValue(getBooleanField(field, 'showTime', true))
 	}
 	if (fieldType == 'switch') return false
 	if (fieldType == 'upload') return [] as string[]
@@ -285,6 +309,18 @@ function getBottomSelectValueKey(field: UTSJSONObject) : string {
 	return 'value'
 }
 
+function getBottomSelectTextKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'textKey')
+}
+
+function getBottomSelectValueText(field: UTSJSONObject) : string {
+	const textKey = getBottomSelectTextKey(field)
+	if (textKey == '') return ''
+	const value = formData.value[textKey]
+	if (value == null) return ''
+	return '' + value
+}
+
 function getBottomSelectPageSize(field: UTSJSONObject) : number {
 	const value = getNumberField(field, 'pageSize', 20)
 	if (value <= 0) return 20
@@ -297,75 +333,51 @@ function getBottomSelectSearchDelay(field: UTSJSONObject) : number {
 	return value
 }
 
-function getDatetimeDateValue(field: UTSJSONObject) : string {
-	const value = getStringFieldValue(field)
-	if (value.length >= 10) {
-		return value.substring(0, 10)
+function getDatetimeTitle(field: UTSJSONObject) : string {
+	const title = getStringField(field, 'title')
+	if (title != '') {
+		return title
 	}
-	return ''
+	return '选择' + getFieldLabel(field)
 }
 
-function getDatetimeTimeValue(field: UTSJSONObject) : string {
-	const value = getStringFieldValue(field)
-	if (value.length >= 16) {
-		return value.substring(11, 16)
-	}
-	return ''
-}
-
-function getDatetimeDateText(field: UTSJSONObject) : string {
-	const value = getDatetimeDateValue(field)
-	if (value != '') {
-		return value
-	}
-	const placeholder = getStringField(field, 'datePlaceholder')
+function getDatetimePlaceholder(field: UTSJSONObject) : string {
+	const placeholder = getStringField(field, 'placeholder')
 	if (placeholder != '') {
 		return placeholder
 	}
-	return '请选择日期'
+	const datePlaceholder = getStringField(field, 'datePlaceholder')
+	const timePlaceholder = getStringField(field, 'timePlaceholder')
+	if (datePlaceholder != '' && timePlaceholder != '') {
+		return datePlaceholder + ' ' + timePlaceholder
+	}
+	return '请选择' + getFieldLabel(field)
 }
 
-function getDatetimeTimeText(field: UTSJSONObject) : string {
-	const value = getDatetimeTimeValue(field)
-	if (value != '') {
-		return value
-	}
-	const placeholder = getStringField(field, 'timePlaceholder')
-	if (placeholder != '') {
-		return placeholder
-	}
-	return '请选择时间'
+function getDatetimeShowTime(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showTime', true)
 }
 
-function getDatetimeValueClass(field: UTSJSONObject, value: string) : string {
-	if (value == '') {
-		return 'uf-datetime-box uf-datetime-box-placeholder'
-	}
-	if (isReadonly(field)) {
-		return 'uf-datetime-box uf-datetime-box-readonly'
-	}
-	return 'uf-datetime-box'
+function getDatetimeDefaultToToday(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'defaultToToday', false)
 }
 
-function getDatetimeTextClass(field: UTSJSONObject, value: string) : string {
-	if (value == '') {
-		return 'uf-datetime-text uf-datetime-text-placeholder'
-	}
-	if (isReadonly(field)) {
-		return 'uf-datetime-text uf-datetime-text-readonly'
-	}
-	return 'uf-datetime-text'
+function getDatetimeStartYear(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'startYear', 2000)
+	if (value <= 0) return 2000
+	return value
 }
 
-function buildDatetimeValue(dateText: string, timeText: string) : string {
-	if (dateText == '' && timeText == '') {
-		return ''
-	}
-	if (dateText == '') {
-		return ''
-	}
-	const normalizedTime = timeText == '' ? '00:00' : timeText
-	return dateText + ' ' + normalizedTime + ':00'
+function getDatetimeEndYear(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'endYear', 2099)
+	if (value <= 0) return 2099
+	return value
+}
+
+function getDatetimeMinuteStep(field: UTSJSONObject) : number {
+	const value = getNumberField(field, 'minuteStep', 1)
+	if (value <= 0) return 1
+	return value
 }
 
 function showBottomSelectEdit(field: UTSJSONObject) : boolean {
@@ -430,7 +442,7 @@ function clearFieldError(key: string) {
 }
 
 function emitFieldChange(field: UTSJSONObject, value: any) {
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 598, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 602, 8), 
 		field: field,
 		key: getFieldKey(field),
 		value: value,
@@ -442,7 +454,7 @@ function emitFieldChange(field: UTSJSONObject, value: any) {
 }
 
 function serializeState() : string {
-	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 610, 8), 
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 614, 8), 
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject
@@ -466,7 +478,7 @@ function markSnapshot() {
 }
 
 function applyInitialValues() {
-	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 634, 8), } as UTSJSONObject
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 638, 8), } as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
 		for (let j = 0; j < fields.length; j++) {
@@ -478,6 +490,11 @@ function applyInitialValues() {
 				nextData[key] = incoming
 			} else {
 				nextData[key] = getDefaultValue(field)
+			}
+			const textKey = getBottomSelectTextKey(field)
+			if (textKey != '') {
+				const incomingText = props.initialData[textKey]
+				nextData[textKey] = incomingText == null ? '' : incomingText
 			}
 			if (isUploadField(field)) {
 				const itemsKey = getUploadFileItemsKey(field)
@@ -541,29 +558,14 @@ function handleNumberInput(field: UTSJSONObject, event: any) {
 	emitFieldChange(field, value)
 }
 
-function setDatetimeFieldValue(key: string, value: string) {
+function handleDatetimeChange(field: UTSJSONObject, payload: any) {
+	const key = getFieldKey(field)
+	if (key == '') return
+	const payloadObject = payload as UTSJSONObject
+	const value = getStringField(payloadObject, 'value')
 	setFieldValueByKey(key, value)
 	clearFieldError(key)
 	refreshDirtyState()
-}
-
-function handleDatetimeDateChange(field: UTSJSONObject, event: any) {
-	const key = getFieldKey(field)
-	if (key == '') return
-	const nextDate = readEventValue(event)
-	const currentTime = getDatetimeTimeValue(field)
-	const value = buildDatetimeValue(nextDate, currentTime)
-	setDatetimeFieldValue(key, value)
-	emitFieldChange(field, value)
-}
-
-function handleDatetimeTimeChange(field: UTSJSONObject, event: any) {
-	const key = getFieldKey(field)
-	if (key == '') return
-	const nextTime = readEventValue(event)
-	const currentDate = getDatetimeDateValue(field)
-	const value = buildDatetimeValue(currentDate, nextTime)
-	setDatetimeFieldValue(key, value)
 	emitFieldChange(field, value)
 }
 
@@ -586,6 +588,10 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 	const payloadObject = payload as UTSJSONObject
 	const value = getStringField(payloadObject, 'value')
 	setFieldValueByKey(key, value)
+	const textKey = getBottomSelectTextKey(field)
+	if (textKey != '') {
+		setFieldValueByKey(textKey, getStringField(payloadObject, 'text'))
+	}
 	clearFieldError(key)
 	refreshDirtyState()
 	emitFieldChange(field, value)
@@ -630,7 +636,7 @@ function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
 	const nextItems: UTSJSONObject[] = []
 	for (let index = 0; index < sourceItems.length; index++) {
 		const sourceItem = sourceItems[index]
-		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 798, 9), } as UTSJSONObject
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 796, 9), } as UTSJSONObject
 		for (const key in sourceItem) {
 			clonedItem[key] = sourceItem[key]
 		}
@@ -702,7 +708,7 @@ function validateField(field: UTSJSONObject) : string {
 }
 
 function validate() : boolean {
-	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 870, 8), } as UTSJSONObject
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 868, 8), } as UTSJSONObject
 	let hasError = false
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
@@ -858,7 +864,6 @@ __expose({
 
 return (): any | null => {
 
-const _component_picker = resolveComponent("picker")
 const _component_switch = resolveComponent("switch")
 
   return _cE("view", _uM({ class: "uf-root" }), [
@@ -969,41 +974,18 @@ const _component_switch = resolveComponent("switch")
                                         key: 3,
                                         class: "uf-datetime-wrap"
                                       }), [
-                                        _cV(_component_picker, _uM({
-                                          mode: "date",
-                                          value: getDatetimeDateValue(field),
+                                        _cV(unref(liliData), _uM({
+                                          value: getStringFieldValue(field),
+                                          title: getDatetimeTitle(field),
+                                          placeholder: getDatetimePlaceholder(field),
                                           disabled: isReadonly(field),
-                                          onChange: ($event: any) => {handleDatetimeDateChange(field, $event)}
-                                        }), _uM({
-                                          default: withSlotCtx((): any[] => [
-                                            _cE("view", _uM({
-                                              class: _nC(getDatetimeValueClass(field, getDatetimeDateValue(field)))
-                                            }), [
-                                              _cE("text", _uM({
-                                                class: _nC(getDatetimeTextClass(field, getDatetimeDateValue(field)))
-                                              }), _tD(getDatetimeDateText(field)), 3 /* TEXT, CLASS */)
-                                            ], 2 /* CLASS */)
-                                          ]),
-                                          _: 2 /* DYNAMIC */
-                                        }), 1032 /* PROPS, DYNAMIC_SLOTS */, ["value", "disabled", "onChange"]),
-                                        _cE("view", _uM({ class: "uf-datetime-gap" })),
-                                        _cV(_component_picker, _uM({
-                                          mode: "time",
-                                          value: getDatetimeTimeValue(field),
-                                          disabled: isReadonly(field),
-                                          onChange: ($event: any) => {handleDatetimeTimeChange(field, $event)}
-                                        }), _uM({
-                                          default: withSlotCtx((): any[] => [
-                                            _cE("view", _uM({
-                                              class: _nC(getDatetimeValueClass(field, getDatetimeTimeValue(field)))
-                                            }), [
-                                              _cE("text", _uM({
-                                                class: _nC(getDatetimeTextClass(field, getDatetimeTimeValue(field)))
-                                              }), _tD(getDatetimeTimeText(field)), 3 /* TEXT, CLASS */)
-                                            ], 2 /* CLASS */)
-                                          ]),
-                                          _: 2 /* DYNAMIC */
-                                        }), 1032 /* PROPS, DYNAMIC_SLOTS */, ["value", "disabled", "onChange"])
+                                          showTime: getDatetimeShowTime(field),
+                                          defaultToToday: getDatetimeDefaultToToday(field),
+                                          startYear: getDatetimeStartYear(field),
+                                          endYear: getDatetimeEndYear(field),
+                                          minuteStep: getDatetimeMinuteStep(field),
+                                          onChange: ($event: any) => {handleDatetimeChange(field, $event)}
+                                        }), null, 8 /* PROPS */, ["value", "title", "placeholder", "disabled", "showTime", "defaultToToday", "startYear", "endYear", "minuteStep", "onChange"])
                                       ])
                                     : isTrue(isSwitchField(field))
                                       ? _cV(_component_switch, _uM({
@@ -1019,6 +1001,7 @@ const _component_switch = resolveComponent("switch")
                                           }), [
                                             _cV(unref(liliBottomSelect), _uM({
                                               value: getStringFieldValue(field),
+                                              valueText: getBottomSelectValueText(field),
                                               title: getBottomSelectTitle(field),
                                               placeholder: getFieldPlaceholder(field),
                                               searchPlaceholder: getBottomSelectSearchPlaceholder(field),
@@ -1034,7 +1017,7 @@ const _component_switch = resolveComponent("switch")
                                               onChange: ($event: any) => {handleBottomSelectChange(field, $event)},
                                               onEdit: () => {handleBottomSelectEdit(field)},
                                               onAdd: () => {handleBottomSelectAdd(field)}
-                                            }), null, 8 /* PROPS */, ["value", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "showEditAction", "showAddAction", "fetchData", "onChange", "onEdit", "onAdd"])
+                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "showEditAction", "showAddAction", "fetchData", "onChange", "onEdit", "onAdd"])
                                           ])
                                         : isTrue(isUploadField(field))
                                           ? _cE("view", _uM({
@@ -1110,4 +1093,4 @@ const _component_switch = resolveComponent("switch")
 })
 export default __sfc__
 export type LiliUniversaFormComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-datetime-wrap", _pS(_uM([["flexDirection", "row"]]))], ["uf-datetime-box", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["minHeight", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["justifyContent", "center"], ["backgroundColor", "#F8FAFC"]]))], ["uf-datetime-box-placeholder", _pS(_uM([["backgroundColor", "#F8FAFC"]]))], ["uf-datetime-box-readonly", _pS(_uM([["backgroundColor", "#F3F4F6"]]))], ["uf-datetime-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-datetime-text-placeholder", _pS(_uM([["color", "#9CA3AF"]]))], ["uf-datetime-text-readonly", _pS(_uM([["color", "#6B7280"]]))], ["uf-datetime-gap", _pS(_uM([["width", 8]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))], ["uf-floating-action", _pS(_uM([["position", "absolute"], ["left", 12], ["bottom", 84], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(37,99,235,0.92)"]]))], ["uf-floating-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]
+const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-datetime-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))], ["uf-floating-action", _pS(_uM([["position", "absolute"], ["left", 12], ["bottom", 84], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(37,99,235,0.92)"]]))], ["uf-floating-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]

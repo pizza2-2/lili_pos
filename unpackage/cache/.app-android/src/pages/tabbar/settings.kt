@@ -25,24 +25,29 @@ open class GenPagesTabbarSettings : BasePage {
             val _cache = __ins.renderCache
             val groups = ref(_uA<MenuGroup>(MenuGroup(label = "常用页面", rows = _uA(
                 _uA(
-                    MenuItem(label = "供应商", icon = "◫", path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
-                    MenuItem(label = "商品", icon = "□", path = "/pages/tabbar/products", action = "switchTab", disabled = false),
-                    MenuItem(label = "我的", icon = "◉", path = "/pages/tabbar/mine", action = "switchTab", disabled = false),
-                    MenuItem(label = "隐私", icon = "◎", path = "/pages/privacy/privacy", action = "navigateTo", disabled = false)
+                    MenuItem(label = "供应商", icon = "◫", iconPath = null, path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "商品", icon = "□", iconPath = null, path = "/pages/tabbar/products", action = "switchTab", disabled = false),
+                    MenuItem(label = "我的", icon = "◉", iconPath = null, path = "/pages/tabbar/mine", action = "switchTab", disabled = false),
+                    MenuItem(label = "隐私", icon = "◎", iconPath = null, path = "/pages/privacy/privacy", action = "navigateTo", disabled = false)
+                )
+            )), MenuGroup(label = "分类设置", rows = _uA(
+                _uA(
+                    MenuItem(label = "分类", icon = "", iconPath = "/static/muen/分类.png", path = "/pages/category/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "收银分类", icon = "", iconPath = "/static/muen/分类 (1).png", path = "/pages/kasa_category/index", action = "navigateTo", disabled = false)
                 )
             )), MenuGroup(label = "门店配置", rows = _uA(
                 _uA(
-                    MenuItem(label = "收银台", icon = "¤", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "打印机", icon = "▣", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "支付", icon = "¥", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "权限", icon = "⌂", path = null, action = "todo", disabled = true)
+                    MenuItem(label = "收银台", icon = "¤", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "打印机", icon = "▣", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "支付", icon = "¥", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "权限", icon = "⌂", iconPath = null, path = null, action = "todo", disabled = true)
                 )
             )), MenuGroup(label = "系统工具", rows = _uA(
                 _uA(
-                    MenuItem(label = "同步", icon = "↻", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "更新", icon = "↑", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "日志", icon = "≡", path = null, action = "todo", disabled = true),
-                    MenuItem(label = "分享", icon = "⇪", path = null, action = "todo", disabled = true)
+                    MenuItem(label = "同步", icon = "↻", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "更新", icon = "↑", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "日志", icon = "≡", iconPath = null, path = null, action = "todo", disabled = true),
+                    MenuItem(label = "分享", icon = "⇪", iconPath = null, path = null, action = "todo", disabled = true)
                 )
             ))))
             fun gen_handleTap_fn(item: MenuItem) {
@@ -102,7 +107,14 @@ open class GenPagesTabbarSettings : BasePage {
                                                     handleTap(item)
                                                 }
                                                 ), _uA(
-                                                    _cE("text", _uM("class" to "grid-icon"), _tD(item.icon), 1),
+                                                    if (isTrue(item.iconPath != null && item.iconPath != "")) {
+                                                        _cE("image", _uM("key" to 0, "class" to "grid-image-icon", "src" to item.iconPath, "mode" to "aspectFit"), null, 8, _uA(
+                                                            "src"
+                                                        ))
+                                                    } else {
+                                                        _cE("text", _uM("key" to 1, "class" to "grid-icon"), _tD(item.icon), 1)
+                                                    }
+                                                    ,
                                                     _cE("text", _uM("class" to "grid-text"), _tD(item.label), 1)
                                                 ), 10, _uA(
                                                     "onClick"
@@ -127,7 +139,7 @@ open class GenPagesTabbarSettings : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page-scroll" to _pS(_uM("backgroundColor" to "#F7F7F7")), "page" to _pS(_uM("backgroundColor" to "#F7F7F7", "paddingBottom" to 20)), "status-bar-space" to _pS(_uM("height" to CSS_VAR_STATUS_BAR_HEIGHT)), "topbar" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12)), "brand-box" to _pS(_uM("width" to 32, "height" to 32, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#FFFFFF", "alignItems" to "center", "justifyContent" to "center")), "brand-text" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "color" to "#111827", "fontWeight" to "bold")), "page-title" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 16, "lineHeight" to "20px", "color" to "#111827", "fontWeight" to "bold", "marginLeft" to 8)), "action-button" to _pS(_uM("width" to 32, "height" to 32, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "action-button-gap" to _pS(_uM("marginRight" to 12, "backgroundColor" to "#64748B")), "action-icon" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "content" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12)), "group" to _pS(_uM("marginBottom" to 24)), "group-label" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#94A3B8", "marginLeft" to 8, "marginBottom" to 8)), "grid-row" to _pS(_uM("flexDirection" to "row", "marginBottom" to 8)), "grid-item" to _pS(_uM("width" to "23%", "height" to 70, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "alignItems" to "center", "paddingTop" to 18)), "grid-item-gap" to _pS(_uM("marginRight" to "2.6666%")), "grid-icon" to _pS(_uM("fontSize" to 18, "lineHeight" to "18px", "color" to "#111827")), "grid-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#111827", "textAlign" to "center", "marginTop" to 8)))
+                return _uM("page-scroll" to _pS(_uM("backgroundColor" to "#F7F7F7")), "page" to _pS(_uM("backgroundColor" to "#F7F7F7", "paddingBottom" to 20)), "status-bar-space" to _pS(_uM("height" to CSS_VAR_STATUS_BAR_HEIGHT)), "topbar" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12)), "brand-box" to _pS(_uM("width" to 32, "height" to 32, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#FFFFFF", "alignItems" to "center", "justifyContent" to "center")), "brand-text" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "color" to "#111827", "fontWeight" to "bold")), "page-title" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 16, "lineHeight" to "20px", "color" to "#111827", "fontWeight" to "bold", "marginLeft" to 8)), "action-button" to _pS(_uM("width" to 32, "height" to 32, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "action-button-gap" to _pS(_uM("marginRight" to 12, "backgroundColor" to "#64748B")), "action-icon" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "content" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12)), "group" to _pS(_uM("marginBottom" to 24)), "group-label" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#94A3B8", "marginLeft" to 8, "marginBottom" to 8)), "grid-row" to _pS(_uM("flexDirection" to "row", "marginBottom" to 8)), "grid-item" to _pS(_uM("width" to "23%", "height" to 70, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "alignItems" to "center", "paddingTop" to 18)), "grid-item-gap" to _pS(_uM("marginRight" to "2.6666%")), "grid-icon" to _pS(_uM("fontSize" to 18, "lineHeight" to "18px", "color" to "#111827")), "grid-image-icon" to _pS(_uM("width" to 24, "height" to 24)), "grid-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#111827", "textAlign" to "center", "marginTop" to 8)))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

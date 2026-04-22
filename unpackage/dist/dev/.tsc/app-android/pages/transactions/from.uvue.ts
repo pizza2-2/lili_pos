@@ -279,8 +279,10 @@ const formSections = ref<UTSJSONObject[]>([
 				label: '采购时间',
 				type: 'datetime',
 				required: true,
-				datePlaceholder: '选择日期',
-				timePlaceholder: '选择时间',
+				title: '选择采购日期',
+				placeholder: '请选择采购日期',
+				showTime: false,
+				defaultToToday: true,
 			} as UTSJSONObject,
 			{
 				key: 'note',

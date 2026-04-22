@@ -49,8 +49,6 @@
 					summaryTitle="采购统计"
 					:summaryItems="summaryItems"
 					:summaryCollapsedByDefault="true"
-					:showFloatingAdd="true"
-					floatingAddText="新增"
 					@item-click="handleItemClick"
 					@subtitle-click="handleSubtitleClick"
 					@meta-click="handleMetaClick"
@@ -91,8 +89,6 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
-	{ key: 'Detail', text: '详情' } as UTSJSONObject,
-	{ key: 'add', text: '增加' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 

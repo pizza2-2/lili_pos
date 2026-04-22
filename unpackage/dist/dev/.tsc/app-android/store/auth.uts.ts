@@ -11,6 +11,9 @@ export type UserInfoState = {
 	//其它字段
 }
 
+const loginPageUrl = '/pages/login/login'
+let redirectingToLogin = false
+
 // 实例化为authState
 export const authState = reactive({
 	token:'',
@@ -24,10 +27,7 @@ export const authState = reactive({
 
 // 本地存储(转为字符串存储)
 function authLocalStorage(){
-	uni.setStorage({
-		key: 'authStateKey',
-		data: JSON.stringify(authState)
-	});
+	uni.setStorageSync('authStateKey', JSON.stringify(authState))
 }
 
 // 清除token和userInfo
@@ -35,7 +35,54 @@ export const clearAuthState = () => {
 	authState.token = ''
 	authState.userInfo = null
 	//移除本地存储
-	uni.removeStorage({ key: 'authStateKey' });
+	uni.removeStorageSync('authStateKey')
+}
+
+function isLoginPageActive(): boolean {
+	const pages = getCurrentPages()
+	if (pages.length == 0) {
+		return false
+	}
+	const currentPage = pages[pages.length - 1]
+	const currentRoute = currentPage.route
+	if (currentRoute == null) {
+		return false
+	}
+	return '/' + currentRoute == loginPageUrl
+}
+
+function resetRedirectFlagWithDelay() {
+	setTimeout(() => {
+		redirectingToLogin = false
+	}, 1500)
+}
+
+export function redirectToLogin(message: string = '登录已过期，请重新登录') {
+	clearAuthState()
+	if (redirectingToLogin) {
+		return
+	}
+	if (isLoginPageActive()) {
+		return
+	}
+	redirectingToLogin = true
+	if (message != '') {
+		uni.showToast({
+			title: message,
+			icon: 'none'
+		})
+	}
+	uni.reLaunch({
+		url: loginPageUrl,
+		fail: () => {
+			uni.navigateTo({
+				url: loginPageUrl
+			})
+		},
+		complete: () => {
+			resetRedirectFlagWithDelay()
+		}
+	})
 }
 
 // 设置token,本地存储token

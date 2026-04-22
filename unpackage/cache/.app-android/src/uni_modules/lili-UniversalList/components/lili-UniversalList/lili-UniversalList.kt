@@ -30,6 +30,10 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
     open var actions: UTSArray<UTSJSONObject> by `$props`
     open var selectionMode: Boolean by `$props`
     open var selectedItems: UTSArray<String> by `$props`
+    open var longPressToSelect: Boolean by `$props`
+    open var showSelectAll: Boolean by `$props`
+    open var batchActions: UTSArray<UTSJSONObject> by `$props`
+    open var batchInfoText: String by `$props`
     open var loading: Boolean by `$props`
     open var loadingText: String by `$props`
     open var keepContentOnLoading: Boolean by `$props`
@@ -50,9 +54,36 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
     open var floatingAddText: String by `$props`
     open var enablePreviewSave: Boolean by `$props`
     open var enablePreviewShare: Boolean by `$props`
+    open fun enterSelectionMode(seedItem: UTSJSONObject? = null) {
+        callKotlinFunction(this.`$exposed`["enterSelectionMode"]!!, _uA(
+            seedItem
+        ))
+    }
+    open var exitSelectionMode: () -> Unit
+        get() {
+            return unref(this.`$exposed`["exitSelectionMode"]) as () -> Unit
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "exitSelectionMode", value)
+        }
+    open var toggleSelectAll: () -> Unit
+        get() {
+            return unref(this.`$exposed`["toggleSelectAll"]) as () -> Unit
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "toggleSelectAll", value)
+        }
+    open var getSelectedItems: () -> UTSArray<String>
+        get() {
+            return unref(this.`$exposed`["getSelectedItems"]) as () -> UTSArray<String>
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "getSelectedItems", value)
+        }
     companion object {
         @Suppress("UNUSED_PARAMETER", "UNUSED_VARIABLE")
-        var setup: (__props: GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList) -> Any? = fun(__props): Any? {
+        var setup: (__props: GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, __setupCtx: SetupContext) -> Any? = fun(__props, __setupCtx): Any? {
+            val __expose = __setupCtx.expose
             val __ins = getCurrentInstance()!!
             val _ctx = __ins.proxy as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList
             val _cache = __ins.renderCache
@@ -65,6 +96,8 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             val previewVisible = ref<Boolean>(false)
             val previewItem = ref<UTSJSONObject?>(null)
             val summaryExpanded = ref<Boolean>(!props.summaryCollapsedByDefault)
+            val internalSelectionMode = ref<Boolean>(props.selectionMode)
+            val internalSelectedItems = ref<UTSArray<String>>(props.selectedItems.slice())
             val showBlockingLoading = computed<Boolean>(fun(): Boolean {
                 if (!props.loading) {
                     return false
@@ -81,6 +114,28 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             )
             val showSummaryBar = computed<Boolean>(fun(): Boolean {
                 return props.summaryItems.length > 0
+            }
+            )
+            val selectionModeActive = computed<Boolean>(fun(): Boolean {
+                return props.selectionMode || internalSelectionMode.value
+            }
+            )
+            val showBatchBar = computed<Boolean>(fun(): Boolean {
+                return selectionModeActive.value
+            }
+            )
+            val batchInfoText = computed<String>(fun(): String {
+                if (props.batchInfoText != "") {
+                    return props.batchInfoText
+                }
+                return "已选 " + internalSelectedItems.value.length + " 项"
+            }
+            )
+            val allSelected = computed<Boolean>(fun(): Boolean {
+                if (props.items.length == 0) {
+                    return false
+                }
+                return internalSelectedItems.value.length > 0 && internalSelectedItems.value.length == props.items.length
             }
             )
             val summaryArrowText = computed<String>(fun(): String {
@@ -270,8 +325,8 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 }
                 run {
                     var i: Number = 0
-                    while(i < props.selectedItems.length){
-                        if (props.selectedItems[i] == id) {
+                    while(i < internalSelectedItems.value.length){
+                        if (internalSelectedItems.value[i] == id) {
                             return true
                         }
                         i++
@@ -280,6 +335,35 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return false
             }
             val isSelected = ::gen_isSelected_fn
+            fun gen_emitSelectedItems_fn(nextSelected: UTSArray<String>) {
+                internalSelectedItems.value = nextSelected
+                emit("update:selectedItems", nextSelected)
+                emit("selection-change", nextSelected)
+            }
+            val emitSelectedItems = ::gen_emitSelectedItems_fn
+            fun enterSelectionMode(seedItem: UTSJSONObject? = null) {
+                if (selectionModeActive.value) {
+                    return
+                }
+                internalSelectionMode.value = true
+                emit("update:selectionMode", true)
+                if (seedItem != null) {
+                    val seedId = itemId(seedItem!!)
+                    if (seedId != "") {
+                        emitSelectedItems(_uA(
+                            seedId
+                        ))
+                    }
+                }
+                emit("selection-enter", _uO("item" to seedItem, "selectedItems" to internalSelectedItems.value))
+            }
+            fun gen_exitSelectionMode_fn() {
+                internalSelectionMode.value = false
+                emitSelectedItems(_uA<String>())
+                emit("update:selectionMode", false)
+                emit("selection-exit", _uO("selectedItems" to _uA<String>()))
+            }
+            val exitSelectionMode = ::gen_exitSelectionMode_fn
             fun gen_toggleSelection_fn(item: UTSJSONObject) {
                 val id = itemId(item)
                 if (id == "") {
@@ -289,8 +373,8 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 var removed = false
                 run {
                     var i: Number = 0
-                    while(i < props.selectedItems.length){
-                        val current = props.selectedItems[i]
+                    while(i < internalSelectedItems.value.length){
+                        val current = internalSelectedItems.value[i]
                         if (current == id) {
                             removed = true
                             i++
@@ -303,18 +387,45 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 if (!removed) {
                     nextSelected.push(id)
                 }
-                emit("update:selectedItems", nextSelected)
-                emit("selection-change", nextSelected)
+                emitSelectedItems(nextSelected)
             }
             val toggleSelection = ::gen_toggleSelection_fn
             fun gen_handleItemClick_fn(item: UTSJSONObject) {
-                if (props.selectionMode) {
+                if (selectionModeActive.value) {
                     toggleSelection(item)
                     return
                 }
                 emit("item-click", item)
             }
             val handleItemClick = ::gen_handleItemClick_fn
+            fun gen_handleItemLongPress_fn(item: UTSJSONObject) {
+                if (!props.longPressToSelect) {
+                    return
+                }
+                enterSelectionMode(item)
+            }
+            val handleItemLongPress = ::gen_handleItemLongPress_fn
+            fun gen_toggleSelectAll_fn() {
+                if (allSelected.value) {
+                    emitSelectedItems(_uA<String>())
+                    emit("select-all", _uO("selected" to false, "selectedItems" to _uA<String>()))
+                    return
+                }
+                val nextSelected: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.items.length){
+                        val id = itemId(props.items[i])
+                        if (id != "") {
+                            nextSelected.push(id)
+                        }
+                        i++
+                    }
+                }
+                emitSelectedItems(nextSelected)
+                emit("select-all", _uO("selected" to true, "selectedItems" to nextSelected))
+            }
+            val toggleSelectAll = ::gen_toggleSelectAll_fn
             fun gen_handleSubtitleClick_fn(item: UTSJSONObject) {
                 emit("subtitle-click", _uO("item" to item, "field" to props.subtitleField, "value" to fieldText(item, props.subtitleField)))
             }
@@ -549,6 +660,53 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 emit("floating-add")
             }
             val handleFloatingAdd = ::gen_handleFloatingAdd_fn
+            fun gen_selectedItemObjects_fn(): UTSArray<UTSJSONObject> {
+                val result: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.items.length){
+                        if (isSelected(props.items[i])) {
+                            result.push(props.items[i])
+                        }
+                        i++
+                    }
+                }
+                return result
+            }
+            val selectedItemObjects = ::gen_selectedItemObjects_fn
+            fun gen_handleBatchAction_fn(action: UTSJSONObject) {
+                emit("batch-action", _uO("action" to action, "selectedItems" to internalSelectedItems.value, "selectedRows" to selectedItemObjects()))
+            }
+            val handleBatchAction = ::gen_handleBatchAction_fn
+            watch(fun(): UTSArray<String> {
+                return props.selectedItems
+            }
+            , fun(newValue: UTSArray<String>){
+                val nextSelected: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < newValue.length){
+                        nextSelected.push(newValue[i])
+                        i++
+                    }
+                }
+                internalSelectedItems.value = nextSelected
+            }
+            )
+            watch(fun(): Boolean {
+                return props.selectionMode
+            }
+            , fun(newValue: Boolean){
+                internalSelectionMode.value = newValue
+                if (!newValue && internalSelectedItems.value.length > 0) {
+                    internalSelectedItems.value = _uA<String>()
+                }
+            }
+            )
+            __expose(_uM("enterSelectionMode" to ::enterSelectionMode, "exitSelectionMode" to exitSelectionMode, "toggleSelectAll" to toggleSelectAll, "getSelectedItems" to fun(): UTSArray<String> {
+                return internalSelectedItems.value
+            }
+            ))
             return fun(): Any? {
                 val _component_lili_preview = resolveEasyComponent("lili-preview", GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass)
                 return _cE("view", _uM("class" to "lul-root"), _uA(
@@ -614,10 +772,13 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                     ), "onClick" to fun(){
                                         handleItemClick(item)
                                     }
+                                    , "onLongpress" to fun(){
+                                        handleItemLongPress(item)
+                                    }
                                     ), _uA(
                                         _cE("view", _uM("class" to "lul-card-top"), _uA(
                                             _cE("view", _uM("class" to "lul-card-top-left"), _uA(
-                                                if (isTrue(_ctx.selectionMode)) {
+                                                if (isTrue(unref(selectionModeActive))) {
                                                     _cE("view", _uM("key" to 0, "class" to "lul-check-wrap", "onClick" to withModifiers(fun(){
                                                         toggleSelection(item)
                                                     }, _uA(
@@ -696,7 +857,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                                                 _cC("v-if", true)
                                                             }
                                                         )),
-                                                        if (isTrue(_ctx.showMenu)) {
+                                                        if (isTrue(_ctx.showMenu && !unref(selectionModeActive))) {
                                                             _cE("view", _uM("key" to 0, "class" to "lul-menu-wrap", "onClick" to withModifiers(fun(){
                                                                 handleMenu(item)
                                                             }, _uA(
@@ -710,7 +871,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                                             _cC("v-if", true)
                                                         }
                                                         ,
-                                                        if (isTrue(_ctx.showChevron)) {
+                                                        if (isTrue(_ctx.showChevron && !unref(selectionModeActive))) {
                                                             _cE("view", _uM("key" to 1, "class" to "lul-chevron-wrap"), _uA(
                                                                 _cE("text", _uM("class" to "lul-chevron"), "›")
                                                             ))
@@ -759,8 +920,9 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                                 _cC("v-if", true)
                                             }
                                         ))
-                                    ), 10, _uA(
-                                        "onClick"
+                                    ), 42, _uA(
+                                        "onClick",
+                                        "onLongpress"
                                     ))
                                 }
                                 ), 128),
@@ -814,8 +976,64 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                         _cC("v-if", true)
                     }
                     ,
-                    if (isTrue(props.showFloatingAdd)) {
-                        _cE("view", _uM("key" to 5, "class" to "lul-floating-add", "onClick" to handleFloatingAdd), _uA(
+                    if (isTrue(unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 5, "class" to "lul-batch-spacer"))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 6, "class" to "lul-batch-bar"), _uA(
+                            _cE("view", _uM("class" to "lul-batch-bar-main"), _uA(
+                                if (isTrue(props.showSelectAll)) {
+                                    _cE("view", _uM("key" to 0, "class" to "lul-batch-select-all", "onClick" to toggleSelectAll), _uA(
+                                        _cE("view", _uM("class" to _nC(if (unref(allSelected)) {
+                                            "lul-check lul-check-active"
+                                        } else {
+                                            "lul-check"
+                                        })), _uA(
+                                            if (isTrue(unref(allSelected))) {
+                                                _cE("text", _uM("key" to 0, "class" to "lul-check-icon"), "✓")
+                                            } else {
+                                                _cC("v-if", true)
+                                            }
+                                        ), 2),
+                                        _cE("text", _uM("class" to "lul-batch-select-all-text"), _tD(if (unref(allSelected)) {
+                                            "取消全选"
+                                        } else {
+                                            "全选"
+                                        }), 1)
+                                    ))
+                                } else {
+                                    _cC("v-if", true)
+                                },
+                                _cE("view", _uM("class" to "lul-batch-info"), _uA(
+                                    _cE("text", _uM("class" to "lul-batch-info-text"), _tD(unref(batchInfoText)), 1)
+                                )),
+                                _cE("scroll-view", _uM("scroll-x" to "true", "class" to "lul-batch-actions-scroll"), _uA(
+                                    _cE("view", _uM("class" to "lul-batch-actions"), _uA(
+                                        _cE(Fragment, null, RenderHelpers.renderList(props.batchActions, fun(action, actionIndex, __index, _cached): Any {
+                                            return _cE("view", _uM("key" to actionKey(action, actionIndex), "class" to "lul-batch-action", "onClick" to fun(){
+                                                handleBatchAction(action)
+                                            }), _uA(
+                                                _cE("text", _uM("class" to "lul-batch-action-text"), _tD(actionText(action)), 1)
+                                            ), 8, _uA(
+                                                "onClick"
+                                            ))
+                                        }), 128),
+                                        _cE("view", _uM("class" to "lul-batch-action lul-batch-action-light", "onClick" to exitSelectionMode), _uA(
+                                            _cE("text", _uM("class" to "lul-batch-action-text lul-batch-action-text-light"), "取消")
+                                        ))
+                                    ))
+                                ))
+                            ))
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(props.showFloatingAdd && !unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 7, "class" to "lul-floating-add", "onClick" to handleFloatingAdd), _uA(
                             _cE("text", _uM("class" to "lul-floating-add-text"), _tD(props.floatingAddText), 1)
                         ))
                     } else {
@@ -826,16 +1044,21 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
         }
         val styles: Map<String, Map<String, Map<String, Any>>> by lazy {
             _nCS(_uA(
-                styles0
+                styles0,
+                styles1
             ))
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("lul-root" to _pS(_uM("width" to "100%")), "lul-list" to _pS(_uM("width" to "100%")), "lul-summary-wrap" to _pS(_uM("marginBottom" to 4)), "lul-summary-toggle" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 7, "paddingBottom" to 7, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-toggle-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "minHeight" to 16, "justifyContent" to "center")), "lul-summary-toggle-title" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-summary-toggle-arrow" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "12px", "color" to "#475569")), "lul-summary-panel" to _pS(_uM("marginTop" to 4, "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 6, "paddingBottom" to 6, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-item" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 3, "paddingBottom" to 3)), "lul-summary-item-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "14px", "color" to "#64748B")), "lul-summary-item-value" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-inline-loading" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#EFF6FF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-inline-loading-dot" to _pS(_uM("width" to 8, "height" to 8, "borderTopLeftRadius" to 4, "borderTopRightRadius" to 4, "borderBottomRightRadius" to 4, "borderBottomLeftRadius" to 4, "backgroundColor" to "#2563EB")), "lul-inline-loading-text" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "16px", "color" to "#1D4ED8", "fontWeight" to "600")), "lul-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 6, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-card-selected" to _pS(_uM("backgroundColor" to "#F8FBFF", "borderTopColor" to "#7CC4FF", "borderRightColor" to "#7CC4FF", "borderBottomColor" to "#7CC4FF", "borderLeftColor" to "#7CC4FF")), "lul-card-top" to _pS(_uM("width" to "100%")), "lul-card-top-left" to _pS(_uM("flexDirection" to "row")), "lul-check-wrap" to _pS(_uM("width" to 26, "paddingTop" to 4, "alignItems" to "flex-start")), "lul-check" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1", "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#FFFFFF")), "lul-check-active" to _pS(_uM("borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "backgroundColor" to "#0F172A")), "lul-check-icon" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-cover-wrap" to _pS(_uM("width" to 64, "height" to 64, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "overflow" to "hidden", "backgroundColor" to "#E2E8F0", "position" to "relative", "marginRight" to 8)), "lul-cover" to _pS(_uM("width" to 64, "height" to 64)), "lul-cover-count" to _pS(_uM("position" to "absolute", "right" to 6, "bottom" to 6, "paddingLeft" to 5, "paddingRight" to 5, "paddingTop" to 2, "paddingBottom" to 2, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "rgba(15,23,42,0.72)")), "lul-cover-count-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "lul-headline-row" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between")), "lul-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingRight" to 6)), "lul-title" to _pS(_uM("fontSize" to 15, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "700")), "lul-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#64748B", "marginTop" to 2)), "lul-meta" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#475569", "marginTop" to 2)), "lul-menu-wrap" to _pS(_uM("width" to 24, "height" to 24, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6)), "lul-menu-icon" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#64748B")), "lul-menu-image" to _pS(_uM("width" to 16, "height" to 16)), "lul-chevron-wrap" to _pS(_uM("width" to 16, "alignItems" to "flex-end", "paddingTop" to 1)), "lul-chevron" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "color" to "#94A3B8")), "lul-tags" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 6, "alignItems" to "center")), "lul-tag" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "height" to 22, "paddingLeft" to 8, "paddingRight" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "marginRight" to 5, "marginBottom" to 4)), "lul-tag-info" to _pS(_uM("backgroundColor" to "#E0F2FE")), "lul-tag-success" to _pS(_uM("backgroundColor" to "#DCFCE7")), "lul-tag-warning" to _pS(_uM("backgroundColor" to "#FEF3C7")), "lul-tag-danger" to _pS(_uM("backgroundColor" to "#FEE2E2")), "lul-tag-violet" to _pS(_uM("backgroundColor" to "#EDE9FE")), "lul-tag-muted" to _pS(_uM("backgroundColor" to "#E2E8F0")), "lul-tag-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "16px", "fontWeight" to "600")), "lul-tag-text-info" to _pS(_uM("color" to "#0369A1")), "lul-tag-text-success" to _pS(_uM("color" to "#15803D")), "lul-tag-text-warning" to _pS(_uM("color" to "#B45309")), "lul-tag-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-tag-text-violet" to _pS(_uM("color" to "#6D28D9")), "lul-tag-text-muted" to _pS(_uM("color" to "#475569")), "lul-fields" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8, "paddingTop" to 8, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E7ECF3")), "lul-field-chip" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 8, "paddingRight" to 8, "paddingTop" to 5, "paddingBottom" to 5, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "marginRight" to 5, "marginTop" to 4, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-field-icon" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-value" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-actions" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 14)), "lul-action" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 9, "paddingBottom" to 9, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "marginRight" to 10, "marginTop" to 8, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid")), "lul-action-info" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-action-success" to _pS(_uM("backgroundColor" to "#F0FDF4", "borderTopColor" to "#BBF7D0", "borderRightColor" to "#BBF7D0", "borderBottomColor" to "#BBF7D0", "borderLeftColor" to "#BBF7D0")), "lul-action-warning" to _pS(_uM("backgroundColor" to "#FFF7ED", "borderTopColor" to "#FED7AA", "borderRightColor" to "#FED7AA", "borderBottomColor" to "#FED7AA", "borderLeftColor" to "#FED7AA")), "lul-action-danger" to _pS(_uM("backgroundColor" to "#FEF2F2", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA")), "lul-action-icon" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "marginRight" to 4)), "lul-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "fontWeight" to "700")), "lul-action-text-info" to _pS(_uM("color" to "#1D4ED8")), "lul-action-text-success" to _pS(_uM("color" to "#15803D")), "lul-action-text-warning" to _pS(_uM("color" to "#C2410C")), "lul-action-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-state-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 22, "borderBottomLeftRadius" to 22, "paddingTop" to 34, "paddingBottom" to 34, "paddingLeft" to 20, "paddingRight" to 20, "alignItems" to "center", "justifyContent" to "center", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-empty-badge" to _pS(_uM("width" to 56, "height" to 56, "borderTopLeftRadius" to 28, "borderTopRightRadius" to 28, "borderBottomRightRadius" to 28, "borderBottomLeftRadius" to 28, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "lul-empty-badge-text" to _pS(_uM("fontSize" to 24, "lineHeight" to "24px", "color" to "#64748B")), "lul-loading-dot" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "backgroundColor" to "#0F172A")), "lul-state-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "700", "marginTop" to 14)), "lul-state-desc" to _pS(_uM("fontSize" to 13, "lineHeight" to "19px", "color" to "#64748B", "marginTop" to 6)), "lul-pagination" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingLeft" to 16, "paddingRight" to 16, "paddingTop" to 14, "paddingBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-pagination-summary" to _pS(_uM("flexDirection" to "row", "justifyContent" to "space-between")), "lul-pagination-summary-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B")), "lul-pagination-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 12)), "lul-page-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center")), "lul-page-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "marginLeft" to 10)), "lul-page-btn-disabled" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#E5E7EB", "borderRightColor" to "#E5E7EB", "borderBottomColor" to "#E5E7EB", "borderLeftColor" to "#E5E7EB")), "lul-page-btn-disabled-primary" to _pS(_uM("backgroundColor" to "#CBD5E1", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1")), "lul-page-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#334155", "fontWeight" to "700")), "lul-page-btn-text-light" to _pS(_uM("color" to "#FFFFFF")), "lul-page-btn-text-disabled" to _pS(_uM("color" to "#94A3B8")), "lul-page-btn-text-disabled-light" to _pS(_uM("color" to "#E2E8F0")), "lul-floating-add" to _pS(_uM("position" to "fixed", "right" to 14, "bottom" to 18, "height" to 36, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(15,23,42,0.92)")), "lul-floating-add-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "16px", "color" to "#FFFFFF")))
+                return _uM("lul-root" to _pS(_uM("width" to "100%")), "lul-list" to _pS(_uM("width" to "100%")), "lul-summary-wrap" to _pS(_uM("marginBottom" to 4)), "lul-summary-toggle" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 7, "paddingBottom" to 7, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-toggle-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "minHeight" to 16, "justifyContent" to "center")), "lul-summary-toggle-title" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-summary-toggle-arrow" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "12px", "color" to "#475569")), "lul-summary-panel" to _pS(_uM("marginTop" to 4, "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 6, "paddingBottom" to 6, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-item" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 3, "paddingBottom" to 3)), "lul-summary-item-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "14px", "color" to "#64748B")), "lul-summary-item-value" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-inline-loading" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#EFF6FF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-inline-loading-dot" to _pS(_uM("width" to 8, "height" to 8, "borderTopLeftRadius" to 4, "borderTopRightRadius" to 4, "borderBottomRightRadius" to 4, "borderBottomLeftRadius" to 4, "backgroundColor" to "#2563EB")), "lul-inline-loading-text" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "16px", "color" to "#1D4ED8", "fontWeight" to "600")), "lul-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 6, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-card-selected" to _pS(_uM("backgroundColor" to "#F8FBFF", "borderTopColor" to "#7CC4FF", "borderRightColor" to "#7CC4FF", "borderBottomColor" to "#7CC4FF", "borderLeftColor" to "#7CC4FF")), "lul-card-top" to _pS(_uM("width" to "100%")), "lul-card-top-left" to _pS(_uM("flexDirection" to "row")), "lul-check-wrap" to _pS(_uM("width" to 26, "paddingTop" to 4, "alignItems" to "flex-start")), "lul-check" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1", "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#FFFFFF")), "lul-check-active" to _pS(_uM("borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "backgroundColor" to "#0F172A")), "lul-check-icon" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-cover-wrap" to _pS(_uM("width" to 64, "height" to 64, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "overflow" to "hidden", "backgroundColor" to "#E2E8F0", "position" to "relative", "marginRight" to 8)), "lul-cover" to _pS(_uM("width" to 64, "height" to 64)), "lul-cover-count" to _pS(_uM("position" to "absolute", "right" to 6, "bottom" to 6, "paddingLeft" to 5, "paddingRight" to 5, "paddingTop" to 2, "paddingBottom" to 2, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "rgba(15,23,42,0.72)")), "lul-cover-count-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "lul-headline-row" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between")), "lul-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingRight" to 6)), "lul-title" to _pS(_uM("fontSize" to 15, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "700")), "lul-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#64748B", "marginTop" to 2)), "lul-meta" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#475569", "marginTop" to 2)), "lul-menu-wrap" to _pS(_uM("width" to 24, "height" to 24, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6)), "lul-menu-icon" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#64748B")), "lul-menu-image" to _pS(_uM("width" to 16, "height" to 16)), "lul-chevron-wrap" to _pS(_uM("width" to 16, "alignItems" to "flex-end", "paddingTop" to 1)), "lul-chevron" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "color" to "#94A3B8")), "lul-tags" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 6, "alignItems" to "center")), "lul-tag" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "height" to 22, "paddingLeft" to 8, "paddingRight" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "marginRight" to 5, "marginBottom" to 4)), "lul-tag-info" to _pS(_uM("backgroundColor" to "#E0F2FE")), "lul-tag-success" to _pS(_uM("backgroundColor" to "#DCFCE7")), "lul-tag-warning" to _pS(_uM("backgroundColor" to "#FEF3C7")), "lul-tag-danger" to _pS(_uM("backgroundColor" to "#FEE2E2")), "lul-tag-violet" to _pS(_uM("backgroundColor" to "#EDE9FE")), "lul-tag-muted" to _pS(_uM("backgroundColor" to "#E2E8F0")), "lul-tag-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "16px", "fontWeight" to "600")), "lul-tag-text-info" to _pS(_uM("color" to "#0369A1")), "lul-tag-text-success" to _pS(_uM("color" to "#15803D")), "lul-tag-text-warning" to _pS(_uM("color" to "#B45309")), "lul-tag-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-tag-text-violet" to _pS(_uM("color" to "#6D28D9")), "lul-tag-text-muted" to _pS(_uM("color" to "#475569")), "lul-fields" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8, "paddingTop" to 8, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E7ECF3")), "lul-field-chip" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 8, "paddingRight" to 8, "paddingTop" to 5, "paddingBottom" to 5, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "marginRight" to 5, "marginTop" to 4, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-field-icon" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-value" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-actions" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 14)), "lul-action" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 9, "paddingBottom" to 9, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "marginRight" to 10, "marginTop" to 8, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid")), "lul-action-info" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-action-success" to _pS(_uM("backgroundColor" to "#F0FDF4", "borderTopColor" to "#BBF7D0", "borderRightColor" to "#BBF7D0", "borderBottomColor" to "#BBF7D0", "borderLeftColor" to "#BBF7D0")), "lul-action-warning" to _pS(_uM("backgroundColor" to "#FFF7ED", "borderTopColor" to "#FED7AA", "borderRightColor" to "#FED7AA", "borderBottomColor" to "#FED7AA", "borderLeftColor" to "#FED7AA")), "lul-action-danger" to _pS(_uM("backgroundColor" to "#FEF2F2", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA")), "lul-action-icon" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "marginRight" to 4)), "lul-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "fontWeight" to "700")), "lul-action-text-info" to _pS(_uM("color" to "#1D4ED8")), "lul-action-text-success" to _pS(_uM("color" to "#15803D")), "lul-action-text-warning" to _pS(_uM("color" to "#C2410C")), "lul-action-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-state-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 22, "borderBottomLeftRadius" to 22, "paddingTop" to 34, "paddingBottom" to 34, "paddingLeft" to 20, "paddingRight" to 20, "alignItems" to "center", "justifyContent" to "center", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-empty-badge" to _pS(_uM("width" to 56, "height" to 56, "borderTopLeftRadius" to 28, "borderTopRightRadius" to 28, "borderBottomRightRadius" to 28, "borderBottomLeftRadius" to 28, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "lul-empty-badge-text" to _pS(_uM("fontSize" to 24, "lineHeight" to "24px", "color" to "#64748B")), "lul-loading-dot" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "backgroundColor" to "#0F172A")), "lul-state-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "700", "marginTop" to 14)), "lul-state-desc" to _pS(_uM("fontSize" to 13, "lineHeight" to "19px", "color" to "#64748B", "marginTop" to 6)), "lul-pagination" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingLeft" to 16, "paddingRight" to 16, "paddingTop" to 14, "paddingBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-pagination-summary" to _pS(_uM("flexDirection" to "row", "justifyContent" to "space-between")), "lul-pagination-summary-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B")), "lul-pagination-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 12)), "lul-page-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center")), "lul-page-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "marginLeft" to 10)), "lul-page-btn-disabled" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#E5E7EB", "borderRightColor" to "#E5E7EB", "borderBottomColor" to "#E5E7EB", "borderLeftColor" to "#E5E7EB")), "lul-page-btn-disabled-primary" to _pS(_uM("backgroundColor" to "#CBD5E1", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1")), "lul-page-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#334155", "fontWeight" to "700")), "lul-page-btn-text-light" to _pS(_uM("color" to "#FFFFFF")), "lul-page-btn-text-disabled" to _pS(_uM("color" to "#94A3B8")), "lul-page-btn-text-disabled-light" to _pS(_uM("color" to "#E2E8F0")), "lul-floating-add" to _pS(_uM("position" to "fixed", "right" to 14, "bottom" to 18, "height" to 36, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(15,23,42,0.92)")), "lul-floating-add-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "16px", "color" to "#FFFFFF")), "lul-batch-bar" to _pS(_uM("position" to "fixed", "left" to 0, "right" to 0, "bottom" to 0, "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 10, "paddingBottom" to 14, "backgroundColor" to "rgba(255,255,255,0.98)", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E2E8F0")), "lul-batch-spacer" to _pS(_uM("height" to 72)), "lul-batch-bar-main" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "lul-batch-select-all" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "minWidth" to 84)), "lul-batch-select-all-text" to _pS(_uM("marginLeft" to 8, "fontSize" to 13, "lineHeight" to "16px", "color" to "#0F172A", "fontWeight" to "600")), "lul-batch-info" to _pS(_uM("marginLeft" to 12, "marginRight" to 12)), "lul-batch-info-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#64748B")), "lul-batch-actions-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "lul-batch-actions" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "flex-end")), "lul-batch-action" to _pS(_uM("height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 8)), "lul-batch-action-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")))
+            }
+        val styles1: Map<String, Map<String, Map<String, Any>>>
+            get() {
+                return _uM("lul-batch-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#FFFFFF", "fontWeight" to "700")), "lul-batch-action-text-light" to _pS(_uM("color" to "#475569")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()
-        var emits: Map<String, Any?> = _uM("item-click" to null, "action" to null, "update:selectedItems" to null, "selection-change" to null, "image-preview" to null, "preview-close" to null, "menu" to null, "page-change" to null, "subtitle-click" to null, "field-click" to null, "meta-click" to null, "floating-add" to null)
+        var emits: Map<String, Any?> = _uM("item-click" to null, "action" to null, "batch-action" to null, "update:selectedItems" to null, "update:selectionMode" to null, "selection-change" to null, "selection-enter" to null, "selection-exit" to null, "select-all" to null, "image-preview" to null, "preview-close" to null, "menu" to null, "page-change" to null, "subtitle-click" to null, "field-click" to null, "meta-click" to null, "floating-add" to null)
         var props = _nP(_uM("items" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
             return _uA()
         }
@@ -854,7 +1077,10 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
         ), "selectionMode" to _uM("type" to "Boolean", "required" to false, "default" to false), "selectedItems" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
-        ), "loading" to _uM("type" to "Boolean", "required" to false, "default" to false), "loadingText" to _uM("type" to "String", "required" to false, "default" to "加载中..."), "keepContentOnLoading" to _uM("type" to "Boolean", "required" to false, "default" to false), "inlineLoadingText" to _uM("type" to "String", "required" to false, "default" to "刷新中..."), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "emptyIcon" to _uM("type" to "String", "required" to false, "default" to "◌"), "showChevron" to _uM("type" to "Boolean", "required" to false, "default" to true), "showMenu" to _uM("type" to "Boolean", "required" to false, "default" to false), "menuActions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+        ), "longPressToSelect" to _uM("type" to "Boolean", "required" to false, "default" to true), "showSelectAll" to _uM("type" to "Boolean", "required" to false, "default" to true), "batchActions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "batchInfoText" to _uM("type" to "String", "required" to false, "default" to ""), "loading" to _uM("type" to "Boolean", "required" to false, "default" to false), "loadingText" to _uM("type" to "String", "required" to false, "default" to "加载中..."), "keepContentOnLoading" to _uM("type" to "Boolean", "required" to false, "default" to false), "inlineLoadingText" to _uM("type" to "String", "required" to false, "default" to "刷新中..."), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "emptyIcon" to _uM("type" to "String", "required" to false, "default" to "◌"), "showChevron" to _uM("type" to "Boolean", "required" to false, "default" to true), "showMenu" to _uM("type" to "Boolean", "required" to false, "default" to false), "menuActions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
             return _uA()
         }
         ), "showPagination" to _uM("type" to "Boolean", "required" to false, "default" to false), "currentPage" to _uM("type" to "Number", "required" to false, "default" to 1), "totalPages" to _uM("type" to "Number", "required" to false, "default" to 1), "totalCount" to _uM("type" to "Number", "required" to false, "default" to 0), "summaryTitle" to _uM("type" to "String", "required" to false, "default" to "统计信息"), "summaryItems" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
@@ -877,6 +1103,10 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             "actions",
             "selectionMode",
             "selectedItems",
+            "longPressToSelect",
+            "showSelectAll",
+            "batchActions",
+            "batchInfoText",
             "loading",
             "loadingText",
             "keepContentOnLoading",

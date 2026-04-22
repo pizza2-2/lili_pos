@@ -16,6 +16,7 @@ import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
+import io.dcloud.uniapp.extapi.showActionSheet as uni_showActionSheet
 import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesSuppliersIndex : BasePage {
@@ -42,8 +43,12 @@ open class GenPagesSuppliersIndex : BasePage {
             val globalStatistics = ref<SupplierGlobalStatisticsResponse?>(null)
             val selectedIsActive = ref<String?>(null)
             val selectedHasArrears = ref<String?>(null)
+            val selectionMode = ref(false)
+            val selectedSupplierIds = ref(_uA<String>())
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "phone", "label" to "电话"), _uO("key" to "address", "label" to "地址"), _uO("key" to "arrears_amount", "label" to "欠款")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "详情"), _uO("key" to "add", "text" to "增加"), _uO("key" to "delete", "text" to "删除")))
+            val batchToolbarActions = ref(_uA<UTSJSONObject>(_uO("key" to "more", "text" to "操作")))
+            val defaultBatchActionMap = ref(_uA<UTSJSONObject>(_uO("key" to "activate", "text" to "批量启用"), _uO("key" to "deactivate", "text" to "批量停用"), _uO("key" to "delete", "text" to "批量删除")))
             fun gen_applySupplierResponse_fn(response: SupplierListResponse) {
                 suppliers.value = response.results
                 currentPage.value = response.current_page
@@ -65,7 +70,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:181")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:200")
                         if (parsedError != null) {
                             val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
@@ -83,6 +88,122 @@ open class GenPagesSuppliersIndex : BasePage {
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
+            fun gen_currentSelectedSuppliers_fn(): UTSArray<SupplierItem> {
+                val result: UTSArray<SupplierItem> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < suppliers.value.length){
+                        val supplier = suppliers.value[index]
+                        val supplierId = supplier.id.toString(10)
+                        if (selectedSupplierIds.value.includes(supplierId)) {
+                            result.push(supplier)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val currentSelectedSuppliers = ::gen_currentSelectedSuppliers_fn
+            fun gen_clearSelectionState_fn() {
+                selectionMode.value = false
+                selectedSupplierIds.value = _uA<String>()
+            }
+            val clearSelectionState = ::gen_clearSelectionState_fn
+            fun gen_handleSelectionModeChange_fn(value: Boolean) {
+                selectionMode.value = value
+                if (!value) {
+                    selectedSupplierIds.value = _uA<String>()
+                }
+            }
+            val handleSelectionModeChange = ::gen_handleSelectionModeChange_fn
+            fun gen_handleSelectedSupplierIdsChange_fn(value: UTSArray<String>) {
+                val nextIds: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < value.length){
+                        nextIds.push(value[index])
+                        index += 1
+                    }
+                }
+                selectedSupplierIds.value = nextIds
+            }
+            val handleSelectedSupplierIdsChange = ::gen_handleSelectedSupplierIdsChange_fn
+            fun gen_handleSelectionExit_fn(payload: UTSJSONObject) {
+                clearSelectionState()
+            }
+            val handleSelectionExit = ::gen_handleSelectionExit_fn
+            fun gen_fieldStringFromObject_fn(obj: UTSJSONObject, key: String): String {
+                val value = obj[key]
+                if (value == null) {
+                    return ""
+                }
+                return "" + value
+            }
+            val fieldStringFromObject = ::gen_fieldStringFromObject_fn
+            fun gen_batchActionCandidatesFromSupplier_fn(item: SupplierItem): UTSArray<String> {
+                val rawItemText = JSON.stringify(item)
+                val rawItem = if (rawItemText == null || rawItemText == "") {
+                    null
+                } else {
+                    UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:264")
+                }
+                if (rawItem == null) {
+                    return _uA()
+                }
+                val rawActions = rawItem["batch_actions"]
+                if (rawActions == null) {
+                    return _uA()
+                }
+                val text = JSON.stringify(rawActions)
+                val parsed = if (text == null || text == "") {
+                    null
+                } else {
+                    UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:273")
+                }
+                if (parsed == null) {
+                    return _uA()
+                }
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < parsed!!.length){
+                        val key = fieldStringFromObject(parsed!![index], "key")
+                        if (key != "") {
+                            result.push(key)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val batchActionCandidatesFromSupplier = ::gen_batchActionCandidatesFromSupplier_fn
+            fun gen_resolveBatchActions_fn(): UTSArray<UTSJSONObject> {
+                val selectedSuppliers = currentSelectedSuppliers()
+                if (selectedSuppliers.length == 0) {
+                    return _uA<UTSJSONObject>()
+                }
+                val firstActionKeys = batchActionCandidatesFromSupplier(selectedSuppliers[0])
+                if (firstActionKeys.length == 0) {
+                    return defaultBatchActionMap.value
+                }
+                val result: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var mapIndex: Number = 0
+                    while(mapIndex < defaultBatchActionMap.value.length){
+                        val action = defaultBatchActionMap.value[mapIndex]
+                        val actionKey = fieldStringFromObject(action, "key")
+                        if (firstActionKeys.includes(actionKey)) {
+                            result.push(action)
+                        }
+                        mapIndex += 1
+                    }
+                }
+                if (result.length == 0) {
+                    return defaultBatchActionMap.value
+                }
+                return result
+            }
+            val resolveBatchActions = ::gen_resolveBatchActions_fn
             fun gen_loadSuppliers_fn(): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (isLoading.value) {
@@ -97,7 +218,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 keyword.value
                             }
                             , page = currentPage.value, page_size = pageSize.value, is_active = selectedIsActive.value, has_arrears = selectedHasArrears.value)))
-                            console.log(response, " at pages/suppliers/index.uvue:215")
+                            console.log(response, " at pages/suppliers/index.uvue:326")
                             applySupplierResponse(response)
                         }
                          catch (error: Throwable) {
@@ -140,6 +261,118 @@ open class GenPagesSuppliersIndex : BasePage {
                 })
             }
             val loadSupplierGlobalStatistics = ::gen_loadSupplierGlobalStatistics_fn
+            fun gen_batchActionTitle_fn(actionKey: String): String {
+                if (actionKey == "activate") {
+                    return "批量启用"
+                }
+                if (actionKey == "deactivate") {
+                    return "批量停用"
+                }
+                if (actionKey == "delete") {
+                    return "批量删除"
+                }
+                if (actionKey == "restore") {
+                    return "批量恢复"
+                }
+                return "批量操作"
+            }
+            val batchActionTitle = ::gen_batchActionTitle_fn
+            fun gen_batchActionConfirmText_fn(actionKey: String, count: Number): String {
+                if (actionKey == "activate") {
+                    return "确定批量启用选中的 " + count + " 个供应商吗？"
+                }
+                if (actionKey == "deactivate") {
+                    return "确定批量停用选中的 " + count + " 个供应商吗？"
+                }
+                if (actionKey == "delete") {
+                    return "确定批量删除选中的 " + count + " 个供应商吗？"
+                }
+                if (actionKey == "restore") {
+                    return "确定批量恢复选中的 " + count + " 个供应商吗？"
+                }
+                return "确定执行批量操作吗？"
+            }
+            val batchActionConfirmText = ::gen_batchActionConfirmText_fn
+            fun gen_executeSupplierBatchAction_fn(actionKey: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        val ids = selectedSupplierIds.value
+                        if (ids.length == 0) {
+                            uni_showToast(ShowToastOptions(title = "请先选择供应商", icon = "none"))
+                            return@w1
+                        }
+                        try {
+                            if (actionKey == "activate") {
+                                await(batchActivateSuppliers(ids))
+                            } else if (actionKey == "deactivate") {
+                                await(batchDeactivateSuppliers(ids))
+                            } else if (actionKey == "delete") {
+                                await(batchDeleteSuppliers(ids))
+                            } else {
+                                uni_showToast(ShowToastOptions(title = "暂不支持该操作", icon = "none"))
+                                return@w1
+                            }
+                            uni_showToast(ShowToastOptions(title = batchActionTitle(actionKey) + "成功", icon = "success"))
+                            clearSelectionState()
+                            loadSuppliers()
+                            loadSupplierGlobalStatistics()
+                        }
+                         catch (error: Throwable) {
+                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                        }
+                })
+            }
+            val executeSupplierBatchAction = ::gen_executeSupplierBatchAction_fn
+            fun gen_confirmSupplierBatchAction_fn(actionKey: String) {
+                val count = selectedSupplierIds.value.length
+                uni_showModal(ShowModalOptions(title = batchActionTitle(actionKey), content = batchActionConfirmText(actionKey, count), success = fun(res){
+                    if (!res.confirm) {
+                        return
+                    }
+                    executeSupplierBatchAction(actionKey)
+                }
+                ))
+            }
+            val confirmSupplierBatchAction = ::gen_confirmSupplierBatchAction_fn
+            fun gen_openSupplierBatchActionSheet_fn() {
+                val availableActions = resolveBatchActions()
+                if (availableActions.length == 0) {
+                    uni_showToast(ShowToastOptions(title = "暂无可执行操作", icon = "none"))
+                    return
+                }
+                val itemList: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < availableActions.length){
+                        itemList.push(fieldStringFromObject(availableActions[index], "text"))
+                        index += 1
+                    }
+                }
+                uni_showActionSheet(ShowActionSheetOptions(itemList = itemList, success = fun(res){
+                    val selectedIndex = res.tapIndex
+                    if (selectedIndex < 0 || selectedIndex >= availableActions.length) {
+                        return
+                    }
+                    val actionKey = fieldStringFromObject(availableActions[selectedIndex], "key")
+                    if (actionKey == "") {
+                        return
+                    }
+                    confirmSupplierBatchAction(actionKey)
+                }
+                ))
+            }
+            val openSupplierBatchActionSheet = ::gen_openSupplierBatchActionSheet_fn
+            fun gen_handleBatchToolbarAction_fn(payload: UTSJSONObject) {
+                val actionValue = payload["action"]
+                if (actionValue == null) {
+                    return
+                }
+                val action = actionValue as UTSJSONObject
+                val actionKey = fieldStringFromObject(action, "key")
+                if (actionKey == "more") {
+                    openSupplierBatchActionSheet()
+                }
+            }
+            val handleBatchToolbarAction = ::gen_handleBatchToolbarAction_fn
             fun gen_consumeSupplierListRefreshNeeded_fn(): Boolean {
                 val storedValue = uni_getStorageSync(supplierListRefreshStorageKey)
                 if (storedValue == null) {
@@ -660,7 +893,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "contactText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载供应商", "keepContentOnLoading" to true, "inlineLoadingText" to "供应商数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "供应商统计", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateSupplier), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "contactText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载供应商", "keepContentOnLoading" to true, "inlineLoadingText" to "供应商数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "selectionMode" to unref(selectionMode), "selectedItems" to unref(selectedSupplierIds), "batchActions" to unref(batchToolbarActions), "summaryTitle" to "供应商统计", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增", "onUpdate:selectionMode" to handleSelectionModeChange, "onUpdate:selectedItems" to handleSelectedSupplierIdsChange, "onSelectionExit" to handleSelectionExit, "onBatchAction" to handleBatchToolbarAction, "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreateSupplier), null, 8, _uA(
                                 "items",
                                 "fields",
                                 "loading",
@@ -669,6 +902,9 @@ open class GenPagesSuppliersIndex : BasePage {
                                 "currentPage",
                                 "totalPages",
                                 "totalCount",
+                                "selectionMode",
+                                "selectedItems",
+                                "batchActions",
                                 "summaryItems"
                             ))
                         ))

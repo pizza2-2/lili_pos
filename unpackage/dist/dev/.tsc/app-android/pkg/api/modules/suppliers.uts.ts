@@ -98,6 +98,12 @@ export type SupplierMutationData = {
 	company_infos: UTSJSONObject[] | null
 }
 
+export type SupplierBatchActionResponse = {
+	success: boolean
+	message: string
+	data: UTSJSONObject
+}
+
 function buildListQuery(data: SupplierListQuery): UTSJSONObject {
 	const query = {
 		page: data.page,
@@ -494,6 +500,47 @@ function supplierDetailPath(id: number | string): string {
 	return '/api/procurement/suppliers/' + stringValue(id) + '/'
 }
 
+function buildBatchActionBody(ids: string[], remark: string | null = null): UTSJSONObject {
+	const nextIds: any[] = []
+	for (let index = 0; index < ids.length; index += 1) {
+		const text = stringValue(ids[index])
+		const parsed = parseInt(text)
+		if (!isNaN(parsed) && '' + parsed == text) {
+			nextIds.push(parsed)
+		} else {
+			nextIds.push(text)
+		}
+	}
+	const body = {
+		ids: nextIds,
+	} as UTSJSONObject
+	if (remark != null && remark != '') {
+		body['remark'] = remark
+	}
+	return body
+}
+
+function supplierBatchActionPath(action: string): string {
+	return '/api/procurement/suppliers/batch-actions/' + action + '/'
+}
+
+function buildSupplierBatchActionResponse(raw: any): SupplierBatchActionResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		return {
+			success: true,
+			message: '操作成功',
+			data: {} as UTSJSONObject,
+		} as SupplierBatchActionResponse
+	}
+	return {
+		success: true,
+		message: stringValue(rawObject['message']),
+		data: rawObject,
+	} as SupplierBatchActionResponse
+}
+
 export async function getSupplierList(data: SupplierListQuery): Promise<SupplierListResponse> {
 	const raw = await request(
 		'/api/procurement/suppliers/',
@@ -623,4 +670,44 @@ export async function deactivateSupplier(id: number | string): Promise<SupplierI
 		true
 	)
 	return buildSupplierItemResponse(raw)
+}
+
+export async function batchActivateSuppliers(ids: string[], remark: string | null = null): Promise<SupplierBatchActionResponse> {
+	const raw = await request(
+		supplierBatchActionPath('activate'),
+		'POST',
+		buildBatchActionBody(ids, remark),
+		true
+	)
+	return buildSupplierBatchActionResponse(raw)
+}
+
+export async function batchDeactivateSuppliers(ids: string[], remark: string | null = null): Promise<SupplierBatchActionResponse> {
+	const raw = await request(
+		supplierBatchActionPath('deactivate'),
+		'POST',
+		buildBatchActionBody(ids, remark),
+		true
+	)
+	return buildSupplierBatchActionResponse(raw)
+}
+
+export async function batchDeleteSuppliers(ids: string[], remark: string | null = null): Promise<SupplierBatchActionResponse> {
+	const raw = await request(
+		supplierBatchActionPath('delete'),
+		'POST',
+		buildBatchActionBody(ids, remark),
+		true
+	)
+	return buildSupplierBatchActionResponse(raw)
+}
+
+export async function batchRestoreSuppliers(ids: string[], remark: string | null = null): Promise<SupplierBatchActionResponse> {
+	const raw = await request(
+		supplierBatchActionPath('restore'),
+		'POST',
+		buildBatchActionBody(ids, remark),
+		true
+	)
+	return buildSupplierBatchActionResponse(raw)
 }

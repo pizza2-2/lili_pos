@@ -1,7 +1,8 @@
-import { authState } from '@/store/auth'
+import { authState, redirectToLogin } from '@/store/auth'
 
 export const baseUrl: string = 'http://192.168.0.163:8000'		//服务器请求接口地址
 export const timeOut: number = 10000							//网络请求超时时间
+const loginApiUrl = '/api/accounts/auth/login/'
 
 // 服务器返回通用格式
 type RootType= {
@@ -36,6 +37,13 @@ function requestIntercept(reqData:UTSJSONObject):Map<string,UTSJSONObject>{
 	return map
 }
 
+function shouldHandleUnauthorized(url: string) : boolean {
+	if (url == loginApiUrl) {
+		return false
+	}
+	return true
+}
+
 //发送请求，url：请求地址，method：请求方式，reqData：请求数据，showLoading：是否显示loading，默认不显示
 export async function request(url:string, method:RequestMethod, reqData:UTSJSONObject = {},showLoading:boolean = false): Promise<any> {
 	return new Promise((resolve,reject) => {
@@ -43,7 +51,7 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 			uni.showLoading({ title: 'loading' })
 		}
 		const interceptMap = requestIntercept(reqData)	//请求拦截，返回的是header和data
-		__f__('log','at pkg/api/index.uts:46','请求地址:', baseUrl + url)
+		__f__('log','at pkg/api/index.uts:54','请求地址:', baseUrl + url)
 		uni.request<RootType>({
 			url: baseUrl + url,
 			method: method,
@@ -72,6 +80,13 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 					}
 					// 兼容后端直接返回对象/数组（无 success 包裹）
 					resolve(res.data)
+					return
+				}
+				if (res.statusCode == 401) {
+					if (shouldHandleUnauthorized(url)) {
+						redirectToLogin('登录状态已失效，请重新登录')
+					}
+					reject(new Error('登录状态已失效'))
 					return
 				}
 				//可以做其它判断....

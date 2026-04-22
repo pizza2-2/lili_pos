@@ -18,6 +18,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
     constructor(__ins: ComponentInternalInstance) : super(__ins) {}
     open var fetchData: (params: UTSJSONObject) -> UTSPromise<UTSJSONObject> by `$props`
     open var value: String by `$props`
+    open var valueText: String by `$props`
     open var values: UTSArray<String> by `$props`
     open var multiple: Boolean by `$props`
     open var placeholder: String by `$props`
@@ -126,8 +127,8 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             val overlayVisible = ref<Boolean>(false)
             val panelVisible = ref<Boolean>(false)
             val internalValue = ref<String>(props.value ?: "")
-            val internalText = ref<String>("")
-            val textInitialized = ref<Boolean>(false)
+            val internalText = ref<String>(props.valueText ?: "")
+            val textInitialized = ref<Boolean>((props.valueText ?: "") != "")
             val selectedItems = ref(_uA<UTSJSONObject>())
             val keyword = ref<String>("")
             val displayList = ref(_uA<UTSJSONObject>())
@@ -274,7 +275,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             }
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:348")
+                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:350")
                             uni_showToast(ShowToastOptions(title = "数据加载失败", icon = "none"))
                         }
                          finally {
@@ -305,7 +306,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             }
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:369")
+                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:371")
                         }
                 })
             }
@@ -341,13 +342,31 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 if (newVal != internalValue.value) {
                     internalValue.value = newVal
                     if (newVal != "") {
-                        if (!textInitialized.value) {
+                        if (props.valueText != "") {
+                            internalText.value = props.valueText
+                            textInitialized.value = true
+                        } else if (!textInitialized.value) {
                             fetchTextByValue(newVal)
                         }
                     } else {
                         internalText.value = ""
                         textInitialized.value = false
                     }
+                }
+            }
+            )
+            watch(fun(): String {
+                return props.valueText ?: ""
+            }
+            , fun(newText: String){
+                if (newText != "") {
+                    internalText.value = newText
+                    textInitialized.value = true
+                    return
+                }
+                if (internalValue.value == "") {
+                    internalText.value = ""
+                    textInitialized.value = false
                 }
             }
             )
@@ -373,7 +392,12 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 }
                 panelStyle.value = "height:" + panelH + "px;"
                 if (!props.multiple && internalValue.value != "") {
-                    fetchTextByValue(internalValue.value)
+                    if (props.valueText != "") {
+                        internalText.value = props.valueText
+                        textInitialized.value = true
+                    } else {
+                        fetchTextByValue(internalValue.value)
+                    }
                 }
                 if (props.multiple && props.values.length > 0) {
                     syncMultiValuesFromProps(props.values)
@@ -887,12 +911,13 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()
         var emits: Map<String, Any?> = _uM("change" to null, "multiChange" to null, "open" to null, "close" to null, "edit" to null, "add" to null)
-        var props = _nP(_uM("fetchData" to _uM("type" to "Function", "required" to true), "value" to _uM("type" to "String", "required" to false, "default" to ""), "values" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
+        var props = _nP(_uM("fetchData" to _uM("type" to "Function", "required" to true), "value" to _uM("type" to "String", "required" to false, "default" to ""), "valueText" to _uM("type" to "String", "required" to false, "default" to ""), "values" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
         ), "multiple" to _uM("type" to "Boolean", "required" to false, "default" to false), "placeholder" to _uM("type" to "String", "required" to false, "default" to "请选择"), "title" to _uM("type" to "String", "required" to false, "default" to "请选择"), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入关键词搜索"), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "disabled" to _uM("type" to "Boolean", "required" to false, "default" to false), "labelKey" to _uM("type" to "String", "required" to false, "default" to "text"), "valueKey" to _uM("type" to "String", "required" to false, "default" to "value"), "pageSize" to _uM("type" to "Number", "required" to false, "default" to 20), "searchDelay" to _uM("type" to "Number", "required" to false, "default" to 300), "closeOnOverlay" to _uM("type" to "Boolean", "required" to false, "default" to true), "showEditAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showAddAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "editActionText" to _uM("type" to "String", "required" to false, "default" to "编辑"), "addActionText" to _uM("type" to "String", "required" to false, "default" to "新增")))
         var propsNeedCastKeys = _uA(
             "value",
+            "valueText",
             "values",
             "multiple",
             "placeholder",
