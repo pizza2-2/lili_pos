@@ -51,7 +51,7 @@ open class GenPagesTransactionsFrom : BasePage {
             }
             val getArrayField = ::gen_getArrayField_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 90, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 91, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -67,7 +67,7 @@ open class GenPagesTransactionsFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:106")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:107")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -376,17 +376,20 @@ open class GenPagesTransactionsFrom : BasePage {
                         uni_showLoading(ShowLoadingOptions(title = savingText.value, mask = true))
                         try {
                             val body = buildTransactionMutationPayload(data)
+                            var successMessage = actionText + "成功"
                             if (body.supplier == "") {
                                 throw UTSError("供应商ID缺失")
                             }
                             if (formMode.value == "edit" && transactionId.value != "") {
                                 savingText.value = "保存修改中..."
                                 await(updateTransaction(transactionId.value, body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                                 savingText.value = "上传图片中..."
                                 await(uploadPendingTransactionImages(data, uploadContentTypeModel))
                             } else {
                                 savingText.value = "创建采购记录中..."
                                 val createdTransaction = await(createTransaction(body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                                 transactionId.value = createdTransaction.id.toString(10)
                                 supplierId.value = createdTransaction.supplier.toString(10)
                                 try {
@@ -399,7 +402,7 @@ open class GenPagesTransactionsFrom : BasePage {
                             }
                             clearDraftStorage()
                             markTransactionListRefreshNeeded()
-                            uni_showToast(ShowToastOptions(title = actionText + "成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
                             goBackToList()
                         }
                          catch (error: Throwable) {

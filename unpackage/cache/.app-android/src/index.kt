@@ -124,7 +124,7 @@ fun tryConnectSocket(host: String, port: String, id: String): UTSPromise<SocketT
     )
 }
 fun initRuntimeSocketService(): UTSPromise<Boolean> {
-    val hosts: String = "192.168.0.163,127.0.0.1,172.27.192.1"
+    val hosts: String = "192.168.43.173,127.0.0.1,172.27.192.1"
     val port: String = "8090"
     val id: String = "app-android_sg-u87"
     if (hosts == "" || port == "" || id == "") {
@@ -521,7 +521,7 @@ val GenAppClass = CreateVueAppComponent(GenApp::class.java, fun(): VueComponentO
     return GenApp(instance)
 }
 )
-val baseUrl: String = "http://192.168.0.163:8000"
+val baseUrl: String = "http://192.168.43.173:8000"
 val timeOut: Number = 10000
 val loginApiUrl = "/api/accounts/auth/login/"
 open class RootType (
@@ -542,9 +542,44 @@ open class RootType (
         return UTSSourceMapPosition("RootType", "pkg/api/index.uts", 6, 6)
     }
 }
+open class ResponseMeta (
+    @JsonNotNull
+    open var success: Boolean = false,
+    @JsonNotNull
+    open var status: String,
+    @JsonNotNull
+    open var status_code: Number,
+    @JsonNotNull
+    open var message: String,
+    @JsonNotNull
+    open var timestamp: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ResponseMeta", "pkg/api/index.uts", 14, 6)
+    }
+}
+var latestResponseMeta: ResponseMeta? = null
+fun clearLatestResponseMeta() {
+    latestResponseMeta = null
+}
+fun saveLatestResponseMeta(response: RootType) {
+    latestResponseMeta = ResponseMeta(success = response.success, status = response.status, status_code = response.status_code, message = response.message, timestamp = response.timestamp)
+}
+fun takeLatestResponseMessage(fallback: String = ""): String {
+    if (latestResponseMeta == null) {
+        return fallback
+    }
+    val message = if (latestResponseMeta!!.message != "") {
+        latestResponseMeta!!.message
+    } else {
+        fallback
+    }
+    clearLatestResponseMeta()
+    return message
+}
 fun requestIntercept(reqData: UTSJSONObject): Map<String, UTSJSONObject> {
     val map = Map<String, UTSJSONObject>()
-    val header: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("header", "pkg/api/index.uts", 18, 11), "content-type" to "application/json")
+    val header: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("header", "pkg/api/index.uts", 46, 11), "content-type" to "application/json")
     if (authState.token != "") {
         header["Authorization"] = authState.token
     }
@@ -563,39 +598,46 @@ fun shouldHandleUnauthorized(url: String): Boolean {
 fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), showLoading: Boolean = false): UTSPromise<Any> {
     return wrapUTSPromise(suspend w@{
             return@w UTSPromise(fun(resolve, reject){
+                clearLatestResponseMeta()
                 if (showLoading) {
                     uni_showLoading(ShowLoadingOptions(title = "loading"))
                 }
                 val interceptMap = requestIntercept(reqData)
-                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:54")
+                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:88")
                 uni_request<RootType>(RequestOptions(url = baseUrl + url, method = method, header = interceptMap.get("header"), data = interceptMap.get("data"), timeout = timeOut, success = fun(res){
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         if (res.data != null && res.data!!.success == true) {
+                            saveLatestResponseMeta(res.data as RootType)
                             resolve(res.data!!.data)
                             return
                         }
                         if (res.data != null && res.data!!.success == false) {
+                            clearLatestResponseMeta()
                             reject(UTSError(res.data?.message ?: "请求失败"))
                             return
                         }
+                        clearLatestResponseMeta()
                         resolve(res.data)
                         return
                     }
                     if (res.statusCode == 401) {
+                        clearLatestResponseMeta()
                         if (shouldHandleUnauthorized(url)) {
                             redirectToLogin("登录状态已失效，请重新登录")
                         }
                         reject(UTSError("登录状态已失效"))
                         return
                     }
+                    clearLatestResponseMeta()
                     reject(UTSError("HTTP状态码错误: " + res.statusCode))
                 }
                 , fail = fun(err){
+                    clearLatestResponseMeta()
                     var message = "网络请求失败"
                     if (err != null) {
                         val errorText = JSON.stringify(err)
                         if (errorText != null && errorText != "") {
-                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:90")
+                            val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pkg/api/index.uts:125")
                             if (parsedError != null) {
                                 val errMsg = parsedError!!["errMsg"]
                                 if (errMsg != null) {
@@ -722,8 +764,1297 @@ val GenPagesTabbarReportsClass = CreateVueComponent(GenPagesTabbarReports::class
     return GenPagesTabbarReports(instance, renderer)
 }
 )
+open class ProductListQuery (
+    open var search: String? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+    @JsonNotNull
+    open var filters: UTSArray<ProductSelectedFilter>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductListQuery", "pkg/api/modules/products.uts", 2, 13)
+    }
+}
+open class ProductSelectedFilter (
+    @JsonNotNull
+    open var param: String,
+    @JsonNotNull
+    open var value: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSelectedFilter", "pkg/api/modules/products.uts", 8, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductSelectedFilterReactiveObject : ProductSelectedFilter, IUTSReactive<ProductSelectedFilter> {
+    override var __v_raw: ProductSelectedFilter
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductSelectedFilter, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(param = __v_raw.param, value = __v_raw.value) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductSelectedFilterReactiveObject {
+        return ProductSelectedFilterReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var param: String
+        get() {
+            return _tRG(__v_raw, "param", __v_raw.param, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("param")) {
+                return
+            }
+            val oldValue = __v_raw.param
+            __v_raw.param = value
+            _tRS(__v_raw, "param", oldValue, value)
+        }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+}
+open class ProductMediaFile (
+    @JsonNotNull
+    open var id: String,
+    @JsonNotNull
+    open var company: Number,
+    @JsonNotNull
+    open var original_filename: String,
+    @JsonNotNull
+    open var file_type: String,
+    @JsonNotNull
+    open var file_type_display: String,
+    @JsonNotNull
+    open var mime_type: String,
+    @JsonNotNull
+    open var file_size: Number,
+    @JsonNotNull
+    open var file_size_display: String,
+    @JsonNotNull
+    open var file_url: String,
+    @JsonNotNull
+    open var thumbnail_url: String,
+    @JsonNotNull
+    open var signed_url: String,
+    @JsonNotNull
+    open var signed_thumbnail_url: String,
+    @JsonNotNull
+    open var object_id: String,
+    @JsonNotNull
+    open var is_deleted: Boolean = false,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductMediaFile", "pkg/api/modules/products.uts", 12, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductMediaFileReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductMediaFileReactiveObject : ProductMediaFile, IUTSReactive<ProductMediaFile> {
+    override var __v_raw: ProductMediaFile
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductMediaFile, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, original_filename = __v_raw.original_filename, file_type = __v_raw.file_type, file_type_display = __v_raw.file_type_display, mime_type = __v_raw.mime_type, file_size = __v_raw.file_size, file_size_display = __v_raw.file_size_display, file_url = __v_raw.file_url, thumbnail_url = __v_raw.thumbnail_url, signed_url = __v_raw.signed_url, signed_thumbnail_url = __v_raw.signed_thumbnail_url, object_id = __v_raw.object_id, is_deleted = __v_raw.is_deleted, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductMediaFileReactiveObject {
+        return ProductMediaFileReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: String
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var company: Number
+        get() {
+            return _tRG(__v_raw, "company", __v_raw.company, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("company")) {
+                return
+            }
+            val oldValue = __v_raw.company
+            __v_raw.company = value
+            _tRS(__v_raw, "company", oldValue, value)
+        }
+    override var original_filename: String
+        get() {
+            return _tRG(__v_raw, "original_filename", __v_raw.original_filename, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("original_filename")) {
+                return
+            }
+            val oldValue = __v_raw.original_filename
+            __v_raw.original_filename = value
+            _tRS(__v_raw, "original_filename", oldValue, value)
+        }
+    override var file_type: String
+        get() {
+            return _tRG(__v_raw, "file_type", __v_raw.file_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type")) {
+                return
+            }
+            val oldValue = __v_raw.file_type
+            __v_raw.file_type = value
+            _tRS(__v_raw, "file_type", oldValue, value)
+        }
+    override var file_type_display: String
+        get() {
+            return _tRG(__v_raw, "file_type_display", __v_raw.file_type_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_type_display
+            __v_raw.file_type_display = value
+            _tRS(__v_raw, "file_type_display", oldValue, value)
+        }
+    override var mime_type: String
+        get() {
+            return _tRG(__v_raw, "mime_type", __v_raw.mime_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("mime_type")) {
+                return
+            }
+            val oldValue = __v_raw.mime_type
+            __v_raw.mime_type = value
+            _tRS(__v_raw, "mime_type", oldValue, value)
+        }
+    override var file_size: Number
+        get() {
+            return _tRG(__v_raw, "file_size", __v_raw.file_size, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size")) {
+                return
+            }
+            val oldValue = __v_raw.file_size
+            __v_raw.file_size = value
+            _tRS(__v_raw, "file_size", oldValue, value)
+        }
+    override var file_size_display: String
+        get() {
+            return _tRG(__v_raw, "file_size_display", __v_raw.file_size_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_size_display
+            __v_raw.file_size_display = value
+            _tRS(__v_raw, "file_size_display", oldValue, value)
+        }
+    override var file_url: String
+        get() {
+            return _tRG(__v_raw, "file_url", __v_raw.file_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_url")) {
+                return
+            }
+            val oldValue = __v_raw.file_url
+            __v_raw.file_url = value
+            _tRS(__v_raw, "file_url", oldValue, value)
+        }
+    override var thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "thumbnail_url", __v_raw.thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.thumbnail_url
+            __v_raw.thumbnail_url = value
+            _tRS(__v_raw, "thumbnail_url", oldValue, value)
+        }
+    override var signed_url: String
+        get() {
+            return _tRG(__v_raw, "signed_url", __v_raw.signed_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_url
+            __v_raw.signed_url = value
+            _tRS(__v_raw, "signed_url", oldValue, value)
+        }
+    override var signed_thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "signed_thumbnail_url", __v_raw.signed_thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_thumbnail_url
+            __v_raw.signed_thumbnail_url = value
+            _tRS(__v_raw, "signed_thumbnail_url", oldValue, value)
+        }
+    override var object_id: String
+        get() {
+            return _tRG(__v_raw, "object_id", __v_raw.object_id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("object_id")) {
+                return
+            }
+            val oldValue = __v_raw.object_id
+            __v_raw.object_id = value
+            _tRS(__v_raw, "object_id", oldValue, value)
+        }
+    override var is_deleted: Boolean
+        get() {
+            return _tRG(__v_raw, "is_deleted", __v_raw.is_deleted, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_deleted")) {
+                return
+            }
+            val oldValue = __v_raw.is_deleted
+            __v_raw.is_deleted = value
+            _tRS(__v_raw, "is_deleted", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class ProductItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var sku: String,
+    @JsonNotNull
+    open var barcode: String,
+    @JsonNotNull
+    open var name_cn: String,
+    @JsonNotNull
+    open var name_en: String,
+    @JsonNotNull
+    open var media_files: UTSArray<ProductMediaFile>,
+    open var category: Any? = null,
+    open var supplier: Number? = null,
+    @JsonNotNull
+    open var supplier_name: String,
+    @JsonNotNull
+    open var purchase_price: String,
+    @JsonNotNull
+    open var cost_price: String,
+    @JsonNotNull
+    open var base_sales_price: String,
+    @JsonNotNull
+    open var status: String,
+    @JsonNotNull
+    open var is_featured: Boolean = false,
+    @JsonNotNull
+    open var is_new: Boolean = false,
+    @JsonNotNull
+    open var is_bestseller: Boolean = false,
+    @JsonNotNull
+    open var sort_order: Number,
+    @JsonNotNull
+    open var rating: String,
+    @JsonNotNull
+    open var variant_count: Number,
+    @JsonNotNull
+    open var total_sales_quantity: Number,
+    @JsonNotNull
+    open var total_sales_amount: String,
+    open var last_sale_date: String? = null,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductItem", "pkg/api/modules/products.uts", 30, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductItemReactiveObject : ProductItem, IUTSReactive<ProductItem> {
+    override var __v_raw: ProductItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, sku = __v_raw.sku, barcode = __v_raw.barcode, name_cn = __v_raw.name_cn, name_en = __v_raw.name_en, media_files = __v_raw.media_files, category = __v_raw.category, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, purchase_price = __v_raw.purchase_price, cost_price = __v_raw.cost_price, base_sales_price = __v_raw.base_sales_price, status = __v_raw.status, is_featured = __v_raw.is_featured, is_new = __v_raw.is_new, is_bestseller = __v_raw.is_bestseller, sort_order = __v_raw.sort_order, rating = __v_raw.rating, variant_count = __v_raw.variant_count, total_sales_quantity = __v_raw.total_sales_quantity, total_sales_amount = __v_raw.total_sales_amount, last_sale_date = __v_raw.last_sale_date, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductItemReactiveObject {
+        return ProductItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var sku: String
+        get() {
+            return _tRG(__v_raw, "sku", __v_raw.sku, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("sku")) {
+                return
+            }
+            val oldValue = __v_raw.sku
+            __v_raw.sku = value
+            _tRS(__v_raw, "sku", oldValue, value)
+        }
+    override var barcode: String
+        get() {
+            return _tRG(__v_raw, "barcode", __v_raw.barcode, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("barcode")) {
+                return
+            }
+            val oldValue = __v_raw.barcode
+            __v_raw.barcode = value
+            _tRS(__v_raw, "barcode", oldValue, value)
+        }
+    override var name_cn: String
+        get() {
+            return _tRG(__v_raw, "name_cn", __v_raw.name_cn, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name_cn")) {
+                return
+            }
+            val oldValue = __v_raw.name_cn
+            __v_raw.name_cn = value
+            _tRS(__v_raw, "name_cn", oldValue, value)
+        }
+    override var name_en: String
+        get() {
+            return _tRG(__v_raw, "name_en", __v_raw.name_en, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name_en")) {
+                return
+            }
+            val oldValue = __v_raw.name_en
+            __v_raw.name_en = value
+            _tRS(__v_raw, "name_en", oldValue, value)
+        }
+    override var media_files: UTSArray<ProductMediaFile>
+        get() {
+            return _tRG(__v_raw, "media_files", __v_raw.media_files, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("media_files")) {
+                return
+            }
+            val oldValue = __v_raw.media_files
+            __v_raw.media_files = value
+            _tRS(__v_raw, "media_files", oldValue, value)
+        }
+    override var category: Any?
+        get() {
+            return _tRG(__v_raw, "category", __v_raw.category, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("category")) {
+                return
+            }
+            val oldValue = __v_raw.category
+            __v_raw.category = value
+            _tRS(__v_raw, "category", oldValue, value)
+        }
+    override var supplier: Number?
+        get() {
+            return _tRG(__v_raw, "supplier", __v_raw.supplier, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("supplier")) {
+                return
+            }
+            val oldValue = __v_raw.supplier
+            __v_raw.supplier = value
+            _tRS(__v_raw, "supplier", oldValue, value)
+        }
+    override var supplier_name: String
+        get() {
+            return _tRG(__v_raw, "supplier_name", __v_raw.supplier_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("supplier_name")) {
+                return
+            }
+            val oldValue = __v_raw.supplier_name
+            __v_raw.supplier_name = value
+            _tRS(__v_raw, "supplier_name", oldValue, value)
+        }
+    override var purchase_price: String
+        get() {
+            return _tRG(__v_raw, "purchase_price", __v_raw.purchase_price, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("purchase_price")) {
+                return
+            }
+            val oldValue = __v_raw.purchase_price
+            __v_raw.purchase_price = value
+            _tRS(__v_raw, "purchase_price", oldValue, value)
+        }
+    override var cost_price: String
+        get() {
+            return _tRG(__v_raw, "cost_price", __v_raw.cost_price, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("cost_price")) {
+                return
+            }
+            val oldValue = __v_raw.cost_price
+            __v_raw.cost_price = value
+            _tRS(__v_raw, "cost_price", oldValue, value)
+        }
+    override var base_sales_price: String
+        get() {
+            return _tRG(__v_raw, "base_sales_price", __v_raw.base_sales_price, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("base_sales_price")) {
+                return
+            }
+            val oldValue = __v_raw.base_sales_price
+            __v_raw.base_sales_price = value
+            _tRS(__v_raw, "base_sales_price", oldValue, value)
+        }
+    override var status: String
+        get() {
+            return _tRG(__v_raw, "status", __v_raw.status, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("status")) {
+                return
+            }
+            val oldValue = __v_raw.status
+            __v_raw.status = value
+            _tRS(__v_raw, "status", oldValue, value)
+        }
+    override var is_featured: Boolean
+        get() {
+            return _tRG(__v_raw, "is_featured", __v_raw.is_featured, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_featured")) {
+                return
+            }
+            val oldValue = __v_raw.is_featured
+            __v_raw.is_featured = value
+            _tRS(__v_raw, "is_featured", oldValue, value)
+        }
+    override var is_new: Boolean
+        get() {
+            return _tRG(__v_raw, "is_new", __v_raw.is_new, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_new")) {
+                return
+            }
+            val oldValue = __v_raw.is_new
+            __v_raw.is_new = value
+            _tRS(__v_raw, "is_new", oldValue, value)
+        }
+    override var is_bestseller: Boolean
+        get() {
+            return _tRG(__v_raw, "is_bestseller", __v_raw.is_bestseller, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_bestseller")) {
+                return
+            }
+            val oldValue = __v_raw.is_bestseller
+            __v_raw.is_bestseller = value
+            _tRS(__v_raw, "is_bestseller", oldValue, value)
+        }
+    override var sort_order: Number
+        get() {
+            return _tRG(__v_raw, "sort_order", __v_raw.sort_order, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("sort_order")) {
+                return
+            }
+            val oldValue = __v_raw.sort_order
+            __v_raw.sort_order = value
+            _tRS(__v_raw, "sort_order", oldValue, value)
+        }
+    override var rating: String
+        get() {
+            return _tRG(__v_raw, "rating", __v_raw.rating, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("rating")) {
+                return
+            }
+            val oldValue = __v_raw.rating
+            __v_raw.rating = value
+            _tRS(__v_raw, "rating", oldValue, value)
+        }
+    override var variant_count: Number
+        get() {
+            return _tRG(__v_raw, "variant_count", __v_raw.variant_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("variant_count")) {
+                return
+            }
+            val oldValue = __v_raw.variant_count
+            __v_raw.variant_count = value
+            _tRS(__v_raw, "variant_count", oldValue, value)
+        }
+    override var total_sales_quantity: Number
+        get() {
+            return _tRG(__v_raw, "total_sales_quantity", __v_raw.total_sales_quantity, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("total_sales_quantity")) {
+                return
+            }
+            val oldValue = __v_raw.total_sales_quantity
+            __v_raw.total_sales_quantity = value
+            _tRS(__v_raw, "total_sales_quantity", oldValue, value)
+        }
+    override var total_sales_amount: String
+        get() {
+            return _tRG(__v_raw, "total_sales_amount", __v_raw.total_sales_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("total_sales_amount")) {
+                return
+            }
+            val oldValue = __v_raw.total_sales_amount
+            __v_raw.total_sales_amount = value
+            _tRS(__v_raw, "total_sales_amount", oldValue, value)
+        }
+    override var last_sale_date: String?
+        get() {
+            return _tRG(__v_raw, "last_sale_date", __v_raw.last_sale_date, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("last_sale_date")) {
+                return
+            }
+            val oldValue = __v_raw.last_sale_date
+            __v_raw.last_sale_date = value
+            _tRS(__v_raw, "last_sale_date", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class ProductListResponse (
+    @JsonNotNull
+    open var results: UTSArray<ProductItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductListResponse", "pkg/api/modules/products.uts", 56, 13)
+    }
+}
+open class ProductFilterOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var label: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductFilterOption", "pkg/api/modules/products.uts", 64, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductFilterOptionReactiveObject : ProductFilterOption, IUTSReactive<ProductFilterOption> {
+    override var __v_raw: ProductFilterOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductFilterOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, label = __v_raw.label) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductFilterOptionReactiveObject {
+        return ProductFilterOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+}
+open class ProductFilterDefinition (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var param: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var control: String,
+    @JsonNotNull
+    open var aliases: UTSArray<String>,
+    @JsonNotNull
+    open var multiple: Boolean = false,
+    @JsonNotNull
+    open var options: UTSArray<ProductFilterOption>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductFilterDefinition", "pkg/api/modules/products.uts", 68, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductFilterDefinitionReactiveObject : ProductFilterDefinition, IUTSReactive<ProductFilterDefinition> {
+    override var __v_raw: ProductFilterDefinition
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductFilterDefinition, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, param = __v_raw.param, label = __v_raw.label, control = __v_raw.control, aliases = __v_raw.aliases, multiple = __v_raw.multiple, options = __v_raw.options) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductFilterDefinitionReactiveObject {
+        return ProductFilterDefinitionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var key: String
+        get() {
+            return _tRG(__v_raw, "key", __v_raw.key, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("key")) {
+                return
+            }
+            val oldValue = __v_raw.key
+            __v_raw.key = value
+            _tRS(__v_raw, "key", oldValue, value)
+        }
+    override var param: String
+        get() {
+            return _tRG(__v_raw, "param", __v_raw.param, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("param")) {
+                return
+            }
+            val oldValue = __v_raw.param
+            __v_raw.param = value
+            _tRS(__v_raw, "param", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+    override var control: String
+        get() {
+            return _tRG(__v_raw, "control", __v_raw.control, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("control")) {
+                return
+            }
+            val oldValue = __v_raw.control
+            __v_raw.control = value
+            _tRS(__v_raw, "control", oldValue, value)
+        }
+    override var aliases: UTSArray<String>
+        get() {
+            return _tRG(__v_raw, "aliases", __v_raw.aliases, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("aliases")) {
+                return
+            }
+            val oldValue = __v_raw.aliases
+            __v_raw.aliases = value
+            _tRS(__v_raw, "aliases", oldValue, value)
+        }
+    override var multiple: Boolean
+        get() {
+            return _tRG(__v_raw, "multiple", __v_raw.multiple, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("multiple")) {
+                return
+            }
+            val oldValue = __v_raw.multiple
+            __v_raw.multiple = value
+            _tRS(__v_raw, "multiple", oldValue, value)
+        }
+    override var options: UTSArray<ProductFilterOption>
+        get() {
+            return _tRG(__v_raw, "options", __v_raw.options, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("options")) {
+                return
+            }
+            val oldValue = __v_raw.options
+            __v_raw.options = value
+            _tRS(__v_raw, "options", oldValue, value)
+        }
+}
+open class ProductFilterOptionsResponse (
+    @JsonNotNull
+    open var resource: String,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var filters: UTSArray<ProductFilterDefinition>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductFilterOptionsResponse", "pkg/api/modules/products.uts", 77, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductFilterOptionsResponseReactiveObject : ProductFilterOptionsResponse, IUTSReactive<ProductFilterOptionsResponse> {
+    override var __v_raw: ProductFilterOptionsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductFilterOptionsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(resource = __v_raw.resource, count = __v_raw.count, filters = __v_raw.filters) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductFilterOptionsResponseReactiveObject {
+        return ProductFilterOptionsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var resource: String
+        get() {
+            return _tRG(__v_raw, "resource", __v_raw.resource, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("resource")) {
+                return
+            }
+            val oldValue = __v_raw.resource
+            __v_raw.resource = value
+            _tRS(__v_raw, "resource", oldValue, value)
+        }
+    override var count: Number
+        get() {
+            return _tRG(__v_raw, "count", __v_raw.count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("count")) {
+                return
+            }
+            val oldValue = __v_raw.count
+            __v_raw.count = value
+            _tRS(__v_raw, "count", oldValue, value)
+        }
+    override var filters: UTSArray<ProductFilterDefinition>
+        get() {
+            return _tRG(__v_raw, "filters", __v_raw.filters, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("filters")) {
+                return
+            }
+            val oldValue = __v_raw.filters
+            __v_raw.filters = value
+            _tRS(__v_raw, "filters", oldValue, value)
+        }
+}
+val productsBasePath = "/api/products/products/"
+fun buildListQuery(data: ProductListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 84, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    run {
+        var filterIndex: Number = 0
+        while(filterIndex < data.filters.length){
+            val filter = data.filters[filterIndex]
+            if (filter.param != "" && filter.value != "") {
+                query[filter.param] = filter.value
+            }
+            filterIndex += 1
+        }
+    }
+    return query
+}
+fun normalizeServerUrl(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun normalizeProductMediaFiles(files: UTSArray<ProductMediaFile>) {
+    run {
+        var mediaIndex: Number = 0
+        while(mediaIndex < files.length){
+            val mediaFile = files[mediaIndex]
+            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
+            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
+            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
+            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+            mediaIndex += 1
+        }
+    }
+}
+fun normalizeProductItem(item: ProductItem): ProductItem {
+    normalizeProductMediaFiles(item.media_files)
+    return item
+}
+fun normalizeProductList(data: ProductListResponse): ProductListResponse {
+    run {
+        var productIndex: Number = 0
+        while(productIndex < data.results.length){
+            data.results[productIndex] = normalizeProductItem(data.results[productIndex])
+            productIndex += 1
+        }
+    }
+    return data
+}
+fun intValue(value: Any?): Number {
+    if (value == null) {
+        return 0
+    }
+    val text = "" + value
+    if (text == "") {
+        return 0
+    }
+    val parsed = parseInt(text)
+    if (isNaN(parsed)) {
+        return 0
+    }
+    return parsed
+}
+fun stringValue(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun booleanValue(value: Any?): Boolean {
+    return stringValue(value) == "true"
+}
+fun stringArrayValue(value: Any?): UTSArray<String> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    val parsed = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/products.uts:164")
+    }
+    if (parsed == null) {
+        return _uA()
+    }
+    val result: UTSArray<String> = _uA()
+    run {
+        var index: Number = 0
+        while(index < parsed!!.length){
+            result.push(stringValue(parsed!![index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildProductListResponse(raw: Any, query: ProductListQuery): ProductListResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:176")
+    }
+    if (rawObject == null) {
+        throw UTSError("商品列表响应解析失败")
+    }
+    var paginationObject: UTSJSONObject? = null
+    val rawPagination = rawObject["pagination"]
+    if (rawPagination != null) {
+        val paginationText = JSON.stringify(rawPagination)
+        if (paginationText != null && paginationText != "") {
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:185")
+        }
+    }
+    var results: UTSArray<ProductItem> = _uA()
+    val rawResults = rawObject["results"]
+    if (rawResults != null) {
+        val resultText = JSON.stringify(rawResults)
+        val parsedResults = if (resultText == null || resultText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<ProductItem>(resultText), " at pkg/api/modules/products.uts:192")
+        }
+        if (parsedResults != null) {
+            results = parsedResults!!
+        }
+    }
+    var totalCount = intValue(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject["total_count"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject["count"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue(rawObject["page"])
+    if (currentPage <= 0) {
+        currentPage = intValue(rawObject["current_page"])
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = query.page
+    }
+    var pageSize = intValue(rawObject["page_size"])
+    if (pageSize <= 0) {
+        pageSize = intValue(rawObject["per_page"])
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue(paginationObject["page_size"])
+    }
+    if (pageSize <= 0) {
+        pageSize = query.page_size
+    }
+    var totalPages = intValue(rawObject["total_pages"])
+    if (totalPages <= 0) {
+        totalPages = intValue(rawObject["pages"])
+    }
+    if (totalPages <= 0) {
+        totalPages = intValue(rawObject["num_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject["pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject["num_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return ProductListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
+}
+fun buildProductFilterOptionsResponse(raw: Any): ProductFilterOptionsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:266")
+    }
+    if (rawObject == null) {
+        throw UTSError("商品过滤选项解析失败")
+    }
+    var filters: UTSArray<ProductFilterDefinition> = _uA()
+    val rawFilters = rawObject["filters"]
+    if (rawFilters != null) {
+        val filtersText = JSON.stringify(rawFilters)
+        val filterObjects = if (filtersText == null || filtersText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/products.uts:274")
+        }
+        if (filterObjects != null) {
+            val nextFilters: UTSArray<ProductFilterDefinition> = _uA()
+            run {
+                var filterIndex: Number = 0
+                while(filterIndex < filterObjects!!.length){
+                    val filterObject = filterObjects!![filterIndex]
+                    var options: UTSArray<ProductFilterOption> = _uA()
+                    val rawOptions = filterObject["options"]
+                    if (rawOptions != null) {
+                        val optionsText = JSON.stringify(rawOptions)
+                        val optionObjects = if (optionsText == null || optionsText == "") {
+                            null
+                        } else {
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/products.uts:283")
+                        }
+                        if (optionObjects != null) {
+                            val nextOptions: UTSArray<ProductFilterOption> = _uA()
+                            run {
+                                var optionIndex: Number = 0
+                                while(optionIndex < optionObjects!!.length){
+                                    val optionObject = optionObjects!![optionIndex]
+                                    nextOptions.push(ProductFilterOption(value = stringValue(optionObject["value"]), label = stringValue(optionObject["label"])))
+                                    optionIndex += 1
+                                }
+                            }
+                            options = nextOptions
+                        }
+                    }
+                    nextFilters.push(ProductFilterDefinition(key = stringValue(filterObject["key"]), param = stringValue(filterObject["param"]), label = stringValue(filterObject["label"]), control = stringValue(filterObject["control"]), aliases = stringArrayValue(filterObject["aliases"]), multiple = booleanValue(filterObject["multiple"]), options = options))
+                    filterIndex += 1
+                }
+            }
+            filters = nextFilters
+        }
+    }
+    return ProductFilterOptionsResponse(resource = stringValue(rawObject["resource"]), count = intValue(rawObject["count"]), filters = filters)
+}
+fun getProductList(data: ProductListQuery): UTSPromise<ProductListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(productsBasePath, "GET", buildListQuery(data), true))
+            return@w normalizeProductList(buildProductListResponse(raw, data))
+    })
+}
+fun getProductFilterOptions(): UTSPromise<ProductFilterOptionsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(productsBasePath + "filter-options/", "GET", _uO(), true))
+            return@w buildProductFilterOptionsResponse(raw)
+    })
+}
+val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.setup(props as GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter {
+    return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter(instance)
+}
+)
+val GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass = CreateVueComponent(GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inheritAttrs, inject = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inject, props = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.props, propsNeedCastKeys = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.propsNeedCastKeys, emits = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.emits, components = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.components, styles = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.setup(props as GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview {
+    return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview(instance)
+}
+)
+val GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass = CreateVueComponent(GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList {
+    return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList(instance)
+}
+)
+open class SelectChangePayload (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+    @JsonNotNull
+    open var item: UTSJSONObject,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 170, 6)
+    }
+}
+open class MultiSelectChangePayload (
+    @JsonNotNull
+    open var values: UTSArray<String>,
+    @JsonNotNull
+    open var texts: UTSArray<String>,
+    @JsonNotNull
+    open var items: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 176, 6)
+    }
+}
+open class TreeDisplayRow (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var item: UTSJSONObject,
+    @JsonNotNull
+    open var level: Number,
+    @JsonNotNull
+    open var hasChildren: Boolean = false,
+    @JsonNotNull
+    open var expanded: Boolean = false,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 182, 6)
+    }
+}
+val GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass = CreateVueComponent(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inheritAttrs, inject = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inject, props = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.props, propsNeedCastKeys = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.propsNeedCastKeys, emits = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.emits, components = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.components, styles = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.setup(props as GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect {
+    return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect(instance)
+}
+)
+open class ProductSelectOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSelectOption", "pages/tabbar/products.uvue", 164, 6)
+    }
+}
 val GenPagesTabbarProductsClass = CreateVueComponent(GenPagesTabbarProducts::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTabbarProducts.inheritAttrs, inject = GenPagesTabbarProducts.inject, props = GenPagesTabbarProducts.props, propsNeedCastKeys = GenPagesTabbarProducts.propsNeedCastKeys, emits = GenPagesTabbarProducts.emits, components = GenPagesTabbarProducts.components, styles = GenPagesTabbarProducts.styles)
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTabbarProducts.inheritAttrs, inject = GenPagesTabbarProducts.inject, props = GenPagesTabbarProducts.props, propsNeedCastKeys = GenPagesTabbarProducts.propsNeedCastKeys, emits = GenPagesTabbarProducts.emits, components = GenPagesTabbarProducts.components, styles = GenPagesTabbarProducts.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesTabbarProducts.setup(props as GenPagesTabbarProducts)
+    }
+    )
 }
 , fun(instance, renderer): GenPagesTabbarProducts {
     return GenPagesTabbarProducts(instance, renderer)
@@ -2028,7 +3359,7 @@ open class SupplierBatchActionResponse (
         return UTSSourceMapPosition("SupplierBatchActionResponse", "pkg/api/modules/suppliers.uts", 90, 13)
     }
 }
-fun buildListQuery(data: SupplierListQuery): UTSJSONObject {
+fun buildListQuery__1(data: SupplierListQuery): UTSJSONObject {
     val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/suppliers.uts", 96, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
@@ -2041,7 +3372,7 @@ fun buildListQuery(data: SupplierListQuery): UTSJSONObject {
     }
     return query
 }
-fun normalizeServerUrl(url: String): String {
+fun normalizeServerUrl__1(url: String): String {
     if (url == "") {
         return ""
     }
@@ -2075,15 +3406,15 @@ fun normalizeSupplierMediaFiles(files: UTSArray<SupplierMediaFile>) {
         var mediaIndex: Number = 0
         while(mediaIndex < files.length){
             val mediaFile = files[mediaIndex]
-            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
-            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
-            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
-            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+            mediaFile.file_url = normalizeServerUrl__1(mediaFile.file_url)
+            mediaFile.thumbnail_url = normalizeServerUrl__1(mediaFile.thumbnail_url)
+            mediaFile.signed_url = normalizeServerUrl__1(mediaFile.signed_url)
+            mediaFile.signed_thumbnail_url = normalizeServerUrl__1(mediaFile.signed_thumbnail_url)
             mediaIndex += 1
         }
     }
 }
-fun intValue(value: Any?): Number {
+fun intValue__1(value: Any?): Number {
     if (value == null) {
         return 0
     }
@@ -2097,7 +3428,7 @@ fun intValue(value: Any?): Number {
     }
     return parsed
 }
-fun stringValue(value: Any?): String {
+fun stringValue__1(value: Any?): String {
     if (value == null) {
         return ""
     }
@@ -2134,54 +3465,54 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
             results = parsedResults!!
         }
     }
-    var totalCount = intValue(rawObject!!["count"])
+    var totalCount = intValue__1(rawObject!!["count"])
     if (totalCount <= 0) {
-        totalCount = intValue(rawObject!!["total"])
+        totalCount = intValue__1(rawObject!!["total"])
     }
     if (totalCount <= 0) {
-        totalCount = intValue(rawObject!!["total_count"])
+        totalCount = intValue__1(rawObject!!["total_count"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue(paginationObject["total"])
+        totalCount = intValue__1(paginationObject["total"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue(paginationObject["count"])
+        totalCount = intValue__1(paginationObject["count"])
     }
     if (totalCount <= 0) {
         totalCount = results.length
     }
-    var currentPage = intValue(rawObject!!["page"])
+    var currentPage = intValue__1(rawObject!!["page"])
     if (currentPage <= 0) {
-        currentPage = intValue(rawObject!!["current_page"])
+        currentPage = intValue__1(rawObject!!["current_page"])
     }
     if (currentPage <= 0 && paginationObject != null) {
-        currentPage = intValue(paginationObject["page"])
+        currentPage = intValue__1(paginationObject["page"])
     }
     if (currentPage <= 0) {
         currentPage = query.page
     }
-    var pageSize = intValue(rawObject!!["page_size"])
+    var pageSize = intValue__1(rawObject!!["page_size"])
     if (pageSize <= 0) {
-        pageSize = intValue(rawObject!!["per_page"])
+        pageSize = intValue__1(rawObject!!["per_page"])
     }
     if (pageSize <= 0 && paginationObject != null) {
-        pageSize = intValue(paginationObject["page_size"])
+        pageSize = intValue__1(paginationObject["page_size"])
     }
     if (pageSize <= 0 && paginationObject != null) {
-        pageSize = intValue(paginationObject["per_page"])
+        pageSize = intValue__1(paginationObject["per_page"])
     }
     if (pageSize <= 0) {
         pageSize = query.page_size
     }
-    var totalPages = intValue(rawObject!!["total_pages"])
+    var totalPages = intValue__1(rawObject!!["total_pages"])
     if (totalPages <= 0) {
-        totalPages = intValue(rawObject!!["num_pages"])
+        totalPages = intValue__1(rawObject!!["num_pages"])
     }
     if (totalPages <= 0 && paginationObject != null) {
-        totalPages = intValue(paginationObject["total_pages"])
+        totalPages = intValue__1(paginationObject["total_pages"])
     }
     if (totalPages <= 0 && paginationObject != null) {
-        totalPages = intValue(paginationObject["num_pages"])
+        totalPages = intValue__1(paginationObject["num_pages"])
     }
     if (totalPages <= 0 && pageSize > 0) {
         totalPages = Math.ceil(totalCount / pageSize)
@@ -2191,7 +3522,7 @@ fun buildSupplierListResponse(raw: Any, query: SupplierListQuery): SupplierListR
     }
     return SupplierListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
 }
-fun stringArrayValue(value: Any?): UTSArray<String> {
+fun stringArrayValue__1(value: Any?): UTSArray<String> {
     if (value == null) {
         return _uA()
     }
@@ -2208,7 +3539,7 @@ fun stringArrayValue(value: Any?): UTSArray<String> {
     run {
         var index: Number = 0
         while(index < parsed!!.length){
-            result.push(stringValue(parsed!![index]))
+            result.push(stringValue__1(parsed!![index]))
             index += 1
         }
     }
@@ -2254,24 +3585,24 @@ fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse 
                                 var optionIndex: Number = 0
                                 while(optionIndex < optionObjects!!.length){
                                     val optionObject = optionObjects!![optionIndex]
-                                    nextOptions.push(SupplierFilterOption(value = stringValue(optionObject["value"]), label = stringValue(optionObject["label"])))
+                                    nextOptions.push(SupplierFilterOption(value = stringValue__1(optionObject["value"]), label = stringValue__1(optionObject["label"])))
                                     optionIndex += 1
                                 }
                             }
                             options = nextOptions
                         }
                     }
-                    nextFilters.push(SupplierFilterDefinition(key = stringValue(filterObject["key"]), param = stringValue(filterObject["param"]), label = stringValue(filterObject["label"]), control = stringValue(filterObject["control"]), aliases = stringArrayValue(filterObject["aliases"]), multiple = stringValue(filterObject["multiple"]) == "true", options = options))
+                    nextFilters.push(SupplierFilterDefinition(key = stringValue__1(filterObject["key"]), param = stringValue__1(filterObject["param"]), label = stringValue__1(filterObject["label"]), control = stringValue__1(filterObject["control"]), aliases = stringArrayValue__1(filterObject["aliases"]), multiple = stringValue__1(filterObject["multiple"]) == "true", options = options))
                     filterIndex += 1
                 }
             }
             filters = nextFilters
         }
     }
-    return SupplierFilterOptionsResponse(resource = stringValue(rawObject!!["resource"]), count = intValue(rawObject!!["count"]), filters = filters)
+    return SupplierFilterOptionsResponse(resource = stringValue__1(rawObject!!["resource"]), count = intValue__1(rawObject!!["count"]), filters = filters)
 }
 fun buildSupplierMediaFileFromObject(rawObject: UTSJSONObject): SupplierMediaFile {
-    return SupplierMediaFile(id = stringValue(rawObject["id"]), company = intValue(rawObject["company"]), original_filename = stringValue(rawObject["original_filename"]), file_type = stringValue(rawObject["file_type"]), file_type_display = stringValue(rawObject["file_type_display"]), mime_type = stringValue(rawObject["mime_type"]), file_size = intValue(rawObject["file_size"]), file_size_display = stringValue(rawObject["file_size_display"]), file_url = normalizeServerUrl(stringValue(rawObject["file_url"])), thumbnail_url = normalizeServerUrl(stringValue(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl(stringValue(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl(stringValue(rawObject["signed_thumbnail_url"])), object_id = stringValue(rawObject["object_id"]), is_deleted = stringValue(rawObject["is_deleted"]) == "true", created_at = stringValue(rawObject["created_at"]), updated_at = stringValue(rawObject["updated_at"]))
+    return SupplierMediaFile(id = stringValue__1(rawObject["id"]), company = intValue__1(rawObject["company"]), original_filename = stringValue__1(rawObject["original_filename"]), file_type = stringValue__1(rawObject["file_type"]), file_type_display = stringValue__1(rawObject["file_type_display"]), mime_type = stringValue__1(rawObject["mime_type"]), file_size = intValue__1(rawObject["file_size"]), file_size_display = stringValue__1(rawObject["file_size_display"]), file_url = normalizeServerUrl__1(stringValue__1(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__1(stringValue__1(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__1(stringValue__1(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__1(stringValue__1(rawObject["signed_thumbnail_url"])), object_id = stringValue__1(rawObject["object_id"]), is_deleted = stringValue__1(rawObject["is_deleted"]) == "true", created_at = stringValue__1(rawObject["created_at"]), updated_at = stringValue__1(rawObject["updated_at"]))
 }
 fun buildSupplierMediaFilesFromValue(value: Any?): UTSArray<SupplierMediaFile> {
     if (value == null) {
@@ -2306,12 +3637,12 @@ fun buildSupplierItemResponse(raw: Any): SupplierItem {
     if (rawObject == null) {
         throw UTSError("供应商详情响应解析失败")
     }
-    return SupplierItem(id = intValue(rawObject!!["id"]), code = stringValue(rawObject!!["code"]), name = stringValue(rawObject!!["name"]), address = stringValue(rawObject!!["address"]), phone = stringValue(rawObject!!["phone"]), contact = stringValue(rawObject!!["contact"]), description = if (rawObject!!["description"] == null) {
+    return SupplierItem(id = intValue__1(rawObject!!["id"]), code = stringValue__1(rawObject!!["code"]), name = stringValue__1(rawObject!!["name"]), address = stringValue__1(rawObject!!["address"]), phone = stringValue__1(rawObject!!["phone"]), contact = stringValue__1(rawObject!!["contact"]), description = if (rawObject!!["description"] == null) {
         null
     } else {
-        stringValue(rawObject!!["description"])
+        stringValue__1(rawObject!!["description"])
     }
-    , total_amount = stringValue(rawObject!!["total_amount"]), arrears_amount = stringValue(rawObject!!["arrears_amount"]), paid_amount = intValue(rawObject!!["paid_amount"]), is_active = stringValue(rawObject!!["is_active"]) == "true", files_count = intValue(rawObject!!["files_count"]), company_infos = (fun(): UTSArray<UTSJSONObject> {
+    , total_amount = stringValue__1(rawObject!!["total_amount"]), arrears_amount = stringValue__1(rawObject!!["arrears_amount"]), paid_amount = intValue__1(rawObject!!["paid_amount"]), is_active = stringValue__1(rawObject!!["is_active"]) == "true", files_count = intValue__1(rawObject!!["files_count"]), company_infos = (fun(): UTSArray<UTSJSONObject> {
         val companyInfosValue = rawObject!!["company_infos"]
         if (companyInfosValue == null) {
             return _uA<UTSJSONObject>()
@@ -2327,7 +3658,7 @@ fun buildSupplierItemResponse(raw: Any): SupplierItem {
         }
         return companyInfosArray!!
     }
-    )(), is_deleted = stringValue(rawObject!!["is_deleted"]) == "true", created_at = stringValue(rawObject!!["created_at"]), updated_at = stringValue(rawObject!!["updated_at"]), media_files = buildSupplierMediaFilesFromValue(rawObject!!["media_files"]))
+    )(), is_deleted = stringValue__1(rawObject!!["is_deleted"]) == "true", created_at = stringValue__1(rawObject!!["created_at"]), updated_at = stringValue__1(rawObject!!["updated_at"]), media_files = buildSupplierMediaFilesFromValue(rawObject!!["media_files"]))
 }
 fun buildSupplierGlobalStatisticsResponse(raw: Any): SupplierGlobalStatisticsResponse {
     val rawText = JSON.stringify(raw)
@@ -2367,14 +3698,14 @@ fun buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
     return body
 }
 fun supplierDetailPath(id: Any): String {
-    return "/api/procurement/suppliers/" + stringValue(id) + "/"
+    return "/api/procurement/suppliers/" + stringValue__1(id) + "/"
 }
 fun buildBatchActionBody(ids: UTSArray<String>, remark: String? = null): UTSJSONObject {
     val nextIds: UTSArray<Any> = _uA()
     run {
         var index: Number = 0
         while(index < ids.length){
-            val text = stringValue(ids[index])
+            val text = stringValue__1(ids[index])
             val parsed = parseInt(text)
             if (!isNaN(parsed) && "" + parsed == text) {
                 nextIds.push(parsed)
@@ -2403,11 +3734,11 @@ fun buildSupplierBatchActionResponse(raw: Any): SupplierBatchActionResponse {
     if (rawObject == null) {
         return SupplierBatchActionResponse(success = true, message = "操作成功", data = _uO())
     }
-    return SupplierBatchActionResponse(success = true, message = stringValue(rawObject["message"]), data = rawObject)
+    return SupplierBatchActionResponse(success = true, message = stringValue__1(rawObject["message"]), data = rawObject)
 }
 fun getSupplierList(data: SupplierListQuery): UTSPromise<SupplierListResponse> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request("/api/procurement/suppliers/", "GET", buildListQuery(data), true))
+            val raw = await(request("/api/procurement/suppliers/", "GET", buildListQuery__1(data), true))
             return@w normalizeSupplierList(buildSupplierListResponse(raw, data))
     })
 }
@@ -2462,36 +3793,6 @@ fun batchDeleteSuppliers(ids: UTSArray<String>, remark: String? = null): UTSProm
             return@w buildSupplierBatchActionResponse(raw)
     })
 }
-val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.setup(props as GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter {
-    return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter(instance)
-}
-)
-val GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass = CreateVueComponent(GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inheritAttrs, inject = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inject, props = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.props, propsNeedCastKeys = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.propsNeedCastKeys, emits = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.emits, components = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.components, styles = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.setup(props as GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview {
-    return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview(instance)
-}
-)
-val GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass = CreateVueComponent(GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
-        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, ctx)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList {
-    return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList(instance)
-}
-)
 val GenPagesSuppliersIndexClass = CreateVueComponent(GenPagesSuppliersIndex::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesSuppliersIndex.inheritAttrs, inject = GenPagesSuppliersIndex.inject, props = GenPagesSuppliersIndex.props, propsNeedCastKeys = GenPagesSuppliersIndex.propsNeedCastKeys, emits = GenPagesSuppliersIndex.emits, components = GenPagesSuppliersIndex.components, styles = GenPagesSuppliersIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
         return GenPagesSuppliersIndex.setup(props as GenPagesSuppliersIndex)
@@ -2510,40 +3811,6 @@ val GenUniModulesLiliDataComponentsLiliDataLiliDataClass = CreateVueComponent(Ge
 }
 , fun(instance, renderer): GenUniModulesLiliDataComponentsLiliDataLiliData {
     return GenUniModulesLiliDataComponentsLiliDataLiliData(instance)
-}
-)
-open class SelectChangePayload (
-    @JsonNotNull
-    open var value: String,
-    @JsonNotNull
-    open var text: String,
-    @JsonNotNull
-    open var item: UTSJSONObject,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 152, 6)
-    }
-}
-open class MultiSelectChangePayload (
-    @JsonNotNull
-    open var values: UTSArray<String>,
-    @JsonNotNull
-    open var texts: UTSArray<String>,
-    @JsonNotNull
-    open var items: UTSArray<UTSJSONObject>,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 158, 6)
-    }
-}
-val GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass = CreateVueComponent(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inheritAttrs, inject = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.inject, props = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.props, propsNeedCastKeys = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.propsNeedCastKeys, emits = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.emits, components = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.components, styles = GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
-        return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect.setup(props as GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect, ctx)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect {
-    return GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect(instance)
 }
 )
 val GenUniModulesLiliPopupComponentsLiliPopupLiliPopupClass = CreateVueComponent(GenUniModulesLiliPopupComponentsLiliPopupLiliPopup::class.java, fun(): VueComponentOptions {
@@ -2576,14 +3843,14 @@ open class MediaBatchUploadResult (
         return UTSSourceMapPosition("MediaBatchUploadResult", "pkg/api/modules/media.uts", 48, 13)
     }
 }
-fun stringValue__1(value: Any?): String {
+fun stringValue__2(value: Any?): String {
     if (value == null) {
         return ""
     }
     return "" + value
 }
 fun mediaFilePath(id: Any): String {
-    return "/api/media/files/" + stringValue__1(id) + "/"
+    return "/api/media/files/" + stringValue__2(id) + "/"
 }
 fun buildUploadHeaders(): UTSJSONObject {
     val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pkg/api/modules/media.uts", 246, 11))
@@ -2600,11 +3867,11 @@ fun parseResponseErrorMessage(text: String): String {
     if (rootObject == null) {
         return ""
     }
-    val detailMessage = stringValue__1(rootObject["detail"])
+    val detailMessage = stringValue__2(rootObject["detail"])
     if (detailMessage != "") {
         return detailMessage
     }
-    val message = stringValue__1(rootObject["message"])
+    val message = stringValue__2(rootObject["message"])
     if (message != "") {
         return message
     }
@@ -2637,12 +3904,12 @@ fun buildBatchUploadFormData(items: UTSArray<MediaBatchUploadItem>): UTSJSONObje
                 index += 1
                 continue
             }
-            val currentContentTypeModel = stringValue__1(itemFormData!!["content_type_model"]).trim()
-            val currentObjectId = stringValue__1(itemFormData!!["object_id"]).trim()
-            val currentCompanyId = stringValue__1(itemFormData!!["company_id"]).trim()
-            val baseContentTypeModel = stringValue__1(result["content_type_model"]).trim()
-            val baseObjectId = stringValue__1(result["object_id"]).trim()
-            val baseCompanyId = stringValue__1(result["company_id"]).trim()
+            val currentContentTypeModel = stringValue__2(itemFormData!!["content_type_model"]).trim()
+            val currentObjectId = stringValue__2(itemFormData!!["object_id"]).trim()
+            val currentCompanyId = stringValue__2(itemFormData!!["company_id"]).trim()
+            val baseContentTypeModel = stringValue__2(result["content_type_model"]).trim()
+            val baseObjectId = stringValue__2(result["object_id"]).trim()
+            val baseCompanyId = stringValue__2(result["company_id"]).trim()
             if (currentContentTypeModel != "" && baseContentTypeModel != "" && currentContentTypeModel != baseContentTypeModel) {
                 throw UTSError("批量上传参数冲突: content_type_model 不一致")
             }
@@ -2653,15 +3920,15 @@ fun buildBatchUploadFormData(items: UTSArray<MediaBatchUploadItem>): UTSJSONObje
                 throw UTSError("批量上传参数冲突: company_id 不一致")
             }
             for(key in resolveUTSKeyIterator(itemFormData!!)){
-                if (result[key] == null || stringValue__1(result[key]).trim() == "") {
+                if (result[key] == null || stringValue__2(result[key]).trim() == "") {
                     result[key] = itemFormData!![key]
                 }
             }
             index += 1
         }
     }
-    val contentTypeModel = stringValue__1(result["content_type_model"]).trim()
-    val objectId = stringValue__1(result["object_id"]).trim()
+    val contentTypeModel = stringValue__2(result["content_type_model"]).trim()
+    val objectId = stringValue__2(result["object_id"]).trim()
     if (contentTypeModel == "" || objectId == "") {
         throw UTSError("批量上传缺少必填参数: content_type_model 和 object_id")
     }
@@ -2677,11 +3944,11 @@ fun parseBatchUploadResponseText(text: String): UTSArray<UTSJSONObject> {
     }
     val successValue = rootObject["success"]
     if (successValue != null) {
-        val successText = stringValue__1(successValue)
+        val successText = stringValue__2(successValue)
         if (successText != "true") {
-            var message = stringValue__1(rootObject["message"])
+            var message = stringValue__2(rootObject["message"])
             if (message == "") {
-                message = stringValue__1(rootObject["detail"])
+                message = stringValue__2(rootObject["detail"])
             }
             throw UTSError(if (message == "") {
                 "批量上传失败"
@@ -2771,11 +4038,11 @@ fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
             valueObject
         )
     }
-    val detailMessage = stringValue__1(valueObject["detail"])
+    val detailMessage = stringValue__2(valueObject["detail"])
     if (detailMessage != "") {
         throw UTSError(detailMessage)
     }
-    val message = stringValue__1(valueObject["message"])
+    val message = stringValue__2(valueObject["message"])
     if (message != "") {
         throw UTSError(message)
     }
@@ -2785,7 +4052,7 @@ fun normalizeUploadFilePath(filePath: String): String {
     return filePath.trim()
 }
 fun buildUploadFailMessage(err: UploadFileFail): String {
-    var message = stringValue__1(err.errMsg)
+    var message = stringValue__2(err.errMsg)
     val rawText = JSON.stringify(err)
     if (rawText != null && rawText != "") {
         val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:470")
@@ -2796,7 +4063,7 @@ fun buildUploadFailMessage(err: UploadFileFail): String {
                 if (causeText != null && causeText != "") {
                     val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:476")
                     if (causeObject != null) {
-                        val causeMessage = stringValue__1(causeObject!!["message"])
+                        val causeMessage = stringValue__2(causeObject!!["message"])
                         if (causeMessage != "") {
                             message = if (message == "") {
                                 causeMessage
@@ -2879,7 +4146,7 @@ fun deleteMediaFileRequest(id: Any): UTSPromise<Boolean> {
             reject(UTSError("HTTP状态码错误: " + res.statusCode))
         }
         , fail = fun(err){
-            reject(UTSError(stringValue__1(err.errMsg)))
+            reject(UTSError(stringValue__2(err.errMsg)))
         }
         ))
     }
@@ -2923,7 +4190,7 @@ fun batchUploadMediaFiles(items: UTSArray<MediaBatchUploadItem>): UTSPromise<Med
                 }
             }
              catch (error: Throwable) {
-                val message = stringValue__1((error as UTSError).message)
+                val message = stringValue__2((error as UTSError).message)
                 run {
                     var index: Number = 0
                     while(index < items.length){
@@ -2964,7 +4231,7 @@ open class SelectOption (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 48, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 49, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -3687,7 +4954,7 @@ open class TransactionMutationData (
         return UTSSourceMapPosition("TransactionMutationData", "pkg/api/modules/transactions.uts", 104, 13)
     }
 }
-fun normalizeServerUrl__1(url: String): String {
+fun normalizeServerUrl__2(url: String): String {
     if (url == "") {
         return ""
     }
@@ -3705,7 +4972,7 @@ fun normalizeServerUrl__1(url: String): String {
     }
     return url
 }
-fun intValue__1(value: Any?): Number {
+fun intValue__2(value: Any?): Number {
     if (value == null) {
         return 0
     }
@@ -3719,14 +4986,14 @@ fun intValue__1(value: Any?): Number {
     }
     return parsed
 }
-fun stringValue__2(value: Any?): String {
+fun stringValue__3(value: Any?): String {
     if (value == null) {
         return ""
     }
     return "" + value
 }
-fun booleanValue(value: Any?): Boolean {
-    return stringValue__2(value) == "true"
+fun booleanValue__1(value: Any?): Boolean {
+    return stringValue__3(value) == "true"
 }
 fun buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
     val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/transactions.uts", 169, 11), "page" to data.page, "page_size" to data.page_size)
@@ -3769,7 +5036,7 @@ fun buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
     return query
 }
 fun buildTransactionMediaFileFromObject(rawObject: UTSJSONObject): TransactionMediaFile {
-    return TransactionMediaFile(id = stringValue__2(rawObject["id"]), company = intValue__1(rawObject["company"]), original_filename = stringValue__2(rawObject["original_filename"]), file_type = stringValue__2(rawObject["file_type"]), file_type_display = stringValue__2(rawObject["file_type_display"]), mime_type = stringValue__2(rawObject["mime_type"]), file_size = intValue__1(rawObject["file_size"]), file_size_display = stringValue__2(rawObject["file_size_display"]), file_url = normalizeServerUrl__1(stringValue__2(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__1(stringValue__2(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__1(stringValue__2(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__1(stringValue__2(rawObject["signed_thumbnail_url"])), object_id = stringValue__2(rawObject["object_id"]), is_deleted = booleanValue(rawObject["is_deleted"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+    return TransactionMediaFile(id = stringValue__3(rawObject["id"]), company = intValue__2(rawObject["company"]), original_filename = stringValue__3(rawObject["original_filename"]), file_type = stringValue__3(rawObject["file_type"]), file_type_display = stringValue__3(rawObject["file_type_display"]), mime_type = stringValue__3(rawObject["mime_type"]), file_size = intValue__2(rawObject["file_size"]), file_size_display = stringValue__3(rawObject["file_size_display"]), file_url = normalizeServerUrl__2(stringValue__3(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__2(stringValue__3(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__2(stringValue__3(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__2(stringValue__3(rawObject["signed_thumbnail_url"])), object_id = stringValue__3(rawObject["object_id"]), is_deleted = booleanValue__1(rawObject["is_deleted"]), created_at = stringValue__3(rawObject["created_at"]), updated_at = stringValue__3(rawObject["updated_at"]))
 }
 fun buildTransactionMediaFilesFromValue(value: Any?): UTSArray<TransactionMediaFile> {
     if (value == null) {
@@ -3795,12 +5062,12 @@ fun buildTransactionMediaFilesFromValue(value: Any?): UTSArray<TransactionMediaF
     return result
 }
 fun buildTransactionItemFromObject(rawObject: UTSJSONObject): TransactionItem {
-    return TransactionItem(id = intValue__1(rawObject["id"]), supplier = intValue__1(rawObject["supplier"]), supplier_name = stringValue__2(rawObject["supplier_name"]), transaction_type = intValue__1(rawObject["transaction_type"]), transaction_type_display = stringValue__2(rawObject["transaction_type_display"]), amount = stringValue__2(rawObject["amount"]), transaction_date = stringValue__2(rawObject["transaction_date"]), transaction_number = stringValue__2(rawObject["transaction_number"]), note = if (rawObject["note"] == null) {
+    return TransactionItem(id = intValue__2(rawObject["id"]), supplier = intValue__2(rawObject["supplier"]), supplier_name = stringValue__3(rawObject["supplier_name"]), transaction_type = intValue__2(rawObject["transaction_type"]), transaction_type_display = stringValue__3(rawObject["transaction_type_display"]), amount = stringValue__3(rawObject["amount"]), transaction_date = stringValue__3(rawObject["transaction_date"]), transaction_number = stringValue__3(rawObject["transaction_number"]), note = if (rawObject["note"] == null) {
         null
     } else {
-        stringValue__2(rawObject["note"])
+        stringValue__3(rawObject["note"])
     }
-    , media_files = buildTransactionMediaFilesFromValue(rawObject["media_files"]), files_count = intValue__1(rawObject["files_count"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+    , media_files = buildTransactionMediaFilesFromValue(rawObject["media_files"]), files_count = intValue__2(rawObject["files_count"]), created_at = stringValue__3(rawObject["created_at"]), updated_at = stringValue__3(rawObject["updated_at"]))
 }
 fun buildTransactionSummary(value: Any?): TransactionSummary? {
     if (value == null) {
@@ -3815,7 +5082,7 @@ fun buildTransactionSummary(value: Any?): TransactionSummary? {
     if (rawObject == null) {
         return null
     }
-    return TransactionSummary(purchase_amount = stringValue__2(rawObject["purchase_amount"]), arrears_amount = stringValue__2(rawObject["arrears_amount"]), payment_amount = stringValue__2(rawObject["payment_amount"]), net_amount = stringValue__2(rawObject["net_amount"]))
+    return TransactionSummary(purchase_amount = stringValue__3(rawObject["purchase_amount"]), arrears_amount = stringValue__3(rawObject["arrears_amount"]), payment_amount = stringValue__3(rawObject["payment_amount"]), net_amount = stringValue__3(rawObject["net_amount"]))
 }
 fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): TransactionListResponse {
     val rawText = JSON.stringify(raw)
@@ -3856,42 +5123,42 @@ fun buildTransactionListResponse(raw: Any, query: TransactionListQuery): Transac
             results = nextResults
         }
     }
-    var totalCount = intValue__1(rawObject["count"])
+    var totalCount = intValue__2(rawObject["count"])
     if (totalCount <= 0) {
-        totalCount = intValue__1(rawObject["total"])
+        totalCount = intValue__2(rawObject["total"])
     }
     if (totalCount <= 0) {
-        totalCount = intValue__1(rawObject["total_count"])
+        totalCount = intValue__2(rawObject["total_count"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue__1(paginationObject["total"])
+        totalCount = intValue__2(paginationObject["total"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue__1(paginationObject["count"])
+        totalCount = intValue__2(paginationObject["count"])
     }
     if (totalCount <= 0) {
         totalCount = results.length
     }
-    var currentPage = intValue__1(rawObject["page"])
+    var currentPage = intValue__2(rawObject["page"])
     if (currentPage <= 0) {
-        currentPage = intValue__1(rawObject["current_page"])
+        currentPage = intValue__2(rawObject["current_page"])
     }
     if (currentPage <= 0 && paginationObject != null) {
-        currentPage = intValue__1(paginationObject["page"])
+        currentPage = intValue__2(paginationObject["page"])
     }
     if (currentPage <= 0) {
         currentPage = query.page
     }
-    var pageSize = intValue__1(rawObject["page_size"])
+    var pageSize = intValue__2(rawObject["page_size"])
     if (pageSize <= 0 && paginationObject != null) {
-        pageSize = intValue__1(paginationObject["page_size"])
+        pageSize = intValue__2(paginationObject["page_size"])
     }
     if (pageSize <= 0) {
         pageSize = query.page_size
     }
-    var totalPages = intValue__1(rawObject["total_pages"])
+    var totalPages = intValue__2(rawObject["total_pages"])
     if (totalPages <= 0 && paginationObject != null) {
-        totalPages = intValue__1(paginationObject["total_pages"])
+        totalPages = intValue__2(paginationObject["total_pages"])
     }
     if (totalPages <= 0 && pageSize > 0) {
         totalPages = Math.ceil(totalCount / pageSize)
@@ -3941,21 +5208,21 @@ fun buildTransactionOptionsResponse(raw: Any): TransactionOptionsResponse {
                                 var itemIndex: Number = 0
                                 while(itemIndex < itemObjects!!.length){
                                     val itemObject = itemObjects!![itemIndex]
-                                    nextItems.push(TransactionOptionItem(value = stringValue__2(itemObject["value"]), label = stringValue__2(itemObject["label"]), extra = itemObject))
+                                    nextItems.push(TransactionOptionItem(value = stringValue__3(itemObject["value"]), label = stringValue__3(itemObject["label"]), extra = itemObject))
                                     itemIndex += 1
                                 }
                             }
                             items = nextItems
                         }
                     }
-                    nextGroups.push(TransactionOptionGroup(key = stringValue__2(groupObject["key"]), label = stringValue__2(groupObject["label"]), control = stringValue__2(groupObject["control"]), count = intValue__1(groupObject["count"]), items = items))
+                    nextGroups.push(TransactionOptionGroup(key = stringValue__3(groupObject["key"]), label = stringValue__3(groupObject["label"]), control = stringValue__3(groupObject["control"]), count = intValue__2(groupObject["count"]), items = items))
                     groupIndex += 1
                 }
             }
             groups = nextGroups
         }
     }
-    return TransactionOptionsResponse(resource = stringValue__2(rawObject["resource"]), total_groups = intValue__1(rawObject["total_groups"]), groups = groups)
+    return TransactionOptionsResponse(resource = stringValue__3(rawObject["resource"]), total_groups = intValue__2(rawObject["total_groups"]), groups = groups)
 }
 fun buildTransactionStatisticsResponse(raw: Any): TransactionStatisticsResponse {
     val rawText = JSON.stringify(raw)
@@ -3980,7 +5247,7 @@ fun buildTransactionMutationBody(data: TransactionMutationData): UTSJSONObject {
     return body
 }
 fun transactionDetailPath(id: Any): String {
-    return "/api/procurement/transactions/" + stringValue__2(id) + "/"
+    return "/api/procurement/transactions/" + stringValue__3(id) + "/"
 }
 fun getTransactionList(data: TransactionListQuery): UTSPromise<TransactionListResponse> {
     return wrapUTSPromise(suspend w@{
@@ -4080,7 +5347,7 @@ open class SelectOption__1 (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/transactions/from.uvue", 49, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/transactions/from.uvue", 50, 6)
     }
 }
 val GenPagesTransactionsFromClass = CreateVueComponent(GenPagesTransactionsFrom::class.java, fun(): VueComponentOptions {
@@ -4424,17 +5691,39 @@ class KasaCategoryTaxRatesResponseReactiveObject : KasaCategoryTaxRatesResponse,
             _tRS(__v_raw, "items", oldValue, value)
         }
 }
-fun stringValue__3(value: Any?): String {
+open class KasaCategoryOptionsQuery (
+    open var key: String? = null,
+    open var search: String? = null,
+    open var q: String? = null,
+    open var keyword: String? = null,
+    open var limit: Number? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryOptionsQuery", "pkg/api/modules/kasa_category.uts", 44, 13)
+    }
+}
+open class KasaCategoryOptionsResponse (
+    open var data: UTSJSONObject? = null,
+    @JsonNotNull
+    open var groups: UTSArray<UTSJSONObject>,
+    @JsonNotNull
+    open var items: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KasaCategoryOptionsResponse", "pkg/api/modules/kasa_category.uts", 51, 13)
+    }
+}
+fun stringValue__4(value: Any?): String {
     if (value == null) {
         return ""
     }
     return "" + value
 }
-fun intValue__2(value: Any?): Number {
+fun intValue__3(value: Any?): Number {
     if (value == null) {
         return 0
     }
-    val text = stringValue__3(value)
+    val text = stringValue__4(value)
     if (text == "") {
         return 0
     }
@@ -4444,8 +5733,8 @@ fun intValue__2(value: Any?): Number {
     }
     return parsed
 }
-fun booleanValue__1(value: Any?): Boolean {
-    val text = stringValue__3(value).toLowerCase()
+fun booleanValue__2(value: Any?): Boolean {
+    val text = stringValue__4(value).toLowerCase()
     return text == "true" || text == "1" || text == "yes"
 }
 fun parseObject(value: Any?): UTSJSONObject? {
@@ -4456,7 +5745,7 @@ fun parseObject(value: Any?): UTSJSONObject? {
     if (text == null || text == "") {
         return null
     }
-    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:76")
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:88")
 }
 fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
     if (value == null) {
@@ -4466,7 +5755,7 @@ fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
     if (text == null || text == "") {
         return _uA()
     }
-    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:86")
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/kasa_category.uts:98")
     if (parsed == null) {
         return _uA()
     }
@@ -4474,27 +5763,27 @@ fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
 }
 fun buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem {
     val nestedRawObject = parseObject(rawObject["raw"])
-    val nameCn = if (stringValue__3(rawObject["name_cn"]) != "") {
-        stringValue__3(rawObject["name_cn"])
+    val nameCn = if (stringValue__4(rawObject["name_cn"]) != "") {
+        stringValue__4(rawObject["name_cn"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["name_cn"]
         } else {
             null
         }
         )
     }
-    val nameEn = if (stringValue__3(rawObject["name_en"]) != "") {
-        stringValue__3(rawObject["name_en"])
+    val nameEn = if (stringValue__4(rawObject["name_en"]) != "") {
+        stringValue__4(rawObject["name_en"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["name_en"]
         } else {
             null
         }
         )
     }
-    var displayName = stringValue__3(rawObject["name"])
+    var displayName = stringValue__4(rawObject["name"])
     if (displayName == "") {
         if (nameCn != "" && nameEn != "") {
             displayName = nameCn + " / " + nameEn
@@ -4504,40 +5793,40 @@ fun buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem 
             displayName = nameEn
         }
     }
-    return KasaCategoryItem(id = intValue__2(rawObject["id"]), name = displayName, name_cn = nameCn, name_en = nameEn, code = if (stringValue__3(rawObject["code"]) != "") {
-        stringValue__3(rawObject["code"])
+    return KasaCategoryItem(id = intValue__3(rawObject["id"]), name = displayName, name_cn = nameCn, name_en = nameEn, code = if (stringValue__4(rawObject["code"]) != "") {
+        stringValue__4(rawObject["code"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["code"]
         } else {
             null
         }
         )
     }
-    , unique_kod = if (stringValue__3(rawObject["unique_kod"]) != "") {
-        stringValue__3(rawObject["unique_kod"])
+    , unique_kod = if (stringValue__4(rawObject["unique_kod"]) != "") {
+        stringValue__4(rawObject["unique_kod"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["unique_kod"]
         } else {
             null
         }
         )
     }
-    , tax_rate = if (stringValue__3(rawObject["tax_rate"]) != "") {
-        stringValue__3(rawObject["tax_rate"])
+    , tax_rate = if (stringValue__4(rawObject["tax_rate"]) != "") {
+        stringValue__4(rawObject["tax_rate"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["tax_rate"]
         } else {
             null
         }
         )
     }
-    , tax_rate_display = if (stringValue__3(rawObject["tax_rate_display"]) != "") {
-        stringValue__3(rawObject["tax_rate_display"])
+    , tax_rate_display = if (stringValue__4(rawObject["tax_rate_display"]) != "") {
+        stringValue__4(rawObject["tax_rate_display"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["tax_rate_display"]
         } else {
             null
@@ -4545,9 +5834,9 @@ fun buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem 
         )
     }
     , products_count = if (rawObject["products_count"] != null) {
-        intValue__2(rawObject["products_count"])
+        intValue__3(rawObject["products_count"])
     } else {
-        intValue__2(if (nestedRawObject != null) {
+        intValue__3(if (nestedRawObject != null) {
             nestedRawObject["products_count"]
         } else {
             null
@@ -4555,29 +5844,29 @@ fun buildKasaCategoryItemFromObject(rawObject: UTSJSONObject): KasaCategoryItem 
         )
     }
     , is_active = if (rawObject["is_active"] != null) {
-        booleanValue__1(rawObject["is_active"])
+        booleanValue__2(rawObject["is_active"])
     } else {
-        booleanValue__1(if (nestedRawObject != null) {
+        booleanValue__2(if (nestedRawObject != null) {
             nestedRawObject["is_active"]
         } else {
             null
         }
         )
     }
-    , created_at = if (stringValue__3(rawObject["created_at"]) != "") {
-        stringValue__3(rawObject["created_at"])
+    , created_at = if (stringValue__4(rawObject["created_at"]) != "") {
+        stringValue__4(rawObject["created_at"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["created_at"]
         } else {
             null
         }
         )
     }
-    , updated_at = if (stringValue__3(rawObject["updated_at"]) != "") {
-        stringValue__3(rawObject["updated_at"])
+    , updated_at = if (stringValue__4(rawObject["updated_at"]) != "") {
+        stringValue__4(rawObject["updated_at"])
     } else {
-        stringValue__3(if (nestedRawObject != null) {
+        stringValue__4(if (nestedRawObject != null) {
             nestedRawObject["updated_at"]
         } else {
             null
@@ -4599,17 +5888,17 @@ fun buildKasaCategoryArrayFromValue(value: Any?): UTSArray<KasaCategoryItem> {
     return result
 }
 fun buildKasaCategoryListQuery(data: KasaCategoryListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/kasa_category.uts", 133, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/kasa_category.uts", 145, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
-    if (data.id != null && stringValue__3(data.id) != "") {
+    if (data.id != null && stringValue__4(data.id) != "") {
         query["id"] = data.id
     }
-    if (data.is_active != null && stringValue__3(data.is_active) != "") {
+    if (data.is_active != null && stringValue__4(data.is_active) != "") {
         query["is_active"] = data.is_active
     }
-    if (data.tax_rate != null && stringValue__3(data.tax_rate) != "") {
+    if (data.tax_rate != null && stringValue__4(data.tax_rate) != "") {
         query["tax_rate"] = data.tax_rate
     }
     if (data.unique_kod != null && data.unique_kod != "") {
@@ -4648,28 +5937,28 @@ fun buildKasaCategoryListResponse(raw: Any, query: KasaCategoryListQuery): KasaC
     } else {
         results = buildKasaCategoryArrayFromValue(raw)
     }
-    var totalCount = intValue__2(rawObject["count"])
+    var totalCount = intValue__3(rawObject["count"])
     if (totalCount <= 0) {
-        totalCount = intValue__2(rawObject["total"])
+        totalCount = intValue__3(rawObject["total"])
     }
     if (totalCount <= 0) {
-        totalCount = intValue__2(rawObject["total_count"])
+        totalCount = intValue__3(rawObject["total_count"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue__2(paginationObject["total"])
+        totalCount = intValue__3(paginationObject["total"])
     }
     if (totalCount <= 0 && paginationObject != null) {
-        totalCount = intValue__2(paginationObject["count"])
+        totalCount = intValue__3(paginationObject["count"])
     }
     if (totalCount <= 0) {
         totalCount = results.length
     }
-    var currentPage = intValue__2(rawObject["page"])
+    var currentPage = intValue__3(rawObject["page"])
     if (currentPage <= 0) {
-        currentPage = intValue__2(rawObject["current_page"])
+        currentPage = intValue__3(rawObject["current_page"])
     }
     if (currentPage <= 0 && paginationObject != null) {
-        currentPage = intValue__2(paginationObject["page"])
+        currentPage = intValue__3(paginationObject["page"])
     }
     if (currentPage <= 0) {
         currentPage = if (query.page > 0) {
@@ -4678,15 +5967,15 @@ fun buildKasaCategoryListResponse(raw: Any, query: KasaCategoryListQuery): KasaC
             1
         }
     }
-    var pageSize = intValue__2(rawObject["page_size"])
+    var pageSize = intValue__3(rawObject["page_size"])
     if (pageSize <= 0) {
-        pageSize = intValue__2(rawObject["per_page"])
+        pageSize = intValue__3(rawObject["per_page"])
     }
     if (pageSize <= 0 && paginationObject != null) {
-        pageSize = intValue__2(paginationObject["page_size"])
+        pageSize = intValue__3(paginationObject["page_size"])
     }
     if (pageSize <= 0 && paginationObject != null) {
-        pageSize = intValue__2(paginationObject["per_page"])
+        pageSize = intValue__3(paginationObject["per_page"])
     }
     if (pageSize <= 0) {
         pageSize = if (query.page_size > 0) {
@@ -4695,15 +5984,15 @@ fun buildKasaCategoryListResponse(raw: Any, query: KasaCategoryListQuery): KasaC
             results.length
         }
     }
-    var totalPages = intValue__2(rawObject["total_pages"])
+    var totalPages = intValue__3(rawObject["total_pages"])
     if (totalPages <= 0) {
-        totalPages = intValue__2(rawObject["num_pages"])
+        totalPages = intValue__3(rawObject["num_pages"])
     }
     if (totalPages <= 0 && paginationObject != null) {
-        totalPages = intValue__2(paginationObject["total_pages"])
+        totalPages = intValue__3(paginationObject["total_pages"])
     }
     if (totalPages <= 0 && paginationObject != null) {
-        totalPages = intValue__2(paginationObject["num_pages"])
+        totalPages = intValue__3(paginationObject["num_pages"])
     }
     if (totalPages <= 0 && pageSize > 0) {
         totalPages = Math.ceil(totalCount / pageSize)
@@ -4728,19 +6017,49 @@ fun buildObjectResponse(raw: Any, errorMessage: String): UTSJSONObject {
     return rawObject
 }
 fun buildTaxRatesResponse(raw: Any): KasaCategoryTaxRatesResponse {
+    val optionsResponse = buildKasaCategoryOptionsResponse(raw)
+    return KasaCategoryTaxRatesResponse(data = optionsResponse.data, items = optionsResponse.items)
+}
+fun buildKasaCategoryOptionsQuery(data: KasaCategoryOptionsQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/kasa_category.uts", 282, 11))
+    if (data.key != null && data.key != "") {
+        query["key"] = data.key
+    }
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.q != null && data.q != "") {
+        query["q"] = data.q
+    }
+    if (data.keyword != null && data.keyword != "") {
+        query["keyword"] = data.keyword
+    }
+    if (data.limit != null && data.limit!! > 0) {
+        query["limit"] = data.limit
+    }
+    return query
+}
+fun buildKasaCategoryOptionsResponse(raw: Any): KasaCategoryOptionsResponse {
     val rawObject = parseObject(raw)
     if (rawObject != null) {
-        return KasaCategoryTaxRatesResponse(data = rawObject, items = parseObjectArray(if (rawObject["results"] != null) {
-            rawObject["results"]
-        } else {
-            rawObject["items"]
+        var groups = parseObjectArray(rawObject["groups"])
+        var items = parseObjectArray(rawObject["items"])
+        if (items.length == 0 && rawObject["results"] != null) {
+            items = parseObjectArray(rawObject["results"])
         }
-        ))
+        if (items.length == 0 && rawObject["data"] != null) {
+            items = parseObjectArray(rawObject["data"])
+        }
+        if (items.length == 0 && groups.length > 0) {
+            val firstGroup = groups[0]
+            items = parseObjectArray(firstGroup["items"])
+        }
+        return KasaCategoryOptionsResponse(data = rawObject, groups = groups, items = items)
     }
-    return KasaCategoryTaxRatesResponse(data = null, items = parseObjectArray(raw))
+    return KasaCategoryOptionsResponse(data = null, groups = _uA<UTSJSONObject>(), items = parseObjectArray(raw))
 }
 fun kasaCategoryDetailPath(id: Any): String {
-    return kasaCategoryBasePath + stringValue__3(id) + "/"
+    return kasaCategoryBasePath + stringValue__4(id) + "/"
 }
 fun getKasaCategoryList(data: KasaCategoryListQuery): UTSPromise<KasaCategoryListResponse> {
     return wrapUTSPromise(suspend w@{
@@ -4775,9 +6094,20 @@ fun patchKasaCategory(id: Any, data: KasaCategoryMutationData): UTSPromise<KasaC
 fun deleteKasaCategory(id: Any): UTSPromise<Any> {
     return request(kasaCategoryDetailPath(id), "DELETE", _uO(), true)
 }
+fun getKasaCategoryOptions(query: KasaCategoryOptionsQuery? = null): UTSPromise<KasaCategoryOptionsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val requestQuery = if (query == null) {
+                buildKasaCategoryOptionsQuery(KasaCategoryOptionsQuery(key = null, search = null, q = null, keyword = null, limit = null))
+            } else {
+                buildKasaCategoryOptionsQuery(query)
+            }
+            val raw = await(request(kasaCategoryBasePath + "options/", "GET", requestQuery, true))
+            return@w buildKasaCategoryOptionsResponse(raw)
+    })
+}
 fun getKasaCategoryTaxRates(): UTSPromise<KasaCategoryTaxRatesResponse> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request(kasaCategoryBasePath + "tax_rates/", "GET", _uO(), true))
+            val raw = await(request(kasaCategoryBasePath + "options/", "GET", buildKasaCategoryOptionsQuery(KasaCategoryOptionsQuery(key = "tax_rate", search = null, q = null, keyword = null, limit = null)), true))
             return@w buildTaxRatesResponse(raw)
     })
 }
@@ -4799,7 +6129,7 @@ open class SelectOption__2 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/index.uvue", 134, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/index.uvue", 135, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__2ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -4861,7 +6191,7 @@ open class SelectOption__3 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/form.uvue", 40, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/form.uvue", 41, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__3ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -4916,6 +6246,1832 @@ val GenPagesKasaCategoryFormClass = CreateVueComponent(GenPagesKasaCategoryForm:
     return GenPagesKasaCategoryForm(instance, renderer)
 }
 )
+val categoryBasePath = "/api/categories/categories/"
+open class CategoryListQuery (
+    open var search: String? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+    open var id: Any? = null,
+    open var is_active: Any? = null,
+    open var level: Any? = null,
+    open var parent: Any? = null,
+    open var parent_id: Any? = null,
+    open var code: String? = null,
+    open var tax_rate: Any? = null,
+    open var kasa_category: Any? = null,
+    open var kasa_category_id: Any? = null,
+    open var status: String? = null,
+    open var ordering: String? = null,
+    open var simple: Boolean? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("CategoryListQuery", "pkg/api/modules/category.uts", 3, 13)
+    }
+}
+open class CategoryItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var name: String,
+    @JsonNotNull
+    open var code: String,
+    @JsonNotNull
+    open var level: Number,
+    @JsonNotNull
+    open var parent_id: Number,
+    @JsonNotNull
+    open var sort_order: Number,
+    @JsonNotNull
+    open var tax_rate: String,
+    @JsonNotNull
+    open var kasa_category_id: Number,
+    @JsonNotNull
+    open var products_count: Number,
+    @JsonNotNull
+    open var children_count: Number,
+    @JsonNotNull
+    open var is_active: Boolean = false,
+    @JsonNotNull
+    open var is_leaf: Boolean = false,
+    @JsonNotNull
+    open var full_name: String,
+    @JsonNotNull
+    open var path: String,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+    @JsonNotNull
+    open var raw: UTSJSONObject,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("CategoryItem", "pkg/api/modules/category.uts", 20, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return CategoryItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class CategoryItemReactiveObject : CategoryItem, IUTSReactive<CategoryItem> {
+    override var __v_raw: CategoryItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: CategoryItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, name = __v_raw.name, code = __v_raw.code, level = __v_raw.level, parent_id = __v_raw.parent_id, sort_order = __v_raw.sort_order, tax_rate = __v_raw.tax_rate, kasa_category_id = __v_raw.kasa_category_id, products_count = __v_raw.products_count, children_count = __v_raw.children_count, is_active = __v_raw.is_active, is_leaf = __v_raw.is_leaf, full_name = __v_raw.full_name, path = __v_raw.path, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, raw = __v_raw.raw) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): CategoryItemReactiveObject {
+        return CategoryItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var name: String
+        get() {
+            return _tRG(__v_raw, "name", __v_raw.name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name")) {
+                return
+            }
+            val oldValue = __v_raw.name
+            __v_raw.name = value
+            _tRS(__v_raw, "name", oldValue, value)
+        }
+    override var code: String
+        get() {
+            return _tRG(__v_raw, "code", __v_raw.code, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("code")) {
+                return
+            }
+            val oldValue = __v_raw.code
+            __v_raw.code = value
+            _tRS(__v_raw, "code", oldValue, value)
+        }
+    override var level: Number
+        get() {
+            return _tRG(__v_raw, "level", __v_raw.level, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("level")) {
+                return
+            }
+            val oldValue = __v_raw.level
+            __v_raw.level = value
+            _tRS(__v_raw, "level", oldValue, value)
+        }
+    override var parent_id: Number
+        get() {
+            return _tRG(__v_raw, "parent_id", __v_raw.parent_id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("parent_id")) {
+                return
+            }
+            val oldValue = __v_raw.parent_id
+            __v_raw.parent_id = value
+            _tRS(__v_raw, "parent_id", oldValue, value)
+        }
+    override var sort_order: Number
+        get() {
+            return _tRG(__v_raw, "sort_order", __v_raw.sort_order, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("sort_order")) {
+                return
+            }
+            val oldValue = __v_raw.sort_order
+            __v_raw.sort_order = value
+            _tRS(__v_raw, "sort_order", oldValue, value)
+        }
+    override var tax_rate: String
+        get() {
+            return _tRG(__v_raw, "tax_rate", __v_raw.tax_rate, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("tax_rate")) {
+                return
+            }
+            val oldValue = __v_raw.tax_rate
+            __v_raw.tax_rate = value
+            _tRS(__v_raw, "tax_rate", oldValue, value)
+        }
+    override var kasa_category_id: Number
+        get() {
+            return _tRG(__v_raw, "kasa_category_id", __v_raw.kasa_category_id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("kasa_category_id")) {
+                return
+            }
+            val oldValue = __v_raw.kasa_category_id
+            __v_raw.kasa_category_id = value
+            _tRS(__v_raw, "kasa_category_id", oldValue, value)
+        }
+    override var products_count: Number
+        get() {
+            return _tRG(__v_raw, "products_count", __v_raw.products_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("products_count")) {
+                return
+            }
+            val oldValue = __v_raw.products_count
+            __v_raw.products_count = value
+            _tRS(__v_raw, "products_count", oldValue, value)
+        }
+    override var children_count: Number
+        get() {
+            return _tRG(__v_raw, "children_count", __v_raw.children_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("children_count")) {
+                return
+            }
+            val oldValue = __v_raw.children_count
+            __v_raw.children_count = value
+            _tRS(__v_raw, "children_count", oldValue, value)
+        }
+    override var is_active: Boolean
+        get() {
+            return _tRG(__v_raw, "is_active", __v_raw.is_active, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_active")) {
+                return
+            }
+            val oldValue = __v_raw.is_active
+            __v_raw.is_active = value
+            _tRS(__v_raw, "is_active", oldValue, value)
+        }
+    override var is_leaf: Boolean
+        get() {
+            return _tRG(__v_raw, "is_leaf", __v_raw.is_leaf, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_leaf")) {
+                return
+            }
+            val oldValue = __v_raw.is_leaf
+            __v_raw.is_leaf = value
+            _tRS(__v_raw, "is_leaf", oldValue, value)
+        }
+    override var full_name: String
+        get() {
+            return _tRG(__v_raw, "full_name", __v_raw.full_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("full_name")) {
+                return
+            }
+            val oldValue = __v_raw.full_name
+            __v_raw.full_name = value
+            _tRS(__v_raw, "full_name", oldValue, value)
+        }
+    override var path: String
+        get() {
+            return _tRG(__v_raw, "path", __v_raw.path, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("path")) {
+                return
+            }
+            val oldValue = __v_raw.path
+            __v_raw.path = value
+            _tRS(__v_raw, "path", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+    override var raw: UTSJSONObject
+        get() {
+            return _tRG(__v_raw, "raw", __v_raw.raw, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("raw")) {
+                return
+            }
+            val oldValue = __v_raw.raw
+            __v_raw.raw = value
+            _tRS(__v_raw, "raw", oldValue, value)
+        }
+}
+open class CategoryListResponse (
+    @JsonNotNull
+    open var results: UTSArray<CategoryItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("CategoryListResponse", "pkg/api/modules/category.uts", 39, 13)
+    }
+}
+typealias CategoryMutationData = UTSJSONObject
+open class CategoryRootsQuery (
+    open var search: String? = null,
+    open var level: Any? = null,
+    open var status: String? = null,
+    open var ordering: String? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("CategoryRootsQuery", "pkg/api/modules/category.uts", 52, 13)
+    }
+}
+fun stringValue__5(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun intValue__4(value: Any?): Number {
+    if (value == null) {
+        return 0
+    }
+    val text = stringValue__5(value)
+    if (text == "") {
+        return 0
+    }
+    val parsed = parseInt(text)
+    if (isNaN(parsed)) {
+        return 0
+    }
+    return parsed
+}
+fun booleanValue__3(value: Any?): Boolean {
+    val text = stringValue__5(value).toLowerCase()
+    return text == "true" || text == "1" || text == "yes"
+}
+fun parseObject__1(value: Any?): UTSJSONObject? {
+    if (value == null) {
+        return null
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return null
+    }
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/category.uts:90")
+}
+fun parseObjectArray__1(value: Any?): UTSArray<UTSJSONObject> {
+    if (value == null) {
+        return _uA()
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return _uA()
+    }
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/category.uts:100")
+    if (parsed == null) {
+        return _uA()
+    }
+    return parsed!!
+}
+fun buildCategoryItemFromObject(rawObject: UTSJSONObject): CategoryItem {
+    return CategoryItem(id = intValue__4(rawObject["id"]), name = stringValue__5(rawObject["name"]), code = stringValue__5(rawObject["code"]), level = intValue__4(rawObject["level"]), parent_id = intValue__4(if (rawObject["parent_id"] != null) {
+        rawObject["parent_id"]
+    } else {
+        rawObject["parent"]
+    }
+    ), sort_order = intValue__4(rawObject["sort_order"]), tax_rate = stringValue__5(rawObject["tax_rate"]), kasa_category_id = intValue__4(if (rawObject["kasa_category_id"] != null) {
+        rawObject["kasa_category_id"]
+    } else {
+        rawObject["kasa_category"]
+    }
+    ), products_count = intValue__4(rawObject["products_count"]), children_count = intValue__4(rawObject["children_count"]), is_active = booleanValue__3(rawObject["is_active"]), is_leaf = booleanValue__3(rawObject["is_leaf"]) || stringValue__5(rawObject["status"]) == "leaf", full_name = stringValue__5(rawObject["full_name"]), path = stringValue__5(rawObject["path"]), created_at = stringValue__5(rawObject["created_at"]), updated_at = stringValue__5(rawObject["updated_at"]), raw = rawObject)
+}
+fun buildCategoryArrayFromValue(value: Any?): UTSArray<CategoryItem> {
+    val rawObject = parseObject__1(value)
+    if (rawObject != null) {
+        if (rawObject["results"] != null) {
+            return buildCategoryArrayFromValue(rawObject["results"])
+        }
+        if (rawObject["items"] != null) {
+            return buildCategoryArrayFromValue(rawObject["items"])
+        }
+        if (rawObject["children"] != null) {
+            return buildCategoryArrayFromValue(rawObject["children"])
+        }
+        if (rawObject["data"] != null) {
+            return buildCategoryArrayFromValue(rawObject["data"])
+        }
+    }
+    val rawArray = parseObjectArray__1(value)
+    val result: UTSArray<CategoryItem> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rawArray.length){
+            result.push(buildCategoryItemFromObject(rawArray[index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildCategoryListQuery(data: CategoryListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/category.uts", 151, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.id != null && stringValue__5(data.id) != "") {
+        query["id"] = data.id
+    }
+    if (data.is_active != null && stringValue__5(data.is_active) != "") {
+        query["is_active"] = data.is_active
+    }
+    if (data.level != null && stringValue__5(data.level) != "") {
+        query["level"] = data.level
+    }
+    if (data.parent != null) {
+        query["parent"] = data.parent
+    }
+    if (data.parent_id != null && stringValue__5(data.parent_id) != "") {
+        query["parent_id"] = data.parent_id
+    }
+    if (data.code != null && data.code != "") {
+        query["code"] = data.code
+    }
+    if (data.tax_rate != null && stringValue__5(data.tax_rate) != "") {
+        query["tax_rate"] = data.tax_rate
+    }
+    if (data.kasa_category != null && stringValue__5(data.kasa_category) != "") {
+        query["kasa_category"] = data.kasa_category
+    }
+    if (data.kasa_category_id != null && stringValue__5(data.kasa_category_id) != "") {
+        query["kasa_category_id"] = data.kasa_category_id
+    }
+    if (data.status != null && data.status != "") {
+        query["status"] = data.status
+    }
+    if (data.ordering != null && data.ordering != "") {
+        query["ordering"] = data.ordering
+    }
+    if (data.simple != null) {
+        query["simple"] = data.simple
+    }
+    return query
+}
+fun buildCategoryListResponse(raw: Any, query: CategoryListQuery): CategoryListResponse {
+    val rawObject = parseObject__1(raw)
+    if (rawObject == null) {
+        val results = buildCategoryArrayFromValue(raw)
+        return CategoryListResponse(results = results, count = results.length, total_count = results.length, total_pages = 1, current_page = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+        , page_size = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+        )
+    }
+    var paginationObject: UTSJSONObject? = null
+    if (rawObject["pagination"] != null) {
+        paginationObject = parseObject__1(rawObject["pagination"])
+    }
+    var results: UTSArray<CategoryItem> = _uA()
+    if (rawObject["results"] != null) {
+        results = buildCategoryArrayFromValue(rawObject["results"])
+    } else if (rawObject["items"] != null) {
+        results = buildCategoryArrayFromValue(rawObject["items"])
+    } else {
+        results = buildCategoryArrayFromValue(raw)
+    }
+    var totalCount = intValue__4(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue__4(rawObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue__4(rawObject["total_count"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__4(paginationObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__4(paginationObject["count"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue__4(rawObject["page"])
+    if (currentPage <= 0) {
+        currentPage = intValue__4(rawObject["current_page"])
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue__4(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+    }
+    var pageSize = intValue__4(rawObject["page_size"])
+    if (pageSize <= 0) {
+        pageSize = intValue__4(rawObject["per_page"])
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__4(paginationObject["page_size"])
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__4(paginationObject["per_page"])
+    }
+    if (pageSize <= 0) {
+        pageSize = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+    }
+    var totalPages = intValue__4(rawObject["total_pages"])
+    if (totalPages <= 0) {
+        totalPages = intValue__4(rawObject["num_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__4(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__4(paginationObject["num_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return CategoryListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
+}
+fun buildCategoryItemResponse(raw: Any, errorMessage: String): CategoryItem {
+    val rawObject = parseObject__1(raw)
+    if (rawObject == null) {
+        throw UTSError(errorMessage)
+    }
+    return buildCategoryItemFromObject(rawObject)
+}
+fun buildSearchQuery(search: String?): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/category.uts", 302, 11))
+    if (search != null && search != "") {
+        query["search"] = search
+    }
+    return query
+}
+fun buildCategoryRootsQuery(data: CategoryRootsQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/category.uts", 309, 11))
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.level != null && stringValue__5(data.level) != "") {
+        query["level"] = data.level
+    }
+    if (data.status != null && data.status != "") {
+        query["status"] = data.status
+    }
+    if (data.ordering != null && data.ordering != "") {
+        query["ordering"] = data.ordering
+    }
+    return query
+}
+fun categoryDetailPath(id: Any): String {
+    return categoryBasePath + stringValue__5(id) + "/"
+}
+fun getCategoryList(data: CategoryListQuery): UTSPromise<CategoryListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryBasePath, "GET", buildCategoryListQuery(data), true))
+            return@w buildCategoryListResponse(raw, data)
+    })
+}
+fun getCategoryDetail(id: Any): UTSPromise<CategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryDetailPath(id), "GET", _uO(), true))
+            return@w buildCategoryItemResponse(raw, "分类详情响应解析失败")
+    })
+}
+fun createCategory(data: CategoryMutationData): UTSPromise<CategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryBasePath, "POST", data, true))
+            return@w buildCategoryItemResponse(raw, "创建分类响应解析失败")
+    })
+}
+fun updateCategory(id: Any, data: CategoryMutationData): UTSPromise<CategoryItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryDetailPath(id), "PUT", data, true))
+            return@w buildCategoryItemResponse(raw, "更新分类响应解析失败")
+    })
+}
+fun deleteCategory(id: Any): UTSPromise<Any> {
+    return request(categoryDetailPath(id), "DELETE", _uO(), true)
+}
+fun getCategoryRoots(query: CategoryRootsQuery? = null): UTSPromise<UTSArray<CategoryItem>> {
+    return wrapUTSPromise(suspend w@{
+            val requestQuery = if (query == null) {
+                buildCategoryRootsQuery(CategoryRootsQuery(search = null, level = null, status = null, ordering = null))
+            } else {
+                buildCategoryRootsQuery(query)
+            }
+            val raw = await(request(categoryBasePath + "roots/", "GET", requestQuery, true))
+            return@w buildCategoryArrayFromValue(raw)
+    })
+}
+fun getCategoryChildren(id: Any, search: String? = null): UTSPromise<UTSArray<CategoryItem>> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryDetailPath(id) + "children/", "GET", buildSearchQuery(search), true))
+            return@w buildCategoryArrayFromValue(raw)
+    })
+}
+open class FilterOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("FilterOption", "pages/category/index.uvue", 171, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return FilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class FilterOptionReactiveObject : FilterOption, IUTSReactive<FilterOption> {
+    override var __v_raw: FilterOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: FilterOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): FilterOptionReactiveObject {
+        return FilterOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+open class ChildGroup (
+    @JsonNotNull
+    open var parentId: Number,
+    @JsonNotNull
+    open var items: UTSArray<CategoryItem>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ChildGroup", "pages/category/index.uvue", 176, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ChildGroupReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ChildGroupReactiveObject : ChildGroup, IUTSReactive<ChildGroup> {
+    override var __v_raw: ChildGroup
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ChildGroup, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(parentId = __v_raw.parentId, items = __v_raw.items) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ChildGroupReactiveObject {
+        return ChildGroupReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var parentId: Number
+        get() {
+            return _tRG(__v_raw, "parentId", __v_raw.parentId, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("parentId")) {
+                return
+            }
+            val oldValue = __v_raw.parentId
+            __v_raw.parentId = value
+            _tRS(__v_raw, "parentId", oldValue, value)
+        }
+    override var items: UTSArray<CategoryItem>
+        get() {
+            return _tRG(__v_raw, "items", __v_raw.items, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("items")) {
+                return
+            }
+            val oldValue = __v_raw.items
+            __v_raw.items = value
+            _tRS(__v_raw, "items", oldValue, value)
+        }
+}
+val GenPagesCategoryIndexClass = CreateVueComponent(GenPagesCategoryIndex::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesCategoryIndex.inheritAttrs, inject = GenPagesCategoryIndex.inject, props = GenPagesCategoryIndex.props, propsNeedCastKeys = GenPagesCategoryIndex.propsNeedCastKeys, emits = GenPagesCategoryIndex.emits, components = GenPagesCategoryIndex.components, styles = GenPagesCategoryIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesCategoryIndex.setup(props as GenPagesCategoryIndex)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesCategoryIndex {
+    return GenPagesCategoryIndex(instance, renderer)
+}
+)
+open class SelectOption__4 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/category/from.uvue", 42, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SelectOption__4ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SelectOption__4ReactiveObject : SelectOption__4, IUTSReactive<SelectOption__4> {
+    override var __v_raw: SelectOption__4
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SelectOption__4, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SelectOption__4ReactiveObject {
+        return SelectOption__4ReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+val GenPagesCategoryFromClass = CreateVueComponent(GenPagesCategoryFrom::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesCategoryFrom.inheritAttrs, inject = GenPagesCategoryFrom.inject, props = GenPagesCategoryFrom.props, propsNeedCastKeys = GenPagesCategoryFrom.propsNeedCastKeys, emits = GenPagesCategoryFrom.emits, components = GenPagesCategoryFrom.components, styles = GenPagesCategoryFrom.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesCategoryFrom.setup(props as GenPagesCategoryFrom)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesCategoryFrom {
+    return GenPagesCategoryFrom(instance, renderer)
+}
+)
+open class ShopListQuery (
+    open var search: String? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopListQuery", "pkg/api/modules/shops.uts", 2, 13)
+    }
+}
+open class ShopItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var name: String,
+    @JsonNotNull
+    open var address: String,
+    @JsonNotNull
+    open var company: Number,
+    @JsonNotNull
+    open var company_name: String,
+    @JsonNotNull
+    open var media_records_count: Number,
+    @JsonNotNull
+    open var media_files: UTSArray<ShopMediaFile>,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopItem", "pkg/api/modules/shops.uts", 7, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ShopItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ShopItemReactiveObject : ShopItem, IUTSReactive<ShopItem> {
+    override var __v_raw: ShopItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ShopItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, name = __v_raw.name, address = __v_raw.address, company = __v_raw.company, company_name = __v_raw.company_name, media_records_count = __v_raw.media_records_count, media_files = __v_raw.media_files, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ShopItemReactiveObject {
+        return ShopItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var name: String
+        get() {
+            return _tRG(__v_raw, "name", __v_raw.name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name")) {
+                return
+            }
+            val oldValue = __v_raw.name
+            __v_raw.name = value
+            _tRS(__v_raw, "name", oldValue, value)
+        }
+    override var address: String
+        get() {
+            return _tRG(__v_raw, "address", __v_raw.address, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("address")) {
+                return
+            }
+            val oldValue = __v_raw.address
+            __v_raw.address = value
+            _tRS(__v_raw, "address", oldValue, value)
+        }
+    override var company: Number
+        get() {
+            return _tRG(__v_raw, "company", __v_raw.company, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("company")) {
+                return
+            }
+            val oldValue = __v_raw.company
+            __v_raw.company = value
+            _tRS(__v_raw, "company", oldValue, value)
+        }
+    override var company_name: String
+        get() {
+            return _tRG(__v_raw, "company_name", __v_raw.company_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("company_name")) {
+                return
+            }
+            val oldValue = __v_raw.company_name
+            __v_raw.company_name = value
+            _tRS(__v_raw, "company_name", oldValue, value)
+        }
+    override var media_records_count: Number
+        get() {
+            return _tRG(__v_raw, "media_records_count", __v_raw.media_records_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("media_records_count")) {
+                return
+            }
+            val oldValue = __v_raw.media_records_count
+            __v_raw.media_records_count = value
+            _tRS(__v_raw, "media_records_count", oldValue, value)
+        }
+    override var media_files: UTSArray<ShopMediaFile>
+        get() {
+            return _tRG(__v_raw, "media_files", __v_raw.media_files, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("media_files")) {
+                return
+            }
+            val oldValue = __v_raw.media_files
+            __v_raw.media_files = value
+            _tRS(__v_raw, "media_files", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class ShopListResponse (
+    @JsonNotNull
+    open var results: UTSArray<ShopItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopListResponse", "pkg/api/modules/shops.uts", 18, 13)
+    }
+}
+open class ShopMediaListQuery (
+    open var search: String? = null,
+    open var shop: Any? = null,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopMediaListQuery", "pkg/api/modules/shops.uts", 26, 13)
+    }
+}
+open class ShopMediaFile (
+    @JsonNotNull
+    open var id: String,
+    @JsonNotNull
+    open var company: Number,
+    @JsonNotNull
+    open var original_filename: String,
+    @JsonNotNull
+    open var file_type: String,
+    @JsonNotNull
+    open var file_type_display: String,
+    @JsonNotNull
+    open var mime_type: String,
+    @JsonNotNull
+    open var file_size: Number,
+    @JsonNotNull
+    open var file_size_display: String,
+    @JsonNotNull
+    open var file_url: String,
+    @JsonNotNull
+    open var thumbnail_url: String,
+    @JsonNotNull
+    open var signed_url: String,
+    @JsonNotNull
+    open var signed_thumbnail_url: String,
+    @JsonNotNull
+    open var object_id: String,
+    @JsonNotNull
+    open var is_deleted: Boolean = false,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopMediaFile", "pkg/api/modules/shops.uts", 32, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ShopMediaFileReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ShopMediaFileReactiveObject : ShopMediaFile, IUTSReactive<ShopMediaFile> {
+    override var __v_raw: ShopMediaFile
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ShopMediaFile, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, original_filename = __v_raw.original_filename, file_type = __v_raw.file_type, file_type_display = __v_raw.file_type_display, mime_type = __v_raw.mime_type, file_size = __v_raw.file_size, file_size_display = __v_raw.file_size_display, file_url = __v_raw.file_url, thumbnail_url = __v_raw.thumbnail_url, signed_url = __v_raw.signed_url, signed_thumbnail_url = __v_raw.signed_thumbnail_url, object_id = __v_raw.object_id, is_deleted = __v_raw.is_deleted, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ShopMediaFileReactiveObject {
+        return ShopMediaFileReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: String
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var company: Number
+        get() {
+            return _tRG(__v_raw, "company", __v_raw.company, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("company")) {
+                return
+            }
+            val oldValue = __v_raw.company
+            __v_raw.company = value
+            _tRS(__v_raw, "company", oldValue, value)
+        }
+    override var original_filename: String
+        get() {
+            return _tRG(__v_raw, "original_filename", __v_raw.original_filename, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("original_filename")) {
+                return
+            }
+            val oldValue = __v_raw.original_filename
+            __v_raw.original_filename = value
+            _tRS(__v_raw, "original_filename", oldValue, value)
+        }
+    override var file_type: String
+        get() {
+            return _tRG(__v_raw, "file_type", __v_raw.file_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type")) {
+                return
+            }
+            val oldValue = __v_raw.file_type
+            __v_raw.file_type = value
+            _tRS(__v_raw, "file_type", oldValue, value)
+        }
+    override var file_type_display: String
+        get() {
+            return _tRG(__v_raw, "file_type_display", __v_raw.file_type_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_type_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_type_display
+            __v_raw.file_type_display = value
+            _tRS(__v_raw, "file_type_display", oldValue, value)
+        }
+    override var mime_type: String
+        get() {
+            return _tRG(__v_raw, "mime_type", __v_raw.mime_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("mime_type")) {
+                return
+            }
+            val oldValue = __v_raw.mime_type
+            __v_raw.mime_type = value
+            _tRS(__v_raw, "mime_type", oldValue, value)
+        }
+    override var file_size: Number
+        get() {
+            return _tRG(__v_raw, "file_size", __v_raw.file_size, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size")) {
+                return
+            }
+            val oldValue = __v_raw.file_size
+            __v_raw.file_size = value
+            _tRS(__v_raw, "file_size", oldValue, value)
+        }
+    override var file_size_display: String
+        get() {
+            return _tRG(__v_raw, "file_size_display", __v_raw.file_size_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_size_display")) {
+                return
+            }
+            val oldValue = __v_raw.file_size_display
+            __v_raw.file_size_display = value
+            _tRS(__v_raw, "file_size_display", oldValue, value)
+        }
+    override var file_url: String
+        get() {
+            return _tRG(__v_raw, "file_url", __v_raw.file_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("file_url")) {
+                return
+            }
+            val oldValue = __v_raw.file_url
+            __v_raw.file_url = value
+            _tRS(__v_raw, "file_url", oldValue, value)
+        }
+    override var thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "thumbnail_url", __v_raw.thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.thumbnail_url
+            __v_raw.thumbnail_url = value
+            _tRS(__v_raw, "thumbnail_url", oldValue, value)
+        }
+    override var signed_url: String
+        get() {
+            return _tRG(__v_raw, "signed_url", __v_raw.signed_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_url
+            __v_raw.signed_url = value
+            _tRS(__v_raw, "signed_url", oldValue, value)
+        }
+    override var signed_thumbnail_url: String
+        get() {
+            return _tRG(__v_raw, "signed_thumbnail_url", __v_raw.signed_thumbnail_url, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("signed_thumbnail_url")) {
+                return
+            }
+            val oldValue = __v_raw.signed_thumbnail_url
+            __v_raw.signed_thumbnail_url = value
+            _tRS(__v_raw, "signed_thumbnail_url", oldValue, value)
+        }
+    override var object_id: String
+        get() {
+            return _tRG(__v_raw, "object_id", __v_raw.object_id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("object_id")) {
+                return
+            }
+            val oldValue = __v_raw.object_id
+            __v_raw.object_id = value
+            _tRS(__v_raw, "object_id", oldValue, value)
+        }
+    override var is_deleted: Boolean
+        get() {
+            return _tRG(__v_raw, "is_deleted", __v_raw.is_deleted, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("is_deleted")) {
+                return
+            }
+            val oldValue = __v_raw.is_deleted
+            __v_raw.is_deleted = value
+            _tRS(__v_raw, "is_deleted", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class ShopMediaItem (
+    @JsonNotNull
+    open var id: Number,
+    @JsonNotNull
+    open var shop: Number,
+    @JsonNotNull
+    open var shop_name: String,
+    @JsonNotNull
+    open var title: String,
+    @JsonNotNull
+    open var record_type: String,
+    @JsonNotNull
+    open var record_type_display: String,
+    @JsonNotNull
+    open var expiration_date: String,
+    @JsonNotNull
+    open var notes: String,
+    @JsonNotNull
+    open var media_files: UTSArray<ShopMediaFile>,
+    @JsonNotNull
+    open var files_count: Number,
+    @JsonNotNull
+    open var created_at: String,
+    @JsonNotNull
+    open var updated_at: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopMediaItem", "pkg/api/modules/shops.uts", 50, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ShopMediaItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ShopMediaItemReactiveObject : ShopMediaItem, IUTSReactive<ShopMediaItem> {
+    override var __v_raw: ShopMediaItem
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ShopMediaItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, shop = __v_raw.shop, shop_name = __v_raw.shop_name, title = __v_raw.title, record_type = __v_raw.record_type, record_type_display = __v_raw.record_type_display, expiration_date = __v_raw.expiration_date, notes = __v_raw.notes, media_files = __v_raw.media_files, files_count = __v_raw.files_count, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ShopMediaItemReactiveObject {
+        return ShopMediaItemReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var id: Number
+        get() {
+            return _tRG(__v_raw, "id", __v_raw.id, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("id")) {
+                return
+            }
+            val oldValue = __v_raw.id
+            __v_raw.id = value
+            _tRS(__v_raw, "id", oldValue, value)
+        }
+    override var shop: Number
+        get() {
+            return _tRG(__v_raw, "shop", __v_raw.shop, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("shop")) {
+                return
+            }
+            val oldValue = __v_raw.shop
+            __v_raw.shop = value
+            _tRS(__v_raw, "shop", oldValue, value)
+        }
+    override var shop_name: String
+        get() {
+            return _tRG(__v_raw, "shop_name", __v_raw.shop_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("shop_name")) {
+                return
+            }
+            val oldValue = __v_raw.shop_name
+            __v_raw.shop_name = value
+            _tRS(__v_raw, "shop_name", oldValue, value)
+        }
+    override var title: String
+        get() {
+            return _tRG(__v_raw, "title", __v_raw.title, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("title")) {
+                return
+            }
+            val oldValue = __v_raw.title
+            __v_raw.title = value
+            _tRS(__v_raw, "title", oldValue, value)
+        }
+    override var record_type: String
+        get() {
+            return _tRG(__v_raw, "record_type", __v_raw.record_type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("record_type")) {
+                return
+            }
+            val oldValue = __v_raw.record_type
+            __v_raw.record_type = value
+            _tRS(__v_raw, "record_type", oldValue, value)
+        }
+    override var record_type_display: String
+        get() {
+            return _tRG(__v_raw, "record_type_display", __v_raw.record_type_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("record_type_display")) {
+                return
+            }
+            val oldValue = __v_raw.record_type_display
+            __v_raw.record_type_display = value
+            _tRS(__v_raw, "record_type_display", oldValue, value)
+        }
+    override var expiration_date: String
+        get() {
+            return _tRG(__v_raw, "expiration_date", __v_raw.expiration_date, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("expiration_date")) {
+                return
+            }
+            val oldValue = __v_raw.expiration_date
+            __v_raw.expiration_date = value
+            _tRS(__v_raw, "expiration_date", oldValue, value)
+        }
+    override var notes: String
+        get() {
+            return _tRG(__v_raw, "notes", __v_raw.notes, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("notes")) {
+                return
+            }
+            val oldValue = __v_raw.notes
+            __v_raw.notes = value
+            _tRS(__v_raw, "notes", oldValue, value)
+        }
+    override var media_files: UTSArray<ShopMediaFile>
+        get() {
+            return _tRG(__v_raw, "media_files", __v_raw.media_files, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("media_files")) {
+                return
+            }
+            val oldValue = __v_raw.media_files
+            __v_raw.media_files = value
+            _tRS(__v_raw, "media_files", oldValue, value)
+        }
+    override var files_count: Number
+        get() {
+            return _tRG(__v_raw, "files_count", __v_raw.files_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("files_count")) {
+                return
+            }
+            val oldValue = __v_raw.files_count
+            __v_raw.files_count = value
+            _tRS(__v_raw, "files_count", oldValue, value)
+        }
+    override var created_at: String
+        get() {
+            return _tRG(__v_raw, "created_at", __v_raw.created_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("created_at")) {
+                return
+            }
+            val oldValue = __v_raw.created_at
+            __v_raw.created_at = value
+            _tRS(__v_raw, "created_at", oldValue, value)
+        }
+    override var updated_at: String
+        get() {
+            return _tRG(__v_raw, "updated_at", __v_raw.updated_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("updated_at")) {
+                return
+            }
+            val oldValue = __v_raw.updated_at
+            __v_raw.updated_at = value
+            _tRS(__v_raw, "updated_at", oldValue, value)
+        }
+}
+open class ShopMediaListResponse (
+    @JsonNotNull
+    open var results: UTSArray<ShopMediaItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopMediaListResponse", "pkg/api/modules/shops.uts", 64, 13)
+    }
+}
+open class ShopMediaMutationData (
+    open var shop: Any? = null,
+    @JsonNotNull
+    open var title: String,
+    open var record_type: String? = null,
+    open var expiration_date: String? = null,
+    open var notes: String? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ShopMediaMutationData", "pkg/api/modules/shops.uts", 76, 13)
+    }
+}
+val shopBasePath = "/api/shops/shops/"
+val shopMediaBasePath = "/api/shops/media/"
+fun buildListQuery__2(data: ShopListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/shops.uts", 86, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    return query
+}
+fun buildMediaListQuery(data: ShopMediaListQuery): UTSJSONObject {
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/shops.uts", 96, 11), "page" to data.page, "page_size" to data.page_size)
+    if (data.search != null && data.search != "") {
+        query["search"] = data.search
+    }
+    if (data.shop != null && stringValue__6(data.shop) != "") {
+        query["shop"] = data.shop
+    }
+    return query
+}
+fun stringValue__6(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun intValue__5(value: Any?): Number {
+    if (value == null) {
+        return 0
+    }
+    val text = stringValue__6(value)
+    if (text == "") {
+        return 0
+    }
+    val parsed = parseInt(text)
+    if (isNaN(parsed)) {
+        return 0
+    }
+    return parsed
+}
+fun boolValue(value: Any?): Boolean {
+    if (value == null) {
+        return false
+    }
+    val text = stringValue__6(value).toLowerCase()
+    return text == "true" || text == "1" || text == "yes"
+}
+fun parseObject__2(value: Any?): UTSJSONObject? {
+    if (value == null) {
+        return null
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return null
+    }
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/shops.uts:143")
+}
+fun parseArray(value: Any?): UTSArray<UTSJSONObject> {
+    if (value == null) {
+        return _uA<UTSJSONObject>()
+    }
+    val text = JSON.stringify(value)
+    if (text == null || text == "") {
+        return _uA<UTSJSONObject>()
+    }
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/shops.uts:153")
+    if (parsed == null) {
+        return _uA<UTSJSONObject>()
+    }
+    return parsed
+}
+fun normalizeServerUrl__3(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun buildShopItem(rawObject: UTSJSONObject): ShopItem {
+    return ShopItem(id = intValue__5(rawObject["id"]), name = stringValue__6(rawObject["name"]), address = stringValue__6(rawObject["address"]), company = intValue__5(rawObject["company"]), company_name = stringValue__6(rawObject["company_name"]), media_records_count = intValue__5(rawObject["media_records_count"]), media_files = buildShopMediaFiles(rawObject["media_files"]), created_at = stringValue__6(rawObject["created_at"]), updated_at = stringValue__6(rawObject["updated_at"]))
+}
+fun buildShopMediaMutationBody(data: ShopMediaMutationData): UTSJSONObject {
+    return _uO("shop" to data.shop, "title" to data.title, "record_type" to data.record_type, "expiration_date" to data.expiration_date, "notes" to if (data.notes == null) {
+        ""
+    } else {
+        data.notes
+    }
+    )
+}
+fun buildShopMediaFile(rawObject: UTSJSONObject): ShopMediaFile {
+    return ShopMediaFile(id = stringValue__6(rawObject["id"]), company = intValue__5(rawObject["company"]), original_filename = stringValue__6(rawObject["original_filename"]), file_type = stringValue__6(rawObject["file_type"]), file_type_display = stringValue__6(rawObject["file_type_display"]), mime_type = stringValue__6(rawObject["mime_type"]), file_size = intValue__5(rawObject["file_size"]), file_size_display = stringValue__6(rawObject["file_size_display"]), file_url = normalizeServerUrl__3(stringValue__6(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__3(stringValue__6(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__3(stringValue__6(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__3(stringValue__6(rawObject["signed_thumbnail_url"])), object_id = stringValue__6(rawObject["object_id"]), is_deleted = boolValue(rawObject["is_deleted"]), created_at = stringValue__6(rawObject["created_at"]), updated_at = stringValue__6(rawObject["updated_at"]))
+}
+fun buildShopMediaFiles(value: Any?): UTSArray<ShopMediaFile> {
+    val rawArray = parseArray(value)
+    val result: UTSArray<ShopMediaFile> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rawArray.length){
+            result.push(buildShopMediaFile(rawArray[index]))
+            index += 1
+        }
+    }
+    return result
+}
+fun buildShopMediaItem(rawObject: UTSJSONObject): ShopMediaItem {
+    return ShopMediaItem(id = intValue__5(rawObject["id"]), shop = intValue__5(rawObject["shop"]), shop_name = stringValue__6(rawObject["shop_name"]), title = stringValue__6(rawObject["title"]), record_type = stringValue__6(rawObject["record_type"]), record_type_display = stringValue__6(rawObject["record_type_display"]), expiration_date = stringValue__6(rawObject["expiration_date"]), notes = stringValue__6(rawObject["notes"]), media_files = buildShopMediaFiles(rawObject["media_files"]), files_count = intValue__5(rawObject["files_count"]), created_at = stringValue__6(rawObject["created_at"]), updated_at = stringValue__6(rawObject["updated_at"]))
+}
+fun buildShopMediaItemResponse(raw: Any): ShopMediaItem {
+    val rawObject = parseObject__2(raw)
+    if (rawObject == null) {
+        throw UTSError("商店资料详情响应解析失败")
+    }
+    return buildShopMediaItem(rawObject)
+}
+fun buildShopItemResponse(raw: Any): ShopItem {
+    val rawObject = parseObject__2(raw)
+    if (rawObject == null) {
+        throw UTSError("商店详情响应解析失败")
+    }
+    return buildShopItem(rawObject)
+}
+fun shopDetailPath(id: Any): String {
+    return shopBasePath + stringValue__6(id) + "/"
+}
+fun shopMediaDetailPath(id: Any): String {
+    return shopMediaBasePath + stringValue__6(id) + "/"
+}
+fun buildShopListResponse(raw: Any, query: ShopListQuery): ShopListResponse {
+    val rawObject = parseObject__2(raw)
+    if (rawObject == null) {
+        throw UTSError("商店列表响应解析失败")
+    }
+    val resultsArray = parseArray(rawObject["results"])
+    val results: UTSArray<ShopItem> = _uA()
+    run {
+        var index: Number = 0
+        while(index < resultsArray.length){
+            results.push(buildShopItem(resultsArray[index]))
+            index += 1
+        }
+    }
+    val paginationObject = parseObject__2(rawObject["pagination"])
+    var totalCount = intValue__5(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue__5(rawObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__5(paginationObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue__5(rawObject["page"])
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue__5(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+    }
+    var pageSize = intValue__5(rawObject["page_size"])
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__5(paginationObject["page_size"])
+    }
+    if (pageSize <= 0) {
+        pageSize = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+    }
+    var totalPages = intValue__5(rawObject["total_pages"])
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__5(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return ShopListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
+}
+fun buildShopMediaListResponse(raw: Any, query: ShopMediaListQuery): ShopMediaListResponse {
+    val rawObject = parseObject__2(raw)
+    if (rawObject == null) {
+        throw UTSError("商店媒体列表响应解析失败")
+    }
+    val resultsArray = parseArray(rawObject["results"])
+    val results: UTSArray<ShopMediaItem> = _uA()
+    run {
+        var index: Number = 0
+        while(index < resultsArray.length){
+            results.push(buildShopMediaItem(resultsArray[index]))
+            index += 1
+        }
+    }
+    val paginationObject = parseObject__2(rawObject["pagination"])
+    var totalCount = intValue__5(rawObject["count"])
+    if (totalCount <= 0) {
+        totalCount = intValue__5(rawObject["total"])
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue__5(paginationObject["total"])
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length
+    }
+    var currentPage = intValue__5(rawObject["page"])
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue__5(paginationObject["page"])
+    }
+    if (currentPage <= 0) {
+        currentPage = if (query.page > 0) {
+            query.page
+        } else {
+            1
+        }
+    }
+    var pageSize = intValue__5(rawObject["page_size"])
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue__5(paginationObject["page_size"])
+    }
+    if (pageSize <= 0) {
+        pageSize = if (query.page_size > 0) {
+            query.page_size
+        } else {
+            results.length
+        }
+    }
+    var totalPages = intValue__5(rawObject["total_pages"])
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue__5(paginationObject["total_pages"])
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize)
+    }
+    if (totalPages <= 0) {
+        totalPages = 1
+    }
+    return ShopMediaListResponse(results = results, count = totalCount, total_count = totalCount, total_pages = totalPages, current_page = currentPage, page_size = pageSize)
+}
+fun getShopList(query: ShopListQuery): UTSPromise<ShopListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopBasePath, "GET", buildListQuery__2(query), false))
+            return@w buildShopListResponse(raw, query)
+    })
+}
+fun getShopDetail(id: Any): UTSPromise<ShopItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopDetailPath(id), "GET", _uO(), false))
+            return@w buildShopItemResponse(raw)
+    })
+}
+fun getShopMediaList(query: ShopMediaListQuery): UTSPromise<ShopMediaListResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopMediaBasePath, "GET", buildMediaListQuery(query), false))
+            return@w buildShopMediaListResponse(raw, query)
+    })
+}
+fun getShopMediaDetail(id: Any): UTSPromise<ShopMediaItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopMediaDetailPath(id), "GET", _uO(), false))
+            return@w buildShopMediaItemResponse(raw)
+    })
+}
+fun createShopMedia(data: ShopMediaMutationData): UTSPromise<ShopMediaItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopMediaBasePath, "POST", buildShopMediaMutationBody(data), false))
+            return@w buildShopMediaItemResponse(raw)
+    })
+}
+fun updateShopMedia(id: Any, data: ShopMediaMutationData): UTSPromise<ShopMediaItem> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(shopMediaDetailPath(id), "PUT", buildShopMediaMutationBody(data), false))
+            return@w buildShopMediaItemResponse(raw)
+    })
+}
+val GenPagesShopIndexClass = CreateVueComponent(GenPagesShopIndex::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesShopIndex.inheritAttrs, inject = GenPagesShopIndex.inject, props = GenPagesShopIndex.props, propsNeedCastKeys = GenPagesShopIndex.propsNeedCastKeys, emits = GenPagesShopIndex.emits, components = GenPagesShopIndex.components, styles = GenPagesShopIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesShopIndex.setup(props as GenPagesShopIndex)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesShopIndex {
+    return GenPagesShopIndex(instance, renderer)
+}
+)
+val GenPagesShopMediaClass = CreateVueComponent(GenPagesShopMedia::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesShopMedia.inheritAttrs, inject = GenPagesShopMedia.inject, props = GenPagesShopMedia.props, propsNeedCastKeys = GenPagesShopMedia.propsNeedCastKeys, emits = GenPagesShopMedia.emits, components = GenPagesShopMedia.components, styles = GenPagesShopMedia.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesShopMedia.setup(props as GenPagesShopMedia)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesShopMedia {
+    return GenPagesShopMedia(instance, renderer)
+}
+)
+open class SelectOption__5 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/shop/from.uvue", 49, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return SelectOption__5ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class SelectOption__5ReactiveObject : SelectOption__5, IUTSReactive<SelectOption__5> {
+    override var __v_raw: SelectOption__5
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: SelectOption__5, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): SelectOption__5ReactiveObject {
+        return SelectOption__5ReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+val GenPagesShopFromClass = CreateVueComponent(GenPagesShopFrom::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesShopFrom.inheritAttrs, inject = GenPagesShopFrom.inject, props = GenPagesShopFrom.props, propsNeedCastKeys = GenPagesShopFrom.propsNeedCastKeys, emits = GenPagesShopFrom.emits, components = GenPagesShopFrom.components, styles = GenPagesShopFrom.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesShopFrom.setup(props as GenPagesShopFrom)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesShopFrom {
+    return GenPagesShopFrom(instance, renderer)
+}
+)
 fun createApp(): UTSJSONObject {
     val app = createSSRApp(GenAppClass)
     return _uO("app" to app)
@@ -4948,6 +8104,11 @@ fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/transactions/from", component = GenPagesTransactionsFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/kasa_category/index", component = GenPagesKasaCategoryIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/kasa_category/form", component = GenPagesKasaCategoryFormClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/category/index", component = GenPagesCategoryIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/category/from", component = GenPagesCategoryFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/shop/index", component = GenPagesShopIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/shop/media", component = GenPagesShopMediaClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
+    __uniRoutes.push(UniPageRoute(path = "pages/shop/from", component = GenPagesShopFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
 }
 val __uniTabBar: Map<String, Any?>? = _uM("color" to "#94A3B8", "selectedColor" to "#0F172A", "backgroundColor" to "#FFFFFF", "borderStyle" to "black", "list" to _uA(
     _uM("pagePath" to "pages/tabbar/reports", "iconPath" to "static/tabBar/Report.png", "selectedIconPath" to "static/tabBar/Report (1).png", "text" to "报表"),

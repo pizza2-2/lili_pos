@@ -70,7 +70,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:200")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:201")
                         if (parsedError != null) {
                             val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
@@ -145,7 +145,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 val rawItem = if (rawItemText == null || rawItemText == "") {
                     null
                 } else {
-                    UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:264")
+                    UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:265")
                 }
                 if (rawItem == null) {
                     return _uA()
@@ -158,7 +158,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 val parsed = if (text == null || text == "") {
                     null
                 } else {
-                    UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:273")
+                    UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:274")
                 }
                 if (parsed == null) {
                     return _uA()
@@ -218,7 +218,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 keyword.value
                             }
                             , page = currentPage.value, page_size = pageSize.value, is_active = selectedIsActive.value, has_arrears = selectedHasArrears.value)))
-                            console.log(response, " at pages/suppliers/index.uvue:326")
+                            console.log(response, " at pages/suppliers/index.uvue:327")
                             applySupplierResponse(response)
                         }
                          catch (error: Throwable) {
@@ -311,7 +311,7 @@ open class GenPagesSuppliersIndex : BasePage {
                                 uni_showToast(ShowToastOptions(title = "暂不支持该操作", icon = "none"))
                                 return@w1
                             }
-                            uni_showToast(ShowToastOptions(title = batchActionTitle(actionKey) + "成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage(batchActionTitle(actionKey) + "成功"), icon = "success"))
                             clearSelectionState()
                             loadSuppliers()
                             loadSupplierGlobalStatistics()
@@ -667,7 +667,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 return wrapUTSPromise(suspend {
                         try {
                             await(deleteSupplier(supplierId))
-                            uni_showToast(ShowToastOptions(title = "删除成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("删除成功"), icon = "success"))
                             loadSuppliers()
                         }
                          catch (error: Throwable) {

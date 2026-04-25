@@ -2,6 +2,7 @@ import { SupplierListQuery } from "../../pkg/api/modules/suppliers";
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue';
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue';
 import { computed } from 'vue';
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts';
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers';
 const __sfc__ = defineComponent({
     __name: 'index',
@@ -64,7 +65,7 @@ const __sfc__ = defineComponent({
             if (error != null) {
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:200");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:201");
                     if (parsedError != null) {
                         const rawMessage = parsedError!['message'];
                         if (rawMessage != null) {
@@ -121,7 +122,7 @@ const __sfc__ = defineComponent({
         }
         function batchActionCandidatesFromSupplier(item: SupplierItem): string[] {
             const rawItemText = JSON.stringify(item);
-            const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:264");
+            const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:265");
             if (rawItem == null) {
                 return [];
             }
@@ -130,7 +131,7 @@ const __sfc__ = defineComponent({
                 return [];
             }
             const text = JSON.stringify(rawActions);
-            const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:273");
+            const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:274");
             if (parsed == null) {
                 return [];
             }
@@ -179,7 +180,7 @@ const __sfc__ = defineComponent({
                     is_active: selectedIsActive.value,
                     has_arrears: selectedHasArrears.value,
                 } as SupplierListQuery);
-                console.log(response, " at pages/suppliers/index.uvue:326");
+                console.log(response, " at pages/suppliers/index.uvue:327");
                 applySupplierResponse(response);
             }
             catch (error: any) {
@@ -265,7 +266,7 @@ const __sfc__ = defineComponent({
                     return;
                 }
                 uni.showToast({
-                    title: batchActionTitle(actionKey) + '成功',
+                    title: takeLatestResponseMessage(batchActionTitle(actionKey) + '成功'),
                     icon: 'success',
                 });
                 clearSelectionState();
@@ -583,7 +584,7 @@ const __sfc__ = defineComponent({
             try {
                 await deleteSupplier(supplierId);
                 uni.showToast({
-                    title: '删除成功',
+                    title: takeLatestResponseMessage('删除成功'),
                     icon: 'success',
                 });
                 loadSuppliers();

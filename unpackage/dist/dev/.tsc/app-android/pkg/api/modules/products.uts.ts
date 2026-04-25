@@ -1,0 +1,380 @@
+import { baseUrl, request } from '../index.uts'
+
+export type ProductListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	filters: ProductSelectedFilter[]
+}
+
+export type ProductSelectedFilter = {
+	param: string
+	value: string
+}
+
+export type ProductMediaFile = {
+	id: string
+	company: number
+	original_filename: string
+	file_type: string
+	file_type_display: string
+	mime_type: string
+	file_size: number
+	file_size_display: string
+	file_url: string
+	thumbnail_url: string
+	signed_url: string
+	signed_thumbnail_url: string
+	object_id: string
+	is_deleted: boolean
+	created_at: string
+	updated_at: string
+}
+
+export type ProductItem = {
+	id: number
+	sku: string
+	barcode: string
+	name_cn: string
+	name_en: string
+	media_files: ProductMediaFile[]
+	category: any | null
+	supplier: number | null
+	supplier_name: string
+	purchase_price: string
+	cost_price: string
+	base_sales_price: string
+	status: string
+	is_featured: boolean
+	is_new: boolean
+	is_bestseller: boolean
+	sort_order: number
+	rating: string
+	variant_count: number
+	total_sales_quantity: number
+	total_sales_amount: string
+	last_sale_date: string | null
+	created_at: string
+	updated_at: string
+}
+
+export type ProductListResponse = {
+	results: ProductItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ProductFilterOption = {
+	value: string
+	label: string
+}
+
+export type ProductFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: ProductFilterOption[]
+}
+
+export type ProductFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: ProductFilterDefinition[]
+}
+
+const productsBasePath = '/api/products/products/'
+
+function buildListQuery(data: ProductListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+
+	for (let filterIndex = 0; filterIndex < data.filters.length; filterIndex += 1) {
+		const filter = data.filters[filterIndex]
+		if (filter.param != '' && filter.value != '') {
+			query[filter.param] = filter.value
+		}
+	}
+
+	return query
+}
+
+function normalizeServerUrl(url: string): string {
+	if (url == '') {
+		return ''
+	}
+
+	if (url.startsWith('http://localhost:8000')) {
+		return baseUrl + url.substring('http://localhost:8000'.length)
+	}
+
+	if (url.startsWith('https://localhost:8000')) {
+		return baseUrl + url.substring('https://localhost:8000'.length)
+	}
+
+	if (url.startsWith('http://127.0.0.1:8000')) {
+		return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	}
+
+	if (url.startsWith('https://127.0.0.1:8000')) {
+		return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	}
+
+	return url
+}
+
+function normalizeProductMediaFiles(files: ProductMediaFile[]) {
+	for (let mediaIndex = 0; mediaIndex < files.length; mediaIndex += 1) {
+		const mediaFile = files[mediaIndex]
+		mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
+		mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
+		mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
+		mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+	}
+}
+
+function normalizeProductItem(item: ProductItem): ProductItem {
+	normalizeProductMediaFiles(item.media_files)
+	return item
+}
+
+function normalizeProductList(data: ProductListResponse): ProductListResponse {
+	for (let productIndex = 0; productIndex < data.results.length; productIndex += 1) {
+		data.results[productIndex] = normalizeProductItem(data.results[productIndex])
+	}
+	return data
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+
+	const text = '' + value
+	if (text == '') {
+		return 0
+	}
+
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+
+	return parsed
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+
+	return '' + value
+}
+
+function booleanValue(value: any | null): boolean {
+	return stringValue(value) == 'true'
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<any>(text)
+	if (parsed == null) {
+		return []
+	}
+
+	const result: string[] = []
+	for (let index = 0; index < parsed!.length; index += 1) {
+		result.push(stringValue(parsed![index]))
+	}
+	return result
+}
+
+function buildProductListResponse(raw: any, query: ProductListQuery): ProductListResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('商品列表响应解析失败')
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) {
+		const paginationText = JSON.stringify(rawPagination)
+		if (paginationText != null && paginationText != '') {
+			paginationObject = JSON.parseObject<UTSJSONObject>(paginationText)
+		}
+	}
+
+	let results: ProductItem[] = []
+	const rawResults = rawObject['results']
+	if (rawResults != null) {
+		const resultText = JSON.stringify(rawResults)
+		const parsedResults = resultText == null || resultText == '' ? null : JSON.parseArray<ProductItem>(resultText)
+		if (parsedResults != null) {
+			results = parsedResults!
+		}
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total_count'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['count'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) {
+		currentPage = intValue(rawObject['current_page'])
+	}
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0) {
+		pageSize = intValue(rawObject['per_page'])
+	}
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0) {
+		totalPages = intValue(rawObject['pages'])
+	}
+	if (totalPages <= 0) {
+		totalPages = intValue(rawObject['num_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['num_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as ProductListResponse
+}
+
+function buildProductFilterOptionsResponse(raw: any): ProductFilterOptionsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('商品过滤选项解析失败')
+	}
+
+	let filters: ProductFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filtersText = JSON.stringify(rawFilters)
+		const filterObjects = filtersText == null || filtersText == '' ? null : JSON.parseArray<UTSJSONObject>(filtersText)
+		if (filterObjects != null) {
+			const nextFilters: ProductFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects!.length; filterIndex += 1) {
+				const filterObject = filterObjects![filterIndex]
+				let options: ProductFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionsText = JSON.stringify(rawOptions)
+					const optionObjects = optionsText == null || optionsText == '' ? null : JSON.parseArray<UTSJSONObject>(optionsText)
+					if (optionObjects != null) {
+						const nextOptions: ProductFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects!.length; optionIndex += 1) {
+							const optionObject = optionObjects![optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as ProductFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: booleanValue(filterObject['multiple']),
+					options: options,
+				} as ProductFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as ProductFilterOptionsResponse
+}
+
+export async function getProductList(data: ProductListQuery): Promise<ProductListResponse> {
+	const raw = await request(
+		productsBasePath,
+		'GET',
+		buildListQuery(data),
+		true
+	)
+
+	return normalizeProductList(buildProductListResponse(raw, data))
+}
+
+export async function getProductFilterOptions(): Promise<ProductFilterOptionsResponse> {
+	const raw = await request(
+		productsBasePath + 'filter-options/',
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+
+	return buildProductFilterOptionsResponse(raw)
+}

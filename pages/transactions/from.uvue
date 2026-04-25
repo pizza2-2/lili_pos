@@ -39,6 +39,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { getSupplierDetail } from '@/pkg/api/modules/suppliers'
 import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
@@ -478,17 +479,20 @@ async function persistForm(payload: UTSJSONObject) {
 	})
 	try {
 		const body = buildTransactionMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (body.supplier == '') {
 			throw new Error('供应商ID缺失')
 		}
 		if (formMode.value == 'edit' && transactionId.value != '') {
 			savingText.value = '保存修改中...'
 			await updateTransaction(transactionId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			savingText.value = '上传图片中...'
 			await uploadPendingTransactionImages(data, uploadContentTypeModel)
 		} else {
 			savingText.value = '创建采购记录中...'
 			const createdTransaction = await createTransaction(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			transactionId.value = createdTransaction.id.toString()
 			supplierId.value = createdTransaction.supplier.toString()
 			try {
@@ -501,7 +505,7 @@ async function persistForm(payload: UTSJSONObject) {
 		clearDraftStorage()
 		markTransactionListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

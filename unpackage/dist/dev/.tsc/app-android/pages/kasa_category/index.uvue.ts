@@ -1,9 +1,10 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteKasaCategory, getKasaCategoryList, getKasaCategoryStatistics, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryListResponse, KasaCategoryStatisticsResponse, KasaCategoryTaxRatesResponse, patchKasaCategory } from '@/pkg/api/modules/kasa_category'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/index.uvue", 134, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/index.uvue", 135, 6>;
 	value: string
 	text: string
 }
@@ -93,7 +94,7 @@ function parseErrorMessage(error: any): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:216")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:217")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -501,7 +502,7 @@ async function executeBatchAction(actionKey: string) {
 			}
 		}
 		uni.showToast({
-			title: batchActionTitle(actionKey) + '成功',
+			title: takeLatestResponseMessage(batchActionTitle(actionKey) + '成功'),
 			icon: 'success',
 		})
 		clearSelectionState()
@@ -567,7 +568,7 @@ async function confirmDelete(id: string) {
 	try {
 		await deleteKasaCategory(id)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		loadKasaCategories()
@@ -586,7 +587,7 @@ async function toggleSingleStatus(id: string, currentActive: boolean) {
 			is_active: !currentActive,
 		} as UTSJSONObject)
 		uni.showToast({
-			title: '状态更新成功',
+			title: takeLatestResponseMessage('状态更新成功'),
 			icon: 'success',
 		})
 		loadKasaCategories()

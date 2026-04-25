@@ -39,6 +39,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { SupplierItem, SupplierMutationData, createSupplier, getSupplierDetail, updateSupplier } from '@/pkg/api/modules/suppliers'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
@@ -413,14 +414,17 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 	})
 	try {
 		const body = buildSupplierMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (formMode.value == 'edit' && supplierId.value != '') {
 			savingText.value = '上传图片中...'
 			await uploadPendingSupplierImages(data, uploadContentTypeModel)
 			savingText.value = '保存修改中...'
 			await updateSupplier(supplierId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 		} else {
 			savingText.value = '创建供应商中...'
 			const createdSupplier = await createSupplier(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			supplierId.value = createdSupplier.id.toString()
 			try {
 				savingText.value = '上传图片中...'
@@ -432,7 +436,7 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 		clearDraftStorage()
 		markSupplierListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

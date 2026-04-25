@@ -25,10 +25,8 @@ open class GenPagesTabbarSettings : BasePage {
             val _cache = __ins.renderCache
             val groups = ref(_uA<MenuGroup>(MenuGroup(label = "常用页面", rows = _uA(
                 _uA(
-                    MenuItem(label = "供应商", icon = "◫", iconPath = null, path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
-                    MenuItem(label = "商品", icon = "□", iconPath = null, path = "/pages/tabbar/products", action = "switchTab", disabled = false),
-                    MenuItem(label = "我的", icon = "◉", iconPath = null, path = "/pages/tabbar/mine", action = "switchTab", disabled = false),
-                    MenuItem(label = "隐私", icon = "◎", iconPath = null, path = "/pages/privacy/privacy", action = "navigateTo", disabled = false)
+                    MenuItem(label = "供应商", icon = "", iconPath = "/static/muen/供应商.png", path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "商店", icon = "", iconPath = "/static/muen/商店.png", path = "/pages/shop/index", action = "navigateTo", disabled = false)
                 )
             )), MenuGroup(label = "分类设置", rows = _uA(
                 _uA(

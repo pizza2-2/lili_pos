@@ -129,6 +129,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
@@ -403,7 +404,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 			return
 		}
 		uni.showToast({
-			title: batchActionTitle(actionKey) + '成功',
+			title: takeLatestResponseMessage(batchActionTitle(actionKey) + '成功'),
 			icon: 'success',
 		})
 		clearSelectionState()
@@ -760,7 +761,7 @@ async function confirmDeleteSupplier(supplierId: string) {
 	try {
 		await deleteSupplier(supplierId)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		loadSuppliers()

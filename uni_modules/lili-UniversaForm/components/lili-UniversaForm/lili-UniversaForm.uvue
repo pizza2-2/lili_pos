@@ -35,14 +35,21 @@
 						</view>
 
 						<view class="uf-control">
-							<input
-								v-if="isInputField(field)"
-								class="uf-input"
-								:value="getStringFieldValue(field)"
-								:placeholder="getFieldPlaceholder(field)"
-								:disabled="isReadonly(field)"
-								@input="handleTextInput(field, $event)"
-							/>
+							<view v-if="isInputField(field)" class="uf-input-wrap">
+								<view v-if="getFieldShowScan(field)" class="uf-input-icon-btn" @click="handleScanClick(field)">
+									<image class="uf-input-icon" src="/static/icon/扫码.png" />
+								</view>
+								<input
+									class="uf-input"
+									:value="getStringFieldValue(field)"
+									:placeholder="getFieldPlaceholder(field)"
+									:disabled="isReadonly(field)"
+									@input="handleTextInput(field, $event)"
+								/>
+								<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" @click="handleAddClick(field)">
+									<image class="uf-input-icon" src="/static/icon/加.png" />
+								</view>
+							</view>
 
 							<textarea
 								v-else-if="isTextareaField(field)"
@@ -53,15 +60,22 @@
 								@input="handleTextInput(field, $event)"
 							></textarea>
 
-							<input
-								v-else-if="isNumberField(field)"
-								class="uf-input"
-								type="number"
-								:value="getStringFieldValue(field)"
-								:placeholder="getFieldPlaceholder(field)"
-								:disabled="isReadonly(field)"
-								@input="handleNumberInput(field, $event)"
-							/>
+							<view v-else-if="isNumberField(field)" class="uf-input-wrap">
+								<view v-if="getFieldShowScan(field)" class="uf-input-icon-btn" @click="handleScanClick(field)">
+									<image class="uf-input-icon" src="/static/icon/扫码.png" />
+								</view>
+								<input
+									class="uf-input"
+									type="number"
+									:value="getStringFieldValue(field)"
+									:placeholder="getFieldPlaceholder(field)"
+									:disabled="isReadonly(field)"
+									@input="handleNumberInput(field, $event)"
+								/>
+								<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" @click="handleAddClick(field)">
+									<image class="uf-input-icon" src="/static/icon/加.png" />
+								</view>
+							</view>
 
 							<view v-else-if="isDatetimeField(field)" class="uf-datetime-wrap">
 								<liliData
@@ -203,6 +217,8 @@ const emit = defineEmits<{
 	(e: 'bottom-select-add', payload: UTSJSONObject): void
 	(e: 'bottom-select-edit', payload: UTSJSONObject): void
 	(e: 'floating-action', payload: UTSJSONObject): void
+	(e: 'input-scan', payload: UTSJSONObject): void
+	(e: 'input-add', payload: UTSJSONObject): void
 }>()
 
 const formData = ref<UTSJSONObject>({} as UTSJSONObject)
@@ -327,6 +343,14 @@ function isBottomSelectField(field: UTSJSONObject) : boolean {
 
 function isUploadField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'upload'
+}
+
+function getFieldShowScan(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showScan', false)
+}
+
+function getFieldShowAdd(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showAdd', false)
 }
 
 function isRequired(field: UTSJSONObject) : boolean {
@@ -943,6 +967,24 @@ function handleFloatingActionClick() {
 	emit('floating-action', payload)
 }
 
+function handleScanClick(field: UTSJSONObject) {
+	emit('input-scan', {
+		field: field,
+		key: getFieldKey(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleAddClick(field: UTSJSONObject) {
+	emit('input-add', {
+		field: field,
+		key: getFieldKey(field),
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
 watch(
 	() : UTSJSONObject[] => props.formSections,
 	() => {
@@ -1153,6 +1195,27 @@ defineExpose({
 
 .uf-upload-wrap {
 	padding-top: 4px;
+}
+
+.uf-input-wrap {
+	flex-direction: row;
+	align-items: center;
+	height: 44px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+}
+
+.uf-input-icon-btn {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+}
+
+.uf-input-icon {
+	width: 24px;
+	height: 24px;
 }
 
 .uf-plain-value {

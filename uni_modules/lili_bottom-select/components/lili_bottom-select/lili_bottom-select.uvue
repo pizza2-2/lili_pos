@@ -15,7 +15,7 @@
 					</view>
 					<!-- 右箭头 -->
 					<view class="bs-trigger-arrow">
-						<text class="bs-arrow-icon">{{ renderVisible ? '⌄' : '›' }}</text>
+						<text class="bs-arrow-icon">{{ panelVisible ? '⌄' : '›' }}</text>
 					</view>
 				</view>
 			</view>
@@ -73,10 +73,10 @@
 				<view class="bs-tags-inner">
 					<view
 						v-for="item in selectedItems"
-						:key="item[valueKey]"
+						:key="fieldToStr(item, valueKey)"
 						class="bs-tag"
 					>
-						<text class="bs-tag-text">{{ item[labelKey] }}</text>
+						<text class="bs-tag-text">{{ fieldLabel(item, labelKey) }}</text>
 						<view class="bs-tag-remove" @click.stop="removeSelectedItem(item)">
 							<text class="bs-tag-remove-icon">✕</text>
 						</view>
@@ -85,7 +85,7 @@
 			</scroll-view>
 		</view>
 
-		<!-- 列表区域 -->
+		<!-- 列表 / 树区域 -->
 		<scroll-view
 			scroll-y="true"
 			style="flex:1"
@@ -93,37 +93,55 @@
 			:show-scrollbar="false"
 		>
 			<!-- 初次加载中 -->
-			<view v-if="loading && displayList.length == 0" class="bs-state-wrapper">
+			<view v-if="loading && visibleRows.length == 0" class="bs-state-wrapper">
 				<text class="bs-state-text">加载中...</text>
 			</view>
 
 			<!-- 空状态 -->
-			<view v-else-if="!loading && displayList.length == 0 && listLoaded" class="bs-state-wrapper">
+			<view v-else-if="!loading && visibleRows.length == 0 && listLoaded" class="bs-state-wrapper">
 				<text class="bs-state-text">{{ emptyText }}</text>
 			</view>
 
-			<!-- 列表项 -->
+			<!-- 列表项 / 树节点 -->
 			<view v-else>
 				<view
-					v-for="item in displayList"
-					:key="item[valueKey]"
-					:class="isItemSelected(item) ? 'bs-list-item bs-list-item-selected' : 'bs-list-item'"
-					@click="onItemClick(item)"
+					v-for="row in visibleRows"
+					:key="row.key"
+					:class="isItemSelected(row.item) ? 'bs-list-item bs-list-item-selected' : 'bs-list-item'"
+					@click="onRowClick(row)"
 				>
-					<text :class="isItemSelected(item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label'">
-						{{ item[labelKey] }}
-					</text>
-					<!-- 选中图标 -->
-					<view v-if="isItemSelected(item)" class="bs-check-icon-wrapper">
-						<text class="bs-check-icon">✓</text>
+					<view class="bs-item-main">
+						<!-- 树缩进 + 展开按钮 -->
+						<view v-if="tree" class="bs-tree-prefix">
+							<view class="bs-tree-indent" :style="getTreeIndentStyle(row)"></view>
+
+							<view
+								v-if="row.hasChildren"
+								class="bs-tree-toggle"
+								@click.stop="toggleExpand(row.item)"
+							>
+								<text class="bs-tree-toggle-icon">{{ row.expanded ? '⌄' : '›' }}</text>
+							</view>
+
+							<view v-else class="bs-tree-toggle-placeholder"></view>
+						</view>
+
+						<text :class="isItemSelected(row.item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label'">
+							{{ fieldLabel(row.item, labelKey) }}
+						</text>
+					</view>
+
+					<!-- 选中 / 半选图标 -->
+					<view v-if="isItemSelected(row.item) || isItemHalfSelected(row.item)" class="bs-check-icon-wrapper">
+						<text class="bs-check-icon">{{ getSelectIcon(row.item) }}</text>
 					</view>
 				</view>
 
 				<!-- 分页加载状态 -->
-				<view v-if="loading && displayList.length > 0" class="bs-load-more">
+				<view v-if="loading && visibleRows.length > 0" class="bs-load-more">
 					<text class="bs-load-more-text">加载中...</text>
 				</view>
-				<view v-else-if="!hasMore && displayList.length > 0" class="bs-load-more">
+				<view v-else-if="!hasMore && visibleRows.length > 0" class="bs-load-more">
 					<text class="bs-load-more-text">没有更多了</text>
 				</view>
 			</view>
@@ -161,12 +179,72 @@ type MultiSelectChangePayload = {
 	items: UTSJSONObject[]
 }
 
+type TreeDisplayRow = {
+	key: string
+	item: UTSJSONObject
+	level: number
+	hasChildren: boolean
+	expanded: boolean
+}
+
 type Props = {
 	fetchData: (params: UTSJSONObject) => Promise<UTSJSONObject>
+
+	/**
+	 * 单选值
+	 */
 	value?: string
+
+	/**
+	 * 单选显示文本
+	 */
 	valueText?: string
+
+	/**
+	 * 多选值
+	 */
 	values?: string[]
+
+	/**
+	 * 是否多选
+	 */
 	multiple?: boolean
+
+	/**
+	 * 是否启用树结构
+	 */
+	tree?: boolean
+
+	/**
+	 * 树子节点字段名
+	 */
+	childrenKey?: string
+
+	/**
+	 * 是否默认展开所有树节点
+	 */
+	defaultExpandAll?: boolean
+
+	/**
+	 * 点击节点主体时是否优先展开/收起
+	 * false：点击节点主体执行选择，点击箭头展开
+	 * true：点击有子节点的节点主体执行展开，叶子节点执行选择
+	 */
+	expandOnClickNode?: boolean
+
+	/**
+	 * 多选树是否严格模式
+	 * true：父子节点互不影响
+	 * false：选择父节点时会级联选择/取消子节点
+	 */
+	checkStrictly?: boolean
+
+	/**
+	 * 是否手风琴展开
+	 * true：同级节点只展开一个
+	 */
+	accordion?: boolean
+
 	placeholder?: string
 	title?: string
 	searchPlaceholder?: string
@@ -188,6 +266,14 @@ const props = withDefaults(defineProps<Props>(), {
 	valueText: '',
 	values: () : string[] => [],
 	multiple: false,
+
+	tree: false,
+	childrenKey: 'children',
+	defaultExpandAll: false,
+	expandOnClickNode: false,
+	checkStrictly: true,
+	accordion: false,
+
 	placeholder: '请选择',
 	title: '请选择',
 	searchPlaceholder: '请输入关键词搜索',
@@ -216,12 +302,17 @@ const emit = defineEmits<{
 const renderVisible = ref<boolean>(false)
 const overlayVisible = ref<boolean>(false)
 const panelVisible = ref<boolean>(false)
+
 const internalValue = ref<string>(props.value ?? '')
 const internalText = ref<string>(props.valueText ?? '')
 const textInitialized = ref<boolean>((props.valueText ?? '') != '')
+
 const selectedItems = ref<UTSJSONObject[]>([])
 const keyword = ref<string>('')
 const displayList = ref<UTSJSONObject[]>([])
+const expandedKeys = ref<string[]>([])
+const loadingChildKeys = ref<string[]>([])
+
 const currentPage = ref<number>(1)
 const total = ref<number>(0)
 const loading = ref<boolean>(false)
@@ -232,6 +323,8 @@ const panelStyle = ref<string>('')
 let searchTimer: number | null = null
 let enterTimer: number | null = null
 let closeTimer: number | null = null
+let requestSeq = 0
+
 const PANEL_ANIMATION_DURATION = 340
 
 function fieldToStr(item: UTSJSONObject, key: string) : string {
@@ -243,7 +336,15 @@ function fieldToStr(item: UTSJSONObject, key: string) : string {
 function fieldLabel(item: UTSJSONObject, key: string) : string {
 	const v = item[key]
 	if (v == null) return ''
-	return v as string
+	return '' + v
+}
+
+function getItemValue(item: UTSJSONObject) : string {
+	return fieldToStr(item, props.valueKey)
+}
+
+function getItemLabel(item: UTSJSONObject) : string {
+	return fieldLabel(item, props.labelKey)
 }
 
 function getNumberField(obj: UTSJSONObject, key: string) : number {
@@ -258,13 +359,169 @@ function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
 	return value as UTSJSONObject[]
 }
 
-function buildFetchParams(page: number, keywordValue: string, id: string) : UTSJSONObject {
-	return {
+function getTreeChildren(item: UTSJSONObject) : UTSJSONObject[] {
+	const value = item[props.childrenKey]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
+function getBooleanField(obj: UTSJSONObject, key: string) : boolean {
+	const value = obj[key]
+	if (value == null) return false
+	if (typeof value == 'boolean') return value as boolean
+	const text = ('' + value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function cloneItem(item: UTSJSONObject) : UTSJSONObject {
+	const next = {} as UTSJSONObject
+	for (const key in item) {
+		next[key] = item[key]
+	}
+	return next
+}
+
+function itemHasChildren(item: UTSJSONObject) : boolean {
+	if (getTreeChildren(item).length > 0) {
+		return true
+	}
+	return getBooleanField(item, 'has_children')
+}
+
+function hasTreeChildren(item: UTSJSONObject) : boolean {
+	return itemHasChildren(item)
+}
+
+function buildFetchParams(page: number, keywordValue: string, id: string, parent: string = '') : UTSJSONObject {
+	const params = {
 		page: page,
 		pageSize: props.pageSize,
 		keyword: keywordValue,
 		id: id,
 	} as UTSJSONObject
+	if (parent != '') {
+		params['parent'] = parent
+	}
+	return params
+}
+
+function hasString(list: string[], value: string) : boolean {
+	for (let i = 0; i < list.length; i++) {
+		if (list[i] == value) {
+			return true
+		}
+	}
+	return false
+}
+
+function uniqueStringList(list: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < list.length; i++) {
+		if (!hasString(result, list[i])) {
+			result.push(list[i])
+		}
+	}
+	return result
+}
+
+function mergeStringList(a: string[], b: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < a.length; i++) {
+		if (!hasString(result, a[i])) {
+			result.push(a[i])
+		}
+	}
+	for (let j = 0; j < b.length; j++) {
+		if (!hasString(result, b[j])) {
+			result.push(b[j])
+		}
+	}
+	return result
+}
+
+function containsItemValue(list: UTSJSONObject[], value: string) : boolean {
+	for (let i = 0; i < list.length; i++) {
+		if (getItemValue(list[i]) == value) {
+			return true
+		}
+	}
+	return false
+}
+
+function findSelectedItemByValue(value: string) : UTSJSONObject | null {
+	for (let i = 0; i < selectedItems.value.length; i++) {
+		const item = selectedItems.value[i]
+		if (getItemValue(item) == value) {
+			return item
+		}
+	}
+	return null
+}
+
+function findItemByValueInList(list: UTSJSONObject[], value: string) : UTSJSONObject | null {
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		if (getItemValue(item) == value) {
+			return item
+		}
+
+		const children = getTreeChildren(item)
+		if (children.length > 0) {
+			const childResult = findItemByValueInList(children, value)
+			if (childResult != null) {
+				return childResult
+			}
+		}
+	}
+	return null
+}
+
+function collectDescendantItems(item: UTSJSONObject, out: UTSJSONObject[]) {
+	const children = getTreeChildren(item)
+	for (let i = 0; i < children.length; i++) {
+		const child = children[i]
+		out.push(child)
+		collectDescendantItems(child, out)
+	}
+}
+
+function collectSelfAndDescendantItems(item: UTSJSONObject) : UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	result.push(item)
+	collectDescendantItems(item, result)
+	return result
+}
+
+function valuesFromItems(items: UTSJSONObject[]) : string[] {
+	const values: string[] = []
+	for (let i = 0; i < items.length; i++) {
+		values.push(getItemValue(items[i]))
+	}
+	return values
+}
+
+function addSelectedItems(items: UTSJSONObject[]) {
+	const next: UTSJSONObject[] = [...selectedItems.value]
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i]
+		const value = getItemValue(item)
+		if (!containsItemValue(next, value)) {
+			next.push(item)
+		}
+	}
+	selectedItems.value = next
+}
+
+function removeSelectedByValues(values: string[]) {
+	const next: UTSJSONObject[] = []
+	for (let i = 0; i < selectedItems.value.length; i++) {
+		const item = selectedItems.value[i]
+		const value = getItemValue(item)
+		if (!hasString(values, value)) {
+			next.push(item)
+		}
+	}
+	selectedItems.value = next
 }
 
 function clearAnimationTimers() {
@@ -289,14 +546,273 @@ function activatePanelAnimation() {
 	}, 16)
 }
 
-function updateTextFromList() {
-	for (let i = 0; i < displayList.value.length; i++) {
-		const item = displayList.value[i]
-		if (fieldToStr(item, props.valueKey) == internalValue.value) {
-			internalText.value = fieldLabel(item, props.labelKey)
-			textInitialized.value = true
-			break
+function isExpanded(item: UTSJSONObject) : boolean {
+	const value = getItemValue(item)
+	return hasString(expandedKeys.value, value)
+}
+
+function buildVisibleRows(list: UTSJSONObject[], level: number, parentKey: string, rows: TreeDisplayRow[]) {
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		const itemVal = getItemValue(item)
+		const children = getTreeChildren(item)
+		const hasChildren = props.tree && itemHasChildren(item)
+		const expanded = hasChildren && isExpanded(item)
+		const rowKey = parentKey + '/' + itemVal + '_' + ('' + i)
+
+		rows.push({
+			key: rowKey,
+			item: item,
+			level: level,
+			hasChildren: hasChildren,
+			expanded: expanded,
+		} as TreeDisplayRow)
+
+		if (props.tree && hasChildren && expanded) {
+			buildVisibleRows(children, level + 1, rowKey, rows)
 		}
+	}
+}
+
+const visibleRows = computed<TreeDisplayRow[]>(() : TreeDisplayRow[] => {
+	const rows: TreeDisplayRow[] = []
+	buildVisibleRows(displayList.value, 0, '', rows)
+	return rows
+})
+
+function getTreeIndentStyle(row: TreeDisplayRow) : string {
+	const width = row.level * 18
+	return `width:${width}px;`
+}
+
+function collectExpandableKeys(list: UTSJSONObject[], out: string[]) {
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		if (getTreeChildren(item).length > 0) {
+			const value = getItemValue(item)
+			if (!hasString(out, value)) {
+				out.push(value)
+			}
+			collectExpandableKeys(getTreeChildren(item), out)
+		}
+	}
+}
+
+function applyTreeExpandState(isReset: boolean, newData: UTSJSONObject[]) {
+	if (!props.tree) return
+
+	const shouldExpand = props.defaultExpandAll || keyword.value != ''
+
+	if (isReset) {
+		if (shouldExpand) {
+			const keys: string[] = []
+			collectExpandableKeys(displayList.value, keys)
+			expandedKeys.value = uniqueStringList(keys)
+		} else {
+			expandedKeys.value = []
+		}
+		return
+	}
+
+	if (shouldExpand) {
+		const keys: string[] = []
+		collectExpandableKeys(newData, keys)
+		expandedKeys.value = mergeStringList(expandedKeys.value, keys)
+	}
+}
+
+function findSiblingExpandableKeys(list: UTSJSONObject[], targetValue: string) : string[] | null {
+	const siblingKeys: string[] = []
+
+	for (let i = 0; i < list.length; i++) {
+		const item = list[i]
+		if (itemHasChildren(item)) {
+			siblingKeys.push(getItemValue(item))
+		}
+	}
+
+	for (let j = 0; j < list.length; j++) {
+		const item = list[j]
+		const value = getItemValue(item)
+
+		if (value == targetValue) {
+			return siblingKeys
+		}
+
+		const children = getTreeChildren(item)
+		if (children.length > 0) {
+			const found = findSiblingExpandableKeys(children, targetValue)
+			if (found != null) {
+				return found
+			}
+		}
+	}
+
+	return null
+}
+
+function replaceTreeChildren(list: UTSJSONObject[], targetValue: string, children: UTSJSONObject[]) : UTSJSONObject[] {
+	const next: UTSJSONObject[] = []
+	for (let index = 0; index < list.length; index += 1) {
+		const current = list[index]
+		const currentValue = getItemValue(current)
+		if (currentValue == targetValue) {
+			const cloned = cloneItem(current)
+			cloned[props.childrenKey] = children
+			cloned['has_children'] = children.length > 0
+			next.push(cloned)
+			continue
+		}
+
+		const currentChildren = getTreeChildren(current)
+		if (currentChildren.length > 0) {
+			const cloned = cloneItem(current)
+			cloned[props.childrenKey] = replaceTreeChildren(currentChildren, targetValue, children)
+			next.push(cloned)
+			continue
+		}
+
+		next.push(current)
+	}
+	return next
+}
+
+function addLoadingChildKey(value: string) {
+	if (!hasString(loadingChildKeys.value, value)) {
+		loadingChildKeys.value = [...loadingChildKeys.value, value]
+	}
+}
+
+function removeLoadingChildKey(value: string) {
+	const next: string[] = []
+	for (let index = 0; index < loadingChildKeys.value.length; index += 1) {
+		if (loadingChildKeys.value[index] != value) {
+			next.push(loadingChildKeys.value[index])
+		}
+	}
+	loadingChildKeys.value = next
+}
+
+async function ensureTreeChildrenLoaded(item: UTSJSONObject) : Promise<void> {
+	if (!props.tree) return
+	if (!itemHasChildren(item)) return
+	if (getTreeChildren(item).length > 0) return
+
+	const parentValue = getItemValue(item)
+	if (parentValue == '') return
+	if (hasString(loadingChildKeys.value, parentValue)) return
+
+	addLoadingChildKey(parentValue)
+
+	try {
+		const res = await props.fetchData(buildFetchParams(1, '', '', parentValue))
+		const children = getListField(res, 'data')
+		displayList.value = replaceTreeChildren(displayList.value, parentValue, children)
+	} catch (e) {
+		console.error('lili_bottom-select loadTreeChildren 失败:', e)
+		uni.showToast({ title: '子节点加载失败', icon: 'none' })
+	} finally {
+		removeLoadingChildKey(parentValue)
+	}
+}
+
+async function expandItem(item: UTSJSONObject) {
+	if (!props.tree) return
+	if (!itemHasChildren(item)) return
+
+	const value = getItemValue(item)
+	if (value == '') return
+
+	await ensureTreeChildrenLoaded(item)
+
+	if (props.accordion) {
+		const siblingKeys = findSiblingExpandableKeys(displayList.value, value)
+		if (siblingKeys != null) {
+			const next: string[] = []
+			for (let i = 0; i < expandedKeys.value.length; i++) {
+				const key = expandedKeys.value[i]
+				if (!hasString(siblingKeys, key) || key == value) {
+					next.push(key)
+				}
+			}
+			expandedKeys.value = next
+		}
+	}
+
+	if (!hasString(expandedKeys.value, value)) {
+		expandedKeys.value = [...expandedKeys.value, value]
+	}
+}
+
+function collapseItem(item: UTSJSONObject) {
+	const value = getItemValue(item)
+	const next: string[] = []
+
+	for (let i = 0; i < expandedKeys.value.length; i++) {
+		if (expandedKeys.value[i] != value) {
+			next.push(expandedKeys.value[i])
+		}
+	}
+
+	expandedKeys.value = next
+}
+
+async function toggleExpand(item: UTSJSONObject) {
+	if (!props.tree) return
+	if (!itemHasChildren(item)) return
+
+	if (isExpanded(item)) {
+		collapseItem(item)
+	} else {
+		await expandItem(item)
+	}
+}
+
+function expandAll() {
+	if (!props.tree) return
+	const keys: string[] = []
+	collectExpandableKeys(displayList.value, keys)
+	expandedKeys.value = uniqueStringList(keys)
+}
+
+function collapseAll() {
+	expandedKeys.value = []
+}
+
+function setExpandedKeys(keys: string[]) {
+	expandedKeys.value = uniqueStringList(keys)
+}
+
+function getExpandedKeys() : string[] {
+	return expandedKeys.value
+}
+
+function expandByValue(value: string) {
+	const item = findItemByValueInList(displayList.value, value)
+	if (item != null) {
+		expandItem(item)
+	}
+}
+
+function collapseByValue(value: string) {
+	const item = findItemByValueInList(displayList.value, value)
+	if (item != null) {
+		collapseItem(item)
+	}
+}
+
+function toggleExpandByValue(value: string) {
+	const item = findItemByValueInList(displayList.value, value)
+	if (item != null) {
+		toggleExpand(item)
+	}
+}
+
+function updateTextFromList() {
+	const item = findItemByValueInList(displayList.value, internalValue.value)
+	if (item != null) {
+		internalText.value = getItemLabel(item)
+		textInitialized.value = true
 	}
 }
 
@@ -305,27 +821,42 @@ function syncFromList(vals: string[]) {
 		selectedItems.value = []
 		return
 	}
-	const matched: UTSJSONObject[] = []
-	for (let i = 0; i < displayList.value.length; i++) {
-		const item = displayList.value[i]
-		if (vals.includes(fieldToStr(item, props.valueKey))) {
-			matched.push(item)
+
+	const next: UTSJSONObject[] = []
+
+	for (let i = 0; i < vals.length; i++) {
+		const value = vals[i]
+		let item = findSelectedItemByValue(value)
+
+		if (item == null) {
+			item = findItemByValueInList(displayList.value, value)
+		}
+
+		if (item != null && !containsItemValue(next, value)) {
+			next.push(item)
 		}
 	}
-	selectedItems.value = matched
+
+	selectedItems.value = next
 }
 
 async function loadData(isReset: boolean) {
-	if (loading.value) return
+	if (loading.value && !isReset) return
 	if (!isReset && !hasMore.value) return
 
-	loading.value = true
 	const page = isReset ? 1 : currentPage.value
+	const seq = requestSeq + 1
+	requestSeq = seq
+	loading.value = true
 
 	try {
 		const res = await props.fetchData(buildFetchParams(page, keyword.value, ''))
+
+		if (seq != requestSeq) return
+
 		const data = getListField(res, 'data')
-		total.value = getNumberField(res, 'total')
+		const totalValue = getNumberField(res, 'total')
+		total.value = totalValue
 
 		if (isReset) {
 			displayList.value = data
@@ -337,35 +868,44 @@ async function loadData(isReset: boolean) {
 			currentPage.value = currentPage.value + 1
 		}
 
+		applyTreeExpandState(isReset, data)
+
 		hasMore.value = displayList.value.length < total.value && data.length >= props.pageSize
 
 		if (!props.multiple && internalValue.value != '' && !textInitialized.value) {
 			updateTextFromList()
 		}
+
 		if (props.multiple) {
-			const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
-			syncFromList(curVals)
+			const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemValue(item))
+			if (curVals.length > 0) {
+				syncFromList(curVals)
+			} else {
+				syncFromList(props.values ?? [])
+			}
 		}
 	} catch (e) {
+		if (seq != requestSeq) return
 		console.error('lili_bottom-select loadData 失败:', e)
 		uni.showToast({ title: '数据加载失败', icon: 'none' })
 	} finally {
-		loading.value = false
+		if (seq == requestSeq) {
+			loading.value = false
+		}
 	}
 }
 
 async function fetchTextByValue(value: string) {
 	if (value == '' || textInitialized.value) return
+
 	try {
 		const res = await props.fetchData(buildFetchParams(1, '', value))
 		const data = getListField(res, 'data')
-		for (let i = 0; i < data.length; i++) {
-			const item = data[i]
-			if (fieldToStr(item, props.valueKey) == value) {
-				internalText.value = fieldLabel(item, props.labelKey)
-				textInitialized.value = true
-				break
-			}
+		const item = findItemByValueInList(data, value)
+
+		if (item != null) {
+			internalText.value = getItemLabel(item)
+			textInitialized.value = true
 		}
 	} catch (e) {
 		console.error('lili_bottom-select fetchTextByValue 失败:', e)
@@ -377,15 +917,13 @@ function syncMultiValuesFromProps(vals: string[]) {
 		selectedItems.value = []
 		return
 	}
-	if (displayList.value.length > 0) {
-		syncFromList(vals)
-	}
+	syncFromList(vals)
 }
 
 const displayText = computed<string>(() : string => {
 	if (props.multiple) {
 		if (selectedItems.value.length == 0) return ''
-		const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+		const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemLabel(item))
 		return texts.join('、')
 	}
 	return internalText.value
@@ -396,11 +934,13 @@ watch(
 	(newVal: string) => {
 		if (newVal != internalValue.value) {
 			internalValue.value = newVal
+
 			if (newVal != '') {
 				if (props.valueText != '') {
 					internalText.value = props.valueText
 					textInitialized.value = true
-				} else if (!textInitialized.value) {
+				} else {
+					textInitialized.value = false
 					fetchTextByValue(newVal)
 				}
 			} else {
@@ -419,6 +959,7 @@ watch(
 			textInitialized.value = true
 			return
 		}
+
 		if (internalValue.value == '') {
 			internalText.value = ''
 			textInitialized.value = false
@@ -439,13 +980,17 @@ onMounted(() => {
 	const info = uni.getWindowInfo()
 	const winH = info.windowHeight
 	let panelH = Math.floor(winH * 0.72)
+
 	if (panelH < 420) {
 		panelH = 420
 	}
+
 	const maxPanelH = winH - 24
+
 	if (panelH > maxPanelH) {
 		panelH = maxPanelH
 	}
+
 	panelStyle.value = `height:${panelH}px;`
 
 	if (!props.multiple && internalValue.value != '') {
@@ -456,6 +1001,7 @@ onMounted(() => {
 			fetchTextByValue(internalValue.value)
 		}
 	}
+
 	if (props.multiple && props.values.length > 0) {
 		syncMultiValuesFromProps(props.values)
 	}
@@ -463,32 +1009,40 @@ onMounted(() => {
 
 async function open() {
 	if (props.disabled) return
-	if (renderVisible.value) return
+	if (panelVisible.value || overlayVisible.value) return
+
 	renderVisible.value = true
 	overlayVisible.value = false
 	panelVisible.value = false
 	activatePanelAnimation()
+
 	emit('open')
-	keyword.value = ''
+
 	if (!listLoaded.value) {
+		displayList.value = []
+		currentPage.value = 1
+		hasMore.value = true
+		listLoaded.value = false
 		await loadData(true)
 	} else {
-		currentPage.value = 1
 		hasMore.value = displayList.value.length < total.value
 	}
+
 	if (props.multiple) {
-		const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
+		const curVals = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemValue(item))
 		syncFromList(curVals.length > 0 ? curVals : (props.values ?? []))
 	}
 }
 
 function close() {
 	if (!renderVisible.value) return
+
 	clearAnimationTimers()
+
 	overlayVisible.value = false
 	panelVisible.value = false
+
 	closeTimer = setTimeout(() => {
-		renderVisible.value = false
 		closeTimer = null
 		emit('close')
 	}, PANEL_ANIMATION_DURATION)
@@ -515,9 +1069,12 @@ async function triggerSearch() {
 		clearTimeout(searchTimer!)
 		searchTimer = null
 	}
+
 	displayList.value = []
+	currentPage.value = 1
 	hasMore.value = true
 	listLoaded.value = false
+
 	await loadData(true)
 }
 
@@ -525,6 +1082,7 @@ function onSearchInput() {
 	if (searchTimer != null) {
 		clearTimeout(searchTimer!)
 	}
+
 	searchTimer = setTimeout(() => {
 		triggerSearch()
 	}, props.searchDelay)
@@ -542,40 +1100,89 @@ function loadMore() {
 }
 
 function isItemSelected(item: UTSJSONObject) : boolean {
-	const itemVal = fieldToStr(item, props.valueKey)
+	const itemVal = getItemValue(item)
+
 	if (props.multiple) {
 		for (let i = 0; i < selectedItems.value.length; i++) {
-			if (fieldToStr(selectedItems.value[i], props.valueKey) == itemVal) {
+			if (getItemValue(selectedItems.value[i]) == itemVal) {
 				return true
 			}
 		}
 		return false
 	}
+
 	return internalValue.value == itemVal
 }
 
+function isItemHalfSelected(item: UTSJSONObject) : boolean {
+	if (!props.multiple) return false
+	if (!props.tree) return false
+	if (props.checkStrictly) return false
+	if (isItemSelected(item)) return false
+
+	const descendants: UTSJSONObject[] = []
+	collectDescendantItems(item, descendants)
+
+	if (descendants.length == 0) return false
+
+	let selectedCount = 0
+
+	for (let i = 0; i < descendants.length; i++) {
+		if (isItemSelected(descendants[i])) {
+			selectedCount = selectedCount + 1
+		}
+	}
+
+	return selectedCount > 0
+}
+
+function getSelectIcon(item: UTSJSONObject) : string {
+	if (isItemSelected(item)) return '✓'
+	if (isItemHalfSelected(item)) return '−'
+	return ''
+}
+
 function confirmSingleItem(item: UTSJSONObject) {
-	const value = fieldToStr(item, props.valueKey)
-	const text = fieldLabel(item, props.labelKey)
+	const value = getItemValue(item)
+	const text = getItemLabel(item)
+
 	internalValue.value = value
 	internalText.value = text
 	textInitialized.value = true
+
 	emit('change', { value: value, text: text, item: item } as UTSJSONObject)
+
 	close()
 }
 
 function toggleMultiItem(item: UTSJSONObject) {
-	const val = fieldToStr(item, props.valueKey)
+	if (props.tree && !props.checkStrictly) {
+		const allItems = collectSelfAndDescendantItems(item)
+		const allValues = valuesFromItems(allItems)
+
+		if (isItemSelected(item)) {
+			removeSelectedByValues(allValues)
+		} else {
+			addSelectedItems(allItems)
+		}
+
+		return
+	}
+
+	const val = getItemValue(item)
 	const idx = selectedItems.value.findIndex((s: UTSJSONObject) : boolean => {
-		return fieldToStr(s, props.valueKey) == val
+		return getItemValue(s) == val
 	})
+
 	if (idx >= 0) {
 		const newList: UTSJSONObject[] = []
+
 		for (let i = 0; i < selectedItems.value.length; i++) {
 			if (i != idx) {
 				newList.push(selectedItems.value[i])
 			}
 		}
+
 		selectedItems.value = newList
 	} else {
 		selectedItems.value = [...selectedItems.value, item]
@@ -584,6 +1191,7 @@ function toggleMultiItem(item: UTSJSONObject) {
 
 function onItemClick(item: UTSJSONObject) {
 	if (props.disabled) return
+
 	if (props.multiple) {
 		toggleMultiItem(item)
 	} else {
@@ -591,14 +1199,34 @@ function onItemClick(item: UTSJSONObject) {
 	}
 }
 
+function onRowClick(row: TreeDisplayRow) {
+	if (props.disabled) return
+
+	if (props.tree && props.expandOnClickNode && row.hasChildren) {
+		toggleExpand(row.item)
+		return
+	}
+
+	onItemClick(row.item)
+}
+
 function removeSelectedItem(item: UTSJSONObject) {
-	const val = fieldToStr(item, props.valueKey)
+	if (props.tree && !props.checkStrictly) {
+		const allItems = collectSelfAndDescendantItems(item)
+		const allValues = valuesFromItems(allItems)
+		removeSelectedByValues(allValues)
+		return
+	}
+
+	const val = getItemValue(item)
 	const newList: UTSJSONObject[] = []
+
 	for (let i = 0; i < selectedItems.value.length; i++) {
-		if (fieldToStr(selectedItems.value[i], props.valueKey) != val) {
+		if (getItemValue(selectedItems.value[i]) != val) {
 			newList.push(selectedItems.value[i])
 		}
 	}
+
 	selectedItems.value = newList
 }
 
@@ -607,25 +1235,34 @@ function clearAllSelected() {
 }
 
 function confirmMultiple() {
-	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
-	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemValue(item))
+	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemLabel(item))
+
 	emit('multiChange', {
 		values: values,
 		texts: texts,
 		items: selectedItems.value,
 	} as UTSJSONObject)
+
 	close()
 }
 
-function openPanel() { open() }
-function closePanel() { close() }
+function openPanel() {
+	open()
+}
+
+function closePanel() {
+	close()
+}
 
 function setValue(value: string, text: string) {
 	internalValue.value = value
+
 	if (text != '') {
 		internalText.value = text
 		textInitialized.value = true
 	} else if (value != '') {
+		textInitialized.value = false
 		fetchTextByValue(value)
 	} else {
 		internalText.value = ''
@@ -646,8 +1283,9 @@ function getValue() : SelectChangePayload {
 }
 
 function getValues() : MultiSelectChangePayload {
-	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldToStr(item, props.valueKey))
-	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => fieldLabel(item, props.labelKey))
+	const values = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemValue(item))
+	const texts = selectedItems.value.map<string>((item: UTSJSONObject) : string => getItemLabel(item))
+
 	return {
 		values: values,
 		texts: texts,
@@ -667,9 +1305,11 @@ function clearValues() {
 
 async function refreshData() {
 	displayList.value = []
+	currentPage.value = 1
 	listLoaded.value = false
 	keyword.value = ''
 	hasMore.value = true
+
 	await loadData(true)
 }
 
@@ -677,24 +1317,34 @@ async function preloadList(kw: string) {
 	if (kw != '') {
 		keyword.value = kw
 	}
+
 	displayList.value = []
+	currentPage.value = 1
 	listLoaded.value = false
 	hasMore.value = true
+
 	await loadData(true)
 }
 
 function reset() {
 	clearValue()
 	clearValues()
+
 	displayList.value = []
+	expandedKeys.value = []
+	loadingChildKeys.value = []
 	listLoaded.value = false
 	keyword.value = ''
 	hasMore.value = true
 	currentPage.value = 1
+	total.value = 0
 }
 
 onUnmounted(() => {
+	requestSeq = requestSeq + 1
+
 	clearAnimationTimers()
+
 	if (searchTimer != null) {
 		const timer = searchTimer
 		clearTimeout(timer!)
@@ -705,15 +1355,25 @@ onUnmounted(() => {
 defineExpose({
 	openPanel,
 	closePanel,
+
 	setValue,
 	setValues,
 	getValue,
 	getValues,
 	clearValue,
 	clearValues,
+
 	refreshData,
 	preloadList,
 	reset,
+
+	expandAll,
+	collapseAll,
+	setExpandedKeys,
+	getExpandedKeys,
+	expandByValue,
+	collapseByValue,
+	toggleExpandByValue,
 })
 </script>
 
@@ -791,6 +1451,7 @@ defineExpose({
 	background-color: rgba(0, 0, 0, 0.0);
 	z-index: 998;
 	opacity: 0;
+	pointer-events: none;
 	transition-property: opacity, background-color;
 	transition-duration: 320ms;
 	transition-timing-function: ease;
@@ -799,6 +1460,7 @@ defineExpose({
 .bs-overlay-active {
 	background-color: rgba(10, 18, 30, 0.32);
 	opacity: 1;
+	pointer-events: auto;
 }
 
 .bs-panel {
@@ -812,6 +1474,7 @@ defineExpose({
 	flex-direction: column;
 	opacity: 0;
 	transform: translateY(48px);
+	pointer-events: none;
 	box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.14);
 	transition-property: transform, opacity;
 	transition-duration: 340ms;
@@ -821,6 +1484,7 @@ defineExpose({
 .bs-panel-active {
 	opacity: 1;
 	transform: translateY(0px);
+	pointer-events: auto;
 }
 
 .bs-handle-wrap {
@@ -976,11 +1640,50 @@ defineExpose({
 	background-color: #F0F5FF;
 }
 
+.bs-item-main {
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+	margin-right: 12px;
+}
+
+.bs-tree-prefix {
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.bs-tree-indent {
+	height: 1px;
+	flex-shrink: 0;
+}
+
+.bs-tree-toggle {
+	width: 24px;
+	height: 24px;
+	align-items: center;
+	justify-content: center;
+	margin-right: 4px;
+	border-radius: 12px;
+	background-color: #F7F8FA;
+}
+
+.bs-tree-toggle-placeholder {
+	width: 24px;
+	height: 24px;
+	margin-right: 4px;
+}
+
+.bs-tree-toggle-icon {
+	font-size: 18px;
+	color: #8A8F99;
+	line-height: 18px;
+}
+
 .bs-item-label {
 	flex: 1;
 	font-size: 14px;
 	color: #333333;
-	margin-right: 12px;
 }
 
 .bs-item-label-selected {
@@ -988,15 +1691,18 @@ defineExpose({
 }
 
 .bs-check-icon-wrapper {
-	width: 20px;
-	height: 20px;
+	width: 22px;
+	height: 22px;
 	align-items: center;
 	justify-content: center;
+	border-radius: 11px;
+	background-color: #E8F0FE;
 }
 
 .bs-check-icon {
-	font-size: 16px;
+	font-size: 15px;
 	color: #4A90E2;
+	line-height: 15px;
 }
 
 .bs-state-wrapper {

@@ -129,6 +129,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteKasaCategory, getKasaCategoryList, getKasaCategoryStatistics, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryListResponse, KasaCategoryStatisticsResponse, KasaCategoryTaxRatesResponse, patchKasaCategory } from '@/pkg/api/modules/kasa_category'
 
 type SelectOption = {
@@ -621,7 +622,7 @@ async function executeBatchAction(actionKey: string) {
 			}
 		}
 		uni.showToast({
-			title: batchActionTitle(actionKey) + '成功',
+			title: takeLatestResponseMessage(batchActionTitle(actionKey) + '成功'),
 			icon: 'success',
 		})
 		clearSelectionState()
@@ -687,7 +688,7 @@ async function confirmDelete(id: string) {
 	try {
 		await deleteKasaCategory(id)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		loadKasaCategories()
@@ -706,7 +707,7 @@ async function toggleSingleStatus(id: string, currentActive: boolean) {
 			is_active: !currentActive,
 		} as UTSJSONObject)
 		uni.showToast({
-			title: '状态更新成功',
+			title: takeLatestResponseMessage('状态更新成功'),
 			icon: 'success',
 		})
 		loadKasaCategories()

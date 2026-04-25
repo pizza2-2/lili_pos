@@ -55,7 +55,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:109")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:110")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -346,7 +346,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 return wrapUTSPromise(suspend {
                         try {
                             await(deleteTransaction(transactionId))
-                            uni_showToast(ShowToastOptions(title = "删除成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("删除成功"), icon = "success"))
                             markTransactionListRefreshNeeded()
                             loadTransactions()
                             loadTransactionStatistics()

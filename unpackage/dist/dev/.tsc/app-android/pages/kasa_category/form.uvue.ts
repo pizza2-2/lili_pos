@@ -1,9 +1,10 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createKasaCategory, getKasaCategoryDetail, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryMutationData, KasaCategoryTaxRatesResponse, updateKasaCategory } from '@/pkg/api/modules/kasa_category'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/form.uvue", 40, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/form.uvue", 41, 6>;
 	value: string
 	text: string
 }
@@ -59,7 +60,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:88")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:89")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -189,7 +190,7 @@ async function loadTaxRateOptions() {
 	}
 	try {
 		taxRateResponse.value = await getKasaCategoryTaxRates()
-		console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:218")
+		console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:219")
 	} catch (error) {
 		taxRateResponse.value = null
 	}
@@ -260,7 +261,7 @@ async function loadDetailData(idText: string) {
 	try {
 		await loadTaxRateOptions()
 		const detail = await getKasaCategoryDetail(idText)
-		console.log(detail, " at pages/kasa_category/form.uvue:289")
+		console.log(detail, " at pages/kasa_category/form.uvue:290")
 		initialData.value = buildInitialDataFromDetail(detail)
 	} catch (error) {
 		uni.showToast({
@@ -321,15 +322,18 @@ async function persistForm(payload: UTSJSONObject) {
 	})
 	try {
 		const body = buildMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (formMode.value == 'edit' && kasaCategoryId.value != '') {
 			await updateKasaCategory(kasaCategoryId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 		} else {
 			const created = await createKasaCategory(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			kasaCategoryId.value = created.id.toString()
 		}
 		markListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

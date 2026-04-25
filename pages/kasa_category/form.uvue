@@ -35,6 +35,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createKasaCategory, getKasaCategoryDetail, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryMutationData, KasaCategoryTaxRatesResponse, updateKasaCategory } from '@/pkg/api/modules/kasa_category'
 
 type SelectOption = {
@@ -347,15 +348,18 @@ async function persistForm(payload: UTSJSONObject) {
 	})
 	try {
 		const body = buildMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (formMode.value == 'edit' && kasaCategoryId.value != '') {
 			await updateKasaCategory(kasaCategoryId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 		} else {
 			const created = await createKasaCategory(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			kasaCategoryId.value = created.id.toString()
 		}
 		markListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

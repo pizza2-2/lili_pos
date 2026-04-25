@@ -1,0 +1,462 @@
+import { baseUrl, request } from '../index.uts'
+
+export type ShopListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+}
+
+export type ShopItem = {
+	id: number
+	name: string
+	address: string
+	company: number
+	company_name: string
+	media_records_count: number
+	media_files: ShopMediaFile[]
+	created_at: string
+	updated_at: string
+}
+
+export type ShopListResponse = {
+	results: ShopItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ShopMediaListQuery = {
+	search: string | null
+	shop: number | string | null
+	page: number
+	page_size: number
+}
+
+export type ShopMediaFile = {
+	id: string
+	company: number
+	original_filename: string
+	file_type: string
+	file_type_display: string
+	mime_type: string
+	file_size: number
+	file_size_display: string
+	file_url: string
+	thumbnail_url: string
+	signed_url: string
+	signed_thumbnail_url: string
+	object_id: string
+	is_deleted: boolean
+	created_at: string
+	updated_at: string
+}
+
+export type ShopMediaItem = {
+	id: number
+	shop: number
+	shop_name: string
+	title: string
+	record_type: string
+	record_type_display: string
+	expiration_date: string
+	notes: string
+	media_files: ShopMediaFile[]
+	files_count: number
+	created_at: string
+	updated_at: string
+}
+
+export type ShopMediaListResponse = {
+	results: ShopMediaItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ShopMutationData = {
+	name: string
+	address: string | null
+}
+
+export type ShopMediaMutationData = {
+	shop: number | string | null
+	title: string
+	record_type: string | null
+	expiration_date: string | null
+	notes: string | null
+}
+
+const shopBasePath = '/api/shops/shops/'
+const shopMediaBasePath = '/api/shops/media/'
+
+function buildListQuery(data: ShopListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+
+	return query
+}
+
+function buildMediaListQuery(data: ShopMediaListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+	if (data.shop != null && stringValue(data.shop) != '') {
+		query['shop'] = data.shop
+	}
+
+	return query
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+	return '' + value
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+	const text = stringValue(value)
+	if (text == '') {
+		return 0
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+function boolValue(value: any | null): boolean {
+	if (value == null) {
+		return false
+	}
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseArray(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return [] as UTSJSONObject[]
+	}
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return [] as UTSJSONObject[]
+	}
+	return parsed
+}
+
+function normalizeServerUrl(url: string): string {
+	if (url == '') {
+		return ''
+	}
+	if (url.startsWith('http://localhost:8000')) {
+		return baseUrl + url.substring('http://localhost:8000'.length)
+	}
+	if (url.startsWith('https://localhost:8000')) {
+		return baseUrl + url.substring('https://localhost:8000'.length)
+	}
+	if (url.startsWith('http://127.0.0.1:8000')) {
+		return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	}
+	if (url.startsWith('https://127.0.0.1:8000')) {
+		return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	}
+	return url
+}
+
+function buildShopItem(rawObject: UTSJSONObject): ShopItem {
+	return {
+		id: intValue(rawObject['id']),
+		name: stringValue(rawObject['name']),
+		address: stringValue(rawObject['address']),
+		company: intValue(rawObject['company']),
+		company_name: stringValue(rawObject['company_name']),
+		media_records_count: intValue(rawObject['media_records_count']),
+		media_files: buildShopMediaFiles(rawObject['media_files']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ShopItem
+}
+
+function buildShopMutationBody(data: ShopMutationData): UTSJSONObject {
+	return {
+		name: data.name,
+		address: data.address == null ? null : data.address,
+	} as UTSJSONObject
+}
+
+function buildShopMediaMutationBody(data: ShopMediaMutationData): UTSJSONObject {
+	return {
+		shop: data.shop,
+		title: data.title,
+		record_type: data.record_type,
+		expiration_date: data.expiration_date,
+		notes: data.notes == null ? '' : data.notes,
+	} as UTSJSONObject
+}
+
+function buildShopMediaFile(rawObject: UTSJSONObject): ShopMediaFile {
+	return {
+		id: stringValue(rawObject['id']),
+		company: intValue(rawObject['company']),
+		original_filename: stringValue(rawObject['original_filename']),
+		file_type: stringValue(rawObject['file_type']),
+		file_type_display: stringValue(rawObject['file_type_display']),
+		mime_type: stringValue(rawObject['mime_type']),
+		file_size: intValue(rawObject['file_size']),
+		file_size_display: stringValue(rawObject['file_size_display']),
+		file_url: normalizeServerUrl(stringValue(rawObject['file_url'])),
+		thumbnail_url: normalizeServerUrl(stringValue(rawObject['thumbnail_url'])),
+		signed_url: normalizeServerUrl(stringValue(rawObject['signed_url'])),
+		signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject['signed_thumbnail_url'])),
+		object_id: stringValue(rawObject['object_id']),
+		is_deleted: boolValue(rawObject['is_deleted']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ShopMediaFile
+}
+
+function buildShopMediaFiles(value: any | null): ShopMediaFile[] {
+	const rawArray = parseArray(value)
+	const result: ShopMediaFile[] = []
+	for (let index = 0; index < rawArray.length; index += 1) {
+		result.push(buildShopMediaFile(rawArray[index]))
+	}
+	return result
+}
+
+function buildShopMediaItem(rawObject: UTSJSONObject): ShopMediaItem {
+	return {
+		id: intValue(rawObject['id']),
+		shop: intValue(rawObject['shop']),
+		shop_name: stringValue(rawObject['shop_name']),
+		title: stringValue(rawObject['title']),
+		record_type: stringValue(rawObject['record_type']),
+		record_type_display: stringValue(rawObject['record_type_display']),
+		expiration_date: stringValue(rawObject['expiration_date']),
+		notes: stringValue(rawObject['notes']),
+		media_files: buildShopMediaFiles(rawObject['media_files']),
+		files_count: intValue(rawObject['files_count']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ShopMediaItem
+}
+
+function buildShopMediaItemResponse(raw: any): ShopMediaItem {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('商店资料详情响应解析失败')
+	}
+	return buildShopMediaItem(rawObject)
+}
+
+function buildShopItemResponse(raw: any): ShopItem {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('商店详情响应解析失败')
+	}
+	return buildShopItem(rawObject)
+}
+
+function shopDetailPath(id: number | string): string {
+	return shopBasePath + stringValue(id) + '/'
+}
+
+function shopMediaDetailPath(id: number | string): string {
+	return shopMediaBasePath + stringValue(id) + '/'
+}
+
+function buildShopListResponse(raw: any, query: ShopListQuery): ShopListResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('商店列表响应解析失败')
+	}
+
+	const resultsArray = parseArray(rawObject['results'])
+	const results: ShopItem[] = []
+	for (let index = 0; index < resultsArray.length; index += 1) {
+		results.push(buildShopItem(resultsArray[index]))
+	}
+
+	const paginationObject = parseObject(rawObject['pagination'])
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page > 0 ? query.page : 1
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size > 0 ? query.page_size : results.length
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as ShopListResponse
+}
+
+function buildShopMediaListResponse(raw: any, query: ShopMediaListQuery): ShopMediaListResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('商店媒体列表响应解析失败')
+	}
+
+	const resultsArray = parseArray(rawObject['results'])
+	const results: ShopMediaItem[] = []
+	for (let index = 0; index < resultsArray.length; index += 1) {
+		results.push(buildShopMediaItem(resultsArray[index]))
+	}
+
+	const paginationObject = parseObject(rawObject['pagination'])
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page > 0 ? query.page : 1
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size > 0 ? query.page_size : results.length
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as ShopMediaListResponse
+}
+
+export async function getShopList(query: ShopListQuery): Promise<ShopListResponse> {
+	const raw = await request(shopBasePath, 'GET', buildListQuery(query), false)
+	return buildShopListResponse(raw, query)
+}
+
+export async function getShopDetail(id: number | string): Promise<ShopItem> {
+	const raw = await request(shopDetailPath(id), 'GET', {} as UTSJSONObject, false)
+	return buildShopItemResponse(raw)
+}
+
+export async function createShop(data: ShopMutationData): Promise<ShopItem> {
+	const raw = await request(shopBasePath, 'POST', buildShopMutationBody(data), false)
+	return buildShopItemResponse(raw)
+}
+
+export async function updateShop(id: number | string, data: ShopMutationData): Promise<ShopItem> {
+	const raw = await request(shopDetailPath(id), 'PUT', buildShopMutationBody(data), false)
+	return buildShopItemResponse(raw)
+}
+
+export async function getShopMediaList(query: ShopMediaListQuery): Promise<ShopMediaListResponse> {
+	const raw = await request(shopMediaBasePath, 'GET', buildMediaListQuery(query), false)
+	return buildShopMediaListResponse(raw, query)
+}
+
+export async function getShopMediaDetail(id: number | string): Promise<ShopMediaItem> {
+	const raw = await request(shopMediaDetailPath(id), 'GET', {} as UTSJSONObject, false)
+	return buildShopMediaItemResponse(raw)
+}
+
+export async function createShopMedia(data: ShopMediaMutationData): Promise<ShopMediaItem> {
+	const raw = await request(shopMediaBasePath, 'POST', buildShopMediaMutationBody(data), false)
+	return buildShopMediaItemResponse(raw)
+}
+
+export async function updateShopMedia(id: number | string, data: ShopMediaMutationData): Promise<ShopMediaItem> {
+	const raw = await request(shopMediaDetailPath(id), 'PUT', buildShopMediaMutationBody(data), false)
+	return buildShopMediaItemResponse(raw)
+}

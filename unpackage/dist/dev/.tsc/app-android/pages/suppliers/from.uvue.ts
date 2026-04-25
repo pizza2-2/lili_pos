@@ -1,11 +1,12 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { SupplierItem, SupplierMutationData, createSupplier, getSupplierDetail, updateSupplier } from '@/pkg/api/modules/suppliers'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 48, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 49, 6>;
 	value: string
 	text: string
 }
@@ -102,7 +103,7 @@ function buildInitialDataFromSupplier(item: SupplierItem) : UTSJSONObject {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 135, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 136, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -118,7 +119,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:151")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:152")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -259,7 +260,7 @@ async function loadSupplierDetailData(idText: string) {
 	}
 	try {
 		const detail = await getSupplierDetail(idText)
-		console.log(detail, " at pages/suppliers/from.uvue:292")
+		console.log(detail, " at pages/suppliers/from.uvue:293")
 		initialData.value = buildInitialDataFromSupplier(detail)
 	} catch (error) {
 		uni.showToast({
@@ -383,14 +384,17 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 	})
 	try {
 		const body = buildSupplierMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (formMode.value == 'edit' && supplierId.value != '') {
 			savingText.value = '上传图片中...'
 			await uploadPendingSupplierImages(data, uploadContentTypeModel)
 			savingText.value = '保存修改中...'
 			await updateSupplier(supplierId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 		} else {
 			savingText.value = '创建供应商中...'
 			const createdSupplier = await createSupplier(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			supplierId.value = createdSupplier.id.toString()
 			try {
 				savingText.value = '上传图片中...'
@@ -402,7 +406,7 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 		clearDraftStorage()
 		markSupplierListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

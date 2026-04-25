@@ -84,7 +84,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:216")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:217")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -509,7 +509,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                                     index += 1
                                 }
                             }
-                            uni_showToast(ShowToastOptions(title = batchActionTitle(actionKey) + "成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage(batchActionTitle(actionKey) + "成功"), icon = "success"))
                             clearSelectionState()
                             loadKasaCategories()
                             loadStatistics()
@@ -571,7 +571,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                 return wrapUTSPromise(suspend {
                         try {
                             await(deleteKasaCategory(id))
-                            uni_showToast(ShowToastOptions(title = "删除成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("删除成功"), icon = "success"))
                             loadKasaCategories()
                             loadStatistics()
                         }
@@ -585,7 +585,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                 return wrapUTSPromise(suspend {
                         try {
                             await(patchKasaCategory(id, _uO("is_active" to !currentActive)))
-                            uni_showToast(ShowToastOptions(title = "状态更新成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("状态更新成功"), icon = "success"))
                             loadKasaCategories()
                             loadStatistics()
                         }

@@ -56,7 +56,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:88")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:89")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -202,7 +202,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                         }
                         try {
                             taxRateResponse.value = await(getKasaCategoryTaxRates())
-                            console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:218")
+                            console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:219")
                         }
                          catch (error: Throwable) {
                             taxRateResponse.value = null
@@ -282,7 +282,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                         try {
                             await(loadTaxRateOptions())
                             val detail = await(getKasaCategoryDetail(idText))
-                            console.log(detail, " at pages/kasa_category/form.uvue:289")
+                            console.log(detail, " at pages/kasa_category/form.uvue:290")
                             initialData.value = buildInitialDataFromDetail(detail)
                         }
                          catch (error: Throwable) {
@@ -353,14 +353,17 @@ open class GenPagesKasaCategoryForm : BasePage {
                         uni_showLoading(ShowLoadingOptions(title = savingText.value, mask = true))
                         try {
                             val body = buildMutationPayload(data)
+                            var successMessage = actionText + "成功"
                             if (formMode.value == "edit" && kasaCategoryId.value != "") {
                                 await(updateKasaCategory(kasaCategoryId.value, body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                             } else {
                                 val created = await(createKasaCategory(body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                                 kasaCategoryId.value = created.id.toString(10)
                             }
                             markListRefreshNeeded()
-                            uni_showToast(ShowToastOptions(title = actionText + "成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
                             goBackToList()
                         }
                          catch (error: Throwable) {

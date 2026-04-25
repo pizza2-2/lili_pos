@@ -1,0 +1,887 @@
+import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
+import { computed, onUnmounted } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { deleteCategory, getCategoryChildren, getCategoryRoots, CategoryItem, CategoryRootsQuery } from '@/pkg/api/modules/category'
+
+type FilterOption = { __$originalPosition?: UTSSourceMapPosition<"FilterOption", "pages/category/index.uvue", 171, 6>;
+	value: string
+	text: string
+}
+
+type ChildGroup = { __$originalPosition?: UTSSourceMapPosition<"ChildGroup", "pages/category/index.uvue", 176, 6>;
+	parentId: number
+	items: CategoryItem[]
+}
+
+
+const __sfc__ = defineComponent({
+  __name: 'index',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const categoryListRefreshStorageKey = 'refresh:pages:category:index'
+const categoryListRefreshPayloadStorageKey = 'refresh:pages:category:index:payload'
+const keyword = ref('')
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const isOperating = ref(false)
+const pageError = ref('')
+const rootCategories = ref<CategoryItem[]>([])
+const childGroups = ref<ChildGroup[]>([])
+const expandedNodeIds = ref<string[]>([])
+const loadingNodeIds = ref<string[]>([])
+const loadedNodeIds = ref<string[]>([])
+const selectedLevel = ref('')
+const selectedStatus = ref('')
+const selectedOrdering = ref('name')
+const searchTimer = ref(0)
+
+const levelFilterOptions = ref<FilterOption[]>([
+	{ value: '', text: '全部层级' } as FilterOption,
+	{ value: '1', text: '一级分类' } as FilterOption,
+	{ value: '2', text: '二级分类' } as FilterOption,
+	{ value: '3', text: '三级分类' } as FilterOption,
+])
+
+const statusFilterOptions = ref<FilterOption[]>([
+	{ value: '', text: '全部状态' } as FilterOption,
+	{ value: 'branch', text: '分支节点' } as FilterOption,
+	{ value: 'leaf', text: '叶子节点' } as FilterOption,
+])
+
+const orderingFilterOptions = ref<FilterOption[]>([
+	{ value: 'name', text: '按名称' } as FilterOption,
+	{ value: 'level', text: '按层级' } as FilterOption,
+	{ value: 'id', text: '按编号' } as FilterOption,
+])
+
+function parseErrorMessage(error: any): string {
+	let message = '分类列表加载失败'
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/index.uvue:226")
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '分类列表加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function nodeIdText(id: number): string {
+	return id.toString()
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function booleanValue(value: any | null, fallback: boolean = false): boolean {
+	if (value == null) {
+		return fallback
+	}
+	const text = ('' + value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function parseStoredObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+	const text = '' + value
+	if (text == '') {
+		return null
+	}
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/index.uvue:287")
+}
+
+function containsNodeId(list: string[], id: number): boolean {
+	return list.includes(nodeIdText(id))
+}
+
+function removeNodeId(list: string[], id: number): string[] {
+	const targetId = nodeIdText(id)
+	const nextIds: string[] = []
+	for (let index = 0; index < list.length; index += 1) {
+		if (list[index] != targetId) {
+			nextIds.push(list[index])
+		}
+	}
+	return nextIds
+}
+
+function clearTreeCache(): void {
+	childGroups.value = [] as ChildGroup[]
+	loadingNodeIds.value = [] as string[]
+	loadedNodeIds.value = [] as string[]
+}
+
+function findChildGroupIndex(parentId: number): number {
+	for (let index = 0; index < childGroups.value.length; index += 1) {
+		if (childGroups.value[index].parentId == parentId) {
+			return index
+		}
+	}
+	return -1
+}
+
+function getChildren(parentId: number): CategoryItem[] {
+	const groupIndex = findChildGroupIndex(parentId)
+	if (groupIndex < 0) {
+		return [] as CategoryItem[]
+	}
+	return childGroups.value[groupIndex].items
+}
+
+function setChildren(parentId: number, items: CategoryItem[]): void {
+	const nextItems: CategoryItem[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		if (item.level <= 3) {
+			nextItems.push(item)
+		}
+	}
+
+	const groupIndex = findChildGroupIndex(parentId)
+	if (groupIndex >= 0) {
+		childGroups.value[groupIndex].items = nextItems
+		return
+	}
+
+	childGroups.value.push({
+		parentId: parentId,
+		items: nextItems,
+	} as ChildGroup)
+}
+
+function isExpanded(id: number): boolean {
+	return containsNodeId(expandedNodeIds.value, id)
+}
+
+function isNodeLoading(id: number): boolean {
+	return containsNodeId(loadingNodeIds.value, id)
+}
+
+function isNodeLoaded(id: number): boolean {
+	return containsNodeId(loadedNodeIds.value, id)
+}
+
+function canExpand(item: CategoryItem): boolean {
+	if (item.level >= 2) {
+		return false
+	}
+	if (item.is_leaf) {
+		return false
+	}
+	return item.children_count > 0 || !item.is_leaf
+}
+
+function clearLegacyExpandedState(): void {
+	try {
+		uni.removeStorageSync('pages:category:index:expanded')
+	} catch (error) {
+	}
+}
+
+function buildRootsQuery(): CategoryRootsQuery {
+	return {
+		search: keyword.value == '' ? null : keyword.value,
+		level: selectedLevel.value == '' ? null : selectedLevel.value,
+		status: selectedStatus.value == '' ? null : selectedStatus.value,
+		ordering: selectedOrdering.value == '' ? null : selectedOrdering.value,
+	} as CategoryRootsQuery
+}
+
+async function ensureChildrenLoaded(item: CategoryItem): Promise<boolean> {
+	if (!canExpand(item)) {
+		return false
+	}
+	if (isNodeLoaded(item.id)) {
+		return true
+	}
+	if (isNodeLoading(item.id)) {
+		return false
+	}
+
+	if (!containsNodeId(loadingNodeIds.value, item.id)) {
+		loadingNodeIds.value.push(nodeIdText(item.id))
+	}
+	try {
+		const children = await getCategoryChildren(item.id, keyword.value == '' ? null : keyword.value)
+		setChildren(item.id, children)
+		if (!containsNodeId(loadedNodeIds.value, item.id)) {
+			loadedNodeIds.value.push(nodeIdText(item.id))
+		}
+		return true
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+		return false
+	} finally {
+		loadingNodeIds.value = removeNodeId(loadingNodeIds.value, item.id)
+	}
+}
+
+async function restoreExpandedBranches(): Promise<void> {
+	for (let index = 0; index < rootCategories.value.length; index += 1) {
+		const root = rootCategories.value[index]
+		if (!isExpanded(root.id)) {
+			continue
+		}
+		const loadedRootChildren = await ensureChildrenLoaded(root)
+		if (!loadedRootChildren) {
+			expandedNodeIds.value = removeNodeId(expandedNodeIds.value, root.id)
+			continue
+		}
+		const secondLevelChildren = getChildren(root.id)
+		for (let childIndex = 0; childIndex < secondLevelChildren.length; childIndex += 1) {
+			const second = secondLevelChildren[childIndex]
+			if (!isExpanded(second.id)) {
+				continue
+			}
+			const loadedSecondChildren = await ensureChildrenLoaded(second)
+			if (!loadedSecondChildren) {
+				expandedNodeIds.value = removeNodeId(expandedNodeIds.value, second.id)
+			}
+		}
+	}
+}
+
+async function loadRootCategories(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+
+	isLoading.value = true
+	pageError.value = ''
+	clearTreeCache()
+
+	try {
+		const roots = await getCategoryRoots(buildRootsQuery())
+		const nextRoots: CategoryItem[] = []
+		for (let index = 0; index < roots.length; index += 1) {
+			const item = roots[index]
+			if (item.level <= 3) {
+				nextRoots.push(item)
+			}
+		}
+		rootCategories.value = nextRoots
+		await restoreExpandedBranches()
+	} catch (error) {
+		rootCategories.value = [] as CategoryItem[]
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function closeFilterDrawer(): void {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: any): void {
+	filterVisible.value = value as boolean
+}
+
+function toggleLevelFilter(value: string): void {
+	selectedLevel.value = selectedLevel.value == value ? '' : value
+}
+
+function toggleStatusFilter(value: string): void {
+	selectedStatus.value = selectedStatus.value == value ? '' : value
+}
+
+function toggleOrderingFilter(value: string): void {
+	selectedOrdering.value = value
+}
+
+function applyFilters(): void {
+	closeFilterDrawer()
+	loadRootCategories()
+}
+
+function handleFilterReset(): void {
+	keyword.value = ''
+	selectedLevel.value = ''
+	selectedStatus.value = ''
+	selectedOrdering.value = 'name'
+	closeFilterDrawer()
+	loadRootCategories()
+}
+
+function startSearchReload(): void {
+	if (searchTimer.value > 0) {
+		clearTimeout(searchTimer.value)
+	}
+	searchTimer.value = setTimeout(() => {
+		loadRootCategories()
+	}, 400)
+}
+
+function handleSearchInput(value: any): void {
+	keyword.value = value as string
+	startSearchReload()
+}
+
+function handleSearchConfirm(value: any | null = null): void {
+	if (value != null) {
+		keyword.value = value as string
+	}
+	if (searchTimer.value > 0) {
+		clearTimeout(searchTimer.value)
+		searchTimer.value = 0
+	}
+	loadRootCategories()
+}
+
+function handleSearchClear(): void {
+	keyword.value = ''
+	if (searchTimer.value > 0) {
+		clearTimeout(searchTimer.value)
+		searchTimer.value = 0
+	}
+	loadRootCategories()
+}
+
+function pruneExpandedIdsAfterCollapse(parentId: number): void {
+	const directChildren = getChildren(parentId)
+	for (let index = 0; index < directChildren.length; index += 1) {
+		const child = directChildren[index]
+		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, child.id)
+	}
+}
+
+function canAddChild(item: CategoryItem): boolean {
+	return item.level < 2
+}
+
+function hasPendingQueryState(): boolean {
+	return keyword.value != '' || selectedLevel.value != '' || selectedStatus.value != '' || selectedOrdering.value != 'name'
+}
+
+function patchCategoryItem(target: CategoryItem, payload: UTSJSONObject): void {
+	target.name = stringValue(payload['name'], target.name)
+	target.code = stringValue(payload['code'], target.code)
+	target.level = intValue(payload['level'], target.level)
+	target.parent_id = intValue(payload['parent_id'], target.parent_id)
+	target.sort_order = intValue(payload['sort_order'], target.sort_order)
+	target.tax_rate = stringValue(payload['tax_rate'], target.tax_rate)
+	target.kasa_category_id = intValue(payload['kasa_category_id'], target.kasa_category_id)
+	target.products_count = intValue(payload['products_count'], target.products_count)
+	target.children_count = intValue(payload['children_count'], target.children_count)
+	target.is_active = booleanValue(payload['is_active'], target.is_active)
+	target.is_leaf = booleanValue(payload['is_leaf'], target.is_leaf)
+	target.full_name = stringValue(payload['full_name'], target.full_name)
+	target.path = stringValue(payload['path'], target.path)
+	target.created_at = stringValue(payload['created_at'], target.created_at)
+	target.updated_at = stringValue(payload['updated_at'], target.updated_at)
+}
+
+function patchCategoryNode(payload: UTSJSONObject): boolean {
+	const targetId = intValue(payload['id'], 0)
+	if (targetId <= 0) {
+		return false
+	}
+	for (let index = 0; index < rootCategories.value.length; index += 1) {
+		const item = rootCategories.value[index]
+		if (item.id != targetId) {
+			continue
+		}
+		patchCategoryItem(item, payload)
+		return true
+	}
+	for (let groupIndex = 0; groupIndex < childGroups.value.length; groupIndex += 1) {
+		const items = childGroups.value[groupIndex].items
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			const item = items[itemIndex]
+			if (item.id != targetId) {
+				continue
+			}
+			patchCategoryItem(item, payload)
+			return true
+		}
+	}
+	return false
+}
+
+async function consumeRefreshState(): Promise<void> {
+	let payload: UTSJSONObject | null = null
+	try {
+		payload = parseStoredObject(uni.getStorageSync(categoryListRefreshPayloadStorageKey))
+		uni.removeStorageSync(categoryListRefreshPayloadStorageKey)
+		uni.removeStorageSync(categoryListRefreshStorageKey)
+	} catch (error) {
+		payload = null
+	}
+
+	if (payload == null) {
+		let legacyRefresh = ''
+		try {
+			legacyRefresh = stringValue(uni.getStorageSync(categoryListRefreshStorageKey))
+			uni.removeStorageSync(categoryListRefreshStorageKey)
+		} catch (error) {
+			legacyRefresh = ''
+		}
+		if (legacyRefresh == '1') {
+			await loadRootCategories()
+		}
+		return
+	}
+
+	const action = stringValue(payload['action'])
+	if (action == '') {
+		return
+	}
+	if (action != 'edit') {
+		await loadRootCategories()
+		return
+	}
+	if (hasPendingQueryState()) {
+		await loadRootCategories()
+		return
+	}
+
+	const previousParentId = stringValue(payload['previous_parent_id'])
+	const currentParentId = stringValue(payload['current_parent_id'])
+	if (previousParentId != currentParentId) {
+		await loadRootCategories()
+		return
+	}
+
+	const patched = patchCategoryNode(payload)
+	if (!patched) {
+		await loadRootCategories()
+	}
+}
+
+function goToEdit(item: CategoryItem): void {
+	uni.navigateTo({
+		url: '/pages/category/from?id=' + item.id + '&mode=edit',
+	})
+}
+
+function goToAddChild(item: CategoryItem): void {
+	uni.navigateTo({
+		url: '/pages/category/from?parent_id=' + item.id + '&parent_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(item.name), " at pages/category/index.uvue:659") + '&mode=add',
+	})
+}
+
+function handleCreateRoot(): void {
+	uni.navigateTo({
+		url: '/pages/category/from?mode=create',
+	})
+}
+
+function removeExpandedIdDeep(id: number): void {
+	expandedNodeIds.value = removeNodeId(expandedNodeIds.value, id)
+	const children = getChildren(id)
+	for (let index = 0; index < children.length; index += 1) {
+		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, children[index].id)
+	}
+}
+
+async function executeDelete(item: CategoryItem): Promise<void> {
+	try {
+		isOperating.value = true
+		await deleteCategory(item.id)
+		removeExpandedIdDeep(item.id)
+		uni.showToast({
+			title: takeLatestResponseMessage('删除成功'),
+			icon: 'success',
+		})
+		loadRootCategories()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error),
+			icon: 'none',
+		})
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function confirmDelete(item: CategoryItem): void {
+	uni.showModal({
+		title: '确认删除',
+		content: '确定删除分类「' + item.name + '」吗？此操作不可恢复。',
+		confirmColor: '#DC2626',
+		success: (res) => {
+			if (!res.confirm) {
+				return
+			}
+			executeDelete(item)
+		},
+	})
+}
+
+function openActionSheet(item: CategoryItem): void {
+	const itemList: string[] = [] as string[]
+	itemList.push('编辑分类')
+	if (canAddChild(item)) {
+		itemList.push('新增子分类')
+	}
+	itemList.push('删除分类')
+
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const tapIndex = res.tapIndex
+			if (tapIndex == 0) {
+				goToEdit(item)
+				return
+			}
+			if (canAddChild(item) && tapIndex == 1) {
+				goToAddChild(item)
+				return
+			}
+			confirmDelete(item)
+		},
+	})
+}
+
+async function toggleNode(item: CategoryItem): Promise<void> {
+	if (!canExpand(item)) {
+		openActionSheet(item)
+		return
+	}
+
+	if (isExpanded(item.id)) {
+		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, item.id)
+		if (item.level == 1) {
+			pruneExpandedIdsAfterCollapse(item.id)
+		}
+		return
+	}
+
+	const loaded = await ensureChildrenLoaded(item)
+	if (!loaded) {
+		return
+	}
+	if (!containsNodeId(expandedNodeIds.value, item.id)) {
+		expandedNodeIds.value.push(nodeIdText(item.id))
+	}
+}
+
+const hasActiveFilter = computed((): boolean => {
+	return selectedLevel.value != '' || selectedStatus.value != '' || selectedOrdering.value != 'name'
+})
+
+onLoad(() => {
+	clearLegacyExpandedState()
+	loadRootCategories()
+})
+
+onShow(() => {
+	consumeRefreshState()
+})
+
+onUnmounted(() => {
+	if (searchTimer.value > 0) {
+		clearTimeout(searchTimer.value)
+	}
+})
+
+return (): any | null => {
+
+const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
+
+  return _cE("view", _uM({ class: "page" }), [
+    _cV(_component_lili_universal_filter, _uM({
+      title: "分类",
+      searchPlaceholder: "输入分类名称",
+      searchValue: unref(keyword),
+      filterVisible: unref(filterVisible),
+      showBack: true,
+      showSearch: true,
+      showFilter: true,
+      showHome: true,
+      filterActive: hasActiveFilter.value,
+      filterText: "重置",
+      homePath: "/pages/tabbar/settings",
+      onSearchInput: ($event: any) => {handleSearchInput($event)},
+      onSearchConfirm: ($event: any) => {handleSearchConfirm($event)},
+      onSearchClear: () => {handleSearchClear()},
+      "onUpdate:filterVisible": ($event: any) => {handleFilterVisibleChange($event)}
+    }), _uM({
+      "filter-panel": withSlotCtx((): any[] => [
+        _cE("view", _uM({ class: "filter-panel" }), [
+          _cE("view", _uM({ class: "filter-actions" }), [
+            _cE("view", _uM({
+              class: "filter-btn filter-btn-light",
+              onClick: handleFilterReset
+            }), [
+              _cE("text", _uM({ class: "filter-btn-light-text" }), "重置")
+            ]),
+            _cE("view", _uM({
+              class: "filter-btn filter-btn-primary",
+              onClick: applyFilters
+            }), [
+              _cE("text", _uM({ class: "filter-btn-primary-text" }), "应用")
+            ])
+          ]),
+          _cE("scroll-view", _uM({
+            "scroll-y": "true",
+            class: "filter-scroll"
+          }), [
+            _cE("view", _uM({ class: "filter-group" }), [
+              _cE("text", _uM({ class: "filter-group-title" }), "分类层级"),
+              _cE("view", _uM({ class: "filter-options" }), [
+                _cE(Fragment, null, RenderHelpers.renderList(unref(levelFilterOptions), (option, __key, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: 'level-' + option.value,
+                    class: _nC(unref(selectedLevel) == option.value ? 'filter-option filter-option-active' : 'filter-option'),
+                    onClick: () => {toggleLevelFilter(option.value)}
+                  }), [
+                    _cE("text", _uM({
+                      class: _nC(unref(selectedLevel) == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text')
+                    }), _tD(option.text), 3 /* TEXT, CLASS */)
+                  ], 10 /* CLASS, PROPS */, ["onClick"])
+                }), 128 /* KEYED_FRAGMENT */)
+              ])
+            ]),
+            _cE("view", _uM({ class: "filter-group" }), [
+              _cE("text", _uM({ class: "filter-group-title" }), "节点状态"),
+              _cE("view", _uM({ class: "filter-options" }), [
+                _cE(Fragment, null, RenderHelpers.renderList(unref(statusFilterOptions), (option, __key, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: 'status-' + option.value,
+                    class: _nC(unref(selectedStatus) == option.value ? 'filter-option filter-option-active' : 'filter-option'),
+                    onClick: () => {toggleStatusFilter(option.value)}
+                  }), [
+                    _cE("text", _uM({
+                      class: _nC(unref(selectedStatus) == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text')
+                    }), _tD(option.text), 3 /* TEXT, CLASS */)
+                  ], 10 /* CLASS, PROPS */, ["onClick"])
+                }), 128 /* KEYED_FRAGMENT */)
+              ])
+            ]),
+            _cE("view", _uM({ class: "filter-group" }), [
+              _cE("text", _uM({ class: "filter-group-title" }), "排序方式"),
+              _cE("view", _uM({ class: "filter-options" }), [
+                _cE(Fragment, null, RenderHelpers.renderList(unref(orderingFilterOptions), (option, __key, __index, _cached): any => {
+                  return _cE("view", _uM({
+                    key: 'ordering-' + option.value,
+                    class: _nC(unref(selectedOrdering) == option.value ? 'filter-option filter-option-active' : 'filter-option'),
+                    onClick: () => {toggleOrderingFilter(option.value)}
+                  }), [
+                    _cE("text", _uM({
+                      class: _nC(unref(selectedOrdering) == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text')
+                    }), _tD(option.text), 3 /* TEXT, CLASS */)
+                  ], 10 /* CLASS, PROPS */, ["onClick"])
+                }), 128 /* KEYED_FRAGMENT */)
+              ])
+            ])
+          ])
+        ])
+      ]),
+      _: 1 /* STABLE */
+    }), 8 /* PROPS */, ["searchValue", "filterVisible", "filterActive", "onSearchInput", "onSearchConfirm", "onSearchClear", "onUpdate:filterVisible"]),
+    _cE("scroll-view", _uM({
+      style: _nS(_uM({"flex":"1"})),
+      class: "page-scroll"
+    }), [
+      _cE("view", _uM({ class: "page-content" }), [
+        isTrue(unref(pageError) != '' && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 0,
+              class: "state-card state-card-error"
+            }), [
+              _cE("text", _uM({ class: "state-title" }), "分类加载失败"),
+              _cE("text", _uM({ class: "state-desc" }), _tD(unref(pageError)), 1 /* TEXT */),
+              _cE("button", _uM({
+                class: "state-btn",
+                onClick: loadRootCategories
+              }), [
+                _cE("text", _uM({ class: "state-btn-text" }), "重新加载")
+              ])
+            ])
+          : isTrue(unref(isLoading) && unref(rootCategories).length == 0)
+            ? _cE("view", _uM({
+                key: 1,
+                class: "state-card"
+              }), [
+                _cE("text", _uM({ class: "state-title" }), "加载中"),
+                _cE("text", _uM({ class: "state-desc" }), "正在获取根分类及已展开分支...")
+              ])
+            : unref(rootCategories).length == 0
+              ? _cE("view", _uM({
+                  key: 2,
+                  class: "state-card"
+                }), [
+                  _cE("text", _uM({ class: "state-title" }), "暂无分类数据"),
+                  _cE("text", _uM({ class: "state-desc" }), "可以调整筛选条件，或直接新增一个根分类。")
+                ])
+              : _cE("view", _uM({
+                  key: 3,
+                  class: "tree-list"
+                }), [
+                  _cE(Fragment, null, RenderHelpers.renderList(unref(rootCategories), (root, __key, __index, _cached): any => {
+                    return _cE("view", _uM({
+                      key: 'root-' + root.id,
+                      class: "tree-section"
+                    }), [
+                      _cE("view", _uM({ class: "tree-node tree-node-level1" }), [
+                        _cE("view", _uM({
+                          class: "tree-main",
+                          onClick: () => {openActionSheet(root)}
+                        }), [
+                          _cE("text", _uM({ class: "tree-title" }), _tD(root.name), 1 /* TEXT */)
+                        ], 8 /* PROPS */, ["onClick"]),
+                        isTrue(canExpand(root))
+                          ? _cE("view", _uM({
+                              key: 0,
+                              class: "tree-toggle-wrap",
+                              onClick: () => {toggleNode(root)}
+                            }), [
+                              _cE("text", _uM({ class: "tree-toggle" }), _tD(isExpanded(root.id) ? '收起' : '展开'), 1 /* TEXT */)
+                            ], 8 /* PROPS */, ["onClick"])
+                          : _cC("v-if", true)
+                      ]),
+                      isTrue(isExpanded(root.id))
+                        ? _cE("view", _uM({
+                            key: 0,
+                            class: "tree-children tree-children-level2"
+                          }), [
+                            isTrue(isNodeLoading(root.id))
+                              ? _cE("view", _uM({
+                                  key: 0,
+                                  class: "child-state"
+                                }), [
+                                  _cE("text", _uM({ class: "child-state-text" }), "二级分类加载中...")
+                                ])
+                              : getChildren(root.id).length == 0
+                                ? _cE("view", _uM({
+                                    key: 1,
+                                    class: "child-state"
+                                  }), [
+                                    _cE("text", _uM({ class: "child-state-text" }), "暂无二级分类")
+                                  ])
+                                : _cE("view", _uM({ key: 2 }), [
+                                    _cE(Fragment, null, RenderHelpers.renderList(getChildren(root.id), (second, __key, __index, _cached): any => {
+                                      return _cE("view", _uM({
+                                        key: 'second-' + second.id,
+                                        class: "tree-child-wrap"
+                                      }), [
+                                        _cE("view", _uM({ class: "tree-node tree-node-level2" }), [
+                                          _cE("view", _uM({
+                                            class: "tree-main",
+                                            onClick: () => {openActionSheet(second)}
+                                          }), [
+                                            _cE("text", _uM({ class: "tree-title" }), _tD(second.name), 1 /* TEXT */)
+                                          ], 8 /* PROPS */, ["onClick"]),
+                                          isTrue(canExpand(second))
+                                            ? _cE("view", _uM({
+                                                key: 0,
+                                                class: "tree-toggle-wrap",
+                                                onClick: () => {toggleNode(second)}
+                                              }), [
+                                                _cE("text", _uM({ class: "tree-toggle" }), _tD(isExpanded(second.id) ? '收起' : '展开'), 1 /* TEXT */)
+                                              ], 8 /* PROPS */, ["onClick"])
+                                            : _cC("v-if", true)
+                                        ]),
+                                        isTrue(isExpanded(second.id))
+                                          ? _cE("view", _uM({
+                                              key: 0,
+                                              class: "tree-children tree-children-level3"
+                                            }), [
+                                              isTrue(isNodeLoading(second.id))
+                                                ? _cE("view", _uM({
+                                                    key: 0,
+                                                    class: "child-state"
+                                                  }), [
+                                                    _cE("text", _uM({ class: "child-state-text" }), "三级分类加载中...")
+                                                  ])
+                                                : getChildren(second.id).length == 0
+                                                  ? _cE("view", _uM({
+                                                      key: 1,
+                                                      class: "child-state"
+                                                    }), [
+                                                      _cE("text", _uM({ class: "child-state-text" }), "暂无三级分类")
+                                                    ])
+                                                  : _cE("view", _uM({ key: 2 }), [
+                                                      _cE(Fragment, null, RenderHelpers.renderList(getChildren(second.id), (third, __key, __index, _cached): any => {
+                                                        return _cE("view", _uM({
+                                                          key: 'third-' + third.id,
+                                                          class: "tree-node tree-node-level3"
+                                                        }), [
+                                                          _cE("view", _uM({
+                                                            class: "tree-main",
+                                                            onClick: () => {openActionSheet(third)}
+                                                          }), [
+                                                            _cE("text", _uM({ class: "tree-title" }), _tD(third.name), 1 /* TEXT */)
+                                                          ], 8 /* PROPS */, ["onClick"])
+                                                        ])
+                                                      }), 128 /* KEYED_FRAGMENT */)
+                                                    ])
+                                            ])
+                                          : _cC("v-if", true)
+                                      ])
+                                    }), 128 /* KEYED_FRAGMENT */)
+                                  ])
+                          ])
+                        : _cC("v-if", true)
+                    ])
+                  }), 128 /* KEYED_FRAGMENT */)
+                ])
+      ])
+    ], 4 /* STYLE */),
+    _cE("view", _uM({
+      class: "fab",
+      onClick: handleCreateRoot
+    }), [
+      _cE("text", _uM({ class: "fab-text" }), "+")
+    ]),
+    isTrue(unref(isOperating))
+      ? _cE("view", _uM({
+          key: 0,
+          class: "operate-mask"
+        }), [
+          _cE("view", _uM({ class: "operate-card" }), [
+            _cE("text", _uM({ class: "operate-text" }), "处理中...")
+          ])
+        ])
+      : _cC("v-if", true)
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesCategoryIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F4F6F8"]]))], ["page-scroll", _pS(_uM([["backgroundColor", "#F4F6F8"]]))], ["page-content", _pS(_uM([["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 12], ["paddingBottom", 100], ["backgroundColor", "#F4F6F8"]]))], ["filter-panel", _pS(_uM([["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["backgroundColor", "#FFFFFF"]]))], ["filter-actions", _pS(_uM([["flexDirection", "row"]]))], ["filter-btn", _pS(_uM([["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["paddingLeft", 16], ["paddingRight", 16], ["marginRight", 10], ["alignItems", "center"], ["justifyContent", "center"]]))], ["filter-btn-light", _pS(_uM([["backgroundColor", "#E2E8F0"]]))], ["filter-btn-primary", _pS(_uM([["backgroundColor", "#0F766E"]]))], ["filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#334155"], ["fontWeight", "bold"]]))], ["filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["filter-scroll", _pS(_uM([["maxHeight", 360], ["marginTop", 14]]))], ["filter-group", _pS(_uM([["marginTop", 14]]))], ["filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["filter-option", _pS(_uM([["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 8], ["paddingBottom", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#F1F5F9"], ["marginRight", 10], ["marginBottom", 10]]))], ["filter-option-active", _pS(_uM([["backgroundColor", "#CCFBF1"]]))], ["filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["filter-option-text-active", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#115E59"], ["fontWeight", "bold"]]))], ["state-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["state-card-error", _pS(_uM([["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"]]))], ["state-title", _pS(_uM([["fontSize", 16], ["lineHeight", "22px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["state-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "21px"], ["color", "#64748B"], ["marginTop", 8]]))], ["state-btn", _pS(_uM([["height", 40], ["marginTop", 14], ["backgroundColor", "#0F766E"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["borderTopWidth", 0], ["borderRightWidth", 0], ["borderBottomWidth", 0], ["borderLeftWidth", 0]]))], ["state-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["tree-list", _pS(_uM([["paddingBottom", 10]]))], ["tree-section", _pS(_uM([["marginBottom", 12]]))], ["tree-node", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["tree-node-level1", _pS(_uM([["backgroundColor", "#FFFFFF"]]))], ["tree-node-level2", _pS(_uM([["backgroundColor", "#FCFFFD"]]))], ["tree-node-level3", _pS(_uM([["backgroundColor", "#FFFDF8"]]))], ["tree-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["tree-title", _pS(_uM([["fontSize", 15], ["lineHeight", "22px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["tree-toggle-wrap", _pS(_uM([["marginLeft", 12], ["paddingLeft", 12], ["paddingRight", 12], ["paddingTop", 8], ["paddingBottom", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#ECFEFF"]]))], ["tree-toggle", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#155E75"], ["fontWeight", "bold"]]))], ["tree-children", _pS(_uM([["marginLeft", 14], ["paddingLeft", 12], ["marginTop", 10], ["borderLeftWidth", 2], ["borderLeftStyle", "solid"]]))], ["tree-children-level2", _pS(_uM([["borderLeftColor", "#99F6E4"]]))], ["tree-children-level3", _pS(_uM([["borderLeftColor", "#FDE68A"]]))], ["tree-child-wrap", _pS(_uM([["marginBottom", 10]]))], ["child-state", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8]]))], ["child-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["fab", _pS(_uM([["position", "fixed"], ["right", 20], ["bottom", 28], ["width", 56], ["height", 56], ["borderTopLeftRadius", 28], ["borderTopRightRadius", 28], ["borderBottomRightRadius", 28], ["borderBottomLeftRadius", 28], ["backgroundColor", "#0F766E"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["fab-text", _pS(_uM([["fontSize", 30], ["lineHeight", "36px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["operate-mask", _pS(_uM([["position", "fixed"], ["left", 0], ["right", 0], ["top", 0], ["bottom", 0], ["backgroundColor", "rgba(0,0,0,0.25)"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["operate-card", _pS(_uM([["paddingLeft", 20], ["paddingRight", 20], ["paddingTop", 14], ["paddingBottom", 14], ["borderTopLeftRadius", 14], ["borderTopRightRadius", 14], ["borderBottomRightRadius", 14], ["borderBottomLeftRadius", 14], ["backgroundColor", "#FFFFFF"]]))], ["operate-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))]])]

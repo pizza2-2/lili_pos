@@ -1,12 +1,13 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { getSupplierDetail } from '@/pkg/api/modules/suppliers'
 import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { createTransaction, getTransactionDetail, getTransactionOptions, TransactionItem, TransactionMutationData, TransactionOptionGroup, updateTransaction } from '@/pkg/api/modules/transactions.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 49, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 50, 6>;
 	value: string
 	text: string
 }
@@ -57,7 +58,7 @@ function getArrayField(obj: UTSJSONObject, key: string) : string[] {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 90, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 91, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -73,7 +74,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:106")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:107")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -448,17 +449,20 @@ async function persistForm(payload: UTSJSONObject) {
 	})
 	try {
 		const body = buildTransactionMutationPayload(data)
+		let successMessage = actionText + '成功'
 		if (body.supplier == '') {
 			throw new Error('供应商ID缺失')
 		}
 		if (formMode.value == 'edit' && transactionId.value != '') {
 			savingText.value = '保存修改中...'
 			await updateTransaction(transactionId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			savingText.value = '上传图片中...'
 			await uploadPendingTransactionImages(data, uploadContentTypeModel)
 		} else {
 			savingText.value = '创建采购记录中...'
 			const createdTransaction = await createTransaction(body)
+			successMessage = takeLatestResponseMessage(successMessage)
 			transactionId.value = createdTransaction.id.toString()
 			supplierId.value = createdTransaction.supplier.toString()
 			try {
@@ -471,7 +475,7 @@ async function persistForm(payload: UTSJSONObject) {
 		clearDraftStorage()
 		markTransactionListRefreshNeeded()
 		uni.showToast({
-			title: actionText + '成功',
+			title: successMessage,
 			icon: 'success',
 		})
 		goBackToList()

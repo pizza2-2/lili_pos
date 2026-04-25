@@ -1,0 +1,355 @@
+import { ShopListQuery } from "../../pkg/api/modules/shops";
+import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue';
+import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue';
+import { computed } from 'vue';
+import { getShopList, ShopItem, ShopListResponse } from '@/pkg/api/modules/shops';
+const __sfc__ = defineComponent({
+    __name: 'index',
+    setup(__props) {
+        const __ins = getCurrentInstance()!;
+        const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+        const _cache = __ins.renderCache;
+        const shopListRefreshStorageKey = 'refresh:pages:shop:index';
+        const keyword = ref('');
+        const isLoading = ref(false);
+        const errorMessage = ref('');
+        const shops = ref<ShopItem[]>([]);
+        const currentPage = ref(1);
+        const totalPages = ref(1);
+        const totalCount = ref(0);
+        const pageSize = ref(20);
+        const fieldConfig = ref<UTSJSONObject[]>([
+            { key: 'address', label: '地址' } as UTSJSONObject,
+            { key: 'media_records_count', label: '媒体数量' } as UTSJSONObject,
+        ]);
+        const menuActions = ref<UTSJSONObject[]>([
+            { key: 'media', text: '资料' } as UTSJSONObject,
+        ]);
+        function stringValue(value: any | null, fallback: string = ''): string {
+            if (value == null) {
+                return fallback;
+            }
+            const text = '' + value;
+            return text == '' ? fallback : text;
+        }
+        function parseErrorMessage(error: any): string {
+            let message = '商店列表加载失败';
+            if (error != null) {
+                const directMessage = (error as Error).message;
+                if (directMessage != null && directMessage != '') {
+                    message = directMessage;
+                }
+                const errorText = JSON.stringify(error);
+                if (errorText != null && errorText != '') {
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:107");
+                    if (parsedError != null) {
+                        const rawMessage = parsedError['message'];
+                        if (rawMessage != null) {
+                            const parsedMessage = rawMessage as string;
+                            if (parsedMessage != '') {
+                                message = parsedMessage;
+                            }
+                        }
+                    }
+                }
+            }
+            return message;
+        }
+        function applyShopResponse(response: ShopListResponse): void {
+            shops.value = response.results;
+            currentPage.value = response.current_page;
+            totalPages.value = response.total_pages;
+            totalCount.value = response.total_count;
+            pageSize.value = response.page_size;
+        }
+        async function loadShops(): Promise<void> {
+            if (isLoading.value) {
+                return;
+            }
+            isLoading.value = true;
+            errorMessage.value = '';
+            try {
+                const response = await getShopList({
+                    search: keyword.value == '' ? null : keyword.value,
+                    page: currentPage.value,
+                    page_size: pageSize.value,
+                } as ShopListQuery);
+                applyShopResponse(response);
+            }
+            catch (error: any) {
+                shops.value = [] as ShopItem[];
+                currentPage.value = 1;
+                totalPages.value = 1;
+                totalCount.value = 0;
+                errorMessage.value = parseErrorMessage(error);
+            }
+            finally {
+                isLoading.value = false;
+            }
+        }
+        function getDisplayText(value: string): string {
+            return value == '' ? '-' : value;
+        }
+        function formatDateText(value: string): string {
+            if (value == '') {
+                return '-';
+            }
+            if (value.length >= 16) {
+                return value.substring(0, 16);
+            }
+            return value;
+        }
+        function shopToListItem(item: ShopItem): UTSJSONObject {
+            return {
+                id: item.id.toString(10),
+                name: item.name,
+                address: item.address,
+                addressText: '地址：' + getDisplayText(item.address),
+                company_name: item.company_name,
+                companyText: '公司：' + getDisplayText(item.company_name),
+                media_records_count: item.media_records_count.toString(10),
+                updated_at: formatDateText(item.updated_at),
+                rawId: item.id.toString(10),
+            } as UTSJSONObject;
+        }
+        function copyText(text: string, successTitle: string, emptyTitle: string): void {
+            if (text == '' || text == '-') {
+                uni.showToast({
+                    title: emptyTitle,
+                    icon: 'none',
+                });
+                return;
+            }
+            uni.setClipboardData({
+                data: text,
+                success: () => {
+                    uni.showToast({
+                        title: successTitle,
+                        icon: 'success',
+                    });
+                },
+            });
+        }
+        function goToShopMedia(shopId: string, shopName: string): void {
+            if (shopId == '') {
+                return;
+            }
+            uni.navigateTo({
+                url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:208"),
+            });
+        }
+        function consumeShopListRefreshNeeded(): boolean {
+            const storedValue = uni.getStorageSync(shopListRefreshStorageKey);
+            if (storedValue == null) {
+                return false;
+            }
+            const storedText = '' + storedValue;
+            if (storedText == '') {
+                return false;
+            }
+            uni.removeStorageSync(shopListRefreshStorageKey);
+            return true;
+        }
+        function handleSearchInput(value: any): void {
+            keyword.value = stringValue(value);
+        }
+        function handleSearchConfirm(value: any | null): void {
+            keyword.value = stringValue(value);
+            currentPage.value = 1;
+            loadShops();
+        }
+        function handleSearchClear(): void {
+            keyword.value = '';
+            currentPage.value = 1;
+            loadShops();
+        }
+        function handlePageChange(payload: UTSJSONObject): void {
+            const pageValue = payload['page'];
+            if (pageValue == null) {
+                return;
+            }
+            const nextPage = parseInt('' + pageValue);
+            if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+                return;
+            }
+            currentPage.value = nextPage;
+            loadShops();
+        }
+        function handleItemClick(payload: UTSJSONObject): void {
+            const itemName = stringValue(payload['name'], '商店');
+            uni.showToast({
+                title: itemName,
+                icon: 'none',
+            });
+        }
+        function handleSubtitleClick(payload: UTSJSONObject): void {
+            const itemValue = payload['item'];
+            if (itemValue == null) {
+                return;
+            }
+            const item = itemValue as UTSJSONObject;
+            copyText(stringValue(item['address']), '地址已复制', '暂无地址');
+        }
+        function handleMetaClick(payload: UTSJSONObject): void {
+            const itemValue = payload['item'];
+            if (itemValue == null) {
+                return;
+            }
+            const item = itemValue as UTSJSONObject;
+            copyText(stringValue(item['company_name']), '公司名已复制', '暂无公司名');
+        }
+        function handleFieldClick(payload: UTSJSONObject): void {
+            const keyValue = payload['key'];
+            const itemValue = payload['item'];
+            if (keyValue == null || itemValue == null) {
+                return;
+            }
+            const key = keyValue as string;
+            const item = itemValue as UTSJSONObject;
+            if (key == 'address') {
+                copyText(stringValue(item['address']), '地址已复制', '暂无地址');
+                return;
+            }
+            if (key == 'company_name') {
+                copyText(stringValue(item['company_name']), '公司名已复制', '暂无公司名');
+                return;
+            }
+            if (key == 'media_records_count') {
+                copyText(stringValue(item['media_records_count']), '媒体数量已复制', '暂无媒体数量');
+                return;
+            }
+            if (key == 'updated_at') {
+                copyText(stringValue(item['updated_at']), '更新时间已复制', '暂无更新时间');
+            }
+        }
+        function handleMenu(payload: UTSJSONObject): void {
+            const actionValue = payload['action'];
+            const itemValue = payload['item'];
+            if (actionValue == null || itemValue == null) {
+                return;
+            }
+            const action = actionValue as UTSJSONObject;
+            const item = itemValue as UTSJSONObject;
+            const actionKey = stringValue(action['key']);
+            const shopId = stringValue(item['rawId']);
+            const shopNameValue = stringValue(item['name']);
+            if (actionKey == 'media') {
+                goToShopMedia(shopId, shopNameValue);
+                return;
+            }
+        }
+        const listItems = computed((): UTSJSONObject[] => {
+            const result: UTSJSONObject[] = [];
+            for (let index = 0; index < shops.value.length; index += 1) {
+                result.push(shopToListItem(shops.value[index]));
+            }
+            return result;
+        });
+        const summaryItems = computed((): UTSJSONObject[] => {
+            return [
+                {
+                    key: 'total',
+                    label: '商店总数',
+                    value: totalCount.value.toString(10),
+                } as UTSJSONObject,
+                {
+                    key: 'page',
+                    label: '当前页',
+                    value: currentPage.value.toString(10) + ' / ' + totalPages.value.toString(10),
+                } as UTSJSONObject,
+            ];
+        });
+        const emptyText = computed((): string => {
+            if (isLoading.value) {
+                return '正在加载';
+            }
+            if (keyword.value != '') {
+                return '没有匹配的商店';
+            }
+            return '暂无商店';
+        });
+        onLoad((_options) => {
+            loadShops();
+        });
+        onShow(() => {
+            if (consumeShopListRefreshNeeded()) {
+                loadShops();
+            }
+        });
+        return (): any | null => {
+            const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", _easycom_lili_universal_filter);
+            const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", _easycom_lili_UniversalList);
+            return _cE("view", _uM({ class: "page" }), [
+                _cV(_component_lili_universal_filter, _uM({
+                    title: "商店",
+                    searchPlaceholder: "输入商店名称或地址",
+                    searchValue: unref(keyword),
+                    showBack: true,
+                    showSearch: true,
+                    showFilter: false,
+                    showHome: true,
+                    homePath: "/pages/tabbar/settings",
+                    onSearchInput: ($event: any) => { handleSearchInput($event); },
+                    onSearchConfirm: ($event: any) => { handleSearchConfirm($event); },
+                    onSearchClear: () => { handleSearchClear(); }
+                }), null, 8 /* PROPS */, ["searchValue", "onSearchInput", "onSearchConfirm", "onSearchClear"]),
+                _cE("scroll-view", _uM({
+                    style: _nS(_uM({ "flex": "1" })),
+                    class: "page-scroll"
+                }), [
+                    _cE("view", _uM({ class: "page-content" }), [
+                        isTrue(unref(errorMessage) != '' && !unref(isLoading))
+                            ? _cE("view", _uM({
+                                key: 0,
+                                class: "error-card"
+                            }), [
+                                _cE("text", _uM({ class: "error-title" }), "加载失败"),
+                                _cE("text", _uM({ class: "error-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */),
+                                _cE("button", _uM({
+                                    class: "retry-btn",
+                                    onClick: loadShops
+                                }), [
+                                    _cE("text", _uM({ class: "retry-btn-text" }), "重新加载")
+                                ])
+                            ])
+                            : _cC("v-if", true),
+                        _cV(_component_lili_UniversalList, _uM({
+                            items: listItems.value,
+                            keyField: "id",
+                            titleField: "name",
+                            subtitleField: "addressText",
+                            metaField: "companyText",
+                            fields: unref(fieldConfig),
+                            loading: unref(isLoading),
+                            loadingText: "正在加载商店",
+                            keepContentOnLoading: true,
+                            inlineLoadingText: "商店数据刷新中...",
+                            emptyText: emptyText.value,
+                            emptyIcon: "◎",
+                            showMenu: true,
+                            menuActions: unref(menuActions),
+                            showChevron: false,
+                            showPagination: true,
+                            currentPage: unref(currentPage),
+                            totalPages: unref(totalPages),
+                            totalCount: unref(totalCount),
+                            summaryTitle: "商店统计",
+                            summaryItems: summaryItems.value,
+                            summaryCollapsedByDefault: true,
+                            showFloatingAdd: false,
+                            onItemClick: handleItemClick,
+                            onSubtitleClick: handleSubtitleClick,
+                            onMetaClick: handleMetaClick,
+                            onFieldClick: handleFieldClick,
+                            onMenu: handleMenu,
+                            onPageChange: handlePageChange
+                        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
+                    ])
+                ], 4 /* STYLE */)
+            ]);
+        };
+    }
+});
+export default __sfc__;
+const GenPagesShopIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 24]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))]])];
+//# sourceMappingURL=index.uvue.map

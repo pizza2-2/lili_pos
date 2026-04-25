@@ -1,6 +1,7 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteTransaction, getTransactionList, getTransactionStatistics, TransactionItem, TransactionListResponse, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
 
 
@@ -49,7 +50,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:109")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:110")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -382,7 +383,7 @@ async function confirmDeleteTransaction(transactionId: string) {
 	try {
 		await deleteTransaction(transactionId)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		markTransactionListRefreshNeeded()

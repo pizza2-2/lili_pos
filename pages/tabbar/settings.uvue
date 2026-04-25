@@ -51,10 +51,8 @@ const groups = ref<MenuGroup[]>([
 		label: '常用页面',
 		rows: [
 			[
-				{ label: '供应商', icon: '◫', iconPath: null, path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
-				{ label: '商品', icon: '□', iconPath: null, path: '/pages/tabbar/products', action: 'switchTab', disabled: false },
-				{ label: '我的', icon: '◉', iconPath: null, path: '/pages/tabbar/mine', action: 'switchTab', disabled: false },
-				{ label: '隐私', icon: '◎', iconPath: null, path: '/pages/privacy/privacy', action: 'navigateTo', disabled: false },
+				{ label: '供应商', icon: '', iconPath: '/static/muen/供应商.png', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+				{ label: '商店', icon: '', iconPath: '/static/muen/商店.png', path: '/pages/shop/index', action: 'navigateTo', disabled: false },
 			],
 		],
 	},

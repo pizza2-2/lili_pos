@@ -100,7 +100,7 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val buildInitialDataFromSupplier = ::gen_buildInitialDataFromSupplier_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 135, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 136, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -116,7 +116,7 @@ open class GenPagesSuppliersFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:151")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:152")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -178,7 +178,7 @@ open class GenPagesSuppliersFrom : BasePage {
                         }
                         try {
                             val detail = await(getSupplierDetail(idText))
-                            console.log(detail, " at pages/suppliers/from.uvue:292")
+                            console.log(detail, " at pages/suppliers/from.uvue:293")
                             initialData.value = buildInitialDataFromSupplier(detail)
                         }
                          catch (error: Throwable) {
@@ -327,14 +327,17 @@ open class GenPagesSuppliersFrom : BasePage {
                         uni_showLoading(ShowLoadingOptions(title = savingText.value, mask = true))
                         try {
                             val body = buildSupplierMutationPayload(data)
+                            var successMessage = actionText + "成功"
                             if (formMode.value == "edit" && supplierId.value != "") {
                                 savingText.value = "上传图片中..."
                                 await(uploadPendingSupplierImages(data, uploadContentTypeModel))
                                 savingText.value = "保存修改中..."
                                 await(updateSupplier(supplierId.value, body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                             } else {
                                 savingText.value = "创建供应商中..."
                                 val createdSupplier = await(createSupplier(body))
+                                successMessage = takeLatestResponseMessage(successMessage)
                                 supplierId.value = createdSupplier.id.toString(10)
                                 try {
                                     savingText.value = "上传图片中..."
@@ -346,7 +349,7 @@ open class GenPagesSuppliersFrom : BasePage {
                             }
                             clearDraftStorage()
                             markSupplierListRefreshNeeded()
-                            uni_showToast(ShowToastOptions(title = actionText + "成功", icon = "success"))
+                            uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
                             goBackToList()
                         }
                          catch (error: Throwable) {

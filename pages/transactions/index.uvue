@@ -66,6 +66,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteTransaction, getTransactionList, getTransactionStatistics, TransactionItem, TransactionListResponse, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
 
 const transactionListRefreshStorageKey = 'refresh:pages:transactions:index'
@@ -439,7 +440,7 @@ async function confirmDeleteTransaction(transactionId: string) {
 	try {
 		await deleteTransaction(transactionId)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		markTransactionListRefreshNeeded()

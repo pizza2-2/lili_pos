@@ -1,0 +1,431 @@
+import { request } from '../index.uts';
+const categoryBasePath = '/api/categories/categories/';
+export type CategoryListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+    id: number | string | null;
+    is_active: boolean | string | null;
+    level: number | string | null;
+    parent: number | string | null;
+    parent_id: number | string | null;
+    code: string | null;
+    tax_rate: number | string | null;
+    kasa_category: number | string | null;
+    kasa_category_id: number | string | null;
+    status: string | null;
+    ordering: string | null;
+    simple: boolean | null;
+};
+export type CategoryItem = {
+    id: number;
+    name: string;
+    code: string;
+    level: number;
+    parent_id: number;
+    sort_order: number;
+    tax_rate: string;
+    kasa_category_id: number;
+    products_count: number;
+    children_count: number;
+    is_active: boolean;
+    is_leaf: boolean;
+    full_name: string;
+    path: string;
+    created_at: string;
+    updated_at: string;
+    raw: UTSJSONObject;
+};
+export type CategoryListResponse = {
+    results: CategoryItem[];
+    count: number;
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+};
+export type CategoryMutationData = UTSJSONObject;
+export type CategorySortItem = UTSJSONObject;
+export type CategoryStatisticsResponse = {
+    data: UTSJSONObject;
+};
+export type CategoryRootsQuery = {
+    search: string | null;
+    level: number | string | null;
+    status: string | null;
+    ordering: string | null;
+};
+function stringValue(value: any | null): string {
+    if (value == null) {
+        return '';
+    }
+    return '' + value;
+}
+function intValue(value: any | null): number {
+    if (value == null) {
+        return 0;
+    }
+    const text = stringValue(value);
+    if (text == '') {
+        return 0;
+    }
+    const parsed = parseInt(text);
+    if (isNaN(parsed)) {
+        return 0;
+    }
+    return parsed;
+}
+function booleanValue(value: any | null): boolean {
+    const text = stringValue(value).toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
+}
+function parseObject(value: any | null): UTSJSONObject | null {
+    if (value == null) {
+        return null;
+    }
+    const text = JSON.stringify(value);
+    if (text == null || text == '') {
+        return null;
+    }
+    return JSON.parseObject<UTSJSONObject>(text);
+}
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+    if (value == null) {
+        return [];
+    }
+    const text = JSON.stringify(value);
+    if (text == null || text == '') {
+        return [];
+    }
+    const parsed = JSON.parseArray<UTSJSONObject>(text);
+    if (parsed == null) {
+        return [];
+    }
+    return parsed!;
+}
+function buildCategoryItemFromObject(rawObject: UTSJSONObject): CategoryItem {
+    return {
+        id: intValue(rawObject['id']),
+        name: stringValue(rawObject['name']),
+        code: stringValue(rawObject['code']),
+        level: intValue(rawObject['level']),
+        parent_id: intValue(rawObject['parent_id'] != null ? rawObject['parent_id'] : rawObject['parent']),
+        sort_order: intValue(rawObject['sort_order']),
+        tax_rate: stringValue(rawObject['tax_rate']),
+        kasa_category_id: intValue(rawObject['kasa_category_id'] != null ? rawObject['kasa_category_id'] : rawObject['kasa_category']),
+        products_count: intValue(rawObject['products_count']),
+        children_count: intValue(rawObject['children_count']),
+        is_active: booleanValue(rawObject['is_active']),
+        is_leaf: booleanValue(rawObject['is_leaf']) || stringValue(rawObject['status']) == 'leaf',
+        full_name: stringValue(rawObject['full_name']),
+        path: stringValue(rawObject['path']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+        raw: rawObject,
+    } as CategoryItem;
+}
+function buildCategoryArrayFromValue(value: any | null): CategoryItem[] {
+    const rawObject = parseObject(value);
+    if (rawObject != null) {
+        if (rawObject['results'] != null) {
+            return buildCategoryArrayFromValue(rawObject['results']);
+        }
+        if (rawObject['items'] != null) {
+            return buildCategoryArrayFromValue(rawObject['items']);
+        }
+        if (rawObject['children'] != null) {
+            return buildCategoryArrayFromValue(rawObject['children']);
+        }
+        if (rawObject['data'] != null) {
+            return buildCategoryArrayFromValue(rawObject['data']);
+        }
+    }
+    const rawArray = parseObjectArray(value);
+    const result: CategoryItem[] = [];
+    for (let index = 0; index < rawArray.length; index += 1) {
+        result.push(buildCategoryItemFromObject(rawArray[index]));
+    }
+    return result;
+}
+function buildCategoryListQuery(data: CategoryListQuery): UTSJSONObject {
+    const query = {
+        page: data.page,
+        page_size: data.page_size,
+    } as UTSJSONObject;
+    if (data.search != null && data.search != '') {
+        query['search'] = data.search;
+    }
+    if (data.id != null && stringValue(data.id) != '') {
+        query['id'] = data.id;
+    }
+    if (data.is_active != null && stringValue(data.is_active) != '') {
+        query['is_active'] = data.is_active;
+    }
+    if (data.level != null && stringValue(data.level) != '') {
+        query['level'] = data.level;
+    }
+    if (data.parent != null) {
+        query['parent'] = data.parent;
+    }
+    if (data.parent_id != null && stringValue(data.parent_id) != '') {
+        query['parent_id'] = data.parent_id;
+    }
+    if (data.code != null && data.code != '') {
+        query['code'] = data.code;
+    }
+    if (data.tax_rate != null && stringValue(data.tax_rate) != '') {
+        query['tax_rate'] = data.tax_rate;
+    }
+    if (data.kasa_category != null && stringValue(data.kasa_category) != '') {
+        query['kasa_category'] = data.kasa_category;
+    }
+    if (data.kasa_category_id != null && stringValue(data.kasa_category_id) != '') {
+        query['kasa_category_id'] = data.kasa_category_id;
+    }
+    if (data.status != null && data.status != '') {
+        query['status'] = data.status;
+    }
+    if (data.ordering != null && data.ordering != '') {
+        query['ordering'] = data.ordering;
+    }
+    if (data.simple != null) {
+        query['simple'] = data.simple;
+    }
+    return query;
+}
+function buildCategoryListResponse(raw: any, query: CategoryListQuery): CategoryListResponse {
+    const rawObject = parseObject(raw);
+    if (rawObject == null) {
+        const results = buildCategoryArrayFromValue(raw);
+        return {
+            results: results,
+            count: results.length,
+            total_count: results.length,
+            total_pages: 1,
+            current_page: query.page > 0 ? query.page : 1,
+            page_size: query.page_size > 0 ? query.page_size : results.length,
+        } as CategoryListResponse;
+    }
+    let paginationObject: UTSJSONObject | null = null;
+    if (rawObject['pagination'] != null) {
+        paginationObject = parseObject(rawObject['pagination']);
+    }
+    let results: CategoryItem[] = [];
+    if (rawObject['results'] != null) {
+        results = buildCategoryArrayFromValue(rawObject['results']);
+    }
+    else if (rawObject['items'] != null) {
+        results = buildCategoryArrayFromValue(rawObject['items']);
+    }
+    else {
+        results = buildCategoryArrayFromValue(raw);
+    }
+    let totalCount = intValue(rawObject['count']);
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject['total']);
+    }
+    if (totalCount <= 0) {
+        totalCount = intValue(rawObject['total_count']);
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject['total']);
+    }
+    if (totalCount <= 0 && paginationObject != null) {
+        totalCount = intValue(paginationObject['count']);
+    }
+    if (totalCount <= 0) {
+        totalCount = results.length;
+    }
+    let currentPage = intValue(rawObject['page']);
+    if (currentPage <= 0) {
+        currentPage = intValue(rawObject['current_page']);
+    }
+    if (currentPage <= 0 && paginationObject != null) {
+        currentPage = intValue(paginationObject['page']);
+    }
+    if (currentPage <= 0) {
+        currentPage = query.page > 0 ? query.page : 1;
+    }
+    let pageSize = intValue(rawObject['page_size']);
+    if (pageSize <= 0) {
+        pageSize = intValue(rawObject['per_page']);
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue(paginationObject['page_size']);
+    }
+    if (pageSize <= 0 && paginationObject != null) {
+        pageSize = intValue(paginationObject['per_page']);
+    }
+    if (pageSize <= 0) {
+        pageSize = query.page_size > 0 ? query.page_size : results.length;
+    }
+    let totalPages = intValue(rawObject['total_pages']);
+    if (totalPages <= 0) {
+        totalPages = intValue(rawObject['num_pages']);
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject['total_pages']);
+    }
+    if (totalPages <= 0 && paginationObject != null) {
+        totalPages = intValue(paginationObject['num_pages']);
+    }
+    if (totalPages <= 0 && pageSize > 0) {
+        totalPages = Math.ceil(totalCount / pageSize);
+    }
+    if (totalPages <= 0) {
+        totalPages = 1;
+    }
+    return {
+        results: results,
+        count: totalCount,
+        total_count: totalCount,
+        total_pages: totalPages,
+        current_page: currentPage,
+        page_size: pageSize,
+    } as CategoryListResponse;
+}
+function buildCategoryItemResponse(raw: any, errorMessage: string): CategoryItem {
+    const rawObject = parseObject(raw);
+    if (rawObject == null) {
+        throw new Error(errorMessage);
+    }
+    return buildCategoryItemFromObject(rawObject);
+}
+function buildObjectResponse(raw: any, errorMessage: string): UTSJSONObject {
+    const rawObject = parseObject(raw);
+    if (rawObject == null) {
+        throw new Error(errorMessage);
+    }
+    return rawObject;
+}
+function buildSearchQuery(search: string | null): UTSJSONObject {
+    const query = {} as UTSJSONObject;
+    if (search != null && search != '') {
+        query['search'] = search;
+    }
+    return query;
+}
+function buildCategoryRootsQuery(data: CategoryRootsQuery): UTSJSONObject {
+    const query = {} as UTSJSONObject;
+    if (data.search != null && data.search != '') {
+        query['search'] = data.search;
+    }
+    if (data.level != null && stringValue(data.level) != '') {
+        query['level'] = data.level;
+    }
+    if (data.status != null && data.status != '') {
+        query['status'] = data.status;
+    }
+    if (data.ordering != null && data.ordering != '') {
+        query['ordering'] = data.ordering;
+    }
+    return query;
+}
+function buildIncludeSelfQuery(includeSelf: boolean): UTSJSONObject {
+    return {
+        include_self: includeSelf,
+    } as UTSJSONObject;
+}
+function categoryDetailPath(id: number | string): string {
+    return categoryBasePath + stringValue(id) + '/';
+}
+function buildMoveBody(parentId: number | string | null): UTSJSONObject {
+    return {
+        parent_id: parentId,
+    } as UTSJSONObject;
+}
+function buildTranslateBody(force: boolean): UTSJSONObject {
+    return {
+        force: force,
+    } as UTSJSONObject;
+}
+function buildBatchUpdateSortBody(sortData: CategorySortItem[]): UTSJSONObject {
+    return {
+        sort_data: sortData,
+    } as UTSJSONObject;
+}
+export async function getCategoryList(data: CategoryListQuery): Promise<CategoryListResponse> {
+    const raw = await request(categoryBasePath, 'GET', buildCategoryListQuery(data), true);
+    return buildCategoryListResponse(raw, data);
+}
+export async function getCategoryDetail(id: number | string): Promise<CategoryItem> {
+    const raw = await request(categoryDetailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildCategoryItemResponse(raw, '分类详情响应解析失败');
+}
+export async function createCategory(data: CategoryMutationData): Promise<CategoryItem> {
+    const raw = await request(categoryBasePath, 'POST', data, true);
+    return buildCategoryItemResponse(raw, '创建分类响应解析失败');
+}
+export async function updateCategory(id: number | string, data: CategoryMutationData): Promise<CategoryItem> {
+    const raw = await request(categoryDetailPath(id), 'PUT', data, true);
+    return buildCategoryItemResponse(raw, '更新分类响应解析失败');
+}
+export async function patchCategory(id: number | string, data: CategoryMutationData): Promise<CategoryItem> {
+    const raw = await request(categoryDetailPath(id), 'PATCH', data, true);
+    return buildCategoryItemResponse(raw, '部分更新分类响应解析失败');
+}
+export function deleteCategory(id: number | string): Promise<any> {
+    return request(categoryDetailPath(id), 'DELETE', {} as UTSJSONObject, true);
+}
+export async function getCategoryRoots(query: CategoryRootsQuery | null = null): Promise<CategoryItem[]> {
+    const requestQuery = query == null ? buildCategoryRootsQuery({
+        search: null,
+        level: null,
+        status: null,
+        ordering: null,
+    } as CategoryRootsQuery) : buildCategoryRootsQuery(query);
+    const raw = await request(categoryBasePath + 'roots/', 'GET', requestQuery, true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function getCategoryChildren(id: number | string, search: string | null = null): Promise<CategoryItem[]> {
+    const raw = await request(categoryDetailPath(id) + 'children/', 'GET', buildSearchQuery(search), true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function getCategoryGlobalSearch(search: string | null = null): Promise<CategoryItem[]> {
+    const raw = await request(categoryBasePath + 'global_search/', 'GET', buildSearchQuery(search), true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function getCategoryAncestors(id: number | string): Promise<CategoryItem[]> {
+    const raw = await request(categoryDetailPath(id) + 'ancestors/', 'GET', {} as UTSJSONObject, true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function getCategoryDescendants(id: number | string, includeSelf: boolean = false): Promise<CategoryItem[]> {
+    const raw = await request(categoryDetailPath(id) + 'descendants/', 'GET', buildIncludeSelfQuery(includeSelf), true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function getCategorySiblings(id: number | string, includeSelf: boolean = false): Promise<CategoryItem[]> {
+    const raw = await request(categoryDetailPath(id) + 'siblings/', 'GET', buildIncludeSelfQuery(includeSelf), true);
+    return buildCategoryArrayFromValue(raw);
+}
+export async function moveCategory(id: number | string, parentId: number | string | null): Promise<UTSJSONObject> {
+    const raw = await request(categoryDetailPath(id) + 'move/', 'POST', buildMoveBody(parentId), true);
+    return buildObjectResponse(raw, '移动分类响应解析失败');
+}
+export async function batchUpdateCategorySort(sortData: CategorySortItem[]): Promise<UTSJSONObject> {
+    const raw = await request(categoryBasePath + 'batch_update_sort/', 'POST', buildBatchUpdateSortBody(sortData), true);
+    return buildObjectResponse(raw, '批量更新分类排序响应解析失败');
+}
+export async function getCategoryStatistics(query: CategoryListQuery | null = null): Promise<CategoryStatisticsResponse> {
+    const requestQuery = query == null ? {} as UTSJSONObject : buildCategoryListQuery(query);
+    const raw = await request(categoryBasePath + 'statistics/', 'GET', requestQuery, true);
+    return {
+        data: buildObjectResponse(raw, '分类统计响应解析失败'),
+    } as CategoryStatisticsResponse;
+}
+export async function updateCategoryProductsCount(id: number | string): Promise<UTSJSONObject> {
+    const raw = await request(categoryDetailPath(id) + 'update_products_count/', 'POST', {} as UTSJSONObject, true);
+    return buildObjectResponse(raw, '更新分类商品数量响应解析失败');
+}
+export async function batchUpdateCategoryProductsCount(): Promise<UTSJSONObject> {
+    const raw = await request(categoryBasePath + 'batch_update_products_count/', 'POST', {} as UTSJSONObject, true);
+    return buildObjectResponse(raw, '批量更新分类商品数量响应解析失败');
+}
+export async function translateCategory(id: number | string, force: boolean = false): Promise<UTSJSONObject> {
+    const raw = await request(categoryDetailPath(id) + 'translate/', 'POST', buildTranslateBody(force), true);
+    return buildObjectResponse(raw, '翻译分类响应解析失败');
+}
+export async function batchTranslateCategories(force: boolean = false): Promise<UTSJSONObject> {
+    const raw = await request(categoryBasePath + 'batch_translate/', 'POST', buildTranslateBody(force), true);
+    return buildObjectResponse(raw, '批量翻译分类响应解析失败');
+}
+//# sourceMappingURL=category.uts.map

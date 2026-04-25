@@ -1,6 +1,7 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 
@@ -77,7 +78,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:200")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:201")
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
@@ -141,7 +142,7 @@ function fieldStringFromObject(obj: UTSJSONObject, key: string) : string {
 
 function batchActionCandidatesFromSupplier(item: SupplierItem) : string[] {
 	const rawItemText = JSON.stringify(item)
-	const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:264")
+	const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:265")
 	if (rawItem == null) {
 		return []
 	}
@@ -150,7 +151,7 @@ function batchActionCandidatesFromSupplier(item: SupplierItem) : string[] {
 		return []
 	}
 	const text = JSON.stringify(rawActions)
-	const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:273")
+	const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:274")
 	if (parsed == null) {
 		return []
 	}
@@ -203,7 +204,7 @@ async function loadSuppliers() {
 			is_active: selectedIsActive.value,
 			has_arrears: selectedHasArrears.value,
 		})
-		console.log(response, " at pages/suppliers/index.uvue:326")
+		console.log(response, " at pages/suppliers/index.uvue:327")
 		applySupplierResponse(response)
 	} catch (error) {
 		suppliers.value = []
@@ -283,7 +284,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 			return
 		}
 		uni.showToast({
-			title: batchActionTitle(actionKey) + '成功',
+			title: takeLatestResponseMessage(batchActionTitle(actionKey) + '成功'),
 			icon: 'success',
 		})
 		clearSelectionState()
@@ -640,7 +641,7 @@ async function confirmDeleteSupplier(supplierId: string) {
 	try {
 		await deleteSupplier(supplierId)
 		uni.showToast({
-			title: '删除成功',
+			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
 		loadSuppliers()

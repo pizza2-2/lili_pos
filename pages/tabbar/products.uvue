@@ -1,89 +1,1261 @@
 <template>
-	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
-		<view class="page">
-			<view class="status-bar-space"></view>
-			<view class="hero">
-				<text class="hero-title">商品</text>
-				<text class="hero-desc">商品管理、筛选组件和弹窗组件都可以从这里继续接业务。</text>
-			</view>
+	<view class="page">
+		<lili-universal-filter
+			title="商品"
+			searchPlaceholder="输入商品名称、SKU、条码"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="false"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="false"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="product-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="product-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="product-filter-scroll-inner">
+							<view class="product-filter-select-group">
+								<text class="product-filter-select-title">供应商</text>
+								<view class="product-filter-select-wrap">
+									<liliBottomSelect
+										:value="supplierFilterValue"
+										:valueText="supplierFilterText"
+										title="选择供应商"
+										placeholder="请选择供应商"
+										searchPlaceholder="请输入供应商名称"
+										emptyText="暂无供应商"
+										:showAddAction="false"
+										:showEditAction="false"
+										:fetchData="fetchSupplierFilterOptions"
+										@change="handleSupplierFilterChange"
+									/>
+								</view>
+							</view>
 
-			<view class="card">
-				<text class="card-label">当前模块</text>
-				<text class="card-value">商品中心</text>
-				<text class="card-desc">这里作为底部导航首页，后续可继续接商品列表、分类、库存和价格体系。</text>
+							<view class="product-filter-select-group">
+								<text class="product-filter-select-title">分类</text>
+								<view class="product-filter-select-wrap">
+								<liliBottomSelect
+									:value="categoryFilterValue"
+									:valueText="categoryFilterText"
+									title="选择分类"
+									placeholder="请选择分类"
+									searchPlaceholder="请输入分类名称"
+									emptyText="暂无分类"
+									:tree="true"
+									:expandOnClickNode="true"
+									:showAddAction="false"
+									:showEditAction="false"
+									:fetchData="fetchCategoryFilterOptions"
+									@change="handleCategoryFilterChange"
+									/>
+								</view>
+							</view>
+
+							<view v-if="filterOptionsLoading" class="product-filter-state">
+								<text class="product-filter-state-text">筛选选项加载中...</text>
+							</view>
+
+							<view v-else-if="filterOptionsError != ''" class="product-filter-state">
+								<text class="product-filter-state-text">{{ filterOptionsError }}</text>
+							</view>
+
+							<view v-else-if="filterDefinitions.length > 0" class="product-filter-groups">
+								<view
+									v-for="filter in filterDefinitions"
+									:key="filter.key"
+									class="product-filter-group"
+								>
+									<text class="product-filter-group-title">{{ filter.label }}</text>
+									<view class="product-filter-options">
+										<view
+											v-for="option in filter.options"
+											:key="filter.key + '-' + option.value"
+											:class="isFilterOptionSelected(filter.param, option.value) ? 'product-filter-option product-filter-option-active' : 'product-filter-option'"
+											@click="toggleFilterOption(filter.param, option.value, filter.multiple)"
+										>
+											<text :class="isFilterOptionSelected(filter.param, option.value) ? 'product-filter-option-text product-filter-option-text-active' : 'product-filter-option-text'">{{ option.label }}</text>
+										</view>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="product-filter-actions">
+						<view class="product-filter-btn product-filter-btn-light" @click="handleFilterReset">
+							<text class="product-filter-btn-light-text">重置</text>
+						</view>
+						<view class="product-filter-btn product-filter-btn-primary" @click="applySelectedFilters">
+							<text class="product-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<button class="retry-btn" @click="loadProducts">
+						<text class="retry-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="skuText"
+					metaField="barcodeText"
+					imageField="cover"
+					imageListField="images"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载商品"
+					:keepContentOnLoading="true"
+					inlineLoadingText="商品数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="商品概览"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="false"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
 			</view>
-		</view>
-	</scroll-view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
 </template>
 
 <script setup lang="uts">
+import { computed } from 'vue'
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import { request } from '@/pkg/api/index.uts'
+import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+
+type ProductSelectOption = {
+	value: string
+	text: string
+}
+
+const keyword = ref('')
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const products = ref<ProductItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<ProductFilterOptionsResponse | null>(null)
+const selectedFilters = ref<ProductSelectedFilter[]>([])
+const supplierFilterValue = ref('')
+const supplierFilterText = ref('')
+const categoryFilterValue = ref('')
+const categoryFilterText = ref('')
+const filterPanelHeight = ref(456)
+const filterContentHeight = ref(392)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'supplierText', label: '供应商' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '进价' } as UTSJSONObject,
+	{ key: 'salesPriceText', label: '售价' } as UTSJSONObject,
+	{ key: 'salesCountText', label: '销量' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'copy-sku', text: '复制SKU' } as UTSJSONObject,
+	{ key: 'copy-barcode', text: '复制条码' } as UTSJSONObject,
+	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const tagColorMap = ref<UTSJSONObject>({
+	ACTIVE: 'success',
+	INACTIVE: 'danger',
+	DRAFT: 'warning',
+	新品: 'violet',
+	精选: 'info',
+	热销: 'warning',
+})
+
+function applyProductResponse(response: ProductListResponse) {
+	products.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '商品列表加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '商品列表加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 456) {
+		nextPanelHeight = 456
+	}
+	if (nextPanelHeight < 336) {
+		nextPanelHeight = 336
+	}
+
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 250) {
+		nextContentHeight = 250
+	}
+
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+async function loadProducts() {
+	if (isLoading.value) {
+		return
+	}
+
+	isLoading.value = true
+	errorMessage.value = ''
+
+	try {
+		const response = await getProductList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			filters: selectedFilters.value,
+		})
+		applyProductResponse(response)
+	} catch (error) {
+		products.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	return text
+}
+
+function booleanValue(value: any | null): boolean {
+	if (value == null) {
+		return false
+	}
+	const text = ('' + value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return []
+	}
+
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return []
+	}
+
+	return parsed!
+}
+
+function getDisplayText(value: string | null, fallback: string = '-'): string {
+	if (value == null || value == '') {
+		return fallback
+	}
+	return value
+}
+
+function buildImages(item: ProductItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaFile = item.media_files[index]
+		if (mediaFile.signed_thumbnail_url != '') {
+			result.push(mediaFile.signed_thumbnail_url)
+			continue
+		}
+		if (mediaFile.thumbnail_url != '') {
+			result.push(mediaFile.thumbnail_url)
+			continue
+		}
+		if (mediaFile.signed_url != '') {
+			result.push(mediaFile.signed_url)
+			continue
+		}
+		if (mediaFile.file_url != '') {
+			result.push(mediaFile.file_url)
+		}
+	}
+	return result
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: ProductSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({
+					param: param,
+					value: value,
+				} as ProductSelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+
+	if (!updated && value != '') {
+		nextFilters.push({
+			param: param,
+			value: value,
+		} as ProductSelectedFilter)
+	}
+
+	selectedFilters.value = nextFilters
+}
+
+function splitSelectedValues(value: string): string[] {
+	if (value == '') {
+		return []
+	}
+
+	const parts = value.split(',')
+	const result: string[] = []
+	for (let index = 0; index < parts.length; index += 1) {
+		const text = parts[index].trim()
+		if (text != '') {
+			result.push(text)
+		}
+	}
+	return result
+}
+
+function extractOptionObjects(value: any | null): UTSJSONObject[] {
+	const rawObject = parseObject(value)
+	if (rawObject != null) {
+		let items = parseObjectArray(rawObject['items'])
+		if (items.length > 0) {
+			return items
+		}
+
+		items = parseObjectArray(rawObject['results'])
+		if (items.length > 0) {
+			return items
+		}
+
+		items = parseObjectArray(rawObject['data'])
+		if (items.length > 0) {
+			return items
+		}
+
+		items = parseObjectArray(rawObject['options'])
+		if (items.length > 0) {
+			return items
+		}
+
+		const groups = parseObjectArray(rawObject['groups'])
+		for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+			const groupItems = parseObjectArray(groups[groupIndex]['items'])
+			if (groupItems.length > 0) {
+				return groupItems
+			}
+		}
+
+		const optionsObject = parseObject(rawObject['options'])
+		if (optionsObject != null) {
+			for (const key in optionsObject) {
+				const optionItems = parseObjectArray(optionsObject[key])
+				if (optionItems.length > 0) {
+					return optionItems
+				}
+			}
+		}
+	}
+
+	return parseObjectArray(value)
+}
+
+function extractCategoryTreeSource(value: any | null): UTSJSONObject[] {
+	const rawObject = parseObject(value)
+	if (rawObject == null) {
+		return []
+	}
+
+	const groups = parseObjectArray(rawObject['groups'])
+	for (let index = 0; index < groups.length; index += 1) {
+		const group = groups[index]
+		if (stringValue(group['key']) == 'parent') {
+			return parseObjectArray(group['items'])
+		}
+	}
+
+	if (groups.length > 0) {
+		return parseObjectArray(groups[0]['items'])
+	}
+
+	return parseObjectArray(rawObject['items'])
+}
+
+function buildOptionValue(item: UTSJSONObject): string {
+	const directValue = stringValue(item['value'])
+	if (directValue != '') {
+		return directValue
+	}
+
+	const idValue = stringValue(item['id'])
+	if (idValue != '') {
+		return idValue
+	}
+
+	const codeValue = stringValue(item['code'])
+	if (codeValue != '') {
+		return codeValue
+	}
+
+	return stringValue(item['key'])
+}
+
+function buildOptionText(item: UTSJSONObject): string {
+	const textValue = stringValue(item['text'])
+	if (textValue != '') {
+		return textValue
+	}
+
+	const labelValue = stringValue(item['label'])
+	if (labelValue != '') {
+		return labelValue
+	}
+
+	const fullNameValue = stringValue(item['full_name'])
+	if (fullNameValue != '') {
+		return fullNameValue
+	}
+
+	const nameValue = stringValue(item['name'])
+	if (nameValue != '') {
+		return nameValue
+	}
+
+	const nameCn = stringValue(item['name_cn'])
+	if (nameCn != '') {
+		return nameCn
+	}
+
+	const titleValue = stringValue(item['title'])
+	if (titleValue != '') {
+		return titleValue
+	}
+
+	return buildOptionValue(item)
+}
+
+function buildSelectOptions(value: any | null): ProductSelectOption[] {
+	const source = extractOptionObjects(value)
+	const result: ProductSelectOption[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const item = source[index]
+		const optionValue = buildOptionValue(item)
+		const optionText = buildOptionText(item)
+		if (optionValue == '' && optionText == '') {
+			continue
+		}
+		result.push({
+			value: optionValue,
+			text: optionText == '' ? optionValue : optionText,
+		} as ProductSelectOption)
+	}
+	return result
+}
+
+function buildBottomSelectResponse(source: ProductSelectOption[], params: UTSJSONObject): UTSJSONObject {
+	const keywordValue = stringValue(params['keyword']).toLowerCase()
+	const idValue = stringValue(params['id'])
+	const result: UTSJSONObject[] = []
+
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (idValue != '' && option.value != idValue) {
+			continue
+		}
+
+		const optionTextLowerCase = option.text.toLowerCase()
+		const optionValueLowerCase = option.value.toLowerCase()
+		if (keywordValue != '' && optionTextLowerCase.indexOf(keywordValue) < 0 && optionValueLowerCase.indexOf(keywordValue) < 0) {
+			continue
+		}
+
+		result.push({
+			value: option.value,
+			text: option.text,
+		} as UTSJSONObject)
+	}
+
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+function buildTreeSelectItem(item: UTSJSONObject): UTSJSONObject {
+	const rawChildren = parseObjectArray(item['children'])
+	const children: UTSJSONObject[] = []
+	for (let index = 0; index < rawChildren.length; index += 1) {
+		children.push(buildTreeSelectItem(rawChildren[index]))
+	}
+
+	const label = stringValue(item['label'], buildOptionText(item))
+	const fullName = stringValue(item['full_name'])
+
+	return {
+		value: buildOptionValue(item),
+		text: label,
+		label: label,
+		full_name: fullName == '' ? label : fullName,
+		code: stringValue(item['code']),
+		level: stringValue(item['level']),
+		parent_value: stringValue(item['parent_value']),
+		disabled: booleanValue(item['disabled']),
+		has_children: booleanValue(item['has_children']) || children.length > 0,
+		children: children,
+	} as UTSJSONObject
+}
+
+function buildCategoryTreeResponse(raw: any): UTSJSONObject {
+	const source = extractCategoryTreeSource(raw)
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		result.push(buildTreeSelectItem(source[index]))
+	}
+
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(
+		'/api/procurement/suppliers/options/',
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+	return buildBottomSelectResponse(buildSelectOptions(raw), params)
+}
+
+async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keywordValue = stringValue(params['keyword'])
+	const pageValue = stringValue(params['page'], '1')
+	const raw = await request(
+		'/api/categories/categories/options/',
+		'GET',
+		{
+			key: 'parent',
+			search: keywordValue == '' ? null : keywordValue,
+			page: pageValue == '' ? 1 : pageValue,
+			page_size: 200,
+		} as UTSJSONObject,
+		true
+	)
+	return buildCategoryTreeResponse(raw)
+}
+
+function getProductImage(item: ProductItem): string {
+	if (item.media_files.length == 0) {
+		return ''
+	}
+
+	const mediaFile = item.media_files[0]
+	if (mediaFile.signed_thumbnail_url != '') {
+		return mediaFile.signed_thumbnail_url
+	}
+	if (mediaFile.thumbnail_url != '') {
+		return mediaFile.thumbnail_url
+	}
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	return mediaFile.file_url
+}
+
+function buildProductTags(item: ProductItem): string[] {
+	const result: string[] = []
+	const statusText = getDisplayText(item.status, '')
+	if (statusText != '') {
+		result.push(statusText)
+	}
+	if (item.is_new) {
+		result.push('新品')
+	}
+	if (item.is_featured) {
+		result.push('精选')
+	}
+	if (item.is_bestseller) {
+		result.push('热销')
+	}
+	return result
+}
+
+function productDisplayName(item: ProductItem): string {
+	const chineseName = getDisplayText(item.name_cn, '')
+	if (chineseName != '') {
+		return chineseName
+	}
+	const englishName = getDisplayText(item.name_en, '')
+	if (englishName != '') {
+		return englishName
+	}
+	return item.sku == '' ? ('商品 #' + item.id.toString()) : item.sku
+}
+
+function productToListItem(item: ProductItem): UTSJSONObject {
+	return {
+		id: item.id.toString(),
+		name: productDisplayName(item),
+		name_en: getDisplayText(item.name_en),
+		sku: getDisplayText(item.sku),
+		skuText: 'SKU：' + getDisplayText(item.sku),
+		barcode: getDisplayText(item.barcode),
+		barcodeText: '条码：' + getDisplayText(item.barcode),
+		supplierText: getDisplayText(item.supplier_name),
+		purchasePriceText: getDisplayText(item.purchase_price),
+		salesPriceText: getDisplayText(item.base_sales_price),
+		salesCountText: item.total_sales_quantity.toString(),
+		variantCountText: item.variant_count.toString(),
+		updatedText: getDisplayText(item.updated_at),
+		cover: getProductImage(item),
+		images: buildImages(item),
+		tags: buildProductTags(item),
+		rawId: item.id.toString(),
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({
+			title: emptyTitle,
+			icon: 'none',
+		})
+		return
+	}
+
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({
+				title: successTitle,
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadProducts()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadProducts()
+}
+
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) {
+		return
+	}
+
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+
+	try {
+		filterOptions.value = await getProductFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error)
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleSupplierFilterChange(payload: UTSJSONObject) {
+	supplierFilterValue.value = stringValue(payload['value'])
+	supplierFilterText.value = stringValue(payload['text'])
+	setSelectedFilterValue('supplier', supplierFilterValue.value)
+}
+
+function handleCategoryFilterChange(payload: UTSJSONObject) {
+	categoryFilterValue.value = stringValue(payload['value'])
+	categoryFilterText.value = stringValue(payload['text'])
+	setSelectedFilterValue('category', categoryFilterValue.value)
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param != param) {
+			continue
+		}
+		return splitSelectedValues(filter.value).includes(value)
+	}
+	return false
+}
+
+function toggleFilterOption(param: string, value: string, multiple: boolean) {
+	let currentValue = ''
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			currentValue = filter.value
+			break
+		}
+	}
+
+	const currentValues = splitSelectedValues(currentValue)
+	if (!multiple) {
+		setSelectedFilterValue(param, currentValues.includes(value) ? '' : value)
+		return
+	}
+
+	const nextValues: string[] = []
+	let alreadySelected = false
+	for (let index = 0; index < currentValues.length; index += 1) {
+		const currentItem = currentValues[index]
+		if (currentItem == value) {
+			alreadySelected = true
+			continue
+		}
+		nextValues.push(currentItem)
+	}
+	if (!alreadySelected) {
+		nextValues.push(value)
+	}
+	setSelectedFilterValue(param, nextValues.join(','))
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) {
+		return
+	}
+
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+		return
+	}
+
+	currentPage.value = nextPage
+	loadProducts()
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as ProductSelectedFilter[]
+	supplierFilterValue.value = ''
+	supplierFilterText.value = ''
+	categoryFilterValue.value = ''
+	categoryFilterText.value = ''
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadProducts()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadProducts()
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const itemName = stringValue(payload['name'], '商品')
+	uni.showToast({
+		title: itemName,
+		icon: 'none',
+	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	copyText(stringValue(item['sku']), 'SKU已复制', '暂无SKU')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	copyText(stringValue(item['barcode']), '条码已复制', '暂无条码')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) {
+		return
+	}
+
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+	if (key == 'supplierText') {
+		copyText(stringValue(item['supplierText']), '供应商已复制', '暂无供应商')
+		return
+	}
+	if (key == 'purchasePriceText') {
+		copyText(stringValue(item['purchasePriceText']), '进价已复制', '暂无进价')
+		return
+	}
+	if (key == 'salesPriceText') {
+		copyText(stringValue(item['salesPriceText']), '售价已复制', '暂无售价')
+		return
+	}
+	if (key == 'salesCountText') {
+		copyText(stringValue(item['salesCountText']), '销量已复制', '暂无销量')
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	const itemValue = payload['item']
+	if (actionValue == null || itemValue == null) {
+		return
+	}
+
+	const action = actionValue as UTSJSONObject
+	const item = itemValue as UTSJSONObject
+	const key = stringValue(action['key'])
+	if (key == 'copy-sku') {
+		copyText(stringValue(item['sku']), 'SKU已复制', '暂无SKU')
+		return
+	}
+	if (key == 'copy-barcode') {
+		copyText(stringValue(item['barcode']), '条码已复制', '暂无条码')
+		return
+	}
+	if (key == 'detail') {
+		uni.showToast({
+			title: '商品详情页待接入',
+			icon: 'none',
+		})
+		return
+	}
+	if (key == 'reload') {
+		loadProducts()
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < products.value.length; index += 1) {
+		result.push(productToListItem(products.value[index]))
+	}
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{
+			key: 'total',
+			label: '商品总数',
+			value: totalCount.value.toString(),
+		} as UTSJSONObject,
+		{
+			key: 'page',
+			label: '当前页',
+			value: currentPage.value.toString() + '/' + totalPages.value.toString(),
+		} as UTSJSONObject,
+		{
+			key: 'loaded',
+			label: '当前页条数',
+			value: products.value.length.toString(),
+		} as UTSJSONObject,
+	]
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedFilters.value.length > 0
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) {
+		return '正在加载'
+	}
+	if (hasActiveFilter.value) {
+		return '没有匹配的商品'
+	}
+	return '暂无商品'
+})
+
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+function isReservedFilterParam(filter: ProductFilterDefinition): boolean {
+	if (filter.param == 'supplier' || filter.param == 'category') {
+		return true
+	}
+	if (filter.key == 'supplier' || filter.key == 'category') {
+		return true
+	}
+	for (let index = 0; index < filter.aliases.length; index += 1) {
+		const alias = filter.aliases[index]
+		if (alias == 'supplier' || alias == 'category') {
+			return true
+		}
+	}
+	return false
+}
+
+const filterDefinitions = computed((): ProductFilterDefinition[] => {
+	if (filterOptions.value == null) {
+		return []
+	}
+
+	const result: ProductFilterDefinition[] = []
+	for (let index = 0; index < filterOptions.value.filters.length; index += 1) {
+		const filter = filterOptions.value.filters[index]
+		if (isReservedFilterParam(filter)) {
+			continue
+		}
+		result.push(filter)
+	}
+	return result
+})
+
+onLoad(() => {
+	updateFilterPanelLayout()
+	loadProducts()
+})
+
+onShow(() => {
+	updateFilterPanelLayout()
+	if (products.value.length == 0 && !isLoading.value) {
+		loadProducts()
+	}
+})
 </script>
 
 <style>
-.page-scroll {
-	background-color: #F6F7FB;
-}
-
 .page {
-	padding-left: 16px;
-	padding-right: 16px;
-	padding-bottom: 24px;
+	flex: 1;
 	background-color: #F6F7FB;
 }
 
-.status-bar-space {
-	height: var(--status-bar-height);
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
 }
 
-.hero {
-	background-color: #14532D;
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	padding-left: 18px;
+	padding-right: 18px;
 	border-radius: 20px;
-	padding: 20px;
+	background-color: #B42318;
+	align-items: center;
+	justify-content: center;
 }
 
-.hero-title {
-	font-size: 24px;
-	line-height: 30px;
+.retry-btn-text {
+	font-size: 14px;
+	line-height: 20px;
 	color: #FFFFFF;
 	font-weight: bold;
 }
 
-.hero-desc {
-	font-size: 14px;
-	line-height: 20px;
-	color: #DCFCE7;
+.product-filter-panel {
+	position: relative;
+	padding-top: 2px;
+}
+
+.product-filter-content-scroll {
+	padding-right: 2px;
+}
+
+.product-filter-scroll-inner {
+	padding-bottom: 58px;
+}
+
+.product-filter-select-group {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	margin-bottom: 6px;
+}
+
+.product-filter-select-title {
+	font-size: 13px;
+	line-height: 17px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.product-filter-select-wrap {
 	margin-top: 8px;
 }
 
-.card {
-	background-color: #FFFFFF;
-	border-radius: 18px;
-	padding: 18px;
-	margin-top: 14px;
+.product-filter-btn {
+	flex: 1;
+	height: 38px;
+	border-radius: 11px;
+	align-items: center;
+	justify-content: center;
+}
+
+.product-filter-btn-light {
+	background-color: #F3F6FA;
 	border-width: 1px;
 	border-style: solid;
-	border-color: #E5E7EB;
+	border-color: #E2E8F0;
+	margin-right: 8px;
 }
 
-.card-label {
+.product-filter-btn-primary {
+	background-color: #0F172A;
+}
+
+.product-filter-btn-light-text {
 	font-size: 13px;
-	line-height: 18px;
-	color: #94A3B8;
+	line-height: 13px;
+	color: #475569;
 }
 
-.card-value {
-	font-size: 24px;
-	line-height: 30px;
+.product-filter-btn-primary-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #FFFFFF;
+}
+
+.product-filter-state {
+	height: 112px;
+	border-radius: 12px;
+	background-color: #F8FAFC;
+	align-items: center;
+	justify-content: center;
+}
+
+.product-filter-state-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.product-filter-groups {
+	margin-bottom: 6px;
+}
+
+.product-filter-group {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	margin-bottom: 6px;
+}
+
+.product-filter-group-title {
+	font-size: 13px;
+	line-height: 17px;
 	color: #0F172A;
 	font-weight: bold;
-	margin-top: 10px;
 }
 
-.card-desc {
-	font-size: 15px;
-	line-height: 22px;
-	color: #475569;
-	margin-top: 10px;
+.product-filter-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 8px;
 }
 
+.product-filter-option {
+	min-width: 48px;
+	height: 30px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 15px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 6px;
+	margin-bottom: 6px;
+}
+
+.product-filter-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.product-filter-option-text {
+	font-size: 12px;
+	line-height: 12px;
+	color: #334155;
+}
+
+.product-filter-option-text-active {
+	color: #FFFFFF;
+}
+
+.product-filter-actions {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	flex-direction: row;
+	margin-top: 0;
+	padding-top: 6px;
+	padding-left: 2px;
+	padding-right: 2px;
+	padding-bottom: 4px;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: rgba(226, 232, 240, 0.78);
+	background-color: #FFFFFF;
+}
 </style>

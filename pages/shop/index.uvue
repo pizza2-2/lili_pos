@@ -1,0 +1,423 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="商店"
+			searchPlaceholder="输入商店名称或地址"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput($event)"
+			@searchConfirm="handleSearchConfirm($event)"
+			@searchClear="handleSearchClear()"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<button class="retry-btn" @click="loadShops">
+						<text class="retry-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="addressText"
+					metaField="companyText"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载商店"
+					:keepContentOnLoading="true"
+					inlineLoadingText="商店数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="商店统计"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="false"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getShopList, ShopItem, ShopListResponse } from '@/pkg/api/modules/shops'
+
+const shopListRefreshStorageKey = 'refresh:pages:shop:index'
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const shops = ref<ShopItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'address', label: '地址' } as UTSJSONObject,
+	{ key: 'media_records_count', label: '媒体数量' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'media', text: '资料' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '商店列表加载失败'
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function applyShopResponse(response: ShopListResponse): void {
+	shops.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadShops(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+
+	isLoading.value = true
+	errorMessage.value = ''
+
+	try {
+		const response = await getShopList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+		})
+		applyShopResponse(response)
+	} catch (error) {
+		shops.value = [] as ShopItem[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function getDisplayText(value: string): string {
+	return value == '' ? '-' : value
+}
+
+function formatDateText(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	if (value.length >= 16) {
+		return value.substring(0, 16)
+	}
+	return value
+}
+
+function shopToListItem(item: ShopItem): UTSJSONObject {
+	return {
+		id: item.id.toString(),
+		name: item.name,
+		address: item.address,
+		addressText: '地址：' + getDisplayText(item.address),
+		company_name: item.company_name,
+		companyText: '公司：' + getDisplayText(item.company_name),
+		media_records_count: item.media_records_count.toString(),
+		updated_at: formatDateText(item.updated_at),
+		rawId: item.id.toString(),
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string): void {
+	if (text == '' || text == '-') {
+		uni.showToast({
+			title: emptyTitle,
+			icon: 'none',
+		})
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({
+				title: successTitle,
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function goToShopMedia(shopId: string, shopName: string): void {
+	if (shopId == '') {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + encodeURIComponent(shopName),
+	})
+}
+
+function consumeShopListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(shopListRefreshStorageKey)
+	if (storedValue == null) {
+		return false
+	}
+	const storedText = '' + storedValue
+	if (storedText == '') {
+		return false
+	}
+	uni.removeStorageSync(shopListRefreshStorageKey)
+	return true
+}
+
+function handleSearchInput(value: any): void {
+	keyword.value = stringValue(value)
+}
+
+function handleSearchConfirm(value: any | null): void {
+	keyword.value = stringValue(value)
+	currentPage.value = 1
+	loadShops()
+}
+
+function handleSearchClear(): void {
+	keyword.value = ''
+	currentPage.value = 1
+	loadShops()
+}
+
+function handlePageChange(payload: UTSJSONObject): void {
+	const pageValue = payload['page']
+	if (pageValue == null) {
+		return
+	}
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+		return
+	}
+	currentPage.value = nextPage
+	loadShops()
+}
+
+function handleItemClick(payload: UTSJSONObject): void {
+	const itemName = stringValue(payload['name'], '商店')
+	uni.showToast({
+		title: itemName,
+		icon: 'none',
+	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject): void {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	copyText(stringValue(item['address']), '地址已复制', '暂无地址')
+}
+
+function handleMetaClick(payload: UTSJSONObject): void {
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	copyText(stringValue(item['company_name']), '公司名已复制', '暂无公司名')
+}
+
+function handleFieldClick(payload: UTSJSONObject): void {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) {
+		return
+	}
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+	if (key == 'address') {
+		copyText(stringValue(item['address']), '地址已复制', '暂无地址')
+		return
+	}
+	if (key == 'company_name') {
+		copyText(stringValue(item['company_name']), '公司名已复制', '暂无公司名')
+		return
+	}
+	if (key == 'media_records_count') {
+		copyText(stringValue(item['media_records_count']), '媒体数量已复制', '暂无媒体数量')
+		return
+	}
+	if (key == 'updated_at') {
+		copyText(stringValue(item['updated_at']), '更新时间已复制', '暂无更新时间')
+	}
+}
+
+function handleMenu(payload: UTSJSONObject): void {
+	const actionValue = payload['action']
+	const itemValue = payload['item']
+	if (actionValue == null || itemValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const item = itemValue as UTSJSONObject
+	const actionKey = stringValue(action['key'])
+	const shopId = stringValue(item['rawId'])
+	const shopNameValue = stringValue(item['name'])
+	if (actionKey == 'media') {
+		goToShopMedia(shopId, shopNameValue)
+		return
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < shops.value.length; index += 1) {
+		result.push(shopToListItem(shops.value[index]))
+	}
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{
+			key: 'total',
+			label: '商店总数',
+			value: totalCount.value.toString(),
+		} as UTSJSONObject,
+		{
+			key: 'page',
+			label: '当前页',
+			value: currentPage.value.toString() + ' / ' + totalPages.value.toString(),
+		} as UTSJSONObject,
+	]
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) {
+		return '正在加载'
+	}
+	if (keyword.value != '') {
+		return '没有匹配的商店'
+	}
+	return '暂无商店'
+})
+
+onLoad(() => {
+	loadShops()
+})
+
+onShow(() => {
+	if (consumeShopListRefreshNeeded()) {
+		loadShops()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 24px;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 12px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+</style>

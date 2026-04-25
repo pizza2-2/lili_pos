@@ -49,6 +49,20 @@ export type KasaCategoryTaxRatesResponse = {
 	items: UTSJSONObject[]
 }
 
+export type KasaCategoryOptionsQuery = {
+	key: string | null
+	search: string | null
+	q: string | null
+	keyword: string | null
+	limit: number | null
+}
+
+export type KasaCategoryOptionsResponse = {
+	data: UTSJSONObject | null
+	groups: UTSJSONObject[]
+	items: UTSJSONObject[]
+}
+
 function stringValue(value: any | null): string {
 	if (value == null) {
 		return ''
@@ -292,18 +306,60 @@ function buildObjectResponse(raw: any, errorMessage: string): UTSJSONObject {
 }
 
 function buildTaxRatesResponse(raw: any): KasaCategoryTaxRatesResponse {
+	const optionsResponse = buildKasaCategoryOptionsResponse(raw)
+	return {
+		data: optionsResponse.data,
+		items: optionsResponse.items,
+	} as KasaCategoryTaxRatesResponse
+}
+
+function buildKasaCategoryOptionsQuery(data: KasaCategoryOptionsQuery): UTSJSONObject {
+	const query = {} as UTSJSONObject
+	if (data.key != null && data.key != '') {
+		query['key'] = data.key
+	}
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+	if (data.q != null && data.q != '') {
+		query['q'] = data.q
+	}
+	if (data.keyword != null && data.keyword != '') {
+		query['keyword'] = data.keyword
+	}
+	if (data.limit != null && data.limit > 0) {
+		query['limit'] = data.limit
+	}
+	return query
+}
+
+function buildKasaCategoryOptionsResponse(raw: any): KasaCategoryOptionsResponse {
 	const rawObject = parseObject(raw)
 	if (rawObject != null) {
+		let groups = parseObjectArray(rawObject['groups'])
+		let items = parseObjectArray(rawObject['items'])
+		if (items.length == 0 && rawObject['results'] != null) {
+			items = parseObjectArray(rawObject['results'])
+		}
+		if (items.length == 0 && rawObject['data'] != null) {
+			items = parseObjectArray(rawObject['data'])
+		}
+		if (items.length == 0 && groups.length > 0) {
+			const firstGroup = groups[0]
+			items = parseObjectArray(firstGroup['items'])
+		}
 		return {
 			data: rawObject,
-			items: parseObjectArray(rawObject['results'] != null ? rawObject['results'] : rawObject['items']),
-		} as KasaCategoryTaxRatesResponse
+			groups: groups,
+			items: items,
+		} as KasaCategoryOptionsResponse
 	}
 
 	return {
 		data: null,
+		groups: [] as UTSJSONObject[],
 		items: parseObjectArray(raw),
-	} as KasaCategoryTaxRatesResponse
+	} as KasaCategoryOptionsResponse
 }
 
 function kasaCategoryDetailPath(id: number | string): string {
@@ -339,8 +395,26 @@ export function deleteKasaCategory(id: number | string): Promise<any> {
 	return request(kasaCategoryDetailPath(id), 'DELETE', {} as UTSJSONObject, true)
 }
 
+export async function getKasaCategoryOptions(query: KasaCategoryOptionsQuery | null = null): Promise<KasaCategoryOptionsResponse> {
+	const requestQuery = query == null ? buildKasaCategoryOptionsQuery({
+		key: null,
+		search: null,
+		q: null,
+		keyword: null,
+		limit: null,
+	} as KasaCategoryOptionsQuery) : buildKasaCategoryOptionsQuery(query)
+	const raw = await request(kasaCategoryBasePath + 'options/', 'GET', requestQuery, true)
+	return buildKasaCategoryOptionsResponse(raw)
+}
+
 export async function getKasaCategoryTaxRates(): Promise<KasaCategoryTaxRatesResponse> {
-	const raw = await request(kasaCategoryBasePath + 'tax_rates/', 'GET', {} as UTSJSONObject, true)
+	const raw = await request(kasaCategoryBasePath + 'options/', 'GET', buildKasaCategoryOptionsQuery({
+		key: 'tax_rate',
+		search: null,
+		q: null,
+		keyword: null,
+		limit: null,
+	} as KasaCategoryOptionsQuery), true)
 	return buildTaxRatesResponse(raw)
 }
 

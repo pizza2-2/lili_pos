@@ -1,0 +1,797 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			homePath="/pages/category/index"
+			backgroundColor="#EEF2F7"
+		/>
+
+		<view class="page-content">
+			<lili-UniversaForm
+				:mode="formMode"
+				:formSections="formSections"
+				:initialData="initialData"
+				:leaveSignal="leaveSignal"
+				@submit="handleSubmit"
+				@cancel="handleCancel"
+				@discard-leave="handleDiscardLeave"
+				@save-request="handleSaveRequest"
+				@dirty-change="handleDirtyChange"
+				@bottom-select-add="handleBottomSelectAdd"
+				@bottom-select-edit="handleBottomSelectEdit"
+			/>
+		</view>
+
+		<view v-if="savingVisible" class="page-saving-mask">
+			<view class="page-saving-card">
+				<text class="page-saving-text">{{ savingText }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { createCategory, getCategoryDetail, getCategoryList, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
+import { getKasaCategoryOptions } from '@/pkg/api/modules/kasa_category'
+
+type SelectOption = {
+	value: string
+	text: string
+}
+
+const categoryListRefreshStorageKey = 'refresh:pages:category:index'
+const categoryListRefreshPayloadStorageKey = 'refresh:pages:category:index:payload'
+
+const formMode = ref('create')
+const operationMode = ref('create')
+const categoryId = ref('')
+const leaveSignal = ref(0)
+const submitting = ref(false)
+const savingVisible = ref(false)
+const savingText = ref('处理中...')
+
+const initialData = ref<UTSJSONObject>({
+	name: '',
+	name_en: '',
+	code: '',
+	parent_id: '',
+	parent_text: '',
+	description: '',
+	kasa_category_id: '',
+	kasa_category_text: '',
+	tax_rate: '0.23',
+	tax_rate_text: '标准税率 23%',
+	sort_order: '0',
+	is_active: true,
+} as UTSJSONObject)
+
+const parentInfo = ref<UTSJSONObject>({
+	id: '',
+	text: '根分类（无父分类）',
+} as UTSJSONObject)
+
+const taxRateOptions = ref<SelectOption[]>([
+	{ value: '0.00', text: '免税 0%' } as SelectOption,
+	{ value: '0.05', text: '低税率 5%' } as SelectOption,
+	{ value: '0.08', text: '中税率 8%' } as SelectOption,
+	{ value: '0.23', text: '标准税率 23%' } as SelectOption,
+])
+
+const statusOptions = ref<SelectOption[]>([
+	{ value: 'true', text: '启用' } as SelectOption,
+	{ value: 'false', text: '停用' } as SelectOption,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function booleanValue(value: any | null, fallback: boolean = false): boolean {
+	if (value == null) {
+		return fallback
+	}
+	const text = ('' + value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function normalizeNullableId(value: any | null): string | null {
+	const text = stringValue(value)
+	if (text == '' || text == '0' || text == 'null') {
+		return null
+	}
+	return text
+}
+
+function findTaxRateText(value: string): string {
+	for (let index = 0; index < taxRateOptions.value.length; index += 1) {
+		const option = taxRateOptions.value[index]
+		if (option.value == value) {
+			return option.text
+		}
+	}
+	return value
+}
+
+function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
+	const keyword = stringValue(params['keyword']).toLowerCase()
+	const id = stringValue(params['id'])
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (id != '' && option.value != id) {
+			continue
+		}
+		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
+			continue
+		}
+		result.push({
+			value: option.value,
+			text: option.text,
+		} as UTSJSONObject)
+	}
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+async function fetchStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return buildSelectResponse(statusOptions.value, params)
+}
+
+async function fetchTaxRateOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return buildSelectResponse(taxRateOptions.value, params)
+}
+
+async function fetchKasaCategoryOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = stringValue(params['keyword'])
+	const id = stringValue(params['id'])
+	const response = await getKasaCategoryOptions({
+		key: 'kasa_category',
+		search: keyword == '' ? null : keyword,
+		q: null,
+		keyword: null,
+		limit: 50,
+	})
+
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < response.items.length; index += 1) {
+		const item = response.items[index]
+		const value = stringValue(item['value'], stringValue(item['id']))
+		const text = stringValue(item['text'], stringValue(item['label']))
+		if (id != '' && value != id) {
+			continue
+		}
+		result.push({
+			value: value,
+			text: text,
+		} as UTSJSONObject)
+	}
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+async function resolveKasaCategoryTextByValue(kasaCategoryIdText: string, fallback: string = ''): Promise<string> {
+	if (kasaCategoryIdText == '') {
+		return ''
+	}
+	try {
+		const response = await getKasaCategoryOptions({
+			key: 'kasa_category',
+			search: null,
+			q: null,
+			keyword: null,
+			limit: 200,
+		})
+		for (let index = 0; index < response.items.length; index += 1) {
+			const item = response.items[index]
+			const value = stringValue(item['value'], stringValue(item['id']))
+			if (value != kasaCategoryIdText) {
+				continue
+			}
+			const text = stringValue(item['text'], stringValue(item['label']))
+			if (text != '') {
+				return text
+			}
+		}
+	} catch (error) {
+	}
+	return fallback
+}
+
+async function fetchParentOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = stringValue(params['keyword'])
+	const id = stringValue(params['id'])
+	const response = await getCategoryList({
+		search: keyword == '' ? null : keyword,
+		page: 1,
+		page_size: 50,
+		id: id == '' ? null : id,
+		is_active: null,
+		level: null,
+		parent: null,
+		parent_id: null,
+		code: null,
+		tax_rate: null,
+		kasa_category: null,
+		kasa_category_id: null,
+		status: null,
+		ordering: 'name',
+		simple: true,
+	})
+
+	const result: UTSJSONObject[] = []
+	if (id == '') {
+		result.push({
+			value: '',
+			text: '根分类（无父分类）',
+		} as UTSJSONObject)
+	}
+
+	for (let index = 0; index < response.results.length; index += 1) {
+		const item = response.results[index]
+		if (categoryId.value != '' && item.id.toString() == categoryId.value) {
+			continue
+		}
+		result.push({
+			value: item.id.toString(),
+			text: item.full_name == '' ? item.name : item.full_name,
+		} as UTSJSONObject)
+	}
+
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+async function resolveParentText(parentIdText: string): Promise<string> {
+	if (parentIdText == '') {
+		return '根分类（无父分类）'
+	}
+	try {
+		const parent = await getCategoryDetail(parentIdText)
+		if (parent.full_name != '') {
+			return parent.full_name
+		}
+		return parent.name
+	} catch (error) {
+		return parentIdText
+	}
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function buildKasaCategoryTextFromInfo(info: UTSJSONObject | null): string {
+	if (info == null) {
+		return ''
+	}
+	const text = stringValue(info['text'])
+	if (text != '') {
+		return text
+	}
+	const label = stringValue(info['label'])
+	if (label != '') {
+		return label
+	}
+	const name = stringValue(info['name'])
+	if (name != '') {
+		return name
+	}
+	const nameCn = stringValue(info['name_cn'])
+	const nameEn = stringValue(info['name_en'])
+	if (nameCn != '' && nameEn != '') {
+		return nameCn + ' / ' + nameEn
+	}
+	if (nameCn != '') {
+		return nameCn
+	}
+	if (nameEn != '') {
+		return nameEn
+	}
+	return stringValue(info['unique_kod'])
+}
+
+function buildInitialDataFromDetail(item: CategoryItem, parentText: string): UTSJSONObject {
+	const raw = item.raw
+	const rawNameEn = raw['name_en']
+	const rawDescription = raw['description']
+	const rawKasaCategoryId = raw['kasa_category_id'] != null ? raw['kasa_category_id'] : raw['kasa_category']
+	const rawKasaCategoryName = raw['kasa_category_name']
+	const rawKasaCategoryInfo = parseObject(raw['kasa_category_info'])
+	const fallbackKasaCategoryText = rawKasaCategoryName == null ? buildKasaCategoryTextFromInfo(rawKasaCategoryInfo) : (rawKasaCategoryName as string)
+	return {
+		name: item.name,
+		name_en: rawNameEn == null ? '' : (rawNameEn as string),
+		code: item.code,
+		parent_id: item.parent_id > 0 ? item.parent_id.toString() : '',
+		parent_text: parentText,
+		description: rawDescription == null ? '' : (rawDescription as string),
+		kasa_category_id: rawKasaCategoryId == null ? '' : ('' + rawKasaCategoryId),
+		kasa_category_text: fallbackKasaCategoryText,
+		tax_rate: item.tax_rate == '' ? '0.23' : item.tax_rate,
+		tax_rate_text: item.tax_rate == '' ? '标准税率 23%' : findTaxRateText(item.tax_rate),
+		sort_order: item.sort_order.toString(),
+		is_active: item.is_active,
+	} as UTSJSONObject
+}
+
+async function loadDetailData(idText: string): Promise<void> {
+	try {
+		const detail = await getCategoryDetail(idText)
+		const parentText = await resolveParentText(detail.parent_id > 0 ? detail.parent_id.toString() : '')
+		const detailData = buildInitialDataFromDetail(detail, parentText)
+		const kasaCategoryIdText = stringValue(detailData['kasa_category_id'])
+		const currentKasaCategoryText = stringValue(detailData['kasa_category_text'])
+		if (kasaCategoryIdText != '') {
+			detailData['kasa_category_text'] = await resolveKasaCategoryTextByValue(kasaCategoryIdText, currentKasaCategoryText)
+		}
+		initialData.value = detailData
+		parentInfo.value = {
+			id: detail.parent_id > 0 ? detail.parent_id.toString() : '',
+			text: parentText,
+		} as UTSJSONObject
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '分类详情加载失败'),
+			icon: 'none',
+		})
+	}
+}
+
+function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationData {
+	const normalizedParentId = normalizeNullableId(formDataObject['parent_id'])
+	const normalizedKasaCategoryId = normalizeNullableId(formDataObject['kasa_category_id'])
+	const name = stringValue(formDataObject['name'])
+	const nameEn = stringValue(formDataObject['name_en'])
+	const code = stringValue(formDataObject['code'])
+	const description = stringValue(formDataObject['description'])
+	const taxRate = stringValue(formDataObject['tax_rate'], '0.23')
+	const sortOrder = intValue(formDataObject['sort_order'], 0)
+	const isActive = booleanValue(formDataObject['is_active'], true)
+	return {
+		name: name,
+		name_en: nameEn == '' ? null : nameEn,
+		code: code == '' ? null : code,
+		parent: normalizedParentId,
+		parent_id: normalizedParentId,
+		description: description == '' ? null : description,
+		kasa_category: normalizedKasaCategoryId,
+		kasa_category_id: normalizedKasaCategoryId,
+		tax_rate: taxRate == '' ? null : taxRate,
+		sort_order: sortOrder,
+		is_active: isActive,
+	} as UTSJSONObject
+}
+
+function buildRefreshPayload(action: string, item: CategoryItem, previousParentId: string | null, currentParentId: string | null): UTSJSONObject {
+	return {
+		action: action,
+		id: item.id.toString(),
+		name: item.name,
+		code: item.code,
+		level: item.level.toString(),
+		parent_id: item.parent_id.toString(),
+		sort_order: item.sort_order.toString(),
+		tax_rate: item.tax_rate,
+		kasa_category_id: item.kasa_category_id.toString(),
+		products_count: item.products_count.toString(),
+		children_count: item.children_count.toString(),
+		is_active: item.is_active,
+		is_leaf: item.is_leaf,
+		full_name: item.full_name,
+		path: item.path,
+		created_at: item.created_at,
+		updated_at: item.updated_at,
+		previous_parent_id: previousParentId == null ? '' : previousParentId,
+		current_parent_id: currentParentId == null ? '' : currentParentId,
+	} as UTSJSONObject
+}
+
+function markListRefreshNeeded(payload: UTSJSONObject | null = null): void {
+	uni.setStorageSync(categoryListRefreshStorageKey, '1')
+	if (payload == null) {
+		uni.removeStorageSync(categoryListRefreshPayloadStorageKey)
+		return
+	}
+	uni.setStorageSync(categoryListRefreshPayloadStorageKey, JSON.stringify(payload))
+}
+
+function goBackToList(): void {
+	leaveSignal.value = leaveSignal.value + 1
+	setTimeout(() => {
+		uni.navigateBack({
+			delta: 1,
+			fail: () => {
+				uni.reLaunch({
+					url: '/pages/category/index',
+				})
+			},
+		})
+	}, 16)
+}
+
+async function persistForm(payload: UTSJSONObject): Promise<void> {
+	if (submitting.value) {
+		return
+	}
+	const formDataValue = payload['formData']
+	const data = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
+	const name = stringValue(data['name']).trim()
+	if (name == '') {
+		uni.showToast({
+			title: '分类名称不能为空',
+			icon: 'none',
+		})
+		return
+	}
+
+	submitting.value = true
+	const isEditing = formMode.value == 'edit' && categoryId.value != ''
+	savingText.value = isEditing ? '保存分类中...' : '创建分类中...'
+	savingVisible.value = true
+	uni.showLoading({
+		title: savingText.value,
+		mask: true,
+	})
+
+	try {
+		const body = buildMutationPayload(data)
+		const previousParentId = normalizeNullableId(initialData.value['parent_id'])
+		const currentParentId = normalizeNullableId(data['parent_id'])
+		let refreshPayload: UTSJSONObject | null = null
+		let successMessage = isEditing ? '分类保存成功' : '分类创建成功'
+		if (isEditing) {
+			const updated = await updateCategory(categoryId.value, body)
+			successMessage = takeLatestResponseMessage(successMessage)
+			const action = previousParentId == currentParentId ? 'edit' : 'reload'
+			refreshPayload = buildRefreshPayload(action, updated, previousParentId, currentParentId)
+		} else {
+			const created = await createCategory(body)
+			successMessage = takeLatestResponseMessage(successMessage)
+			categoryId.value = created.id.toString()
+			formMode.value = 'edit'
+			refreshPayload = buildRefreshPayload('reload', created, previousParentId, currentParentId)
+		}
+		markListRefreshNeeded(refreshPayload)
+		uni.showToast({
+			title: successMessage,
+			icon: 'success',
+		})
+		goBackToList()
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, isEditing ? '分类保存失败' : '分类创建失败'),
+			icon: 'none',
+		})
+	} finally {
+		savingVisible.value = false
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+async function handleSubmit(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+async function handleSaveRequest(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+function handleCancel(payload: UTSJSONObject) {
+	const hasChangesValue = payload['hasChanges']
+	const changed = hasChangesValue != null && (hasChangesValue as boolean)
+	if (changed) {
+		return
+	}
+	goBackToList()
+}
+
+function handleDiscardLeave(payload: UTSJSONObject) {
+	goBackToList()
+}
+
+function handleDirtyChange(value: boolean) {
+}
+
+function handleBottomSelectAdd(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '当前字段不支持新增',
+		icon: 'none',
+	})
+}
+
+function handleBottomSelectEdit(payload: UTSJSONObject) {
+	uni.showToast({
+		title: '当前字段不支持编辑',
+		icon: 'none',
+	})
+}
+
+const formSections = ref<UTSJSONObject[]>([
+	{
+		key: 'base',
+		title: '基础信息',
+		description: '',
+		defaultOpen: true,
+		fields: [
+			{
+				key: 'name',
+				label: '分类名称',
+				type: 'input',
+				required: true,
+				placeholder: '请输入分类名称',
+			} as UTSJSONObject,
+			{
+				key: 'name_en',
+				label: '英文名称',
+				type: 'input',
+				placeholder: '请输入英文名称',
+			} as UTSJSONObject,
+			{
+				key: 'code',
+				label: '分类编码',
+				type: 'input',
+				placeholder: '留空则自动生成',
+			} as UTSJSONObject,
+			{
+				key: 'parent_text',
+				label: '当前父分类',
+				type: 'input',
+				readonly: true,
+				placeholder: '根分类（无父分类）',
+			} as UTSJSONObject,
+			{
+				key: 'parent_id',
+				label: '调整父分类',
+				type: 'bottomSelect',
+				textKey: 'parent_text',
+				title: '选择父分类',
+				placeholder: '请选择父分类',
+				showAddAction: false,
+				showEditAction: false,
+				editOnly: true,
+				fetchData: fetchParentOptions,
+			} as UTSJSONObject,
+			{
+				key: 'description',
+				label: '分类描述',
+				type: 'textarea',
+				placeholder: '请输入分类描述',
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
+		key: 'relation',
+		title: '关联设置',
+		description: '',
+		defaultOpen: true,
+		fields: [
+			{
+				key: 'kasa_category_id',
+				label: '关联收银分类',
+				type: 'bottomSelect',
+				textKey: 'kasa_category_text',
+				title: '选择收银分类',
+				placeholder: '请选择收银分类',
+				searchPlaceholder: '请输入收银分类名称',
+				emptyText: '暂无收银分类',
+				showAddAction: false,
+				showEditAction: false,
+				fetchData: fetchKasaCategoryOptions,
+			} as UTSJSONObject,
+			{
+				key: 'tax_rate',
+				label: '税率',
+				type: 'bottomSelect',
+				textKey: 'tax_rate_text',
+				title: '选择税率',
+				placeholder: '请选择税率',
+				showAddAction: false,
+				showEditAction: false,
+				fetchData: fetchTaxRateOptions,
+			} as UTSJSONObject,
+			{
+				key: 'sort_order',
+				label: '排序号',
+				type: 'number',
+				placeholder: '请输入排序号',
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
+		key: 'status',
+		title: '状态设置',
+		description: '',
+		defaultOpen: false,
+		fields: [
+			{
+				key: 'is_active',
+				label: '启用状态',
+				type: 'switch',
+				defaultValue: true,
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+])
+
+const pageTitle = computed((): string => {
+	if (operationMode.value == 'edit') {
+		return '编辑分类'
+	}
+	if (operationMode.value == 'add') {
+		return '新增子分类'
+	}
+	return '新建分类'
+})
+
+onLoad((event: OnLoadOptions) => {
+	leaveSignal.value = 0
+	const modeValue = event['mode']
+	const idValue = event['id']
+	const parentIdValue = event['parent_id']
+	const parentNameValue = event['parent_name']
+
+	categoryId.value = idValue == null ? '' : (idValue as string)
+
+	if (modeValue != null && (modeValue as string) == 'edit' && categoryId.value != '') {
+		operationMode.value = 'edit'
+		formMode.value = 'edit'
+		loadDetailData(categoryId.value)
+		return
+	}
+
+	if (modeValue != null && (modeValue as string) == 'add' && parentIdValue != null) {
+		operationMode.value = 'add'
+		formMode.value = 'create'
+		const parentIdText = parentIdValue as string
+		const parentNameText = parentNameValue == null ? '' : decodeURIComponent(parentNameValue as string)
+		parentInfo.value = {
+			id: parentIdText,
+			text: parentNameText == '' ? parentIdText : parentNameText,
+		} as UTSJSONObject
+		initialData.value = {
+			name: '',
+			name_en: '',
+			code: '',
+			parent_id: parentIdText,
+			parent_text: parentNameText == '' ? parentIdText : parentNameText,
+			description: '',
+			kasa_category_id: '',
+			kasa_category_text: '',
+			tax_rate: '0.23',
+			tax_rate_text: '标准税率 23%',
+			sort_order: '0',
+			is_active: true,
+		} as UTSJSONObject
+		return
+	}
+
+	operationMode.value = 'create'
+	formMode.value = 'create'
+	parentInfo.value = {
+		id: '',
+		text: '根分类（无父分类）',
+	} as UTSJSONObject
+	initialData.value = {
+		name: '',
+		name_en: '',
+		code: '',
+		parent_id: '',
+		parent_text: '根分类（无父分类）',
+		description: '',
+		kasa_category_id: '',
+		kasa_category_text: '',
+		tax_rate: '0.23',
+		tax_rate_text: '标准税率 23%',
+		sort_order: '0',
+		is_active: true,
+	} as UTSJSONObject
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	position: relative;
+	background-color: #EEF2F7;
+}
+
+.page-content {
+	flex: 1;
+	padding-left: 0;
+	padding-right: 0;
+	padding-bottom: 0;
+}
+
+.page-saving-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 9999;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.28);
+}
+
+.page-saving-card {
+	min-width: 150px;
+	padding-left: 20px;
+	padding-right: 20px;
+	padding-top: 16px;
+	padding-bottom: 16px;
+	border-radius: 16px;
+	background-color: #FFFFFF;
+	align-items: center;
+	justify-content: center;
+}
+
+.page-saving-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+</style>
