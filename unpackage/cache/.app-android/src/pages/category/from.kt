@@ -14,7 +14,7 @@ import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
-import io.dcloud.uniapp.extapi.reLaunch as uni_reLaunch
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
@@ -447,7 +447,7 @@ open class GenPagesCategoryFrom : BasePage {
                 leaveSignal.value = leaveSignal.value + 1
                 setTimeout(fun(){
                     uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
-                        uni_reLaunch(ReLaunchOptions(url = "/pages/category/index"))
+                        uni_navigateTo(NavigateToOptions(url = "/pages/category/index"))
                     }
                     ))
                 }
@@ -560,7 +560,7 @@ open class GenPagesCategoryFrom : BasePage {
                 uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
-            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "分类名称", "type" to "input", "required" to true, "placeholder" to "请输入分类名称"), _uO("key" to "name_en", "label" to "英文名称", "type" to "input", "placeholder" to "请输入英文名称"), _uO("key" to "code", "label" to "分类编码", "type" to "input", "placeholder" to "留空则自动生成"), _uO("key" to "parent_text", "label" to "当前父分类", "type" to "input", "readonly" to true, "placeholder" to "根分类（无父分类）"), _uO("key" to "parent_id", "label" to "调整父分类", "type" to "bottomSelect", "textKey" to "parent_text", "title" to "选择父分类", "placeholder" to "请选择父分类", "showAddAction" to false, "showEditAction" to false, "editOnly" to true, "fetchData" to fetchParentOptions), _uO("key" to "description", "label" to "分类描述", "type" to "textarea", "placeholder" to "请输入分类描述"))), _uO("key" to "relation", "title" to "关联设置", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "kasa_category_id", "label" to "关联收银分类", "type" to "bottomSelect", "textKey" to "kasa_category_text", "title" to "选择收银分类", "placeholder" to "请选择收银分类", "searchPlaceholder" to "请输入收银分类名称", "emptyText" to "暂无收银分类", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchKasaCategoryOptions), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_text", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions), _uO("key" to "sort_order", "label" to "排序号", "type" to "number", "placeholder" to "请输入排序号"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "switch", "defaultValue" to true)))))
+            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "分类名称", "type" to "input", "required" to true, "placeholder" to "请输入分类名称"), _uO("key" to "name_en", "label" to "英文名称", "type" to "input", "placeholder" to "请输入英文名称"), _uO("key" to "code", "label" to "分类编码", "type" to "input", "placeholder" to "留空则自动生成"), _uO("key" to "parent_text", "label" to "当前父分类", "type" to "input", "readonly" to true, "placeholder" to "根分类（无父分类）"), _uO("key" to "parent_id", "label" to "调整父分类", "type" to "bottomSelect", "textKey" to "parent_text", "title" to "选择父分类", "placeholder" to "请选择父分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/category/from", "editPath" to "/pages/category/from", "editOnly" to true, "fetchData" to fetchParentOptions), _uO("key" to "description", "label" to "分类描述", "type" to "textarea", "placeholder" to "请输入分类描述"))), _uO("key" to "relation", "title" to "关联设置", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "kasa_category_id", "label" to "关联收银分类", "type" to "bottomSelect", "textKey" to "kasa_category_text", "title" to "选择收银分类", "placeholder" to "请选择收银分类", "searchPlaceholder" to "请输入收银分类名称", "emptyText" to "暂无收银分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/kasa_category/form", "editPath" to "/pages/kasa_category/form", "fetchData" to fetchKasaCategoryOptions), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_text", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions), _uO("key" to "sort_order", "label" to "排序号", "type" to "number", "placeholder" to "请输入排序号"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "switch", "defaultValue" to true)))))
             val pageTitle = computed(fun(): String {
                 if (operationMode.value == "edit") {
                     return "编辑分类"
@@ -577,25 +577,30 @@ open class GenPagesCategoryFrom : BasePage {
                 val idValue = event["id"]
                 val parentIdValue = event["parent_id"]
                 val parentNameValue = event["parent_name"]
+                val modeText = if (modeValue == null) {
+                    ""
+                } else {
+                    ("" + modeValue)
+                }
                 categoryId.value = if (idValue == null) {
                     ""
                 } else {
-                    (idValue as String)
+                    ("" + idValue)
                 }
-                if (modeValue != null && (modeValue as String) == "edit" && categoryId.value != "") {
+                if (categoryId.value != "") {
                     operationMode.value = "edit"
                     formMode.value = "edit"
                     loadDetailData(categoryId.value)
                     return
                 }
-                if (modeValue != null && (modeValue as String) == "add" && parentIdValue != null) {
+                if (modeText == "add" && parentIdValue != null) {
                     operationMode.value = "add"
                     formMode.value = "create"
-                    val parentIdText = parentIdValue as String
+                    val parentIdText = "" + parentIdValue
                     val parentNameText = if (parentNameValue == null) {
                         ""
                     } else {
-                        UTSAndroid.consoleDebugError(decodeURIComponent(parentNameValue as String), " at pages/category/from.uvue:708")
+                        UTSAndroid.consoleDebugError(decodeURIComponent("" + parentNameValue), " at pages/category/from.uvue:713")
                     }
                     parentInfo.value = _uO("id" to parentIdText, "text" to if (parentNameText == "") {
                         parentIdText

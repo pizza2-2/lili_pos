@@ -1,0 +1,220 @@
+import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
+import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { createPurchaseDetail, getPurchaseDetailItem, getPurchaseOptionList, PurchaseDetailItem, PurchaseDetailMutationData, PurchaseOptionItem, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+
+
+const __sfc__ = defineComponent({
+  __name: 'from',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const refreshStorageKey = 'refresh:pages:purchases:details:index'
+const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
+const formMode = ref('create')
+const purchaseId = ref('')
+const detailId = ref('')
+const leaveSignal = ref(0)
+const submitting = ref(false)
+const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	return '' + value
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/from.uvue:49")
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+		}
+	}
+	return message
+}
+
+function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject): UTSJSONObject {
+	const keyword = getStringField(params, 'keyword').toLowerCase()
+	const id = getStringField(params, 'id')
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (id != '' && option.value != id) continue
+		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
+		result.push({ value: option.value, text: option.text } as UTSJSONObject)
+	}
+	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
+}
+
+async function fetchProductOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = getStringField(params, 'keyword')
+	const id = getStringField(params, 'id')
+	const options = await getPurchaseOptionList('/api/products/products/', keyword == '' ? null : keyword, 'name_cn', 'barcode')
+	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+}
+
+function initialCreateData(): UTSJSONObject {
+	return {
+		product: '',
+		product_text: '',
+		quantity: '',
+		received_quantity: '0',
+		notes: '',
+	} as UTSJSONObject
+}
+
+function buildInitialDataFromDetail(item: PurchaseDetailItem): UTSJSONObject {
+	let productText = item.product_name
+	if (item.product_barcode != '') productText = productText + ' / ' + item.product_barcode
+	return {
+		product: item.product.toString(),
+		product_text: productText,
+		quantity: item.quantity.toString(),
+		received_quantity: item.received_quantity.toString(),
+		notes: item.notes,
+	} as UTSJSONObject
+}
+
+const formSections = ref<UTSJSONObject[]>([
+	{
+		key: 'base',
+		title: '明细信息',
+		description: '',
+		defaultOpen: true,
+		fields: [
+			{ key: 'product', textKey: 'product_text', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
+			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
+			{ key: 'received_quantity', label: '已收货数量', type: 'number', placeholder: '通常由收货操作更新' } as UTSJSONObject,
+			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+])
+
+const homePath = computed((): string => '/pages/purchases/details/index?purchase=' + purchaseId.value)
+const pageTitle = computed((): string => formMode.value == 'edit' ? '编辑采购明细' : '新建采购明细')
+
+function markRefresh() {
+	uni.setStorageSync(refreshStorageKey + ':' + purchaseId.value, '1')
+	uni.setStorageSync(purchaseListRefreshStorageKey, '1')
+}
+
+function goBackToList() {
+	leaveSignal.value = leaveSignal.value + 1
+	setTimeout(() => { uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: homePath.value }) } }) }, 16)
+}
+
+async function loadDetail(idText: string) {
+	if (idText == '') return
+	try {
+		const detail = await getPurchaseDetailItem(idText)
+		initialData.value = buildInitialDataFromDetail(detail)
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '采购明细加载失败'), icon: 'none' })
+	}
+}
+
+function buildPayload(data: UTSJSONObject): PurchaseDetailMutationData {
+	return {
+		purchase: purchaseId.value,
+		product: getStringField(data, 'product'),
+		quantity: getStringField(data, 'quantity'),
+		received_quantity: getStringField(data, 'received_quantity') == '' ? null : getStringField(data, 'received_quantity'),
+		notes: getStringField(data, 'notes') == '' ? null : getStringField(data, 'notes'),
+	} as PurchaseDetailMutationData
+}
+
+async function persistForm(payload: UTSJSONObject) {
+	if (submitting.value) return
+	const rawData = payload['formData']
+	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
+	const body = buildPayload(data)
+	const quantity = parseInt(body.quantity)
+	if (body.purchase == '' || body.product == '' || isNaN(quantity) || quantity <= 0) {
+		uni.showToast({ title: '请填写商品和有效采购数量', icon: 'none' })
+		return
+	}
+	const actionText = formMode.value == 'edit' ? '保存采购明细' : '创建采购明细'
+	submitting.value = true
+	uni.showLoading({ title: actionText + '中...', mask: true })
+	try {
+		if (formMode.value == 'edit' && detailId.value != '') await updatePurchaseDetail(detailId.value, body)
+		else await createPurchaseDetail(body)
+		markRefresh()
+		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
+		goBackToList()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+async function handleSubmit(payload: UTSJSONObject) { await persistForm(payload) }
+async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(payload) }
+function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
+function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
+function handleDirtyChange(value: boolean) {}
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none' }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none' }) }
+
+onLoad((query: OnLoadOptions) => {
+	const purchaseValue = query['purchase']
+	const idValue = query['id']
+	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
+	detailId.value = idValue == null ? '' : ('' + idValue)
+	formMode.value = detailId.value == '' ? 'create' : 'edit'
+	initialData.value = initialCreateData()
+	if (formMode.value == 'edit') loadDetail(detailId.value)
+})
+
+return (): any | null => {
+
+const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
+const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_easycom_lili_UniversaForm)
+
+  return _cE("view", _uM({ class: "page" }), [
+    _cV(_component_lili_universal_filter, _uM({
+      title: pageTitle.value,
+      showBack: true,
+      showSearch: false,
+      showHome: true,
+      homePath: homePath.value,
+      backgroundColor: "#EEF2F7"
+    }), null, 8 /* PROPS */, ["title", "homePath"]),
+    _cE("view", _uM({ class: "page-content" }), [
+      _cV(_component_lili_UniversaForm, _uM({
+        mode: unref(formMode),
+        formSections: unref(formSections),
+        initialData: unref(initialData),
+        leaveSignal: unref(leaveSignal),
+        onSubmit: handleSubmit,
+        onCancel: handleCancel,
+        onDiscardLeave: handleDiscardLeave,
+        onSaveRequest: handleSaveRequest,
+        onDirtyChange: handleDirtyChange,
+        onBottomSelectAdd: handleBottomSelectAdd,
+        onBottomSelectEdit: handleBottomSelectEdit
+      }), null, 8 /* PROPS */, ["mode", "formSections", "initialData", "leaveSignal"])
+    ])
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesPurchasesDetailsFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#EEF2F7"]]))], ["page-content", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingBottom", 0]]))]])]

@@ -12,6 +12,7 @@ import io.dcloud.uts.Map
 import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm : VueComponent {
@@ -108,7 +109,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val getObjectField = ::gen_getObjectField_fn
             fun gen_cloneObject_fn(source: UTSJSONObject): UTSJSONObject {
-                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 238, 8))
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 246, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     target[key] = source[key]
                 }
@@ -515,10 +516,66 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return getBooleanField(field, "showAddAction", true)
             }
             val showBottomSelectAdd = ::gen_showBottomSelectAdd_fn
+            fun gen_getFieldTree_fn(field: UTSJSONObject): Boolean {
+                return getBooleanField(field, "tree", false)
+            }
+            val getFieldTree = ::gen_getFieldTree_fn
+            fun gen_getFieldChildrenKey_fn(field: UTSJSONObject): String {
+                val value = getStringField(field, "childrenKey")
+                if (value != "") {
+                    return value
+                }
+                return "children"
+            }
+            val getFieldChildrenKey = ::gen_getFieldChildrenKey_fn
+            fun gen_getFieldExpandOnClickNode_fn(field: UTSJSONObject): Boolean {
+                return getBooleanField(field, "expandOnClickNode", false)
+            }
+            val getFieldExpandOnClickNode = ::gen_getFieldExpandOnClickNode_fn
+            fun gen_getFieldSelectableLevel_fn(field: UTSJSONObject): Number {
+                return getNumberField(field, "selectableLevel", -1)
+            }
+            val getFieldSelectableLevel = ::gen_getFieldSelectableLevel_fn
+            fun gen_getFieldSelectableLevelMessage_fn(field: UTSJSONObject): String {
+                return getStringField(field, "selectableLevelMessage")
+            }
+            val getFieldSelectableLevelMessage = ::gen_getFieldSelectableLevelMessage_fn
             fun gen_getFieldFetchData_fn(field: UTSJSONObject): FetchDataFn {
                 return field["fetchData"] as FetchDataFn
             }
             val getFieldFetchData = ::gen_getFieldFetchData_fn
+            fun gen_getBottomSelectAddPath_fn(field: UTSJSONObject): String {
+                return getStringField(field, "addPath")
+            }
+            val getBottomSelectAddPath = ::gen_getBottomSelectAddPath_fn
+            fun gen_getBottomSelectEditPath_fn(field: UTSJSONObject): String {
+                return getStringField(field, "editPath")
+            }
+            val getBottomSelectEditPath = ::gen_getBottomSelectEditPath_fn
+            fun gen_getBottomSelectEditQueryKey_fn(field: UTSJSONObject): String {
+                val value = getStringField(field, "editQueryKey")
+                if (value != "") {
+                    return value
+                }
+                return "id"
+            }
+            val getBottomSelectEditQueryKey = ::gen_getBottomSelectEditQueryKey_fn
+            fun gen_appendQueryValue_fn(url: String, key: String, value: String): String {
+                if (value == "") {
+                    return url
+                }
+                val separator = if (url.indexOf("?") >= 0) {
+                    "&"
+                } else {
+                    "?"
+                }
+                return url + separator + key + "=" + value
+            }
+            val appendQueryValue = ::gen_appendQueryValue_fn
+            fun gen_navigateToBottomSelectPath_fn(url: String) {
+                uni_navigateTo(NavigateToOptions(url = url))
+            }
+            val navigateToBottomSelectPath = ::gen_navigateToBottomSelectPath_fn
             fun gen_getUploadAction_fn(field: UTSJSONObject): String {
                 return getStringField(field, "action")
             }
@@ -575,13 +632,13 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val clearFieldError = ::gen_clearFieldError_fn
             fun gen_emitFieldChange_fn(field: UTSJSONObject, value: Any) {
-                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 626, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
+                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 682, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
                 emit("field-change", payload)
                 emit("form-change", payload)
             }
             val emitFieldChange = ::gen_emitFieldChange_fn
             fun gen_serializeState_fn(): String {
-                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 638, 8), "mode" to props.mode, "formData" to formData.value)
+                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 694, 8), "mode" to props.mode, "formData" to formData.value)
                 return JSON.stringify(state)
             }
             val serializeState = ::gen_serializeState_fn
@@ -602,7 +659,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val markSnapshot = ::gen_markSnapshot_fn
             fun gen_applyInitialValues_fn() {
-                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 662, 8))
+                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 718, 8))
                 run {
                     var i: Number = 0
                     while(i < props.formSections.length){
@@ -761,10 +818,25 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val handleBottomSelectChange = ::gen_handleBottomSelectChange_fn
             fun gen_handleBottomSelectAdd_fn(field: UTSJSONObject) {
+                val addPath = getBottomSelectAddPath(field)
+                if (addPath != "") {
+                    navigateToBottomSelectPath(addPath)
+                    return
+                }
                 emit("bottom-select-add", _uO("field" to field, "key" to getFieldKey(field), "mode" to props.mode, "formData" to formData.value))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(field: UTSJSONObject) {
+                val editPath = getBottomSelectEditPath(field)
+                if (editPath != "") {
+                    val value = getStringFieldValue(field)
+                    if (value == "") {
+                        uni_showToast(ShowToastOptions(title = "请先选择要编辑的项目", icon = "none"))
+                        return
+                    }
+                    navigateToBottomSelectPath(appendQueryValue(editPath, getBottomSelectEditQueryKey(field), value))
+                    return
+                }
                 emit("bottom-select-edit", _uO("field" to field, "key" to getFieldKey(field), "value" to getFieldValue(field), "mode" to props.mode, "formData" to formData.value))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
@@ -796,7 +868,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     var index: Number = 0
                     while(index < sourceItems.length){
                         val sourceItem = sourceItems[index]
-                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 820, 9))
+                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 894, 9))
                         for(key in resolveUTSKeyIterator(sourceItem)){
                             clonedItem[key] = sourceItem[key]
                         }
@@ -860,7 +932,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val validateField = ::gen_validateField_fn
             fun gen_validate_fn(): Boolean {
-                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 892, 8))
+                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 966, 8))
                 var hasError = false
                 run {
                     var i: Number = 0
@@ -1181,7 +1253,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                             } else {
                                                                                 if (isTrue(isBottomSelectField(field))) {
                                                                                     _cE("view", _uM("key" to 5, "class" to "uf-bottom-select-wrap"), _uA(
-                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "valueText" to getBottomSelectValueText(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
+                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "valueText" to getBottomSelectValueText(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "tree" to getFieldTree(field), "childrenKey" to getFieldChildrenKey(field), "expandOnClickNode" to getFieldExpandOnClickNode(field), "selectableLevel" to getFieldSelectableLevel(field), "selectableLevelMessage" to getFieldSelectableLevelMessage(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "addPath" to getBottomSelectAddPath(field), "editPath" to getBottomSelectEditPath(field), "editQueryKey" to getBottomSelectEditQueryKey(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
                                                                                             handleBottomSelectChange(field, `$event`)
                                                                                         }, "onEdit" to fun(){
                                                                                             handleBottomSelectEdit(field)
@@ -1199,8 +1271,16 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                                             "valueKey",
                                                                                             "pageSize",
                                                                                             "searchDelay",
+                                                                                            "tree",
+                                                                                            "childrenKey",
+                                                                                            "expandOnClickNode",
+                                                                                            "selectableLevel",
+                                                                                            "selectableLevelMessage",
                                                                                             "showEditAction",
                                                                                             "showAddAction",
+                                                                                            "addPath",
+                                                                                            "editPath",
+                                                                                            "editQueryKey",
                                                                                             "fetchData",
                                                                                             "onChange",
                                                                                             "onEdit",

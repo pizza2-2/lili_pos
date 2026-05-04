@@ -5,7 +5,7 @@ import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 178, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 186, 6>;
 	mode?: string
 	formSections?: UTSJSONObject[]
 	initialData?: UTSJSONObject
@@ -62,7 +62,7 @@ function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
 }
 
 function cloneObject(source: UTSJSONObject) : UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 238, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 246, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -396,8 +396,56 @@ function showBottomSelectAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAddAction', true)
 }
 
+function getFieldTree(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'tree', false)
+}
+
+function getFieldChildrenKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'childrenKey')
+	if (value != '') return value
+	return 'children'
+}
+
+function getFieldExpandOnClickNode(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'expandOnClickNode', false)
+}
+
+function getFieldSelectableLevel(field: UTSJSONObject) : number {
+	return getNumberField(field, 'selectableLevel', -1)
+}
+
+function getFieldSelectableLevelMessage(field: UTSJSONObject) : string {
+	return getStringField(field, 'selectableLevelMessage')
+}
+
 function getFieldFetchData(field: UTSJSONObject) : FetchDataFn {
 	return field['fetchData'] as FetchDataFn
+}
+
+function getBottomSelectAddPath(field: UTSJSONObject) : string {
+	return getStringField(field, 'addPath')
+}
+
+function getBottomSelectEditPath(field: UTSJSONObject) : string {
+	return getStringField(field, 'editPath')
+}
+
+function getBottomSelectEditQueryKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'editQueryKey')
+	if (value != '') return value
+	return 'id'
+}
+
+function appendQueryValue(url: string, key: string, value: string) : string {
+	if (value == '') return url
+	const separator = url.indexOf('?') >= 0 ? '&' : '?'
+	return url + separator + key + '=' + value
+}
+
+function navigateToBottomSelectPath(url: string) {
+	uni.navigateTo({
+		url: url,
+	})
 }
 
 function getUploadAction(field: UTSJSONObject) : string {
@@ -450,7 +498,7 @@ function clearFieldError(key: string) {
 }
 
 function emitFieldChange(field: UTSJSONObject, value: any) {
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 626, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 682, 8), 
 		field: field,
 		key: getFieldKey(field),
 		value: value,
@@ -462,7 +510,7 @@ function emitFieldChange(field: UTSJSONObject, value: any) {
 }
 
 function serializeState() : string {
-	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 638, 8), 
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 694, 8), 
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject
@@ -486,7 +534,7 @@ function markSnapshot() {
 }
 
 function applyInitialValues() {
-	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 662, 8), } as UTSJSONObject
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 718, 8), } as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
 		for (let j = 0; j < fields.length; j++) {
@@ -606,6 +654,11 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 }
 
 function handleBottomSelectAdd(field: UTSJSONObject) {
+	const addPath = getBottomSelectAddPath(field)
+	if (addPath != '') {
+		navigateToBottomSelectPath(addPath)
+		return
+	}
 	emit('bottom-select-add', {
 		field: field,
 		key: getFieldKey(field),
@@ -615,6 +668,19 @@ function handleBottomSelectAdd(field: UTSJSONObject) {
 }
 
 function handleBottomSelectEdit(field: UTSJSONObject) {
+	const editPath = getBottomSelectEditPath(field)
+	if (editPath != '') {
+		const value = getStringFieldValue(field)
+		if (value == '') {
+			uni.showToast({
+				title: '请先选择要编辑的项目',
+				icon: 'none',
+			})
+			return
+		}
+		navigateToBottomSelectPath(appendQueryValue(editPath, getBottomSelectEditQueryKey(field), value))
+		return
+	}
 	emit('bottom-select-edit', {
 		field: field,
 		key: getFieldKey(field),
@@ -644,7 +710,7 @@ function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
 	const nextItems: UTSJSONObject[] = []
 	for (let index = 0; index < sourceItems.length; index++) {
 		const sourceItem = sourceItems[index]
-		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 820, 9), } as UTSJSONObject
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 894, 9), } as UTSJSONObject
 		for (const key in sourceItem) {
 			clonedItem[key] = sourceItem[key]
 		}
@@ -716,7 +782,7 @@ function validateField(field: UTSJSONObject) : string {
 }
 
 function validate() : boolean {
-	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 892, 8), } as UTSJSONObject
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 966, 8), } as UTSJSONObject
 	let hasError = false
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
@@ -1093,13 +1159,21 @@ const _component_switch = resolveComponent("switch")
                                               valueKey: getBottomSelectValueKey(field),
                                               pageSize: getBottomSelectPageSize(field),
                                               searchDelay: getBottomSelectSearchDelay(field),
+                                              tree: getFieldTree(field),
+                                              childrenKey: getFieldChildrenKey(field),
+                                              expandOnClickNode: getFieldExpandOnClickNode(field),
+                                              selectableLevel: getFieldSelectableLevel(field),
+                                              selectableLevelMessage: getFieldSelectableLevelMessage(field),
                                               showEditAction: showBottomSelectEdit(field),
                                               showAddAction: showBottomSelectAdd(field),
+                                              addPath: getBottomSelectAddPath(field),
+                                              editPath: getBottomSelectEditPath(field),
+                                              editQueryKey: getBottomSelectEditQueryKey(field),
                                               fetchData: getFieldFetchData(field),
                                               onChange: ($event: any) => {handleBottomSelectChange(field, $event)},
                                               onEdit: () => {handleBottomSelectEdit(field)},
                                               onAdd: () => {handleBottomSelectAdd(field)}
-                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "showEditAction", "showAddAction", "fetchData", "onChange", "onEdit", "onAdd"])
+                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
                                           ])
                                         : isTrue(isUploadField(field))
                                           ? _cE("view", _uM({

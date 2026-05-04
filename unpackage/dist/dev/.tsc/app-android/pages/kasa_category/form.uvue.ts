@@ -294,7 +294,7 @@ function goBackToList() {
 		uni.navigateBack({
 			delta: 1,
 			fail: () => {
-				uni.reLaunch({
+				uni.navigateTo({
 					url: '/pages/kasa_category/index',
 				})
 			},

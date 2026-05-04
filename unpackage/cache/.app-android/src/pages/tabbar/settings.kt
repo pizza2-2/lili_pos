@@ -25,27 +25,43 @@ open class GenPagesTabbarSettings : BasePage {
             val _cache = __ins.renderCache
             val groups = ref(_uA<MenuGroup>(MenuGroup(label = "常用页面", rows = _uA(
                 _uA(
-                    MenuItem(label = "供应商", icon = "", iconPath = "/static/muen/供应商.png", path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
-                    MenuItem(label = "商店", icon = "", iconPath = "/static/muen/商店.png", path = "/pages/shop/index", action = "navigateTo", disabled = false)
+                    MenuItem(label = "供应商", icon = "", iconPath = "/static/menu-icons/suppliers.svg", path = "/pages/suppliers/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "商店", icon = "", iconPath = "/static/menu-icons/shop.svg", path = "/pages/shop/index", action = "navigateTo", disabled = false)
                 )
             )), MenuGroup(label = "分类设置", rows = _uA(
                 _uA(
-                    MenuItem(label = "分类", icon = "", iconPath = "/static/muen/分类.png", path = "/pages/category/index", action = "navigateTo", disabled = false),
-                    MenuItem(label = "收银分类", icon = "", iconPath = "/static/muen/分类 (1).png", path = "/pages/kasa_category/index", action = "navigateTo", disabled = false)
+                    MenuItem(label = "分类", icon = "", iconPath = "/static/menu-icons/category.svg", path = "/pages/category/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "收银分类", icon = "", iconPath = "/static/menu-icons/cash-category.svg", path = "/pages/kasa_category/index", action = "navigateTo", disabled = false)
                 )
             )), MenuGroup(label = "门店配置", rows = _uA(
                 _uA(
-                    MenuItem(label = "收银台", icon = "¤", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "打印机", icon = "▣", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "支付", icon = "¥", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "权限", icon = "⌂", iconPath = null, path = null, action = "todo", disabled = true)
+                    MenuItem(label = "收银台", icon = "", iconPath = "/static/menu-icons/cash-register.svg", path = null, action = "todo", disabled = true),
+                    MenuItem(label = "打印机", icon = "", iconPath = "/static/menu-icons/printer.svg", path = null, action = "todo", disabled = true),
+                    MenuItem(label = "支付", icon = "", iconPath = "/static/menu-icons/payment.svg", path = null, action = "todo", disabled = true),
+                    MenuItem(label = "权限", icon = "", iconPath = "/static/menu-icons/permission.svg", path = null, action = "todo", disabled = true)
                 )
             )), MenuGroup(label = "系统工具", rows = _uA(
                 _uA(
-                    MenuItem(label = "同步", icon = "↻", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "更新", icon = "↑", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "日志", icon = "≡", iconPath = null, path = null, action = "todo", disabled = true),
-                    MenuItem(label = "分享", icon = "⇪", iconPath = null, path = null, action = "todo", disabled = true)
+                    MenuItem(label = "价格计算公式", icon = "", iconPath = "/static/menu-icons/pricing-formula.svg", path = "/pages/products/pricing-formula/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "商品折扣", icon = "", iconPath = "/static/menu-icons/discount.svg", path = "/pages/products/config-model/index?resource=discount", action = "navigateTo", disabled = false),
+                    MenuItem(label = "商品属性", icon = "", iconPath = "/static/menu-icons/attributes.svg", path = "/pages/products/config-model/index?resource=attribute-type", action = "navigateTo", disabled = false),
+                    MenuItem(label = "条形码序列", icon = "", iconPath = "/static/menu-icons/barcode.svg", path = "/pages/products/config-model/index?resource=barcode-sequence", action = "navigateTo", disabled = false)
+                ),
+                _uA(
+                    MenuItem(label = "KSeF发票", icon = "", iconPath = "/static/menu-icons/ksef-invoice.svg", path = "/pages/ksef/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "支出管理", icon = "", iconPath = "/static/menu-icons/expenses.svg", path = "/pages/expenses/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "采购单", icon = "", iconPath = "/static/menu-icons/purchases.svg", path = "/pages/purchases/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "订单管理", icon = "", iconPath = "/static/menu-icons/orders.svg", path = "/pages/orders/index", action = "navigateTo", disabled = false)
+                ),
+                _uA(
+                    MenuItem(label = "分享", icon = "", iconPath = "/static/menu-icons/share.svg", path = null, action = "todo", disabled = true)
+                )
+            )), MenuGroup(label = "库存管理", rows = _uA(
+                _uA(
+                    MenuItem(label = "库存管理", icon = "", iconPath = "/static/menu-icons/inventory.svg", path = "/pages/inventory-management/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "库存位置", icon = "", iconPath = "/static/menu-icons/inventory-location.svg", path = "/pages/inventory-locations/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "调拨单", icon = "", iconPath = "/static/menu-icons/inventory-transfer.svg", path = "/pages/inventory-transfers/index", action = "navigateTo", disabled = false),
+                    MenuItem(label = "盘点单", icon = "", iconPath = "/static/menu-icons/inventory-check.svg", path = "/pages/inventory-checks/index", action = "navigateTo", disabled = false)
                 )
             ))))
             fun gen_handleTap_fn(item: MenuItem) {

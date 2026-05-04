@@ -1,0 +1,200 @@
+<template>
+	<view class="page">
+		<lili-universal-filter title="盘点单" searchPlaceholder="盘点单号、备注" :searchValue="keyword" :filterVisible="false" :showBack="true" :showSearch="true" :showFilter="false" :showHome="true" homePath="/pages/tabbar/settings" @searchInput="handleSearchInput" @searchConfirm="handleSearchConfirm" @searchClear="handleSearchClear" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+				<lili-UniversalList :items="listItems" keyField="id" titleField="name" subtitleField="subtitle" metaField="meta" tagField="tags" :fields="fieldConfig" :loading="isLoading" loadingText="正在加载盘点单" :emptyText="emptyText" emptyIcon="◎" :showMenu="true" :menuActions="menuActions" :showPagination="true" :currentPage="currentPage" :totalPages="totalPages" :totalCount="totalCount" summaryTitle="盘点概览" :summaryItems="summaryItems" :showFloatingAdd="true" floatingAddText="新增" @menu="handleMenu" @page-change="handlePageChange" @floating-add="handleCreate" />
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { adjustInventoryCheck, approveInventoryCheck, getInventoryChecks, InventoryListQuery, InventoryListResponse, startInventoryCheck, submitInventoryCheck } from '@/pkg/api/modules/inventory'
+
+const keyword = ref('')
+const refreshStorageKey = 'refresh:pages:inventory-checks:index'
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'status_display', label: '状态' } as UTSJSONObject,
+	{ key: 'progress_text', label: '进度' } as UTSJSONObject,
+	{ key: 'total_items', label: '商品数' } as UTSJSONObject,
+	{ key: 'discrepancy_items', label: '差异' } as UTSJSONObject,
+])
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'start-check', text: '开始' } as UTSJSONObject,
+	{ key: 'submit-check', text: '提交' } as UTSJSONObject,
+	{ key: 'approve-check', text: '审核' } as UTSJSONObject,
+	{ key: 'adjust-check', text: '调整库存' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '') return fallback
+	return text
+}
+
+function compactDate(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function applyListResponse(response: InventoryListResponse) {
+	items.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const query = { search: keyword.value == '' ? null : keyword.value, page: currentPage.value, page_size: pageSize.value, status: null, alert_status: null, transaction_type: null, location_type: null, is_active: null } as InventoryListQuery
+		applyListResponse(await getInventoryChecks(query))
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '盘点单加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadItems() }
+function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadItems() }
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadItems()
+}
+
+function checkItem(item: UTSJSONObject): UTSJSONObject {
+	const statusText = stringField(item, 'status_display', stringField(item, 'status'))
+	return {
+		id: stringField(item, 'id'),
+		rawId: stringField(item, 'id'),
+		name: stringField(item, 'check_number', '盘点单'),
+		subtitle: stringField(item, 'location_name', '-'),
+		meta: compactDate(stringField(item, 'planned_date')),
+		status_display: statusText,
+		progress_text: stringField(item, 'progress_pct', '0') + '%',
+		total_items: stringField(item, 'total_items', '0'),
+		discrepancy_items: stringField(item, 'discrepancy_items', '0'),
+		tags: [statusText] as string[],
+	} as UTSJSONObject
+}
+
+async function runAction(actionName: string, id: string) {
+	try {
+		if (actionName == 'start-check') await startInventoryCheck(id)
+		else if (actionName == 'submit-check') await submitInventoryCheck(id)
+		else if (actionName == 'approve-check') await approveInventoryCheck(id)
+		else if (actionName == 'adjust-check') await adjustInventoryCheck(id)
+		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
+		loadItems()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+	}
+}
+
+function confirmRunAction(actionKey: string, id: string, title: string, content: string) {
+	uni.showModal({ title: title, content: content, success: (res) => { if (res.confirm) runAction(actionKey, id) } })
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringField(action as UTSJSONObject, 'key')
+	const id = stringField(item as UTSJSONObject, 'rawId')
+	if (actionKey == 'edit') uni.navigateTo({ url: '/pages/inventory-checks/from?id=' + id })
+	else if (actionKey == 'start-check') confirmRunAction(actionKey, id, '开始盘点', '确定开始这张盘点单吗？')
+	else if (actionKey == 'submit-check') confirmRunAction(actionKey, id, '提交盘点', '确定提交这张盘点单吗？')
+	else if (actionKey == 'approve-check') confirmRunAction(actionKey, id, '审核盘点', '确定审核通过这张盘点单吗？')
+	else if (actionKey == 'adjust-check') confirmRunAction(actionKey, id, '调整库存', '确定按盘点差异调整库存吗？')
+	else if (actionKey == 'reload') loadItems()
+}
+
+function handleCreate(payload: UTSJSONObject) {
+	uni.navigateTo({ url: '/pages/inventory-checks/from' })
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) result.push(checkItem(items.value[index]))
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的盘点单'
+	return '暂无盘点单'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '盘点单数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => { loadItems() })
+onShow(() => {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag != null && flag != '') {
+		uni.removeStorageSync(refreshStorageKey)
+		loadItems()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

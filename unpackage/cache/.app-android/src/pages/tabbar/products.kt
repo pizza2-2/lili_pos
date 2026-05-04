@@ -12,7 +12,10 @@ import io.dcloud.uts.Map
 import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
+import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
+import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesTabbarProducts : BasePage {
@@ -38,13 +41,13 @@ open class GenPagesTabbarProducts : BasePage {
             val selectedFilters = ref(_uA<ProductSelectedFilter>())
             val supplierFilterValue = ref("")
             val supplierFilterText = ref("")
-            val categoryFilterValue = ref("")
-            val categoryFilterText = ref("")
+            val categoryFilterValues = ref(_uA<String>())
             val filterPanelHeight = ref(456)
             val filterContentHeight = ref(392)
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "supplierText", "label" to "供应商"), _uO("key" to "purchasePriceText", "label" to "进价"), _uO("key" to "salesPriceText", "label" to "售价"), _uO("key" to "salesCountText", "label" to "销量")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "copy-sku", "text" to "复制SKU"), _uO("key" to "copy-barcode", "text" to "复制条码"), _uO("key" to "detail", "text" to "详情"), _uO("key" to "reload", "text" to "刷新")))
             val tagColorMap = ref(_uO("ACTIVE" to "success", "INACTIVE" to "danger", "DRAFT" to "warning", "新品" to "violet", "精选" to "info", "热销" to "warning"))
+            val productListRefreshStorageKey = "refresh:pages:products:index"
             fun gen_applyProductResponse_fn(response: ProductListResponse) {
                 products.value = response.results
                 currentPage.value = response.current_page
@@ -66,7 +69,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:233")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:236")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -156,7 +159,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:326")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:329")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -167,7 +170,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return _uA()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:339")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:342")
                 if (parsed == null) {
                     return _uA()
                 }
@@ -434,7 +437,20 @@ open class GenPagesTabbarProducts : BasePage {
             }
             val buildTreeSelectItem = ::gen_buildTreeSelectItem_fn
             fun gen_buildCategoryTreeResponse_fn(raw: Any): UTSJSONObject {
-                val source = extractCategoryTreeSource(raw)
+                var source = extractCategoryTreeSource(raw)
+                if (source.length == 0) {
+                    val rawObject = parseObject(raw)
+                    if (rawObject != null) {
+                        var items = parseObjectArray(rawObject["items"])
+                        if (items.length == 0) {
+                            items = parseObjectArray(rawObject["results"])
+                        }
+                        if (items.length == 0) {
+                            items = parseObjectArray(rawObject["data"])
+                        }
+                        source = items
+                    }
+                }
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
                     var index: Number = 0
@@ -457,17 +473,21 @@ open class GenPagesTabbarProducts : BasePage {
                 return wrapUTSPromise(suspend w1@{
                         val keywordValue = stringValue(params["keyword"])
                         val pageValue = stringValue(params["page"], "1")
-                        val raw = await(request("/api/categories/categories/options/", "GET", _uO("key" to "parent", "search" to if (keywordValue == "") {
-                            null
-                        } else {
-                            keywordValue
-                        }
-                        , "page" to if (pageValue == "") {
-                            1
+                        val parentValue = stringValue(params["parent"])
+                        val pageSizeValue = stringValue(params["pageSize"], "20")
+                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 659, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
+                            "1"
                         } else {
                             pageValue
                         }
-                        , "page_size" to 200), true))
+                        ), "page_size" to parseInt(pageSizeValue))
+                        if (keywordValue != "") {
+                            queryParams["search"] = keywordValue
+                        }
+                        if (parentValue != "") {
+                            queryParams["parent"] = parentValue
+                        }
+                        val raw = await(request("/api/categories/categories/options/", "GET", queryParams, true))
                         return@w1 buildCategoryTreeResponse(raw)
                 })
             }
@@ -579,12 +599,15 @@ open class GenPagesTabbarProducts : BasePage {
                 setSelectedFilterValue("supplier", supplierFilterValue.value)
             }
             val handleSupplierFilterChange = ::gen_handleSupplierFilterChange_fn
-            fun gen_handleCategoryFilterChange_fn(payload: UTSJSONObject) {
-                categoryFilterValue.value = stringValue(payload["value"])
-                categoryFilterText.value = stringValue(payload["text"])
-                setSelectedFilterValue("category", categoryFilterValue.value)
+            fun gen_handleCategoryMultiChange_fn(payload: UTSJSONObject) {
+                val values = payload["values"] as UTSArray<String>?
+                val texts = payload["texts"] as UTSArray<String>?
+                if (values != null && texts != null) {
+                    categoryFilterValues.value = values
+                    setSelectedFilterValue("category", values.join(","))
+                }
             }
-            val handleCategoryFilterChange = ::gen_handleCategoryFilterChange_fn
+            val handleCategoryMultiChange = ::gen_handleCategoryMultiChange_fn
             fun gen_isFilterOptionSelected_fn(param: String, value: String): Boolean {
                 run {
                     var index: Number = 0
@@ -662,8 +685,7 @@ open class GenPagesTabbarProducts : BasePage {
                 selectedFilters.value = _uA<ProductSelectedFilter>()
                 supplierFilterValue.value = ""
                 supplierFilterText.value = ""
-                categoryFilterValue.value = ""
-                categoryFilterText.value = ""
+                categoryFilterValues.value = _uA()
                 keyword.value = ""
                 currentPage.value = 1
                 closeFilterDrawer()
@@ -742,7 +764,11 @@ open class GenPagesTabbarProducts : BasePage {
                     return
                 }
                 if (key == "detail") {
-                    uni_showToast(ShowToastOptions(title = "商品详情页待接入", icon = "none"))
+                    val rawId = stringValue(item["rawId"])
+                    if (rawId == "") {
+                        return
+                    }
+                    uni_navigateTo(NavigateToOptions(url = "/pages/products/from?id=" + rawId))
                     return
                 }
                 if (key == "reload") {
@@ -750,6 +776,19 @@ open class GenPagesTabbarProducts : BasePage {
                 }
             }
             val handleMenu = ::gen_handleMenu_fn
+            fun gen_handleFloatingAdd_fn() {
+                uni_navigateTo(NavigateToOptions(url = "/pages/products/from"))
+            }
+            val handleFloatingAdd = ::gen_handleFloatingAdd_fn
+            fun gen_consumeProductListRefreshFlag_fn(): Boolean {
+                val storedValue = uni_getStorageSync(productListRefreshStorageKey)
+                val shouldRefresh = storedValue != null && stringValue(storedValue) == "1"
+                if (shouldRefresh) {
+                    uni_removeStorageSync(productListRefreshStorageKey)
+                }
+                return shouldRefresh
+            }
+            val consumeProductListRefreshFlag = ::gen_consumeProductListRefreshFlag_fn
             val listItems = computed(fun(): UTSArray<UTSJSONObject> {
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -839,6 +878,10 @@ open class GenPagesTabbarProducts : BasePage {
             )
             onShow(fun(){
                 updateFilterPanelLayout()
+                if (consumeProductListRefreshFlag()) {
+                    loadProducts()
+                    return
+                }
                 if (products.value.length == 0 && !isLoading.value) {
                     loadProducts()
                 }
@@ -865,9 +908,8 @@ open class GenPagesTabbarProducts : BasePage {
                                         _cE("view", _uM("class" to "product-filter-select-group"), _uA(
                                             _cE("text", _uM("class" to "product-filter-select-title"), "分类"),
                                             _cE("view", _uM("class" to "product-filter-select-wrap"), _uA(
-                                                _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to unref(categoryFilterValue), "valueText" to unref(categoryFilterText), "title" to "选择分类", "placeholder" to "请选择分类", "searchPlaceholder" to "请输入分类名称", "emptyText" to "暂无分类", "tree" to true, "expandOnClickNode" to true, "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchCategoryFilterOptions, "onChange" to handleCategoryFilterChange), null, 8, _uA(
-                                                    "value",
-                                                    "valueText"
+                                                _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("values" to unref(categoryFilterValues), "title" to "选择分类", "placeholder" to "请选择分类", "searchPlaceholder" to "请输入分类名称", "emptyText" to "暂无分类", "tree" to true, "multiple" to true, "checkStrictly" to false, "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchCategoryFilterOptions, "onMultiChange" to handleCategoryMultiChange), null, 8, _uA(
+                                                    "values"
                                                 ))
                                             ))
                                         )),
@@ -945,7 +987,7 @@ open class GenPagesTabbarProducts : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "skuText", "metaField" to "barcodeText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载商品", "keepContentOnLoading" to true, "inlineLoadingText" to "商品数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "商品概览", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to false, "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "skuText", "metaField" to "barcodeText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载商品", "keepContentOnLoading" to true, "inlineLoadingText" to "商品数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "商品概览", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增商品", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleFloatingAdd), null, 8, _uA(
                                 "items",
                                 "tagColorMap",
                                 "fields",

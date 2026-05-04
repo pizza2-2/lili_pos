@@ -13,6 +13,7 @@ import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect : VueComponent {
     constructor(__ins: ComponentInternalInstance) : super(__ins) {}
@@ -27,6 +28,8 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
     open var expandOnClickNode: Boolean by `$props`
     open var checkStrictly: Boolean by `$props`
     open var accordion: Boolean by `$props`
+    open var selectableLevel: Number by `$props`
+    open var selectableLevelMessage: String by `$props`
     open var placeholder: String by `$props`
     open var title: String by `$props`
     open var searchPlaceholder: String by `$props`
@@ -41,6 +44,9 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
     open var showAddAction: Boolean by `$props`
     open var editActionText: String by `$props`
     open var addActionText: String by `$props`
+    open var editPath: String by `$props`
+    open var addPath: String by `$props`
+    open var editQueryKey: String by `$props`
     open var openPanel: () -> Unit
         get() {
             return unref(this.`$exposed`["openPanel"]) as () -> Unit
@@ -232,6 +238,35 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 return value as Number
             }
             val getNumberField = ::gen_getNumberField_fn
+            fun gen_getItemLevel_fn(item: UTSJSONObject): Number {
+                val value = item["level"]
+                if (value == null) {
+                    return -1
+                }
+                if (UTSAndroid.`typeof`(value) == "number") {
+                    return value as Number
+                }
+                val parsed = parseInt("" + value)
+                if (isNaN(parsed)) {
+                    return -1
+                }
+                return parsed
+            }
+            val getItemLevel = ::gen_getItemLevel_fn
+            fun gen_isItemSelectable_fn(item: UTSJSONObject): Boolean {
+                if (props.selectableLevel < 0) {
+                    return true
+                }
+                return getItemLevel(item) == props.selectableLevel
+            }
+            val isItemSelectable = ::gen_isItemSelectable_fn
+            fun gen_showUnselectableMessage_fn() {
+                val message = props.selectableLevelMessage
+                if (message != "") {
+                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                }
+            }
+            val showUnselectableMessage = ::gen_showUnselectableMessage_fn
             fun gen_getListField_fn(obj: UTSJSONObject, key: String): UTSArray<UTSJSONObject> {
                 val value = obj[key]
                 if (value == null) {
@@ -261,7 +296,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val getBooleanField = ::gen_getBooleanField_fn
             fun gen_cloneItem_fn(item: UTSJSONObject): UTSJSONObject {
-                val next: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 377, 8))
+                val next: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 415, 8))
                 for(key in resolveUTSKeyIterator(item)){
                     next[key] = item[key]
                 }
@@ -280,7 +315,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val hasTreeChildren = ::gen_hasTreeChildren_fn
             fun buildFetchParams(page: Number, keywordValue: String, id: String, parent: String = ""): UTSJSONObject {
-                val params: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 396, 8), "page" to page, "pageSize" to props.pageSize, "keyword" to keywordValue, "id" to id)
+                val params: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 434, 8), "page" to page, "pageSize" to props.pageSize, "keyword" to keywordValue, "id" to id)
                 if (parent != "") {
                     params["parent"] = parent
                 }
@@ -655,7 +690,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             displayList.value = replaceTreeChildren(displayList.value, parentValue, children)
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select loadTreeChildren 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:712")
+                            console.error("lili_bottom-select loadTreeChildren 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:750")
                             uni_showToast(ShowToastOptions(title = "子节点加载失败", icon = "none"))
                         }
                          finally {
@@ -860,7 +895,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             if (seq != requestSeq) {
                                 return@w1
                             }
-                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:889")
+                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:927")
                             uni_showToast(ShowToastOptions(title = "数据加载失败", icon = "none"))
                         }
                          finally {
@@ -886,7 +921,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             }
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:911")
+                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:949")
                         }
                 })
             }
@@ -1040,8 +1075,59 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 }
             }
             val handleOverlayClick = ::gen_handleOverlayClick_fn
+            fun gen_appendQueryValue_fn(url: String, key: String, value: String): String {
+                if (value == "") {
+                    return url
+                }
+                val separator = if (url.indexOf("?") >= 0) {
+                    "&"
+                } else {
+                    "?"
+                }
+                return url + separator + key + "=" + value
+            }
+            val appendQueryValue = ::gen_appendQueryValue_fn
+            fun gen_navigateToActionPath_fn(url: String) {
+                listLoaded.value = false
+                uni_navigateTo(NavigateToOptions(url = url))
+            }
+            val navigateToActionPath = ::gen_navigateToActionPath_fn
+            fun gen_getActionAddPath_fn(): String {
+                val value = props.addPath
+                if (value == null) {
+                    return ""
+                }
+                return value
+            }
+            val getActionAddPath = ::gen_getActionAddPath_fn
+            fun gen_getActionEditPath_fn(): String {
+                val value = props.editPath
+                if (value == null) {
+                    return ""
+                }
+                return value
+            }
+            val getActionEditPath = ::gen_getActionEditPath_fn
+            fun gen_getActionEditQueryKey_fn(): String {
+                val value = props.editQueryKey
+                if (value == null || value == "") {
+                    return "id"
+                }
+                return value
+            }
+            val getActionEditQueryKey = ::gen_getActionEditQueryKey_fn
             fun gen_handleEditAction_fn() {
                 if (props.disabled) {
+                    return
+                }
+                val editPath = getActionEditPath()
+                if (editPath != "") {
+                    val value = internalValue.value
+                    if (value == "") {
+                        uni_showToast(ShowToastOptions(title = "请先选择要编辑的项目", icon = "none"))
+                        return
+                    }
+                    navigateToActionPath(appendQueryValue(editPath, getActionEditQueryKey(), value))
                     return
                 }
                 emit("edit")
@@ -1049,6 +1135,11 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             val handleEditAction = ::gen_handleEditAction_fn
             fun gen_handleAddAction_fn() {
                 if (props.disabled) {
+                    return
+                }
+                val addPath = getActionAddPath()
+                if (addPath != "") {
+                    navigateToActionPath(addPath)
                     return
                 }
                 emit("add")
@@ -1196,6 +1287,10 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             val toggleMultiItem = ::gen_toggleMultiItem_fn
             fun gen_onItemClick_fn(item: UTSJSONObject) {
                 if (props.disabled) {
+                    return
+                }
+                if (!isItemSelectable(item)) {
+                    showUnselectableMessage()
                     return
                 }
                 if (props.multiple) {
@@ -1596,7 +1691,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
         var props = _nP(_uM("fetchData" to _uM("type" to "Function", "required" to true), "value" to _uM("type" to "String", "required" to false, "default" to ""), "valueText" to _uM("type" to "String", "required" to false, "default" to ""), "values" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
-        ), "multiple" to _uM("type" to "Boolean", "required" to false, "default" to false), "tree" to _uM("type" to "Boolean", "required" to false, "default" to false), "childrenKey" to _uM("type" to "String", "required" to false, "default" to "children"), "defaultExpandAll" to _uM("type" to "Boolean", "required" to false, "default" to false), "expandOnClickNode" to _uM("type" to "Boolean", "required" to false, "default" to false), "checkStrictly" to _uM("type" to "Boolean", "required" to false, "default" to true), "accordion" to _uM("type" to "Boolean", "required" to false, "default" to false), "placeholder" to _uM("type" to "String", "required" to false, "default" to "请选择"), "title" to _uM("type" to "String", "required" to false, "default" to "请选择"), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入关键词搜索"), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "disabled" to _uM("type" to "Boolean", "required" to false, "default" to false), "labelKey" to _uM("type" to "String", "required" to false, "default" to "text"), "valueKey" to _uM("type" to "String", "required" to false, "default" to "value"), "pageSize" to _uM("type" to "Number", "required" to false, "default" to 20), "searchDelay" to _uM("type" to "Number", "required" to false, "default" to 300), "closeOnOverlay" to _uM("type" to "Boolean", "required" to false, "default" to true), "showEditAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showAddAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "editActionText" to _uM("type" to "String", "required" to false, "default" to "编辑"), "addActionText" to _uM("type" to "String", "required" to false, "default" to "新增")))
+        ), "multiple" to _uM("type" to "Boolean", "required" to false, "default" to false), "tree" to _uM("type" to "Boolean", "required" to false, "default" to false), "childrenKey" to _uM("type" to "String", "required" to false, "default" to "children"), "defaultExpandAll" to _uM("type" to "Boolean", "required" to false, "default" to false), "expandOnClickNode" to _uM("type" to "Boolean", "required" to false, "default" to false), "checkStrictly" to _uM("type" to "Boolean", "required" to false, "default" to true), "accordion" to _uM("type" to "Boolean", "required" to false, "default" to false), "selectableLevel" to _uM("type" to "Number", "required" to false, "default" to -1), "selectableLevelMessage" to _uM("type" to "String", "required" to false, "default" to ""), "placeholder" to _uM("type" to "String", "required" to false, "default" to "请选择"), "title" to _uM("type" to "String", "required" to false, "default" to "请选择"), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入关键词搜索"), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "disabled" to _uM("type" to "Boolean", "required" to false, "default" to false), "labelKey" to _uM("type" to "String", "required" to false, "default" to "text"), "valueKey" to _uM("type" to "String", "required" to false, "default" to "value"), "pageSize" to _uM("type" to "Number", "required" to false, "default" to 20), "searchDelay" to _uM("type" to "Number", "required" to false, "default" to 300), "closeOnOverlay" to _uM("type" to "Boolean", "required" to false, "default" to true), "showEditAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showAddAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "editActionText" to _uM("type" to "String", "required" to false, "default" to "编辑"), "addActionText" to _uM("type" to "String", "required" to false, "default" to "新增"), "editPath" to _uM("type" to "String", "required" to false, "default" to ""), "addPath" to _uM("type" to "String", "required" to false, "default" to ""), "editQueryKey" to _uM("type" to "String", "required" to false, "default" to "id")))
         var propsNeedCastKeys = _uA(
             "value",
             "valueText",
@@ -1608,6 +1703,8 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             "expandOnClickNode",
             "checkStrictly",
             "accordion",
+            "selectableLevel",
+            "selectableLevelMessage",
             "placeholder",
             "title",
             "searchPlaceholder",
@@ -1621,7 +1718,10 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             "showEditAction",
             "showAddAction",
             "editActionText",
-            "addActionText"
+            "addActionText",
+            "editPath",
+            "addPath",
+            "editQueryKey"
         )
         var components: Map<String, CreateVueComponent> = _uM()
     }

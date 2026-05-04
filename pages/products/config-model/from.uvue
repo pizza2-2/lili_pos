@@ -1,0 +1,477 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			:homePath="homePath"
+			backgroundColor="#EEF2F7"
+		/>
+		<view class="page-content">
+			<lili-UniversaForm
+				:mode="formMode"
+				:formSections="formSections"
+				:initialData="initialData"
+				:leaveSignal="leaveSignal"
+				@submit="handleSubmit"
+				@cancel="handleCancel"
+				@discard-leave="handleDiscardLeave"
+				@save-request="handleSaveRequest"
+				@dirty-change="handleDirtyChange"
+				@bottom-select-add="handleBottomSelectAdd"
+				@bottom-select-edit="handleBottomSelectEdit"
+			/>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import {
+	attributeTypesPath,
+	attributeValuesPath,
+	barcodeSequencesPath,
+	createProductConfig,
+	getProductConfigDetail,
+	getProductConfigList,
+	productDiscountsPath,
+	updateProductConfig,
+} from '@/pkg/api/modules/products.uts'
+
+const resource = ref('discount')
+const recordId = ref('')
+const parentAttributeTypeId = ref('')
+const parentAttributeTypeName = ref('')
+const formMode = ref('create')
+const leaveSignal = ref(0)
+const submitting = ref(false)
+const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function getBooleanField(obj: UTSJSONObject, key: string): boolean {
+	const text = getStringField(obj, key).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function resourceBasePath(): string {
+	if (resource.value == 'attribute-type') return attributeTypesPath()
+	if (resource.value == 'attribute-value') return attributeValuesPath()
+	if (resource.value == 'barcode-sequence') return barcodeSequencesPath()
+	return productDiscountsPath()
+}
+
+function resourceTitle(): string {
+	if (resource.value == 'attribute-type') return '属性类型'
+	if (resource.value == 'attribute-value') return '属性值'
+	if (resource.value == 'barcode-sequence') return '条形码序列'
+	return '商品折扣'
+}
+
+function refreshStorageKey(): string {
+	return 'refresh:pages:products:config-model:' + resource.value
+}
+
+function markListRefreshNeeded() {
+	uni.setStorageSync(refreshStorageKey(), '1')
+}
+
+function goBackToList() {
+	leaveSignal.value = leaveSignal.value + 1
+	setTimeout(() => {
+		uni.navigateBack({
+			delta: 1,
+		})
+	}, 16)
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+	}
+	return message
+}
+
+function twoDigit(value: number): string {
+	if (value < 10) return '0' + value.toString()
+	return value.toString()
+}
+
+function nowDatetimeText(): string {
+	const now = new Date()
+	const y = now.getFullYear().toString()
+	const m = twoDigit(now.getMonth() + 1)
+	const d = twoDigit(now.getDate())
+	const h = twoDigit(now.getHours())
+	const mi = twoDigit(now.getMinutes())
+	return y + '-' + m + '-' + d + ' ' + h + ':' + mi
+}
+
+function defaultInitialData(): UTSJSONObject {
+	if (resource.value == 'discount') {
+		return {
+			name: '',
+			discount_type: 'PERCENTAGE',
+			discount_percentage: '10',
+			discount_amount: '0',
+			min_quantity: '1',
+			start_date: nowDatetimeText(),
+			end_date: '2099-12-31 23:59',
+			is_permanent: false,
+			status: 'DRAFT',
+			priority: '1',
+			description: '',
+		} as UTSJSONObject
+	}
+	if (resource.value == 'attribute-value') {
+		return {
+			attribute_type: parentAttributeTypeId.value,
+			attribute_type_name: parentAttributeTypeName.value,
+			value: '',
+			value_en: '',
+			code: '',
+			color_hex: '',
+			display_order: '0',
+		} as UTSJSONObject
+	}
+	if (resource.value == 'barcode-sequence') {
+		return {
+			sequence_name: 'auto_product_barcode',
+			prefix: '690',
+			current_number: '1',
+			min_number: '1',
+			max_number: '9999999',
+			description: '',
+		} as UTSJSONObject
+	}
+	return {
+		name: '',
+		name_en: '',
+		code: '',
+		display_order: '0',
+		description: '',
+	} as UTSJSONObject
+}
+
+function normalizeDetail(data: UTSJSONObject): UTSJSONObject {
+	const result = defaultInitialData()
+	if (resource.value == 'discount') {
+		result['name'] = getStringField(data, 'name')
+		result['discount_type'] = getStringField(data, 'discount_type', 'PERCENTAGE')
+		result['discount_percentage'] = getStringField(data, 'discount_percentage', '10')
+		result['discount_amount'] = getStringField(data, 'discount_amount', '0')
+		result['min_quantity'] = getStringField(data, 'min_quantity', '1')
+		result['start_date'] = getStringField(data, 'start_date')
+		result['end_date'] = getStringField(data, 'end_date')
+		result['is_permanent'] = getBooleanField(data, 'is_permanent')
+		result['status'] = getStringField(data, 'status', 'DRAFT')
+		result['priority'] = getStringField(data, 'priority', '1')
+		result['description'] = getStringField(data, 'description')
+		return result
+	}
+	if (resource.value == 'attribute-value') {
+		result['attribute_type'] = getStringField(data, 'attribute_type')
+		result['attribute_type_name'] = getStringField(data, 'attribute_type_name')
+		result['value'] = getStringField(data, 'value')
+		result['value_en'] = getStringField(data, 'value_en')
+		result['code'] = getStringField(data, 'code')
+		result['color_hex'] = getStringField(data, 'color_hex')
+		result['display_order'] = getStringField(data, 'display_order', '0')
+		return result
+	}
+	if (resource.value == 'barcode-sequence') {
+		result['sequence_name'] = getStringField(data, 'sequence_name', 'auto_product_barcode')
+		result['prefix'] = getStringField(data, 'prefix', '690')
+		result['current_number'] = getStringField(data, 'current_number', '1')
+		result['min_number'] = getStringField(data, 'min_number', '1')
+		result['max_number'] = getStringField(data, 'max_number', '9999999')
+		result['description'] = getStringField(data, 'description')
+		return result
+	}
+	result['name'] = getStringField(data, 'name')
+	result['name_en'] = getStringField(data, 'name_en')
+	result['code'] = getStringField(data, 'code')
+	result['display_order'] = getStringField(data, 'display_order', '0')
+	result['description'] = getStringField(data, 'description')
+	return result
+}
+
+async function loadDetail(idText: string) {
+	if (idText == '') return
+	try {
+		const detail = await getProductConfigDetail(resourceBasePath(), idText)
+		initialData.value = normalizeDetail(detail)
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, resourceTitle() + '详情加载失败'), icon: 'none' })
+	}
+}
+
+function buildAttributeTypeOption(item: UTSJSONObject): UTSJSONObject {
+	return {
+		value: getStringField(item, 'id'),
+		text: getStringField(item, 'name') + ' (' + getStringField(item, 'code') + ')',
+	} as UTSJSONObject
+}
+
+async function fetchAttributeTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = getStringField(params, 'keyword')
+	const response = await getProductConfigList(attributeTypesPath(), keyword == '' ? null : keyword, 1, 50)
+	const rawResults = response['results']
+	const source = rawResults == null ? ([] as UTSJSONObject[]) : (rawResults as UTSJSONObject[])
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		result.push(buildAttributeTypeOption(source[index]))
+	}
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
+async function fetchDiscountTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return {
+		data: [
+			{ value: 'PERCENTAGE', text: '百分比折扣' } as UTSJSONObject,
+			{ value: 'FIXED_AMOUNT', text: '固定金额折扣' } as UTSJSONObject,
+		] as UTSJSONObject[],
+		total: 2,
+	} as UTSJSONObject
+}
+
+async function fetchDiscountStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return {
+		data: [
+			{ value: 'DRAFT', text: '草稿' } as UTSJSONObject,
+			{ value: 'ACTIVE', text: '启用' } as UTSJSONObject,
+			{ value: 'INACTIVE', text: '停用' } as UTSJSONObject,
+			{ value: 'EXPIRED', text: '已过期' } as UTSJSONObject,
+		] as UTSJSONObject[],
+		total: 4,
+	} as UTSJSONObject
+}
+
+function buildPayload(formData: UTSJSONObject): UTSJSONObject {
+	if (resource.value == 'discount') {
+		return {
+			name: getStringField(formData, 'name'),
+			discount_type: getStringField(formData, 'discount_type', 'PERCENTAGE'),
+			discount_percentage: getStringField(formData, 'discount_percentage', '0'),
+			discount_amount: getStringField(formData, 'discount_amount', '0'),
+			min_quantity: parseInt(getStringField(formData, 'min_quantity', '1')),
+			start_date: getStringField(formData, 'start_date'),
+			end_date: getStringField(formData, 'end_date'),
+			is_permanent: getBooleanField(formData, 'is_permanent'),
+			status: getStringField(formData, 'status', 'DRAFT'),
+			priority: parseInt(getStringField(formData, 'priority', '1')),
+			description: getStringField(formData, 'description'),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'attribute-value') {
+		return {
+			attribute_type: getStringField(formData, 'attribute_type'),
+			value: getStringField(formData, 'value'),
+			value_en: getStringField(formData, 'value_en'),
+			code: getStringField(formData, 'code'),
+			color_hex: getStringField(formData, 'color_hex'),
+			display_order: parseInt(getStringField(formData, 'display_order', '0')),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'barcode-sequence') {
+		return {
+			sequence_name: getStringField(formData, 'sequence_name'),
+			prefix: getStringField(formData, 'prefix'),
+			current_number: parseInt(getStringField(formData, 'current_number', '1')),
+			min_number: parseInt(getStringField(formData, 'min_number', '1')),
+			max_number: parseInt(getStringField(formData, 'max_number', '9999999')),
+			description: getStringField(formData, 'description'),
+		} as UTSJSONObject
+	}
+	return {
+		name: getStringField(formData, 'name'),
+		name_en: getStringField(formData, 'name_en'),
+		code: getStringField(formData, 'code'),
+		display_order: parseInt(getStringField(formData, 'display_order', '0')),
+		description: getStringField(formData, 'description'),
+	} as UTSJSONObject
+}
+
+async function persistForm(payload: UTSJSONObject) {
+	if (submitting.value) return
+	const formDataValue = payload['formData']
+	const formData = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
+	submitting.value = true
+	uni.showLoading({ title: '保存中...', mask: true })
+	try {
+		const body = buildPayload(formData)
+		if (formMode.value == 'edit') {
+			await updateProductConfig(resourceBasePath(), recordId.value, body)
+		} else {
+			const created = await createProductConfig(resourceBasePath(), body)
+			recordId.value = getStringField(created, 'id')
+			formMode.value = 'edit'
+		}
+		uni.showToast({ title: takeLatestResponseMessage('保存成功'), icon: 'success' })
+		markListRefreshNeeded()
+		goBackToList()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '保存失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+async function handleSubmit(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+async function handleSaveRequest(payload: UTSJSONObject) {
+	await persistForm(payload)
+}
+
+function handleCancel(payload: UTSJSONObject) {
+	const hasChangesValue = payload['hasChanges']
+	const changed = hasChangesValue != null && (hasChangesValue as boolean)
+	if (changed) return
+	goBackToList()
+}
+
+function handleDiscardLeave(payload: UTSJSONObject) {
+	goBackToList()
+}
+
+function handleDirtyChange(value: boolean) {
+}
+
+function handleBottomSelectAdd(payload: UTSJSONObject) {
+	uni.showToast({ title: '请先到属性类型页面新增', icon: 'none' })
+}
+
+function handleBottomSelectEdit(payload: UTSJSONObject) {
+	uni.showToast({ title: '请先到属性类型页面编辑', icon: 'none' })
+}
+
+const homePath = computed((): string => {
+	let path = '/pages/products/config-model/index?resource=' + resource.value
+	if (resource.value == 'attribute-value' && parentAttributeTypeId.value != '') {
+		path = path + '&attribute_type=' + parentAttributeTypeId.value + '&attribute_type_name=' + parentAttributeTypeName.value
+	}
+	return path
+})
+
+const pageTitle = computed((): string => {
+	const prefix = formMode.value == 'edit' ? '编辑' : '新建'
+	return prefix + resourceTitle()
+})
+
+const formSections = computed((): UTSJSONObject[] => {
+	if (resource.value == 'discount') {
+		return [
+			{
+				key: 'base',
+				title: '折扣信息',
+				defaultOpen: true,
+				fields: [
+					{ key: 'name', label: '折扣名称', type: 'input', required: true, placeholder: '请输入折扣名称' } as UTSJSONObject,
+					{ key: 'discount_type', label: '折扣类型', type: 'bottomSelect', title: '选择折扣类型', textKey: 'discount_type_text', showAddAction: false, showEditAction: false, fetchData: fetchDiscountTypeOptions } as UTSJSONObject,
+					{ key: 'discount_percentage', label: '折扣百分比', type: 'number', placeholder: '例如 10' } as UTSJSONObject,
+					{ key: 'discount_amount', label: '折扣金额', type: 'number', placeholder: '例如 5.00' } as UTSJSONObject,
+					{ key: 'min_quantity', label: '最低购买数量', type: 'number', required: true } as UTSJSONObject,
+				] as UTSJSONObject[],
+			} as UTSJSONObject,
+			{
+				key: 'time',
+				title: '有效期',
+				defaultOpen: true,
+				fields: [
+					{ key: 'start_date', label: '开始时间', type: 'datetime', required: true, showTime: true } as UTSJSONObject,
+					{ key: 'end_date', label: '结束时间', type: 'datetime', required: true, showTime: true } as UTSJSONObject,
+					{ key: 'is_permanent', label: '永久有效', type: 'switch' } as UTSJSONObject,
+					{ key: 'status', label: '状态', type: 'bottomSelect', title: '选择状态', showAddAction: false, showEditAction: false, fetchData: fetchDiscountStatusOptions } as UTSJSONObject,
+					{ key: 'priority', label: '优先级', type: 'number' } as UTSJSONObject,
+					{ key: 'description', label: '说明', type: 'textarea' } as UTSJSONObject,
+				] as UTSJSONObject[],
+			} as UTSJSONObject,
+		]
+	}
+	if (resource.value == 'attribute-value') {
+		return [{
+			key: 'base',
+			title: '属性值',
+			defaultOpen: true,
+			fields: [
+				{ key: 'attribute_type', label: '属性类型', type: 'bottomSelect', title: '选择属性类型', required: true, textKey: 'attribute_type_name', showAddAction: true, showEditAction: true, addPath: '/pages/products/config-model/from?resource=attribute-type', editPath: '/pages/products/config-model/from?resource=attribute-type', fetchData: fetchAttributeTypeOptions } as UTSJSONObject,
+				{ key: 'value', label: '属性值', type: 'input', required: true, placeholder: '例如 红色、XL' } as UTSJSONObject,
+				{ key: 'value_en', label: '英文值', type: 'input' } as UTSJSONObject,
+				{ key: 'code', label: '编码', type: 'input', required: true } as UTSJSONObject,
+				{ key: 'color_hex', label: '颜色代码', type: 'input', placeholder: '例如 #FF0000' } as UTSJSONObject,
+				{ key: 'display_order', label: '排序', type: 'number' } as UTSJSONObject,
+			] as UTSJSONObject[],
+		} as UTSJSONObject]
+	}
+	if (resource.value == 'barcode-sequence') {
+		return [{
+			key: 'base',
+			title: '条形码序列',
+			defaultOpen: true,
+			fields: [
+				{ key: 'sequence_name', label: '序列名称', type: 'input', required: true } as UTSJSONObject,
+				{ key: 'prefix', label: '条形码前缀', type: 'input', required: true } as UTSJSONObject,
+				{ key: 'current_number', label: '当前序号', type: 'number', required: true } as UTSJSONObject,
+				{ key: 'min_number', label: '最小序号', type: 'number', required: true } as UTSJSONObject,
+				{ key: 'max_number', label: '最大序号', type: 'number', required: true } as UTSJSONObject,
+				{ key: 'description', label: '说明', type: 'textarea' } as UTSJSONObject,
+			] as UTSJSONObject[],
+		} as UTSJSONObject]
+	}
+	return [{
+		key: 'base',
+		title: '属性类型',
+		defaultOpen: true,
+		fields: [
+			{ key: 'name', label: '属性名称', type: 'input', required: true, placeholder: '例如 颜色、尺寸' } as UTSJSONObject,
+			{ key: 'name_en', label: '英文名称', type: 'input' } as UTSJSONObject,
+			{ key: 'code', label: '属性编码', type: 'input', required: true } as UTSJSONObject,
+			{ key: 'display_order', label: '排序', type: 'number' } as UTSJSONObject,
+			{ key: 'description', label: '描述', type: 'textarea' } as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject]
+})
+
+onLoad((event: OnLoadOptions) => {
+	leaveSignal.value = 0
+	const resourceValue = event['resource']
+	resource.value = resourceValue == null ? 'discount' : (resourceValue as string)
+	const attributeTypeValue = event['attribute_type']
+	parentAttributeTypeId.value = attributeTypeValue == null ? '' : (attributeTypeValue as string)
+	const attributeTypeNameValue = event['attribute_type_name']
+	parentAttributeTypeName.value = attributeTypeNameValue == null ? '' : (attributeTypeNameValue as string)
+	const idValue = event['id']
+	recordId.value = idValue == null ? '' : (idValue as string)
+	formMode.value = recordId.value == '' ? 'create' : 'edit'
+	initialData.value = defaultInitialData()
+	if (formMode.value == 'edit') {
+		loadDetail(recordId.value)
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	position: relative;
+	background-color: #EEF2F7;
+}
+.page-content {
+	flex: 1;
+}
+</style>

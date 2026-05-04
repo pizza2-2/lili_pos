@@ -1,0 +1,332 @@
+import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
+import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
+import { computed } from 'vue'
+import {
+	ProductPricingFormulaItem,
+	ProductPricingFormulaListResponse,
+	getProductPricingFormulaList,
+} from '@/pkg/api/modules/products.uts'
+
+
+const __sfc__ = defineComponent({
+  __name: 'index',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const pricingFormulaListRefreshStorageKey = 'refresh:pages:products:pricing-formula:index'
+
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const formulas = ref<ProductPricingFormulaItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'expression', label: '表达式' } as UTSJSONObject,
+	{ key: 'descriptionText', label: '说明' } as UTSJSONObject,
+	{ key: 'updatedText', label: '更新' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'copy-expression', text: '复制表达式' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/pricing-formula/index.uvue:103")
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function applyFormulaResponse(response: ProductPricingFormulaListResponse) {
+	formulas.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadPricingFormulas() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getProductPricingFormulaList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+		})
+		applyFormulaResponse(response)
+	} catch (error) {
+		formulas.value = [] as ProductPricingFormulaItem[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '价格公式列表加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function formatDateText(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function formulaToListItem(item: ProductPricingFormulaItem): UTSJSONObject {
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		name: item.name,
+		codeText: '编码：' + stringValue(item.code, '-'),
+		statusText: item.is_active ? '启用' : '停用',
+		expression: stringValue(item.expression, '-'),
+		descriptionText: stringValue(item.description, '-'),
+		updatedText: formatDateText(item.updated_at),
+		tags: item.is_active ? ['启用'] : ['停用'],
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadPricingFormulas()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadPricingFormulas()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadPricingFormulas()
+}
+
+function openFormulaForm(id: string) {
+	if (id == '') {
+		uni.navigateTo({ url: '/pages/products/pricing-formula/from' })
+		return
+	}
+	uni.navigateTo({ url: '/pages/products/pricing-formula/from?id=' + id })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	const itemObject = item as UTSJSONObject
+	openFormulaForm(stringValue(itemObject['rawId']))
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) return
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+	if (key == 'expression') {
+		copyText(stringValue(item['expression']), '表达式已复制', '暂无表达式')
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionObject = action as UTSJSONObject
+	const itemObject = item as UTSJSONObject
+	const key = stringValue(actionObject['key'])
+	const formulaId = stringValue(itemObject['rawId'])
+	if (key == 'edit') {
+		openFormulaForm(formulaId)
+		return
+	}
+	if (key == 'copy-expression') {
+		copyText(stringValue(itemObject['expression']), '表达式已复制', '暂无表达式')
+		return
+	}
+	if (key == 'reload') {
+		loadPricingFormulas()
+	}
+}
+
+function handleCreateFormula() {
+	openFormulaForm('')
+}
+
+function consumePricingFormulaListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(pricingFormulaListRefreshStorageKey)
+	if (storedValue == null) return false
+	const storedText = '' + storedValue
+	if (storedText == '') return false
+	uni.removeStorageSync(pricingFormulaListRefreshStorageKey)
+	return true
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < formulas.value.length; index += 1) {
+		result.push(formulaToListItem(formulas.value[index]))
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的价格公式'
+	return '暂无价格公式'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	let activeCount = 0
+	for (let index = 0; index < formulas.value.length; index += 1) {
+		if (formulas.value[index].is_active) activeCount += 1
+	}
+	return [
+		{ key: 'total', label: '公式总数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'active', label: '当前页启用', value: activeCount.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => {
+	loadPricingFormulas()
+})
+
+onShow(() => {
+	if (consumePricingFormulaListRefreshNeeded()) {
+		loadPricingFormulas()
+	}
+})
+
+return (): any | null => {
+
+const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
+const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",_easycom_lili_UniversalList)
+
+  return _cE("view", _uM({ class: "page" }), [
+    _cV(_component_lili_universal_filter, _uM({
+      title: "价格计算公式",
+      searchPlaceholder: "输入公式名称、编码、表达式",
+      searchValue: unref(keyword),
+      showBack: true,
+      showSearch: true,
+      showHome: true,
+      homePath: "/pages/tabbar/settings",
+      onSearchInput: handleSearchInput,
+      onSearchConfirm: handleSearchConfirm,
+      onSearchClear: handleSearchClear
+    }), null, 8 /* PROPS */, ["searchValue"]),
+    _cE("scroll-view", _uM({
+      class: "page-scroll",
+      "scroll-y": "true"
+    }), [
+      _cE("view", _uM({ class: "page-content" }), [
+        isTrue(unref(errorMessage) != '' && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 0,
+              class: "error-card"
+            }), [
+              _cE("text", _uM({ class: "error-title" }), "加载失败"),
+              _cE("text", _uM({ class: "error-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */),
+              _cE("view", _uM({
+                class: "retry-btn",
+                onClick: loadPricingFormulas
+              }), [
+                _cE("text", _uM({ class: "retry-btn-text" }), "重新加载")
+              ])
+            ])
+          : _cC("v-if", true),
+        _cV(_component_lili_UniversalList, _uM({
+          items: listItems.value,
+          keyField: "id",
+          titleField: "name",
+          subtitleField: "codeText",
+          metaField: "statusText",
+          tagField: "tags",
+          fields: unref(fieldConfig),
+          loading: unref(isLoading),
+          loadingText: "正在加载价格公式",
+          keepContentOnLoading: true,
+          inlineLoadingText: "价格公式刷新中...",
+          emptyText: emptyText.value,
+          emptyIcon: "◎",
+          showMenu: true,
+          menuActions: unref(menuActions),
+          showChevron: false,
+          showPagination: true,
+          currentPage: unref(currentPage),
+          totalPages: unref(totalPages),
+          totalCount: unref(totalCount),
+          summaryTitle: "价格公式统计",
+          summaryItems: summaryItems.value,
+          summaryCollapsedByDefault: true,
+          showFloatingAdd: true,
+          floatingAddText: "新增",
+          onItemClick: handleItemClick,
+          onFieldClick: handleFieldClick,
+          onMenu: handleMenu,
+          onPageChange: handlePageChange,
+          onFloatingAdd: handleCreateFormula
+        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
+      ])
+    ])
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesProductsPricingFormulaIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingLeft", 18], ["paddingRight", 18], ["paddingTop", 18], ["paddingBottom", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))]])]

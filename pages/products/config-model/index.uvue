@@ -1,0 +1,654 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			:searchPlaceholder="searchPlaceholder"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="showFilter"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="config-filter-panel">
+					<view class="config-filter-actions">
+						<view class="config-filter-btn config-filter-btn-light" @click="handleFilterReset">
+							<text class="config-filter-btn-light-text">重置</text>
+						</view>
+						<view class="config-filter-btn config-filter-btn-primary" @click="applyFilter">
+							<text class="config-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+					<view class="config-filter-group">
+						<text class="config-filter-title">折扣状态</text>
+						<view class="config-filter-options">
+							<view :class="selectedStatus == null ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectStatus(null)">
+								<text :class="selectedStatus == null ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">全部</text>
+							</view>
+							<view :class="selectedStatus == 'DRAFT' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectStatus('DRAFT')">
+								<text :class="selectedStatus == 'DRAFT' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">草稿</text>
+							</view>
+							<view :class="selectedStatus == 'ACTIVE' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectStatus('ACTIVE')">
+								<text :class="selectedStatus == 'ACTIVE' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">启用</text>
+							</view>
+							<view :class="selectedStatus == 'INACTIVE' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectStatus('INACTIVE')">
+								<text :class="selectedStatus == 'INACTIVE' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">停用</text>
+							</view>
+							<view :class="selectedStatus == 'EXPIRED' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectStatus('EXPIRED')">
+								<text :class="selectedStatus == 'EXPIRED' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">过期</text>
+							</view>
+						</view>
+					</view>
+					<view class="config-filter-group">
+						<text class="config-filter-title">折扣类型</text>
+						<view class="config-filter-options">
+							<view :class="selectedDiscountType == null ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectDiscountType(null)">
+								<text :class="selectedDiscountType == null ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">全部</text>
+							</view>
+							<view :class="selectedDiscountType == 'PERCENTAGE' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectDiscountType('PERCENTAGE')">
+								<text :class="selectedDiscountType == 'PERCENTAGE' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">百分比</text>
+							</view>
+							<view :class="selectedDiscountType == 'FIXED_AMOUNT' ? 'config-filter-option config-filter-option-active' : 'config-filter-option'" @click="selectDiscountType('FIXED_AMOUNT')">
+								<text :class="selectedDiscountType == 'FIXED_AMOUNT' ? 'config-filter-option-text config-filter-option-text-active' : 'config-filter-option-text'">固定金额</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="meta"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					:loadingText="loadingText"
+					:keepContentOnLoading="true"
+					:inlineLoadingText="inlineLoadingText"
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@item-click="handleItemClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreate"
+				/>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+	attributeTypesPath,
+	attributeValuesPath,
+	barcodeSequencesPath,
+	deleteProductConfig,
+	getProductConfigList,
+	productDiscountsPath,
+} from '@/pkg/api/modules/products.uts'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+
+const resource = ref('discount')
+const parentAttributeTypeId = ref('')
+const parentAttributeTypeName = ref('')
+const keyword = ref('')
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const statusFilter = ref<string | null>(null)
+const discountTypeFilter = ref<string | null>(null)
+const selectedStatus = ref<string | null>(null)
+const selectedDiscountType = ref<string | null>(null)
+
+const menuActions = computed((): UTSJSONObject[] => {
+	if (resource.value == 'attribute-type') {
+		return [
+			{ key: 'values', text: '属性值' } as UTSJSONObject,
+			{ key: 'edit', text: '编辑' } as UTSJSONObject,
+			{ key: 'delete', text: '删除' } as UTSJSONObject,
+			{ key: 'reload', text: '刷新' } as UTSJSONObject,
+		]
+	}
+	return [
+		{ key: 'edit', text: '编辑' } as UTSJSONObject,
+		{ key: 'delete', text: '删除' } as UTSJSONObject,
+		{ key: 'reload', text: '刷新' } as UTSJSONObject,
+	]
+})
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function getNumberField(obj: UTSJSONObject, key: string): number {
+	const value = obj[key]
+	if (value == null) return 0
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function getBoolField(obj: UTSJSONObject, key: string): boolean {
+	const text = getStringField(obj, key).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function resourceBasePath(): string {
+	if (resource.value == 'attribute-type') return attributeTypesPath()
+	if (resource.value == 'attribute-value') return attributeValuesPath()
+	if (resource.value == 'barcode-sequence') return barcodeSequencesPath()
+	return productDiscountsPath()
+}
+
+function resourceTitle(): string {
+	if (resource.value == 'attribute-type') return '属性类型'
+	if (resource.value == 'attribute-value') {
+		if (parentAttributeTypeName.value != '') return parentAttributeTypeName.value + '属性值'
+		return '属性值'
+	}
+	if (resource.value == 'barcode-sequence') return '条形码序列'
+	return '商品折扣'
+}
+
+function refreshStorageKey(): string {
+	return 'refresh:pages:products:config-model:' + resource.value
+}
+
+function openForm(id: string) {
+	let url = '/pages/products/config-model/from?resource=' + resource.value
+	if (resource.value == 'attribute-value' && parentAttributeTypeId.value != '') {
+		url = url + '&attribute_type=' + parentAttributeTypeId.value + '&attribute_type_name=' + parentAttributeTypeName.value
+	}
+	if (id != '') {
+		url = url + '&id=' + id
+	}
+	uni.navigateTo({ url: url })
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+	}
+	return message
+}
+
+function applyListResponse(response: UTSJSONObject) {
+	const rawResults = response['results']
+	if (rawResults == null) {
+		items.value = [] as UTSJSONObject[]
+	} else {
+		items.value = rawResults as UTSJSONObject[]
+	}
+	totalCount.value = getNumberField(response, 'total_count')
+	totalPages.value = getNumberField(response, 'total_pages')
+	currentPage.value = getNumberField(response, 'current_page')
+	pageSize.value = getNumberField(response, 'page_size')
+	if (totalPages.value <= 0) totalPages.value = 1
+	if (currentPage.value <= 0) currentPage.value = 1
+	if (pageSize.value <= 0) pageSize.value = 20
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const extra = {} as UTSJSONObject
+		if (resource.value == 'attribute-value' && parentAttributeTypeId.value != '') {
+			extra['attribute_type'] = parentAttributeTypeId.value
+		}
+		if (resource.value == 'discount') {
+			if (statusFilter.value != null && statusFilter.value != '') extra['status'] = statusFilter.value
+			if (discountTypeFilter.value != null && discountTypeFilter.value != '') extra['discount_type'] = discountTypeFilter.value
+		}
+		const response = await getProductConfigList(resourceBasePath(), keyword.value == '' ? null : keyword.value, currentPage.value, pageSize.value, extra)
+		applyListResponse(response)
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		totalCount.value = 0
+		totalPages.value = 1
+		currentPage.value = 1
+		errorMessage.value = parseErrorMessage(error, resourceTitle() + '加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function formatDateText(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function discountName(item: UTSJSONObject): string {
+	return getStringField(item, 'name', '未命名折扣')
+}
+
+function itemToListItem(item: UTSJSONObject): UTSJSONObject {
+	if (resource.value == 'discount') {
+		return {
+			id: getStringField(item, 'id'),
+			rawId: getStringField(item, 'id'),
+			name: discountName(item),
+			subtitle: getStringField(item, 'discount_display', '-'),
+			meta: getStringField(item, 'status', '-'),
+			min_quantity: getStringField(item, 'min_quantity', '-'),
+			priority: getStringField(item, 'priority', '-'),
+			updated: formatDateText(getStringField(item, 'updated_at')),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'attribute-value') {
+		return {
+			id: getStringField(item, 'id'),
+			rawId: getStringField(item, 'id'),
+			name: getStringField(item, 'value', '未命名属性值'),
+			subtitle: '编码：' + getStringField(item, 'code', '-'),
+			meta: getStringField(item, 'attribute_type_name', '-'),
+			value_en: getStringField(item, 'value_en', '-'),
+			color_hex: getStringField(item, 'color_hex', '-'),
+			display_order: getStringField(item, 'display_order', '0'),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'barcode-sequence') {
+		return {
+			id: getStringField(item, 'id'),
+			rawId: getStringField(item, 'id'),
+			name: getStringField(item, 'sequence_name', '未命名序列'),
+			subtitle: '前缀：' + getStringField(item, 'prefix', '-'),
+			meta: '下一个：' + getStringField(item, 'current_number', '0'),
+			min_number: getStringField(item, 'min_number', '-'),
+			max_number: getStringField(item, 'max_number', '-'),
+			description: getStringField(item, 'description', '-'),
+		} as UTSJSONObject
+	}
+	return {
+		id: getStringField(item, 'id'),
+		rawId: getStringField(item, 'id'),
+		name: getStringField(item, 'name', '未命名属性类型'),
+		subtitle: '编码：' + getStringField(item, 'code', '-'),
+		meta: '值数量：' + getStringField(item, 'values_count', '0'),
+		name_en: getStringField(item, 'name_en', '-'),
+		display_order: getStringField(item, 'display_order', '0'),
+		description: getStringField(item, 'description', '-'),
+	} as UTSJSONObject
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadItems()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadItems()
+}
+
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+function handleFilterOpen() {
+	selectedStatus.value = statusFilter.value
+	selectedDiscountType.value = discountTypeFilter.value
+}
+function selectStatus(value: string | null) { selectedStatus.value = value }
+function selectDiscountType(value: string | null) { selectedDiscountType.value = value }
+function handleFilterReset() {
+	selectedStatus.value = null
+	selectedDiscountType.value = null
+	statusFilter.value = null
+	discountTypeFilter.value = null
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+function applyFilter() {
+	statusFilter.value = selectedStatus.value
+	discountTypeFilter.value = selectedDiscountType.value
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadItems()
+}
+
+function openAttributeValues(item: UTSJSONObject) {
+	const typeId = getStringField(item, 'rawId')
+	const typeName = getStringField(item, 'name')
+	if (typeId == '') return
+	uni.navigateTo({
+		url: '/pages/products/config-model/index?resource=attribute-value&attribute_type=' + typeId + '&attribute_type_name=' + typeName,
+	})
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	const itemObject = item as UTSJSONObject
+	if (resource.value == 'attribute-type') {
+		openAttributeValues(itemObject)
+		return
+	}
+	openForm(getStringField(itemObject, 'rawId'))
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+}
+
+async function confirmDelete(id: string) {
+	try {
+		await deleteProductConfig(resourceBasePath(), id)
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
+		loadItems()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const key = getStringField(action as UTSJSONObject, 'key')
+	const itemObject = item as UTSJSONObject
+	const id = getStringField(itemObject, 'rawId')
+	if (key == 'values') {
+		openAttributeValues(itemObject)
+		return
+	}
+	if (key == 'edit') {
+		openForm(id)
+		return
+	}
+	if (key == 'delete') {
+		uni.showModal({
+			title: '删除' + resourceTitle(),
+			content: '确定删除这条配置吗？',
+			success: (res) => {
+				if (res.confirm) confirmDelete(id)
+			},
+		})
+		return
+	}
+	if (key == 'reload') {
+		loadItems()
+	}
+}
+
+function handleCreate() {
+	openForm('')
+}
+
+function consumeRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(refreshStorageKey())
+	if (storedValue == null) return false
+	const storedText = '' + storedValue
+	if (storedText == '') return false
+	uni.removeStorageSync(refreshStorageKey())
+	return true
+}
+
+const pageTitle = computed((): string => {
+	return resourceTitle()
+})
+
+const searchPlaceholder = computed((): string => {
+	return '搜索' + resourceTitle()
+})
+
+const showFilter = computed((): boolean => {
+	return resource.value == 'discount'
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return statusFilter.value != null || discountTypeFilter.value != null
+})
+
+const loadingText = computed((): string => {
+	return '正在加载' + resourceTitle()
+})
+
+const inlineLoadingText = computed((): string => {
+	return resourceTitle() + '刷新中...'
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的' + resourceTitle()
+	return '暂无' + resourceTitle()
+})
+
+const fieldConfig = computed((): UTSJSONObject[] => {
+	if (resource.value == 'discount') {
+		return [
+			{ key: 'min_quantity', label: '最低数量' } as UTSJSONObject,
+			{ key: 'priority', label: '优先级' } as UTSJSONObject,
+			{ key: 'updated', label: '更新' } as UTSJSONObject,
+		]
+	}
+	if (resource.value == 'attribute-value') {
+		return [
+			{ key: 'value_en', label: '英文' } as UTSJSONObject,
+			{ key: 'color_hex', label: '颜色' } as UTSJSONObject,
+			{ key: 'display_order', label: '排序' } as UTSJSONObject,
+		]
+	}
+	if (resource.value == 'barcode-sequence') {
+		return [
+			{ key: 'min_number', label: '最小' } as UTSJSONObject,
+			{ key: 'max_number', label: '最大' } as UTSJSONObject,
+			{ key: 'description', label: '说明' } as UTSJSONObject,
+		]
+	}
+	return [
+		{ key: 'name_en', label: '英文' } as UTSJSONObject,
+		{ key: 'display_order', label: '排序' } as UTSJSONObject,
+		{ key: 'description', label: '说明' } as UTSJSONObject,
+	]
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) {
+		result.push(itemToListItem(items.value[index]))
+	}
+	return result
+})
+
+onLoad((event: OnLoadOptions) => {
+	const resourceValue = event['resource']
+	resource.value = resourceValue == null ? 'discount' : (resourceValue as string)
+	const attributeTypeValue = event['attribute_type']
+	parentAttributeTypeId.value = attributeTypeValue == null ? '' : (attributeTypeValue as string)
+	const attributeTypeNameValue = event['attribute_type_name']
+	parentAttributeTypeName.value = attributeTypeNameValue == null ? '' : (attributeTypeNameValue as string)
+	loadItems()
+})
+
+onShow(() => {
+	if (consumeRefreshNeeded()) {
+		loadItems()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+.config-filter-panel {
+	flex: 1;
+	background-color: #FFFFFF;
+	padding: 14px;
+}
+.config-filter-actions {
+	flex-direction: row;
+	justify-content: flex-end;
+	margin-bottom: 12px;
+}
+.config-filter-btn {
+	height: 38px;
+	border-radius: 8px;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+	margin-left: 8px;
+}
+.config-filter-btn-light {
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5E1;
+}
+.config-filter-btn-primary {
+	background-color: #0F172A;
+}
+.config-filter-btn-light-text {
+	font-size: 14px;
+	color: #334155;
+}
+.config-filter-btn-primary-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+.config-filter-group {
+	margin-top: 10px;
+}
+.config-filter-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+.config-filter-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+.config-filter-option {
+	height: 34px;
+	border-radius: 8px;
+	padding-left: 12px;
+	padding-right: 12px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+.config-filter-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+.config-filter-option-text {
+	font-size: 13px;
+	color: #475569;
+}
+.config-filter-option-text-active {
+	color: #FFFFFF;
+}
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+.retry-btn-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+</style>

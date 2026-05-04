@@ -1,0 +1,326 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/orders/index" backgroundColor="#EEF2F7" />
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadDetail"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<view v-if="isLoading" class="loading-card">
+					<text class="loading-text">正在加载订单详情</text>
+				</view>
+
+				<lili-UniversaForm
+					v-if="!isLoading"
+					mode="edit"
+					:formSections="formSections"
+					:initialData="initialData"
+					:showFooter="false"
+					:enableBackConfirm="false"
+					@submit="handleNoop"
+					@cancel="handleNoop"
+					@discard-leave="handleNoop"
+					@save-request="handleNoop"
+					@dirty-change="handleDirtyChange"
+				/>
+
+				<view v-if="!isLoading" class="section-card">
+					<view class="section-header">
+						<text class="section-title">商品行</text>
+						<text class="section-subtitle">{{ itemRows.length.toString() }} 项</text>
+					</view>
+					<view v-if="itemRows.length == 0" class="empty-line">
+						<text class="empty-line-text">payload 中没有 items / products / cart 商品行</text>
+					</view>
+					<view v-for="row in itemRows" :key="row.key" class="item-row">
+						<view class="item-row-main">
+							<text class="item-title">{{ row.title }}</text>
+							<text class="item-desc">{{ row.desc }}</text>
+						</view>
+						<text class="item-qty">{{ row.quantity }}</text>
+					</view>
+				</view>
+
+				<view v-if="!isLoading" class="section-card">
+					<view class="section-header">
+						<text class="section-title">原始 Payload</text>
+						<view class="copy-btn" @click="copyPayload"><text class="copy-btn-text">复制</text></view>
+					</view>
+					<text class="payload-text">{{ payloadText }}</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getOrderDetail, OrderItem } from '@/pkg/api/modules/orders.uts'
+
+type PayloadRow = {
+	key: string
+	title: string
+	desc: string
+	quantity: string
+}
+
+const orderId = ref('')
+const orderDetail = ref<OrderItem | null>(null)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function boolText(value: boolean): string {
+	return value ? '是' : '否'
+}
+
+function statusText(item: OrderItem): string {
+	const text = stringValue(item.status_display, item.status)
+	if (text != '') return text
+	if (item.status == 'received') return '已接收'
+	if (item.status == 'processed') return '已处理'
+	if (item.status == 'failed') return '处理失败'
+	return '-'
+}
+
+function paymentText(item: OrderItem): string {
+	const text = stringValue(item.payment_method_display, item.payment_method)
+	if (text != '') return text
+	if (item.payment_method == 'cash') return '现金'
+	if (item.payment_method == 'card') return '银行卡'
+	if (item.payment_method == 'mixed') return '混合支付'
+	if (item.payment_method == 'other') return '其他'
+	return '-'
+}
+
+function payloadTextValue(payload: UTSJSONObject): string {
+	const text = JSON.stringify(payload)
+	if (text == null || text == '') return '{}'
+	return text
+}
+
+function getPayloadItems(payload: UTSJSONObject): UTSJSONObject[] {
+	let rows = parseObjectArray(payload['items'])
+	if (rows.length > 0) return rows
+	rows = parseObjectArray(payload['products'])
+	if (rows.length > 0) return rows
+	return parseObjectArray(payload['cart'])
+}
+
+function buildRowTitle(row: UTSJSONObject, index: number): string {
+	const name = stringValue(row['name'], stringValue(row['product_name'], stringValue(row['title'])))
+	if (name != '') return name
+	const barcode = stringValue(row['barcode'])
+	if (barcode != '') return '商品 ' + barcode
+	return '商品行 ' + (index + 1).toString()
+}
+
+function buildRowDesc(row: UTSJSONObject): string {
+	const barcode = stringValue(row['barcode'], '-')
+	const price = stringValue(row['price'], stringValue(row['unit_price'], '-'))
+	const amount = stringValue(row['amount'], stringValue(row['total'], '-'))
+	return '条码 ' + barcode + ' / 单价 ' + price + ' / 金额 ' + amount
+}
+
+function buildInitialData(item: OrderItem): UTSJSONObject {
+	return {
+		order_number: item.order_number,
+		shop_name: stringValue(item.shop_name, item.shop > 0 ? '店铺 #' + item.shop.toString() : '-'),
+		order_time: stringValue(item.order_time, '-'),
+		created_at: stringValue(item.created_at, '-'),
+		cashier_id: stringValue(item.cashier_id, '-'),
+		kasa_number: stringValue(item.kasa_number, '-'),
+		payment_method_text: paymentText(item),
+		subtotal: stringValue(item.subtotal, '0.00'),
+		discount_amount: stringValue(item.discount_amount, '0.00'),
+		tax_amount: stringValue(item.tax_amount, '0.00'),
+		total_amount: stringValue(item.total_amount, '0.00'),
+		status_text: statusText(item),
+		error_message: stringValue(item.error_message, '-'),
+		inventory_deducted_text: boolText(item.inventory_deducted),
+		inventory_deduct_time: stringValue(item.inventory_deduct_time, '-'),
+		inventory_deduct_error: stringValue(item.inventory_deduct_error, '-'),
+	} as UTSJSONObject
+}
+
+async function loadDetail() {
+	if (orderId.value == '') {
+		errorMessage.value = '缺少订单 ID'
+		return
+	}
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const detail = await getOrderDetail(orderId.value)
+		orderDetail.value = detail
+		initialData.value = buildInitialData(detail)
+	} catch (error) {
+		orderDetail.value = null
+		initialData.value = {} as UTSJSONObject
+		errorMessage.value = parseErrorMessage(error, '订单详情加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function handleNoop(payload: UTSJSONObject) {
+}
+
+function handleDirtyChange(value: boolean) {
+}
+
+const pageTitle = computed((): string => {
+	if (orderDetail.value == null) return '订单详情'
+	const detail = orderDetail.value as OrderItem
+	return '订单 ' + detail.order_number
+})
+
+const payloadText = computed((): string => {
+	if (orderDetail.value == null) return '{}'
+	const detail = orderDetail.value as OrderItem
+	return payloadTextValue(detail.payload)
+})
+
+const itemRows = computed((): PayloadRow[] => {
+	const result: PayloadRow[] = []
+	if (orderDetail.value == null) return result
+	const detail = orderDetail.value as OrderItem
+	const rows = getPayloadItems(detail.payload)
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			key: index.toString(),
+			title: buildRowTitle(row, index),
+			desc: buildRowDesc(row),
+			quantity: 'x ' + stringValue(row['quantity'], '0'),
+		} as PayloadRow)
+	}
+	return result
+})
+
+function copyPayload() {
+	uni.setClipboardData({
+		data: payloadText.value,
+		success: () => { uni.showToast({ title: 'Payload 已复制', icon: 'success' }) },
+	})
+}
+
+const formSections = ref<UTSJSONObject[]>([
+	{
+		key: 'base',
+		title: '订单信息',
+		defaultOpen: true,
+		fields: [
+			{ key: 'order_number', label: '订单号', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'shop_name', label: '店铺', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'order_time', label: '订单时间', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'created_at', label: '接收时间', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'cashier_id', label: '收银员', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'kasa_number', label: '收银台', type: 'input', readonly: true } as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
+		key: 'amount',
+		title: '金额信息',
+		defaultOpen: true,
+		fields: [
+			{ key: 'payment_method_text', label: '支付方式', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'subtotal', label: '小计', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'discount_amount', label: '折扣', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'tax_amount', label: '税额', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'total_amount', label: '总金额', type: 'input', readonly: true } as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
+		key: 'status',
+		title: '处理状态',
+		defaultOpen: true,
+		fields: [
+			{ key: 'status_text', label: '订单状态', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'error_message', label: '订单错误', type: 'textarea', readonly: true } as UTSJSONObject,
+			{ key: 'inventory_deducted_text', label: '库存已扣减', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'inventory_deduct_time', label: '扣减时间', type: 'input', readonly: true } as UTSJSONObject,
+			{ key: 'inventory_deduct_error', label: '扣减错误', type: 'textarea', readonly: true } as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+])
+
+onLoad((event: OnLoadOptions) => {
+	const idValue = event['id']
+	orderId.value = idValue == null ? '' : ('' + idValue)
+	loadDetail()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.loading-card { background-color: #FFFFFF; border-radius: 8px; padding: 20px; margin-bottom: 8px; align-items: center; justify-content: center; }
+.loading-text { font-size: 14px; line-height: 20px; color: #64748B; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.section-card { background-color: #FFFFFF; border-radius: 8px; padding: 14px; margin-top: 8px; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.section-header { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.section-title { font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.section-subtitle { font-size: 13px; line-height: 18px; color: #64748B; }
+.empty-line { padding-top: 12px; padding-bottom: 12px; align-items: center; }
+.empty-line-text { font-size: 13px; line-height: 18px; color: #94A3B8; }
+.item-row { flex-direction: row; align-items: center; justify-content: space-between; padding-top: 10px; padding-bottom: 10px; border-top-width: 1px; border-top-style: solid; border-top-color: #EEF2F7; }
+.item-row-main { flex: 1; padding-right: 10px; }
+.item-title { font-size: 14px; line-height: 20px; color: #111827; font-weight: bold; }
+.item-desc { font-size: 12px; line-height: 18px; color: #64748B; margin-top: 2px; }
+.item-qty { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.copy-btn { height: 30px; padding-left: 12px; padding-right: 12px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.copy-btn-text { font-size: 13px; color: #FFFFFF; }
+.payload-text { font-size: 12px; line-height: 18px; color: #334155; }
+</style>

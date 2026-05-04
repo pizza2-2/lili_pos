@@ -1,0 +1,334 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="支出管理"
+			searchPlaceholder="支出类型、供应商、发票号、备注"
+			:searchValue="keyword"
+			:filterVisible="false"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadExpenses"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					imageField="cover"
+					imageListField="images"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载支出记录"
+					:keepContentOnLoading="true"
+					inlineLoadingText="支出数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="支出概览"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreateExpense"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { deleteExpense, ExpenseItem, ExpenseListResponse, getExpenseList } from '@/pkg/api/modules/expenses.uts'
+
+const expenseListRefreshStorageKey = 'refresh:pages:expenses:index'
+
+const keyword = ref('')
+const expenses = ref<ExpenseItem[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const pageTotalAmount = ref('0.00')
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'typeText', label: '类型:' } as UTSJSONObject,
+	{ key: 'supplierText', label: '供应商:' } as UTSJSONObject,
+	{ key: 'invoiceText', label: '发票:' } as UTSJSONObject,
+	{ key: 'noteText', label: '备注:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function applyExpenseResponse(response: ExpenseListResponse) {
+	expenses.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+	let total = 0.0
+	for (let index = 0; index < response.results.length; index += 1) {
+		const amount = parseFloat(response.results[index].amount)
+		if (!isNaN(amount)) total = total + amount
+	}
+	pageTotalAmount.value = total.toFixed(2)
+}
+
+async function loadExpenses() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getExpenseList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			expenditure_type: null,
+			expenditure_type_id: null,
+			supplier: null,
+			supplier_id: null,
+			date_from: null,
+			date_to: null,
+			amount_min: null,
+			amount_max: null,
+		})
+		applyExpenseResponse(response)
+	} catch (error) {
+		expenses.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		pageTotalAmount.value = '0.00'
+		errorMessage.value = parseErrorMessage(error, '支出记录加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function markExpenseListRefreshNeeded() {
+	uni.setStorageSync(expenseListRefreshStorageKey, '1')
+}
+
+function consumeExpenseListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(expenseListRefreshStorageKey)
+	if (storedValue == null || ('' + storedValue) == '') return false
+	uni.removeStorageSync(expenseListRefreshStorageKey)
+	return true
+}
+
+function getDisplayText(value: string | null, fallback: string = '-'): string {
+	if (value == null || value == '') return fallback
+	return value
+}
+
+function buildImages(item: ExpenseItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaFile = item.media_files[index]
+		if (mediaFile.signed_thumbnail_url != '') result.push(mediaFile.signed_thumbnail_url)
+		else if (mediaFile.thumbnail_url != '') result.push(mediaFile.thumbnail_url)
+		else if (mediaFile.signed_url != '') result.push(mediaFile.signed_url)
+		else if (mediaFile.file_url != '') result.push(mediaFile.file_url)
+	}
+	return result
+}
+
+function expenseToListItem(item: ExpenseItem): UTSJSONObject {
+	const typeText = getDisplayText(item.expenditure_type_name, '未分类')
+	const supplierText = getDisplayText(item.supplier_name, '-')
+	const invoiceText = getDisplayText(item.invoice_number, '-')
+	const noteText = getDisplayText(item.note, getDisplayText(item.description, '-'))
+	const images = buildImages(item)
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		title: typeText,
+		subtitle: '日期：' + getDisplayText(item.expenditure_date, '-'),
+		amountText: '¥ ' + getDisplayText(item.amount, '0.00'),
+		typeText: typeText,
+		supplierText: supplierText,
+		invoiceText: invoiceText,
+		noteText: noteText,
+		cover: images.length > 0 ? images[0] : '',
+		images: images,
+		tags: [item.files_count > 0 ? '附件 ' + item.files_count.toString() : '无附件'] as string[],
+	} as UTSJSONObject
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadExpenses() }
+function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadExpenses() }
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadExpenses()
+}
+
+function handleCreateExpense(payload: UTSJSONObject) {
+	uni.navigateTo({ url: '/pages/expenses/from' })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const id = stringValue(payload['rawId'], stringValue(payload['id']))
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/expenses/from?id=' + id })
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '日期已复制', '暂无日期')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '金额已复制', '暂无金额')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '内容已复制', '暂无内容')
+}
+
+async function runDelete(id: string) {
+	try {
+		await deleteExpense(id)
+		markExpenseListRefreshNeeded()
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
+		loadExpenses()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const id = stringValue((item as UTSJSONObject)['rawId'])
+	if (id == '') return
+	if (actionKey == 'edit') {
+		uni.navigateTo({ url: '/pages/expenses/from?id=' + id })
+		return
+	}
+	if (actionKey == 'delete') {
+		uni.showModal({
+			title: '删除支出',
+			content: '确定删除这条支出记录吗？',
+			success: (res) => {
+				if (res.confirm) runDelete(id)
+			},
+		})
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < expenses.value.length; index += 1) result.push(expenseToListItem(expenses.value[index]))
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的支出记录'
+	return '暂无支出记录'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'pageAmount', label: '本页合计', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => { loadExpenses() })
+onShow(() => {
+	if (consumeExpenseListRefreshNeeded()) loadExpenses()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

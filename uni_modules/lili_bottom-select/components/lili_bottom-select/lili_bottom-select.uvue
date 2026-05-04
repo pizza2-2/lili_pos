@@ -245,6 +245,12 @@ type Props = {
 	 */
 	accordion?: boolean
 
+	/**
+	 * 单选/多选允许选择的树层级，-1 表示不限制
+	 */
+	selectableLevel?: number
+	selectableLevelMessage?: string
+
 	placeholder?: string
 	title?: string
 	searchPlaceholder?: string
@@ -259,6 +265,9 @@ type Props = {
 	showAddAction?: boolean
 	editActionText?: string
 	addActionText?: string
+	editPath?: string
+	addPath?: string
+	editQueryKey?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -273,6 +282,8 @@ const props = withDefaults(defineProps<Props>(), {
 	expandOnClickNode: false,
 	checkStrictly: true,
 	accordion: false,
+	selectableLevel: -1,
+	selectableLevelMessage: '',
 
 	placeholder: '请选择',
 	title: '请选择',
@@ -288,6 +299,9 @@ const props = withDefaults(defineProps<Props>(), {
 	showAddAction: true,
 	editActionText: '编辑',
 	addActionText: '新增',
+	editPath: '',
+	addPath: '',
+	editQueryKey: 'id',
 })
 
 const emit = defineEmits<{
@@ -351,6 +365,30 @@ function getNumberField(obj: UTSJSONObject, key: string) : number {
 	const value = obj[key]
 	if (value == null) return 0
 	return value as number
+}
+
+function getItemLevel(item: UTSJSONObject) : number {
+	const value = item['level']
+	if (value == null) return -1
+	if (typeof value == 'number') return value as number
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return -1
+	return parsed
+}
+
+function isItemSelectable(item: UTSJSONObject) : boolean {
+	if (props.selectableLevel < 0) return true
+	return getItemLevel(item) == props.selectableLevel
+}
+
+function showUnselectableMessage() {
+	const message = props.selectableLevelMessage
+	if (message != '') {
+		uni.showToast({
+			title: message,
+			icon: 'none',
+		})
+	}
 }
 
 function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
@@ -1054,13 +1092,62 @@ function handleOverlayClick() {
 	}
 }
 
+function appendQueryValue(url: string, key: string, value: string) : string {
+	if (value == '') return url
+	const separator = url.indexOf('?') >= 0 ? '&' : '?'
+	return url + separator + key + '=' + value
+}
+
+function navigateToActionPath(url: string) {
+	listLoaded.value = false
+	uni.navigateTo({
+		url: url,
+	})
+}
+
+function getActionAddPath() : string {
+	const value = props.addPath
+	if (value == null) return ''
+	return value
+}
+
+function getActionEditPath() : string {
+	const value = props.editPath
+	if (value == null) return ''
+	return value
+}
+
+function getActionEditQueryKey() : string {
+	const value = props.editQueryKey
+	if (value == null || value == '') return 'id'
+	return value
+}
+
 function handleEditAction() {
 	if (props.disabled) return
+	const editPath = getActionEditPath()
+	if (editPath != '') {
+		const value = internalValue.value
+		if (value == '') {
+			uni.showToast({
+				title: '请先选择要编辑的项目',
+				icon: 'none',
+			})
+			return
+		}
+		navigateToActionPath(appendQueryValue(editPath, getActionEditQueryKey(), value))
+		return
+	}
 	emit('edit')
 }
 
 function handleAddAction() {
 	if (props.disabled) return
+	const addPath = getActionAddPath()
+	if (addPath != '') {
+		navigateToActionPath(addPath)
+		return
+	}
 	emit('add')
 }
 
@@ -1191,6 +1278,10 @@ function toggleMultiItem(item: UTSJSONObject) {
 
 function onItemClick(item: UTSJSONObject) {
 	if (props.disabled) return
+	if (!isItemSelectable(item)) {
+		showUnselectableMessage()
+		return
+	}
 
 	if (props.multiple) {
 		toggleMultiItem(item)

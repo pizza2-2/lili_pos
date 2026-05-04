@@ -1,0 +1,408 @@
+import { request } from '../index.uts';
+export type PurchaseListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+    status: string | null;
+    receive_status: string | null;
+    supplier: string | null;
+    date_from: string | null;
+    date_to: string | null;
+    min_amount: string | null;
+    max_amount: string | null;
+};
+export type PurchaseItem = {
+    id: number;
+    purchase_number: string;
+    purchase_date: string;
+    status: string;
+    status_display: string;
+    shop: number;
+    shop_name: string;
+    supplier: number;
+    supplier_name: string;
+    total_quantity: number;
+    received_quantity: number;
+    total_amount: string;
+    receive_progress: string;
+    is_fully_received: boolean;
+    remark: string;
+    created_at: string;
+    updated_at: string;
+    items: UTSJSONObject[];
+};
+export type PurchaseListResponse = {
+    results: PurchaseItem[];
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+};
+export type PurchaseMutationData = {
+    purchase_date: string;
+    shop: string;
+    supplier: string;
+    remark: string | null;
+    items: UTSJSONObject[];
+};
+export type PurchaseOptionItem = {
+    value: string;
+    text: string;
+};
+export type PurchaseDetailItem = {
+    id: number;
+    purchase: number;
+    purchase_number: string;
+    product: number;
+    product_name: string;
+    product_sku: string;
+    product_barcode: string;
+    quantity: number;
+    unit_price: string;
+    amount: string;
+    received_quantity: number;
+    remaining_quantity: number;
+    receive_progress: string;
+    is_fully_received: boolean;
+    notes: string;
+    created_at: string;
+    updated_at: string;
+};
+export type PurchaseDetailListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+    purchase: string | null;
+    product: string | null;
+    is_fully_received: string | null;
+};
+export type PurchaseDetailListResponse = {
+    results: PurchaseDetailItem[];
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+};
+export type PurchaseDetailMutationData = {
+    purchase: string;
+    product: string;
+    quantity: string;
+    received_quantity: string | null;
+    notes: string | null;
+};
+function stringValue(value: any | null): string {
+    if (value == null)
+        return '';
+    return '' + value;
+}
+function intValue(value: any | null): number {
+    const parsed = parseInt(stringValue(value));
+    if (isNaN(parsed))
+        return 0;
+    return parsed;
+}
+function boolValue(value: any | null): boolean {
+    const text = stringValue(value).toLowerCase();
+    return text == 'true' || text == '1';
+}
+function parseObject(value: any | null): UTSJSONObject | null {
+    if (value == null)
+        return null;
+    const text = JSON.stringify(value);
+    if (text == null || text == '')
+        return null;
+    return JSON.parseObject<UTSJSONObject>(text);
+}
+function rawDataObject(raw: any): UTSJSONObject {
+    const rawObject = parseObject(raw);
+    if (rawObject == null)
+        throw new Error('采购接口响应解析失败');
+    const dataValue = rawObject['data'];
+    const dataObject = parseObject(dataValue);
+    if (dataObject != null)
+        return dataObject!;
+    return rawObject!;
+}
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+    if (value == null)
+        return [] as UTSJSONObject[];
+    const text = JSON.stringify(value);
+    if (text == null || text == '')
+        return [] as UTSJSONObject[];
+    const parsed = JSON.parseArray<UTSJSONObject>(text);
+    if (parsed == null)
+        return [] as UTSJSONObject[];
+    return parsed!;
+}
+function buildQuery(data: PurchaseListQuery): UTSJSONObject {
+    const query = { page: data.page, page_size: data.page_size } as UTSJSONObject;
+    if (data.search != null && data.search != '')
+        query['search'] = data.search;
+    if (data.status != null && data.status != '')
+        query['status'] = data.status;
+    if (data.receive_status != null && data.receive_status != '')
+        query['receive_status'] = data.receive_status;
+    if (data.supplier != null && data.supplier != '')
+        query['supplier'] = data.supplier;
+    if (data.date_from != null && data.date_from != '')
+        query['date_from'] = data.date_from;
+    if (data.date_to != null && data.date_to != '')
+        query['date_to'] = data.date_to;
+    if (data.min_amount != null && data.min_amount != '')
+        query['min_amount'] = data.min_amount;
+    if (data.max_amount != null && data.max_amount != '')
+        query['max_amount'] = data.max_amount;
+    return query;
+}
+function buildDetailQuery(data: PurchaseDetailListQuery): UTSJSONObject {
+    const query = { page: data.page, page_size: data.page_size } as UTSJSONObject;
+    if (data.search != null && data.search != '')
+        query['search'] = data.search;
+    if (data.purchase != null && data.purchase != '')
+        query['purchase'] = data.purchase;
+    if (data.product != null && data.product != '')
+        query['product'] = data.product;
+    if (data.is_fully_received != null && data.is_fully_received != '')
+        query['is_fully_received'] = data.is_fully_received;
+    return query;
+}
+function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
+    let shopName = stringValue(rawObject['shop_name']);
+    const shopInfo = parseObject(rawObject['shop_info']);
+    if (shopName == '' && shopInfo != null)
+        shopName = stringValue(shopInfo!['name']);
+    let supplierName = stringValue(rawObject['supplier_name']);
+    const supplierInfo = parseObject(rawObject['supplier_info']);
+    if (supplierName == '' && supplierInfo != null)
+        supplierName = stringValue(supplierInfo!['name']);
+    return {
+        id: intValue(rawObject['id']),
+        purchase_number: stringValue(rawObject['purchase_number']),
+        purchase_date: stringValue(rawObject['purchase_date']),
+        status: stringValue(rawObject['status']),
+        status_display: stringValue(rawObject['status_display']),
+        shop: intValue(rawObject['shop']),
+        shop_name: shopName,
+        supplier: intValue(rawObject['supplier']),
+        supplier_name: supplierName,
+        total_quantity: intValue(rawObject['total_quantity']),
+        received_quantity: intValue(rawObject['received_quantity']),
+        total_amount: stringValue(rawObject['total_amount']),
+        receive_progress: stringValue(rawObject['receive_progress']),
+        is_fully_received: boolValue(rawObject['is_fully_received']),
+        remark: stringValue(rawObject['remark']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+        items: parseObjectArray(rawObject['items']),
+    } as PurchaseItem;
+}
+function buildPurchaseDetailItem(rawObject: UTSJSONObject): PurchaseDetailItem {
+    return {
+        id: intValue(rawObject['id']),
+        purchase: intValue(rawObject['purchase']),
+        purchase_number: stringValue(rawObject['purchase_number']),
+        product: intValue(rawObject['product']),
+        product_name: stringValue(rawObject['product_name']),
+        product_sku: stringValue(rawObject['product_sku']),
+        product_barcode: stringValue(rawObject['product_barcode']),
+        quantity: intValue(rawObject['quantity']),
+        unit_price: stringValue(rawObject['unit_price']),
+        amount: stringValue(rawObject['amount']),
+        received_quantity: intValue(rawObject['received_quantity']),
+        remaining_quantity: intValue(rawObject['remaining_quantity']),
+        receive_progress: stringValue(rawObject['receive_progress']),
+        is_fully_received: boolValue(rawObject['is_fully_received']),
+        notes: stringValue(rawObject['notes']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+    } as PurchaseDetailItem;
+}
+function buildItems(value: any | null): PurchaseItem[] {
+    const rawArray = parseObjectArray(value);
+    const result: PurchaseItem[] = [];
+    for (let index = 0; index < rawArray.length; index += 1)
+        result.push(buildPurchaseItem(rawArray[index]));
+    return result;
+}
+function buildDetailItems(value: any | null): PurchaseDetailItem[] {
+    const rawArray = parseObjectArray(value);
+    const result: PurchaseDetailItem[] = [];
+    for (let index = 0; index < rawArray.length; index += 1)
+        result.push(buildPurchaseDetailItem(rawArray[index]));
+    return result;
+}
+function buildListResponse(raw: any, query: PurchaseListQuery): PurchaseListResponse {
+    const rawObject = rawDataObject(raw);
+    let paginationObject: UTSJSONObject | null = null;
+    const rawPagination = rawObject['pagination'];
+    if (rawPagination != null)
+        paginationObject = parseObject(rawPagination);
+    const results = buildItems(rawObject['results']);
+    let totalCount = intValue(rawObject['count']);
+    if (totalCount <= 0)
+        totalCount = intValue(rawObject['total_count']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['total']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['count']);
+    if (totalCount <= 0)
+        totalCount = results.length;
+    let currentPage = intValue(rawObject['current_page']);
+    if (currentPage <= 0)
+        currentPage = intValue(rawObject['page']);
+    if (currentPage <= 0 && paginationObject != null)
+        currentPage = intValue(paginationObject!['page']);
+    if (currentPage <= 0)
+        currentPage = query.page;
+    let pageSize = intValue(rawObject['page_size']);
+    if (pageSize <= 0 && paginationObject != null)
+        pageSize = intValue(paginationObject!['page_size']);
+    if (pageSize <= 0)
+        pageSize = query.page_size;
+    let totalPages = intValue(rawObject['total_pages']);
+    if (totalPages <= 0 && paginationObject != null)
+        totalPages = intValue(paginationObject!['total_pages']);
+    if (totalPages <= 0 && pageSize > 0)
+        totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 0)
+        totalPages = 1;
+    return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as PurchaseListResponse;
+}
+function buildDetailListResponse(raw: any, query: PurchaseDetailListQuery): PurchaseDetailListResponse {
+    const rawObject = rawDataObject(raw);
+    let paginationObject: UTSJSONObject | null = null;
+    const rawPagination = rawObject['pagination'];
+    if (rawPagination != null)
+        paginationObject = parseObject(rawPagination);
+    const results = buildDetailItems(rawObject['results']);
+    let totalCount = intValue(rawObject['count']);
+    if (totalCount <= 0)
+        totalCount = intValue(rawObject['total_count']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['total']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['count']);
+    if (totalCount <= 0)
+        totalCount = results.length;
+    let currentPage = intValue(rawObject['current_page']);
+    if (currentPage <= 0)
+        currentPage = intValue(rawObject['page']);
+    if (currentPage <= 0 && paginationObject != null)
+        currentPage = intValue(paginationObject!['page']);
+    if (currentPage <= 0)
+        currentPage = query.page;
+    let pageSize = intValue(rawObject['page_size']);
+    if (pageSize <= 0 && paginationObject != null)
+        pageSize = intValue(paginationObject!['page_size']);
+    if (pageSize <= 0)
+        pageSize = query.page_size;
+    let totalPages = intValue(rawObject['total_pages']);
+    if (totalPages <= 0 && paginationObject != null)
+        totalPages = intValue(paginationObject!['total_pages']);
+    if (totalPages <= 0 && pageSize > 0)
+        totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 0)
+        totalPages = 1;
+    return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as PurchaseDetailListResponse;
+}
+function mutationBody(data: PurchaseMutationData): UTSJSONObject {
+    const body = {
+        purchase_date: data.purchase_date,
+        shop: parseInt(data.shop),
+        supplier: parseInt(data.supplier),
+        remark: data.remark == null ? '' : data.remark,
+    } as UTSJSONObject;
+    if (data.items.length > 0)
+        body['items'] = data.items;
+    return body;
+}
+function updateMutationBody(data: PurchaseMutationData): UTSJSONObject {
+    return {
+        purchase_date: data.purchase_date,
+        supplier: parseInt(data.supplier),
+        remark: data.remark == null ? '' : data.remark,
+    } as UTSJSONObject;
+}
+function detailMutationBody(data: PurchaseDetailMutationData): UTSJSONObject {
+    const body = {
+        purchase: parseInt(data.purchase),
+        product: parseInt(data.product),
+        quantity: parseInt(data.quantity),
+        notes: data.notes == null ? '' : data.notes,
+    } as UTSJSONObject;
+    if (data.received_quantity != null && data.received_quantity != '')
+        body['received_quantity'] = parseInt(data.received_quantity!);
+    return body;
+}
+function detailPath(id: number | string): string {
+    return '/api/purchases/purchases/' + stringValue(id) + '/';
+}
+function purchaseDetailPath(id: number | string): string {
+    return '/api/purchases/purchase-details/' + stringValue(id) + '/';
+}
+export async function getPurchaseList(data: PurchaseListQuery): Promise<PurchaseListResponse> {
+    const raw = await request('/api/purchases/purchases/', 'GET', buildQuery(data), true);
+    return buildListResponse(raw, data);
+}
+export async function getPurchaseDetail(id: number | string): Promise<PurchaseItem> {
+    const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildPurchaseItem(rawDataObject(raw));
+}
+export async function getPurchaseDetailList(data: PurchaseDetailListQuery): Promise<PurchaseDetailListResponse> {
+    const raw = await request('/api/purchases/purchase-details/', 'GET', buildDetailQuery(data), true);
+    return buildDetailListResponse(raw, data);
+}
+export async function getPurchaseDetailItem(id: number | string): Promise<PurchaseDetailItem> {
+    const raw = await request(purchaseDetailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildPurchaseDetailItem(rawDataObject(raw));
+}
+export async function createPurchase(data: PurchaseMutationData): Promise<PurchaseItem> {
+    const raw = await request('/api/purchases/purchases/', 'POST', mutationBody(data), true);
+    return buildPurchaseItem(rawDataObject(raw));
+}
+export async function updatePurchase(id: number | string, data: PurchaseMutationData): Promise<PurchaseItem> {
+    const raw = await request(detailPath(id), 'PUT', updateMutationBody(data), true);
+    return buildPurchaseItem(rawDataObject(raw));
+}
+export async function createPurchaseDetail(data: PurchaseDetailMutationData): Promise<PurchaseDetailItem> {
+    const raw = await request('/api/purchases/purchase-details/', 'POST', detailMutationBody(data), true);
+    return buildPurchaseDetailItem(rawDataObject(raw));
+}
+export async function updatePurchaseDetail(id: number | string, data: PurchaseDetailMutationData): Promise<PurchaseDetailItem> {
+    const raw = await request(purchaseDetailPath(id), 'PUT', detailMutationBody(data), true);
+    return buildPurchaseDetailItem(rawDataObject(raw));
+}
+export function deletePurchase(id: number | string): Promise<any> {
+    return request(detailPath(id), 'DELETE', {} as UTSJSONObject, true);
+}
+export function deletePurchaseDetail(id: number | string): Promise<any> {
+    return request(purchaseDetailPath(id), 'DELETE', {} as UTSJSONObject, true);
+}
+export function runPurchaseAction(id: number | string, actionName: string): Promise<any> {
+    const body = { action: actionName } as UTSJSONObject;
+    if (actionName == 'cancel')
+        body['reason'] = '前端取消采购单';
+    return request(detailPath(id) + 'action_purchase/', 'POST', body, true);
+}
+export function receivePurchaseDetail(id: number | string, quantity: number, notes: string = ''): Promise<any> {
+    return request(purchaseDetailPath(id) + 'receive/', 'POST', { quantity: quantity, notes: notes } as UTSJSONObject, true);
+}
+export async function getPurchaseOptionList(path: string, search: string | null, labelField: string, extraLabelField: string = ''): Promise<PurchaseOptionItem[]> {
+    const query = { page: 1, page_size: 30 } as UTSJSONObject;
+    if (search != null && search != '')
+        query['search'] = search;
+    const raw = await request(path, 'GET', query, true);
+    const rawObject = rawDataObject(raw);
+    const rows = parseObjectArray(rawObject['results']);
+    const result: PurchaseOptionItem[] = [];
+    for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        let text = stringValue(row[labelField]);
+        const extra = stringValue(row[extraLabelField]);
+        if (extra != '')
+            text = text + ' / ' + extra;
+        result.push({ value: stringValue(row['id']), text: text } as PurchaseOptionItem);
+    }
+    return result;
+}
+//# sourceMappingURL=purchases.uts.map

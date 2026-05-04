@@ -1,0 +1,671 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="KSeF 发票"
+			searchPlaceholder="发票号、KSeF号、卖方"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+		>
+			<template #filter-panel>
+				<view class="filter-panel">
+					<text class="filter-title">同步状态</text>
+					<view class="filter-row">
+						<view :class="selectedSyncStatus == null ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus(null)">
+							<text :class="selectedSyncStatus == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">全部</text>
+						</view>
+						<view :class="selectedSyncStatus == 'METADATA_ONLY' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('METADATA_ONLY')">
+							<text :class="selectedSyncStatus == 'METADATA_ONLY' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">待详情</text>
+						</view>
+						<view :class="selectedSyncStatus == 'XML_DOWNLOADED' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('XML_DOWNLOADED')">
+							<text :class="selectedSyncStatus == 'XML_DOWNLOADED' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">已完成</text>
+						</view>
+						<view :class="selectedSyncStatus == 'SYNC_ERROR' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('SYNC_ERROR')">
+							<text :class="selectedSyncStatus == 'SYNC_ERROR' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">异常</text>
+						</view>
+					</view>
+					<view class="filter-actions">
+						<view class="filter-btn filter-btn-light" @click="handleFilterReset">
+							<text class="filter-btn-light-text">重置</text>
+						</view>
+						<view class="filter-btn filter-btn-primary" @click="applyFilter">
+							<text class="filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="status-card">
+					<view class="status-head">
+						<view>
+							<text class="status-title">自动同步</text>
+							<text class="status-subtitle">{{ autoSyncSubtitle }}</text>
+						</view>
+						<view class="sync-btn" @click="handleEnqueueAutoSync">
+							<text class="sync-btn-text">立即排队</text>
+						</view>
+					</view>
+					<view class="status-grid">
+						<view class="status-cell">
+							<text class="status-value">{{ pendingXmlText }}</text>
+							<text class="status-label">待详情</text>
+						</view>
+						<view class="status-cell">
+							<text class="status-value">{{ batchLimitText }}</text>
+							<text class="status-label">每批限制</text>
+						</view>
+						<view class="status-cell">
+							<text class="status-value">{{ lastSuccessText }}</text>
+							<text class="status-label">最近成功</text>
+						</view>
+					</view>
+					<text v-if="statusError != ''" class="status-error">{{ statusError }}</text>
+				</view>
+
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadInvoices">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="codeText"
+					metaField="metaText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载 KSeF 发票"
+					:keepContentOnLoading="true"
+					inlineLoadingText="KSeF 发票刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					:showFloatingAdd="false"
+					summaryTitle="KSeF 汇总"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@subtitle-click="handleSubtitleClick"
+					@field-click="handleFieldClick"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { downloadKsefInvoiceXml, enqueueKsefAutoSync, getKsefAutoSyncStatus, getKsefInvoiceList, KsefAutoSyncStatus, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef'
+
+const keyword = ref('')
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const statusError = ref('')
+const invoices = ref<KsefInvoiceItem[]>([])
+const status = ref<KsefAutoSyncStatus | null>(null)
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const selectedSyncStatus = ref<string | null>(null)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'seller_nip', label: '卖方NIP' } as UTSJSONObject,
+	{ key: 'gross_amount_text', label: '金额' } as UTSJSONObject,
+	{ key: 'sync_status_text', label: '详情状态' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'download_xml', text: '同步详情' } as UTSJSONObject,
+	{ key: 'copy_ksef', text: '复制KSeF号' } as UTSJSONObject,
+])
+
+function parseErrorMessage(error: any, fallback: string = '操作失败'): string {
+	let message = fallback
+	if (error != null) {
+		const text = JSON.stringify(error)
+		if (text != null && text != '') {
+			message = text
+		}
+	}
+	return message
+}
+
+function applyListResponse(response: KsefInvoiceListResponse) {
+	invoices.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadInvoices() {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getKsefInvoiceList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			sync_status: selectedSyncStatus.value,
+			is_paid: null,
+		})
+		applyListResponse(response)
+	} catch (error) {
+		invoices.value = [] as KsefInvoiceItem[]
+		errorMessage.value = parseErrorMessage(error, 'KSeF 发票加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+async function loadAutoSyncStatus() {
+	statusError.value = ''
+	try {
+		status.value = await getKsefAutoSyncStatus()
+	} catch (error) {
+		status.value = null
+		statusError.value = parseErrorMessage(error, '自动同步状态加载失败')
+	}
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadInvoices()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadInvoices()
+}
+
+function selectSyncStatus(value: string | null) {
+	selectedSyncStatus.value = value
+}
+
+function handleFilterReset() {
+	selectedSyncStatus.value = null
+	keyword.value = ''
+	currentPage.value = 1
+	filterVisible.value = false
+	loadInvoices()
+}
+
+function applyFilter() {
+	currentPage.value = 1
+	filterVisible.value = false
+	loadInvoices()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) {
+		return
+	}
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) {
+		return
+	}
+	currentPage.value = nextPage
+	loadInvoices()
+}
+
+function statusText(value: string): string {
+	if (value == 'XML_DOWNLOADED') return '已同步详情'
+	if (value == 'SYNC_ERROR') return '同步异常'
+	return '待同步详情'
+}
+
+function statusTag(value: string): string {
+	if (value == 'XML_DOWNLOADED') return '已完成'
+	if (value == 'SYNC_ERROR') return '异常'
+	return '待详情'
+}
+
+function compactDate(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	if (value.length >= 16) {
+		return value.substring(0, 16)
+	}
+	return value
+}
+
+function displayText(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	return value
+}
+
+function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
+	return {
+		id: item.id.toString(),
+		name: displayText(item.invoice_number),
+		codeText: 'KSeF：' + displayText(item.ksef_number),
+		metaText: compactDate(item.issue_date),
+		seller_name: displayText(item.seller_name),
+		seller_nip: displayText(item.seller_nip),
+		gross_amount_text: displayText(item.gross_amount) + ' ' + displayText(item.currency),
+		sync_status_text: statusText(item.sync_status),
+		rawId: item.id.toString(),
+		rawKsefNumber: item.ksef_number,
+		tags: [statusTag(item.sync_status)] as string[],
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+async function handleEnqueueAutoSync() {
+	try {
+		await enqueueKsefAutoSync()
+		uni.showToast({ title: takeLatestResponseMessage('已加入队列'), icon: 'success' })
+		loadAutoSyncStatus()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '任务加入队列失败'), icon: 'none' })
+	}
+}
+
+async function handleDownloadXml(invoiceId: string) {
+	try {
+		await downloadKsefInvoiceXml(invoiceId)
+		uni.showToast({ title: takeLatestResponseMessage('详情同步完成'), icon: 'success' })
+		loadInvoices()
+		loadAutoSyncStatus()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '详情同步失败'), icon: 'none' })
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) {
+		return
+	}
+	const actionObject = action as UTSJSONObject
+	const itemObject = item as UTSJSONObject
+	const keyValue = actionObject['key']
+	if (keyValue == null) {
+		return
+	}
+	const key = keyValue as string
+	const idValue = itemObject['rawId']
+	const invoiceId = idValue == null ? '' : (idValue as string)
+	if (key == 'download_xml') {
+		handleDownloadXml(invoiceId)
+		return
+	}
+	if (key == 'copy_ksef') {
+		const ksefValue = itemObject['rawKsefNumber']
+		const ksefText = ksefValue == null ? '' : (ksefValue as string)
+		copyText(ksefText, 'KSeF号已复制', '暂无KSeF号')
+	}
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) {
+		return
+	}
+	const itemObject = item as UTSJSONObject
+	const ksefValue = itemObject['rawKsefNumber']
+	const ksefText = ksefValue == null ? '' : (ksefValue as string)
+	copyText(ksefText, 'KSeF号已复制', '暂无KSeF号')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	const keyValue = payload['key']
+	if (item == null || keyValue == null) {
+		return
+	}
+	const key = keyValue as string
+	const itemObject = item as UTSJSONObject
+	if (key == 'seller_nip') {
+		const value = itemObject['seller_nip']
+		const text = value == null ? '' : (value as string)
+		copyText(text, '卖方NIP已复制', '暂无卖方NIP')
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < invoices.value.length; index += 1) {
+		result.push(invoiceToListItem(invoices.value[index]))
+	}
+	return result
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedSyncStatus.value != null
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (hasActiveFilter.value) return '没有匹配的 KSeF 发票'
+	return '暂无 KSeF 发票'
+})
+
+const pendingXmlText = computed((): string => {
+	if (status.value == null) return '-'
+	return status.value.pending_xml_count.toString()
+})
+
+const batchLimitText = computed((): string => {
+	if (status.value == null) return '-'
+	return status.value.xml_batch_size.toString() + '张/' + status.value.xml_delay_seconds.toString() + '秒'
+})
+
+const lastSuccessText = computed((): string => {
+	if (status.value == null) return '-'
+	return compactDate(status.value.last_success_at)
+})
+
+const autoSyncSubtitle = computed((): string => {
+	if (status.value == null) return '读取自动同步配置中'
+	if (!status.value.enabled) return '自动同步已关闭'
+	return '每 5 小时增量同步，详情分批自动回填'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '发票总数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'pending', label: '待详情', value: pendingXmlText.value } as UTSJSONObject,
+		{ key: 'last', label: '最近成功', value: lastSuccessText.value } as UTSJSONObject,
+	]
+})
+
+onLoad(() => {
+	loadAutoSyncStatus()
+	loadInvoices()
+})
+
+onShow(() => {
+	loadAutoSyncStatus()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+
+.status-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 14px;
+	margin-bottom: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+}
+
+.status-head {
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.status-title {
+	font-size: 17px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.status-subtitle {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 2px;
+}
+
+.sync-btn {
+	height: 36px;
+	padding-left: 14px;
+	padding-right: 14px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+}
+
+.sync-btn-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #FFFFFF;
+}
+
+.status-grid {
+	flex-direction: row;
+	margin-top: 12px;
+}
+
+.status-cell {
+	flex: 1;
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	padding-left: 8px;
+	padding-right: 8px;
+	margin-right: 6px;
+}
+
+.status-value {
+	font-size: 15px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.status-label {
+	font-size: 11px;
+	line-height: 16px;
+	color: #64748B;
+	margin-top: 2px;
+}
+
+.status-error {
+	font-size: 12px;
+	line-height: 18px;
+	color: #B42318;
+	margin-top: 8px;
+}
+
+.filter-panel {
+	padding-bottom: 8px;
+}
+
+.filter-title {
+	font-size: 14px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.filter-row {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.filter-chip {
+	height: 34px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.filter-chip-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.filter-chip-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #475569;
+}
+
+.filter-chip-text-active {
+	color: #FFFFFF;
+}
+
+.filter-actions {
+	flex-direction: row;
+	margin-top: 8px;
+}
+
+.filter-btn {
+	flex: 1;
+	height: 40px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.filter-btn-light {
+	background-color: #F3F6FA;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	margin-right: 8px;
+}
+
+.filter-btn-primary {
+	background-color: #0F172A;
+}
+
+.filter-btn-light-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #475569;
+}
+
+.filter-btn-primary-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 18px;
+	margin-bottom: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+</style>

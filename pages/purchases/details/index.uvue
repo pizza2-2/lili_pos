@@ -1,0 +1,339 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			searchPlaceholder="商品名、SKU、条码"
+			:searchValue="keyword"
+			:filterVisible="false"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/purchases/index"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadDetails"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载采购明细"
+					:keepContentOnLoading="true"
+					inlineLoadingText="采购明细刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="明细概览"
+					:summaryItems="summaryItems"
+					:showFloatingAdd="true"
+					floatingAddText="新增明细"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreate"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+
+const refreshStorageKey = 'refresh:pages:purchases:details:index'
+const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
+const purchaseId = ref('')
+const purchaseInfo = ref<PurchaseItem | null>(null)
+const keyword = ref('')
+const details = ref<PurchaseDetailItem[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const pageTotalAmount = ref('0.00')
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'skuText', label: 'SKU:' } as UTSJSONObject,
+	{ key: 'quantityText', label: '数量:' } as UTSJSONObject,
+	{ key: 'progressText', label: '收货:' } as UTSJSONObject,
+	{ key: 'notesText', label: '备注:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'receive', text: '收货' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+function applyResponse(response: PurchaseDetailListResponse) {
+	details.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+	let total = 0.0
+	for (let index = 0; index < response.results.length; index += 1) {
+		const amount = parseFloat(response.results[index].amount)
+		if (!isNaN(amount)) total = total + amount
+	}
+	pageTotalAmount.value = total.toFixed(2)
+}
+
+async function loadPurchaseInfo() {
+	if (purchaseId.value == '') return
+	try {
+		purchaseInfo.value = await getPurchaseDetail(purchaseId.value)
+	} catch (error) {
+	}
+}
+
+async function loadDetails() {
+	if (isLoading.value) return
+	if (purchaseId.value == '') {
+		errorMessage.value = '缺少采购单 ID'
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getPurchaseDetailList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			purchase: purchaseId.value,
+			product: null,
+			is_fully_received: null,
+		})
+		applyResponse(response)
+		await loadPurchaseInfo()
+	} catch (error) {
+		details.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		pageTotalAmount.value = '0.00'
+		errorMessage.value = parseErrorMessage(error, '采购明细加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function markRefreshNeeded() {
+	uni.setStorageSync(refreshStorageKey + ':' + purchaseId.value, '1')
+}
+
+function markPurchaseListRefreshNeeded() {
+	uni.setStorageSync(purchaseListRefreshStorageKey, '1')
+}
+
+function consumeRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(refreshStorageKey + ':' + purchaseId.value)
+	if (storedValue == null || ('' + storedValue) == '') return false
+	uni.removeStorageSync(refreshStorageKey + ':' + purchaseId.value)
+	return true
+}
+
+function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
+	const statusText = item.is_fully_received ? '已收齐' : '待收货'
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		title: stringValue(item.product_name, '商品 #' + item.product.toString()),
+		subtitle: '条码：' + stringValue(item.product_barcode, '-'),
+		amountText: '¥ ' + stringValue(item.amount, '0.00'),
+		skuText: stringValue(item.product_sku, '-'),
+		quantityText: item.received_quantity.toString() + '/' + item.quantity.toString() + '，剩余 ' + item.remaining_quantity.toString(),
+		progressText: stringValue(item.receive_progress, '0') + '%',
+		notesText: stringValue(item.notes, '-'),
+		tags: [statusText, '单价 ¥ ' + stringValue(item.unit_price, '0.00')] as string[],
+	} as UTSJSONObject
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadDetails() }
+function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadDetails() }
+function handleCreate(payload: UTSJSONObject) { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }) }
+
+function handleItemClick(payload: UTSJSONObject) {
+	const id = stringValue(payload['rawId'], stringValue(payload['id']))
+	if (id != '') uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + id })
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadDetails()
+}
+
+async function runDelete(id: string) {
+	try {
+		await deletePurchaseDetail(id)
+		markPurchaseListRefreshNeeded()
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
+		loadDetails()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+	}
+}
+
+function confirmDelete(id: string) {
+	uni.showModal({ title: '删除明细', content: '确定删除这条采购明细吗？', success: (res) => { if (res.confirm) runDelete(id) } })
+}
+
+async function runReceive(id: string, quantity: number) {
+	try {
+		await receivePurchaseDetail(id, quantity, '前端收货')
+		markPurchaseListRefreshNeeded()
+		uni.showToast({ title: takeLatestResponseMessage('收货成功'), icon: 'success' })
+		loadDetails()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '收货失败'), icon: 'none' })
+	}
+}
+
+function promptReceive(item: UTSJSONObject) {
+	const id = stringValue(item['rawId'])
+	const defaultValue = stringValue(item['remainingValue'], '1')
+	uni.showModal({
+		title: '采购收货',
+		editable: true,
+		placeholderText: '请输入本次数量',
+		content: defaultValue,
+		success: (res) => {
+			if (!res.confirm) return
+			const inputText = res.content == null ? defaultValue : ('' + res.content)
+			const quantity = parseInt(inputText)
+			if (isNaN(quantity) || quantity <= 0) {
+				uni.showToast({ title: '请输入有效收货数量', icon: 'none' })
+				return
+			}
+			runReceive(id, quantity)
+		},
+	})
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const itemObject = item as UTSJSONObject
+	const id = stringValue(itemObject['rawId'])
+	if (id == '') return
+	if (actionKey == 'edit') {
+		uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + id })
+		return
+	}
+	if (actionKey == 'receive') promptReceive(itemObject)
+	if (actionKey == 'delete') confirmDelete(id)
+}
+
+const pageTitle = computed((): string => {
+	if (purchaseInfo.value == null) return '采购单明细'
+	const info = purchaseInfo.value as PurchaseItem
+	return '明细 ' + info.purchase_number
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < details.value.length; index += 1) {
+		const row = detailToListItem(details.value[index])
+		row['remainingValue'] = details.value[index].remaining_quantity.toString()
+		result.push(row)
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的采购明细'
+	return '暂无采购明细'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '明细数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'amount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad((query: OnLoadOptions) => {
+	const purchaseValue = query['purchase']
+	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
+	loadDetails()
+})
+
+onShow(() => { if (consumeRefreshNeeded()) loadDetails() })
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

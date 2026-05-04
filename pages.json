@@ -128,6 +128,167 @@
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""
 			}
+		},
+		{
+			"path": "pages/products/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/pricing-formula",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/pricing-formula/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/pricing-formula/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/config-model/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/config-model/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/ksef/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/expenses/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/expenses/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/details/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/details/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/orders/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/orders/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-management/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-management/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-locations/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-locations/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-transfers/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-transfers/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-checks/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-checks/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
 		}
 	],
 	"globalStyle": {

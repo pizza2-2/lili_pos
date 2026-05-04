@@ -408,7 +408,7 @@ const __sfc__ = defineComponent({
                 uni.navigateBack({
                     delta: 1,
                     fail: () => {
-                        uni.reLaunch({
+                        uni.navigateTo({
                             url: '/pages/category/index',
                         });
                     },
@@ -546,8 +546,10 @@ const __sfc__ = defineComponent({
                         textKey: 'parent_text',
                         title: '选择父分类',
                         placeholder: '请选择父分类',
-                        showAddAction: false,
-                        showEditAction: false,
+                        showAddAction: true,
+                        showEditAction: true,
+                        addPath: '/pages/category/from',
+                        editPath: '/pages/category/from',
                         editOnly: true,
                         fetchData: fetchParentOptions,
                     } as UTSJSONObject,
@@ -574,8 +576,10 @@ const __sfc__ = defineComponent({
                         placeholder: '请选择收银分类',
                         searchPlaceholder: '请输入收银分类名称',
                         emptyText: '暂无收银分类',
-                        showAddAction: false,
-                        showEditAction: false,
+                        showAddAction: true,
+                        showEditAction: true,
+                        addPath: '/pages/kasa_category/form',
+                        editPath: '/pages/kasa_category/form',
                         fetchData: fetchKasaCategoryOptions,
                     } as UTSJSONObject,
                     {
@@ -627,18 +631,19 @@ const __sfc__ = defineComponent({
             const idValue = event['id'];
             const parentIdValue = event['parent_id'];
             const parentNameValue = event['parent_name'];
-            categoryId.value = idValue == null ? '' : (idValue as string);
-            if (modeValue != null && (modeValue as string) == 'edit' && categoryId.value != '') {
+            const modeText = modeValue == null ? '' : ('' + modeValue);
+            categoryId.value = idValue == null ? '' : ('' + idValue);
+            if (categoryId.value != '') {
                 operationMode.value = 'edit';
                 formMode.value = 'edit';
                 loadDetailData(categoryId.value);
                 return;
             }
-            if (modeValue != null && (modeValue as string) == 'add' && parentIdValue != null) {
+            if (modeText == 'add' && parentIdValue != null) {
                 operationMode.value = 'add';
                 formMode.value = 'create';
-                const parentIdText = parentIdValue as string;
-                const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent(parentNameValue as string), " at pages/category/from.uvue:708");
+                const parentIdText = '' + parentIdValue;
+                const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent('' + parentNameValue), " at pages/category/from.uvue:713");
                 parentInfo.value = {
                     id: parentIdText,
                     text: parentNameText == '' ? parentIdText : parentNameText,

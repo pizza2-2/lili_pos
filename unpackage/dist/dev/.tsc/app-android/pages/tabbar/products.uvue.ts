@@ -5,7 +5,7 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { request } from '@/pkg/api/index.uts'
 import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
 
-type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 164, 6>;
+type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 166, 6>;
 	value: string
 	text: string
 }
@@ -33,8 +33,7 @@ const filterOptions = ref<ProductFilterOptionsResponse | null>(null)
 const selectedFilters = ref<ProductSelectedFilter[]>([])
 const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
-const categoryFilterValue = ref('')
-const categoryFilterText = ref('')
+const categoryFilterValues = ref<string[]>([])
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 
@@ -61,6 +60,8 @@ const tagColorMap = ref<UTSJSONObject>({
 	热销: 'warning',
 })
 
+const productListRefreshStorageKey = 'refresh:pages:products:index'
+
 function applyProductResponse(response: ProductListResponse) {
 	products.value = response.results
 	currentPage.value = response.current_page
@@ -82,7 +83,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:233")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:236")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -175,7 +176,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 		return null
 	}
 
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:326")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:329")
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
@@ -188,7 +189,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 		return []
 	}
 
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:339")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:342")
 	if (parsed == null) {
 		return []
 	}
@@ -461,7 +462,23 @@ function buildTreeSelectItem(item: UTSJSONObject): UTSJSONObject {
 }
 
 function buildCategoryTreeResponse(raw: any): UTSJSONObject {
-	const source = extractCategoryTreeSource(raw)
+	let source = extractCategoryTreeSource(raw)
+
+	// 懒加载子节点时，API 返回扁平格式而非 groups 分组结构
+	if (source.length == 0) {
+		const rawObject = parseObject(raw)
+		if (rawObject != null) {
+			let items = parseObjectArray(rawObject['items'])
+			if (items.length == 0) {
+				items = parseObjectArray(rawObject['results'])
+			}
+			if (items.length == 0) {
+				items = parseObjectArray(rawObject['data'])
+			}
+			source = items
+		}
+	}
+
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		result.push(buildTreeSelectItem(source[index]))
@@ -486,15 +503,26 @@ async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const keywordValue = stringValue(params['keyword'])
 	const pageValue = stringValue(params['page'], '1')
+	const parentValue = stringValue(params['parent'])
+	const pageSizeValue = stringValue(params['pageSize'], '20')
+
+	const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 659, 8), 
+		key: 'parent',
+		page: parseInt(pageValue == '' ? '1' : pageValue),
+		page_size: parseInt(pageSizeValue),
+	} as UTSJSONObject
+
+	if (keywordValue != '') {
+		queryParams['search'] = keywordValue
+	}
+	if (parentValue != '') {
+		queryParams['parent'] = parentValue
+	}
+
 	const raw = await request(
 		'/api/categories/categories/options/',
 		'GET',
-		{
-			key: 'parent',
-			search: keywordValue == '' ? null : keywordValue,
-			page: pageValue == '' ? 1 : pageValue,
-			page_size: 200,
-		} as UTSJSONObject,
+		queryParams,
 		true
 	)
 	return buildCategoryTreeResponse(raw)
@@ -629,10 +657,13 @@ function handleSupplierFilterChange(payload: UTSJSONObject) {
 	setSelectedFilterValue('supplier', supplierFilterValue.value)
 }
 
-function handleCategoryFilterChange(payload: UTSJSONObject) {
-	categoryFilterValue.value = stringValue(payload['value'])
-	categoryFilterText.value = stringValue(payload['text'])
-	setSelectedFilterValue('category', categoryFilterValue.value)
+function handleCategoryMultiChange(payload: UTSJSONObject) {
+	const values = payload['values'] as string[] | null
+	const texts = payload['texts'] as string[] | null
+	if (values != null && texts != null) {
+		categoryFilterValues.value = values
+		setSelectedFilterValue('category', values.join(','))
+	}
 }
 
 function isFilterOptionSelected(param: string, value: string): boolean {
@@ -697,8 +728,7 @@ function handleFilterReset() {
 	selectedFilters.value = [] as ProductSelectedFilter[]
 	supplierFilterValue.value = ''
 	supplierFilterText.value = ''
-	categoryFilterValue.value = ''
-	categoryFilterText.value = ''
+	categoryFilterValues.value = []
 	keyword.value = ''
 	currentPage.value = 1
 	closeFilterDrawer()
@@ -782,15 +812,33 @@ function handleMenu(payload: UTSJSONObject) {
 		return
 	}
 	if (key == 'detail') {
-		uni.showToast({
-			title: '商品详情页待接入',
-			icon: 'none',
+		const rawId = stringValue(item['rawId'])
+		if (rawId == '') {
+			return
+		}
+		uni.navigateTo({
+			url: '/pages/products/from?id=' + rawId,
 		})
 		return
 	}
 	if (key == 'reload') {
 		loadProducts()
 	}
+}
+
+function handleFloatingAdd() {
+	uni.navigateTo({
+		url: '/pages/products/from',
+	})
+}
+
+function consumeProductListRefreshFlag(): boolean {
+	const storedValue = uni.getStorageSync(productListRefreshStorageKey)
+	const shouldRefresh = storedValue != null && stringValue(storedValue) == '1'
+	if (shouldRefresh) {
+		uni.removeStorageSync(productListRefreshStorageKey)
+	}
+	return shouldRefresh
 }
 
 const listItems = computed((): UTSJSONObject[] => {
@@ -882,6 +930,10 @@ onLoad(() => {
 
 onShow(() => {
 	updateFilterPanelLayout()
+	if (consumeProductListRefreshFlag()) {
+		loadProducts()
+		return
+	}
 	if (products.value.length == 0 && !isLoading.value) {
 		loadProducts()
 	}
@@ -942,19 +994,19 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
                 _cE("text", _uM({ class: "product-filter-select-title" }), "分类"),
                 _cE("view", _uM({ class: "product-filter-select-wrap" }), [
                   _cV(unref(liliBottomSelect), _uM({
-                    value: unref(categoryFilterValue),
-                    valueText: unref(categoryFilterText),
+                    values: unref(categoryFilterValues),
                     title: "选择分类",
                     placeholder: "请选择分类",
                     searchPlaceholder: "请输入分类名称",
                     emptyText: "暂无分类",
                     tree: true,
-                    expandOnClickNode: true,
+                    multiple: true,
+                    checkStrictly: false,
                     showAddAction: false,
                     showEditAction: false,
                     fetchData: fetchCategoryFilterOptions,
-                    onChange: handleCategoryFilterChange
-                  }), null, 8 /* PROPS */, ["value", "valueText"])
+                    onMultiChange: handleCategoryMultiChange
+                  }), null, 8 /* PROPS */, ["values"])
                 ])
               ]),
               isTrue(unref(filterOptionsLoading))
@@ -1066,13 +1118,15 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           summaryTitle: "商品概览",
           summaryItems: summaryItems.value,
           summaryCollapsedByDefault: true,
-          showFloatingAdd: false,
+          showFloatingAdd: true,
+          floatingAddText: "新增商品",
           onItemClick: handleItemClick,
           onSubtitleClick: handleSubtitleClick,
           onMetaClick: handleMetaClick,
           onFieldClick: handleFieldClick,
           onMenu: handleMenu,
-          onPageChange: handlePageChange
+          onPageChange: handlePageChange,
+          onFloatingAdd: handleFloatingAdd
         }), null, 8 /* PROPS */, ["items", "tagColorMap", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
       ])
     ], 4 /* STYLE */)

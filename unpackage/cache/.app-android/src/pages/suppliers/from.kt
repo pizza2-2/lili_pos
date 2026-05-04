@@ -14,7 +14,7 @@ import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
-import io.dcloud.uniapp.extapi.reLaunch as uni_reLaunch
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
@@ -191,7 +191,7 @@ open class GenPagesSuppliersFrom : BasePage {
                 leaveSignal.value = leaveSignal.value + 1
                 setTimeout(fun(){
                     uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
-                        uni_reLaunch(ReLaunchOptions(url = "/pages/suppliers/index"))
+                        uni_navigateTo(NavigateToOptions(url = "/pages/suppliers/index"))
                     }
                     ))
                 }

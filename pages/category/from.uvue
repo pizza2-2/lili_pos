@@ -462,7 +462,7 @@ function goBackToList(): void {
 		uni.navigateBack({
 			delta: 1,
 			fail: () => {
-				uni.reLaunch({
+				uni.navigateTo({
 					url: '/pages/category/index',
 				})
 			},
@@ -608,8 +608,10 @@ const formSections = ref<UTSJSONObject[]>([
 				textKey: 'parent_text',
 				title: '选择父分类',
 				placeholder: '请选择父分类',
-				showAddAction: false,
-				showEditAction: false,
+				showAddAction: true,
+				showEditAction: true,
+				addPath: '/pages/category/from',
+				editPath: '/pages/category/from',
 				editOnly: true,
 				fetchData: fetchParentOptions,
 			} as UTSJSONObject,
@@ -636,8 +638,10 @@ const formSections = ref<UTSJSONObject[]>([
 				placeholder: '请选择收银分类',
 				searchPlaceholder: '请输入收银分类名称',
 				emptyText: '暂无收银分类',
-				showAddAction: false,
-				showEditAction: false,
+				showAddAction: true,
+				showEditAction: true,
+				addPath: '/pages/kasa_category/form',
+				editPath: '/pages/kasa_category/form',
 				fetchData: fetchKasaCategoryOptions,
 			} as UTSJSONObject,
 			{
@@ -692,20 +696,21 @@ onLoad((event: OnLoadOptions) => {
 	const parentIdValue = event['parent_id']
 	const parentNameValue = event['parent_name']
 
-	categoryId.value = idValue == null ? '' : (idValue as string)
+	const modeText = modeValue == null ? '' : ('' + modeValue)
+	categoryId.value = idValue == null ? '' : ('' + idValue)
 
-	if (modeValue != null && (modeValue as string) == 'edit' && categoryId.value != '') {
+	if (categoryId.value != '') {
 		operationMode.value = 'edit'
 		formMode.value = 'edit'
 		loadDetailData(categoryId.value)
 		return
 	}
 
-	if (modeValue != null && (modeValue as string) == 'add' && parentIdValue != null) {
+	if (modeText == 'add' && parentIdValue != null) {
 		operationMode.value = 'add'
 		formMode.value = 'create'
-		const parentIdText = parentIdValue as string
-		const parentNameText = parentNameValue == null ? '' : decodeURIComponent(parentNameValue as string)
+		const parentIdText = '' + parentIdValue
+		const parentNameText = parentNameValue == null ? '' : decodeURIComponent('' + parentNameValue)
 		parentInfo.value = {
 			id: parentIdText,
 			text: parentNameText == '' ? parentIdText : parentNameText,

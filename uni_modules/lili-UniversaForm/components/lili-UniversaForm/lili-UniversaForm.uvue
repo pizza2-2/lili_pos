@@ -112,8 +112,16 @@
 									:valueKey="getBottomSelectValueKey(field)"
 									:pageSize="getBottomSelectPageSize(field)"
 									:searchDelay="getBottomSelectSearchDelay(field)"
+									:tree="getFieldTree(field)"
+									:childrenKey="getFieldChildrenKey(field)"
+									:expandOnClickNode="getFieldExpandOnClickNode(field)"
+									:selectableLevel="getFieldSelectableLevel(field)"
+									:selectableLevelMessage="getFieldSelectableLevelMessage(field)"
 									:showEditAction="showBottomSelectEdit(field)"
 									:showAddAction="showBottomSelectAdd(field)"
+									:addPath="getBottomSelectAddPath(field)"
+									:editPath="getBottomSelectEditPath(field)"
+									:editQueryKey="getBottomSelectEditQueryKey(field)"
 									:fetchData="getFieldFetchData(field)"
 									@change="handleBottomSelectChange(field, $event)"
 									@edit="handleBottomSelectEdit(field)"
@@ -569,8 +577,56 @@ function showBottomSelectAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAddAction', true)
 }
 
+function getFieldTree(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'tree', false)
+}
+
+function getFieldChildrenKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'childrenKey')
+	if (value != '') return value
+	return 'children'
+}
+
+function getFieldExpandOnClickNode(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'expandOnClickNode', false)
+}
+
+function getFieldSelectableLevel(field: UTSJSONObject) : number {
+	return getNumberField(field, 'selectableLevel', -1)
+}
+
+function getFieldSelectableLevelMessage(field: UTSJSONObject) : string {
+	return getStringField(field, 'selectableLevelMessage')
+}
+
 function getFieldFetchData(field: UTSJSONObject) : FetchDataFn {
 	return field['fetchData'] as FetchDataFn
+}
+
+function getBottomSelectAddPath(field: UTSJSONObject) : string {
+	return getStringField(field, 'addPath')
+}
+
+function getBottomSelectEditPath(field: UTSJSONObject) : string {
+	return getStringField(field, 'editPath')
+}
+
+function getBottomSelectEditQueryKey(field: UTSJSONObject) : string {
+	const value = getStringField(field, 'editQueryKey')
+	if (value != '') return value
+	return 'id'
+}
+
+function appendQueryValue(url: string, key: string, value: string) : string {
+	if (value == '') return url
+	const separator = url.indexOf('?') >= 0 ? '&' : '?'
+	return url + separator + key + '=' + value
+}
+
+function navigateToBottomSelectPath(url: string) {
+	uni.navigateTo({
+		url: url,
+	})
 }
 
 function getUploadAction(field: UTSJSONObject) : string {
@@ -779,6 +835,11 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 }
 
 function handleBottomSelectAdd(field: UTSJSONObject) {
+	const addPath = getBottomSelectAddPath(field)
+	if (addPath != '') {
+		navigateToBottomSelectPath(addPath)
+		return
+	}
 	emit('bottom-select-add', {
 		field: field,
 		key: getFieldKey(field),
@@ -788,6 +849,19 @@ function handleBottomSelectAdd(field: UTSJSONObject) {
 }
 
 function handleBottomSelectEdit(field: UTSJSONObject) {
+	const editPath = getBottomSelectEditPath(field)
+	if (editPath != '') {
+		const value = getStringFieldValue(field)
+		if (value == '') {
+			uni.showToast({
+				title: '请先选择要编辑的项目',
+				icon: 'none',
+			})
+			return
+		}
+		navigateToBottomSelectPath(appendQueryValue(editPath, getBottomSelectEditQueryKey(field), value))
+		return
+	}
 	emit('bottom-select-edit', {
 		field: field,
 		key: getFieldKey(field),

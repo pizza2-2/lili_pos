@@ -1,0 +1,371 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="价格计算公式"
+			searchPlaceholder="输入公式名称、编码、表达式"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadPricingFormulas">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="codeText"
+					metaField="statusText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载价格公式"
+					:keepContentOnLoading="true"
+					inlineLoadingText="价格公式刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="价格公式统计"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@item-click="handleItemClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreateFormula"
+				/>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+	ProductPricingFormulaItem,
+	ProductPricingFormulaListResponse,
+	getProductPricingFormulaList,
+} from '@/pkg/api/modules/products.uts'
+
+const pricingFormulaListRefreshStorageKey = 'refresh:pages:products:pricing-formula:index'
+
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const formulas = ref<ProductPricingFormulaItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'expression', label: '表达式' } as UTSJSONObject,
+	{ key: 'descriptionText', label: '说明' } as UTSJSONObject,
+	{ key: 'updatedText', label: '更新' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'copy-expression', text: '复制表达式' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+		}
+	}
+	return message
+}
+
+function applyFormulaResponse(response: ProductPricingFormulaListResponse) {
+	formulas.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadPricingFormulas() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getProductPricingFormulaList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+		})
+		applyFormulaResponse(response)
+	} catch (error) {
+		formulas.value = [] as ProductPricingFormulaItem[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '价格公式列表加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function formatDateText(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function formulaToListItem(item: ProductPricingFormulaItem): UTSJSONObject {
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		name: item.name,
+		codeText: '编码：' + stringValue(item.code, '-'),
+		statusText: item.is_active ? '启用' : '停用',
+		expression: stringValue(item.expression, '-'),
+		descriptionText: stringValue(item.description, '-'),
+		updatedText: formatDateText(item.updated_at),
+		tags: item.is_active ? ['启用'] : ['停用'],
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadPricingFormulas()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadPricingFormulas()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadPricingFormulas()
+}
+
+function openFormulaForm(id: string) {
+	if (id == '') {
+		uni.navigateTo({ url: '/pages/products/pricing-formula/from' })
+		return
+	}
+	uni.navigateTo({ url: '/pages/products/pricing-formula/from?id=' + id })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	const itemObject = item as UTSJSONObject
+	openFormulaForm(stringValue(itemObject['rawId']))
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const keyValue = payload['key']
+	const itemValue = payload['item']
+	if (keyValue == null || itemValue == null) return
+	const key = keyValue as string
+	const item = itemValue as UTSJSONObject
+	if (key == 'expression') {
+		copyText(stringValue(item['expression']), '表达式已复制', '暂无表达式')
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionObject = action as UTSJSONObject
+	const itemObject = item as UTSJSONObject
+	const key = stringValue(actionObject['key'])
+	const formulaId = stringValue(itemObject['rawId'])
+	if (key == 'edit') {
+		openFormulaForm(formulaId)
+		return
+	}
+	if (key == 'copy-expression') {
+		copyText(stringValue(itemObject['expression']), '表达式已复制', '暂无表达式')
+		return
+	}
+	if (key == 'reload') {
+		loadPricingFormulas()
+	}
+}
+
+function handleCreateFormula() {
+	openFormulaForm('')
+}
+
+function consumePricingFormulaListRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(pricingFormulaListRefreshStorageKey)
+	if (storedValue == null) return false
+	const storedText = '' + storedValue
+	if (storedText == '') return false
+	uni.removeStorageSync(pricingFormulaListRefreshStorageKey)
+	return true
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < formulas.value.length; index += 1) {
+		result.push(formulaToListItem(formulas.value[index]))
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的价格公式'
+	return '暂无价格公式'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	let activeCount = 0
+	for (let index = 0; index < formulas.value.length; index += 1) {
+		if (formulas.value[index].is_active) activeCount += 1
+	}
+	return [
+		{ key: 'total', label: '公式总数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'active', label: '当前页启用', value: activeCount.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => {
+	loadPricingFormulas()
+})
+
+onShow(() => {
+	if (consumePricingFormulaListRefreshNeeded()) {
+		loadPricingFormulas()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding-left: 18px;
+	padding-right: 18px;
+	padding-top: 18px;
+	padding-bottom: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+</style>

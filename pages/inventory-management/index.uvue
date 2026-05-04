@@ -1,0 +1,340 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="库存管理"
+			searchPlaceholder="商品名称、SKU、条码"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="inventory-filter-panel">
+					<view class="inventory-filter-actions">
+						<view class="inventory-filter-btn inventory-filter-btn-light" @click="handleFilterReset">
+							<text class="inventory-filter-btn-light-text">重置</text>
+						</view>
+						<view class="inventory-filter-btn inventory-filter-btn-primary" @click="applyFilter">
+							<text class="inventory-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+					<view class="inventory-filter-group">
+						<text class="inventory-filter-group-title">库存状态</text>
+						<view class="inventory-filter-options">
+							<view :class="selectedAlertStatus == null ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectFilterStatus(null)">
+								<text :class="selectedAlertStatus == null ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">全部</text>
+							</view>
+							<view :class="selectedAlertStatus == 'LOW_STOCK' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectFilterStatus('LOW_STOCK')">
+								<text :class="selectedAlertStatus == 'LOW_STOCK' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">低库存</text>
+							</view>
+							<view :class="selectedAlertStatus == 'OUT_OF_STOCK' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectFilterStatus('OUT_OF_STOCK')">
+								<text :class="selectedAlertStatus == 'OUT_OF_STOCK' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">缺货</text>
+							</view>
+							<view :class="selectedAlertStatus == 'NO_MOVEMENT' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectFilterStatus('NO_MOVEMENT')">
+								<text :class="selectedAlertStatus == 'NO_MOVEMENT' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">久未动</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="meta"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载库存"
+					:keepContentOnLoading="true"
+					inlineLoadingText="库存数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="库存概览"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					:showFloatingAdd="false"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@subtitle-click="handleSubtitleClick"
+					@field-click="handleFieldClick"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+
+const keyword = ref('')
+const refreshStorageKey = 'refresh:pages:inventory-management:index'
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const alertStatus = ref<string | null>(null)
+const selectedAlertStatus = ref<string | null>(null)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'quantity_text', label: '现存' } as UTSJSONObject,
+	{ key: 'available_text', label: '可用' } as UTSJSONObject,
+	{ key: 'alert_text', label: '状态' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'adjust-stock', text: '调整库存' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '') return fallback
+	return text
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function alertLabel(value: string): string {
+	if (value == 'LOW_STOCK') return '低库存'
+	if (value == 'OUT_OF_STOCK') return '缺货'
+	if (value == 'NO_MOVEMENT') return '久未动'
+	return '正常'
+}
+
+function applyListResponse(response: InventoryListResponse) {
+	items.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const query = {
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			status: null,
+			alert_status: alertStatus.value,
+			transaction_type: null,
+			location_type: null,
+			is_active: null,
+		} as InventoryListQuery
+		applyListResponse(await getInventoryStocks(query))
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '库存数据加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function selectAlertStatus(value: string | null) {
+	alertStatus.value = value
+	currentPage.value = 1
+	loadItems()
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadItems()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadItems()
+}
+
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+function handleFilterOpen() { selectedAlertStatus.value = alertStatus.value }
+function selectFilterStatus(value: string | null) { selectedAlertStatus.value = value }
+function handleFilterReset() {
+	selectedAlertStatus.value = null
+	alertStatus.value = null
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+function applyFilter() {
+	alertStatus.value = selectedAlertStatus.value
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadItems()
+}
+
+function stockItem(item: UTSJSONObject): UTSJSONObject {
+	const status = stringField(item, 'alert_status', 'NORMAL')
+	return {
+		id: stringField(item, 'id'),
+		rawId: stringField(item, 'id'),
+		name: stringField(item, 'product_name', '未命名商品'),
+		subtitle: 'SKU：' + stringField(item, 'product_sku', '-'),
+		meta: stringField(item, 'location_name', '-'),
+		quantity_text: stringField(item, 'quantity', '0'),
+		available_text: stringField(item, 'available_quantity', '0'),
+		alert_text: alertLabel(status),
+		tags: [alertLabel(status)] as string[],
+	} as UTSJSONObject
+}
+
+function openStockAdjust(id: string) {
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/inventory-management/from?id=' + id })
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringField(action as UTSJSONObject, 'key')
+	const itemObject = item as UTSJSONObject
+	const id = stringField(itemObject, 'rawId')
+	if (actionKey == 'adjust-stock') openStockAdjust(id)
+	else if (actionKey == 'reload') loadItems()
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	copyText(stringField(item as UTSJSONObject, 'subtitle'), '内容已复制', '暂无内容')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	const keyValue = payload['key']
+	if (item == null || keyValue == null) return
+	copyText(stringField(item as UTSJSONObject, keyValue as string), '内容已复制', '暂无内容')
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) result.push(stockItem(items.value[index]))
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的库存'
+	return '暂无库存'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '库存记录', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return alertStatus.value != null
+})
+
+onLoad(() => { loadItems() })
+onShow(() => {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag != null && flag != '') {
+		uni.removeStorageSync(refreshStorageKey)
+		loadItems()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.inventory-filter-panel { flex: 1; background-color: #FFFFFF; padding: 14px; }
+.inventory-filter-actions { flex-direction: row; justify-content: flex-end; margin-bottom: 12px; }
+.inventory-filter-btn { height: 38px; border-radius: 8px; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; margin-left: 8px; }
+.inventory-filter-btn-light { background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; }
+.inventory-filter-btn-primary { background-color: #0F172A; }
+.inventory-filter-btn-light-text { font-size: 14px; color: #334155; }
+.inventory-filter-btn-primary-text { font-size: 14px; color: #FFFFFF; }
+.inventory-filter-group { margin-top: 6px; }
+.inventory-filter-group-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.inventory-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 10px; }
+.inventory-filter-option { height: 34px; border-radius: 8px; padding-left: 12px; padding-right: 12px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 8px; margin-bottom: 8px; }
+.inventory-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.inventory-filter-option-text { font-size: 13px; color: #475569; }
+.inventory-filter-option-text-active { color: #FFFFFF; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

@@ -289,7 +289,7 @@ function goBackToList(): void {
 		uni.navigateBack({
 			delta: 1,
 			fail: () => {
-				uni.reLaunch({
+				uni.navigateTo({
 					url: '/pages/shop/index',
 				})
 			},
@@ -522,7 +522,7 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 			uni.navigateBack({
 				delta: 1,
 				fail: () => {
-					uni.reLaunch({
+					uni.navigateTo({
 						url: '/pages/shop/index',
 					})
 				},

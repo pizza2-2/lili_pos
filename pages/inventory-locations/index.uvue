@@ -1,0 +1,343 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="库存位置"
+			searchPlaceholder="库位名称、编码、地址"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="inventory-filter-panel">
+					<view class="inventory-filter-actions">
+						<view class="inventory-filter-btn inventory-filter-btn-light" @click="handleFilterReset">
+							<text class="inventory-filter-btn-light-text">重置</text>
+						</view>
+						<view class="inventory-filter-btn inventory-filter-btn-primary" @click="applyFilter">
+							<text class="inventory-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+					<view class="inventory-filter-group">
+						<text class="inventory-filter-group-title">位置类型</text>
+						<view class="inventory-filter-options">
+							<view :class="selectedLocationType == null ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectLocationType(null)">
+								<text :class="selectedLocationType == null ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">全部</text>
+							</view>
+							<view :class="selectedLocationType == 'SHOP' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectLocationType('SHOP')">
+								<text :class="selectedLocationType == 'SHOP' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">店铺</text>
+							</view>
+							<view :class="selectedLocationType == 'WAREHOUSE' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectLocationType('WAREHOUSE')">
+								<text :class="selectedLocationType == 'WAREHOUSE' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">仓库</text>
+							</view>
+							<view :class="selectedLocationType == 'TRANSIT' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectLocationType('TRANSIT')">
+								<text :class="selectedLocationType == 'TRANSIT' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">在途</text>
+							</view>
+							<view :class="selectedLocationType == 'SUPPLIER' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectLocationType('SUPPLIER')">
+								<text :class="selectedLocationType == 'SUPPLIER' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">供应商处</text>
+							</view>
+						</view>
+					</view>
+					<view class="inventory-filter-group">
+						<text class="inventory-filter-group-title">启用状态</text>
+						<view class="inventory-filter-options">
+							<view :class="selectedIsActive == null ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectActiveStatus(null)">
+								<text :class="selectedIsActive == null ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">全部</text>
+							</view>
+							<view :class="selectedIsActive == 'true' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectActiveStatus('true')">
+								<text :class="selectedIsActive == 'true' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">启用</text>
+							</view>
+							<view :class="selectedIsActive == 'false' ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'" @click="selectActiveStatus('false')">
+								<text :class="selectedIsActive == 'false' ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">停用</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="meta"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载库存位置"
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="位置概览"
+					:summaryItems="summaryItems"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@subtitle-click="handleSubtitleClick"
+					@field-click="handleFieldClick"
+					@floating-add="handleCreate"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getInventoryLocations, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+
+const keyword = ref('')
+const refreshStorageKey = 'refresh:pages:inventory-locations:index'
+const filterVisible = ref(false)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const locationTypeFilter = ref<string | null>(null)
+const isActiveFilter = ref<string | null>(null)
+const selectedLocationType = ref<string | null>(null)
+const selectedIsActive = ref<string | null>(null)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'typeText', label: '类型' } as UTSJSONObject,
+	{ key: 'stock_count', label: '库存数' } as UTSJSONObject,
+	{ key: 'address', label: '地址' } as UTSJSONObject,
+])
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '') return fallback
+	return text
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function locationTypeText(value: string): string {
+	if (value == 'SHOP') return '店铺'
+	if (value == 'WAREHOUSE') return '仓库'
+	if (value == 'TRANSIT') return '在途'
+	if (value == 'SUPPLIER') return '供应商处'
+	if (value == '') return '-'
+	return value
+}
+
+function activeStatusText(value: string): string {
+	if (value == 'true') return '启用'
+	if (value == 'false') return '停用'
+	return value
+}
+
+function applyListResponse(response: InventoryListResponse) {
+	items.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const query = { search: keyword.value == '' ? null : keyword.value, page: currentPage.value, page_size: pageSize.value, status: null, alert_status: null, transaction_type: null, location_type: locationTypeFilter.value, is_active: isActiveFilter.value } as InventoryListQuery
+		applyListResponse(await getInventoryLocations(query))
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '库存位置加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadItems() }
+function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadItems() }
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+function handleFilterOpen() {
+	selectedLocationType.value = locationTypeFilter.value
+	selectedIsActive.value = isActiveFilter.value
+}
+function selectLocationType(value: string | null) { selectedLocationType.value = value }
+function selectActiveStatus(value: string | null) { selectedIsActive.value = value }
+function handleFilterReset() {
+	selectedLocationType.value = null
+	selectedIsActive.value = null
+	locationTypeFilter.value = null
+	isActiveFilter.value = null
+	keyword.value = ''
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+function applyFilter() {
+	locationTypeFilter.value = selectedLocationType.value
+	isActiveFilter.value = selectedIsActive.value
+	currentPage.value = 1
+	filterVisible.value = false
+	loadItems()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadItems()
+}
+
+function locationItem(item: UTSJSONObject): UTSJSONObject {
+	const rawType = stringField(item, 'location_type')
+	let typeText = stringField(item, 'location_type_display')
+	if (typeText == '') typeText = locationTypeText(rawType)
+	const activeValue = stringField(item, 'is_active') == 'true' ? 'true' : 'false'
+	return {
+		id: stringField(item, 'id'),
+		rawId: stringField(item, 'id'),
+		name: stringField(item, 'name', '未命名库位'),
+		subtitle: '编码：' + stringField(item, 'code', '-'),
+		meta: stringField(item, 'shop_name', '-'),
+		typeText: typeText,
+		location_type: rawType,
+		address: stringField(item, 'address', '-'),
+		stock_count: stringField(item, 'stock_count', '0'),
+		tags: [typeText, activeStatusText(activeValue)] as string[],
+	} as UTSJSONObject
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null) return
+	const actionKey = stringField(action as UTSJSONObject, 'key')
+	if (actionKey == 'reload') loadItems()
+	else if (actionKey == 'edit' && item != null) uni.navigateTo({ url: '/pages/inventory-locations/from?id=' + stringField(item as UTSJSONObject, 'rawId') })
+}
+
+function handleCreate(payload: UTSJSONObject) {
+	uni.navigateTo({ url: '/pages/inventory-locations/from' })
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	copyText(stringField(item as UTSJSONObject, 'subtitle'), '编码已复制', '暂无编码')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	const keyValue = payload['key']
+	if (item == null || keyValue == null) return
+	copyText(stringField(item as UTSJSONObject, keyValue as string), '内容已复制', '暂无内容')
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) result.push(locationItem(items.value[index]))
+	return result
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || locationTypeFilter.value != null || isActiveFilter.value != null
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (hasActiveFilter.value) return '没有匹配的库存位置'
+	return '暂无库存位置'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '位置数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => { loadItems() })
+onShow(() => {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag != null && flag != '') {
+		uni.removeStorageSync(refreshStorageKey)
+		loadItems()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.inventory-filter-panel { background-color: #FFFFFF; padding: 14px; border-top-width: 1px; border-top-style: solid; border-top-color: #E5E7EB; }
+.inventory-filter-actions { flex-direction: row; justify-content: flex-end; margin-bottom: 14px; }
+.inventory-filter-btn { height: 36px; border-radius: 8px; padding-left: 16px; padding-right: 16px; align-items: center; justify-content: center; margin-left: 8px; }
+.inventory-filter-btn-light { background-color: #F3F4F6; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.inventory-filter-btn-primary { background-color: #0F172A; }
+.inventory-filter-btn-light-text { font-size: 14px; color: #374151; }
+.inventory-filter-btn-primary-text { font-size: 14px; color: #FFFFFF; }
+.inventory-filter-group { margin-bottom: 16px; }
+.inventory-filter-group-title { font-size: 14px; line-height: 20px; color: #111827; font-weight: bold; margin-bottom: 10px; }
+.inventory-filter-options { flex-direction: row; flex-wrap: wrap; }
+.inventory-filter-option { min-height: 34px; border-radius: 8px; padding-left: 12px; padding-right: 12px; margin-right: 8px; margin-bottom: 8px; align-items: center; justify-content: center; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.inventory-filter-option-active { background-color: #E0F2FE; border-color: #0284C7; }
+.inventory-filter-option-text { font-size: 13px; color: #4B5563; }
+.inventory-filter-option-text-active { color: #075985; font-weight: bold; }
+</style>

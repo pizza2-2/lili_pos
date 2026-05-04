@@ -1,0 +1,173 @@
+import { request } from '../index.uts'
+
+export type ReportPeriod = string
+
+export type ReportOverview = {
+	sales_amount: string
+	order_count: number
+	average_order_value: string
+	purchase_amount: string
+	expense_amount: string
+	arrears_amount: string
+	net_cashflow: string
+}
+
+export type ReportTrendItem = {
+	date: string
+	amount: string
+	order_count: number
+}
+
+export type ReportPaymentMethod = {
+	key: string
+	label: string
+	amount: string
+	count: number
+}
+
+export type ReportInventory = {
+	stock_item_count: number
+	total_quantity: number
+	available_quantity: number
+	low_stock_count: number
+	out_of_stock_count: number
+	no_movement_count: number
+	inventory_value: string
+}
+
+export type ReportAlert = {
+	level: string
+	label: string
+	value: number
+}
+
+export type DashboardReport = {
+	overview: ReportOverview
+	sales_trend: ReportTrendItem[]
+	payment_methods: ReportPaymentMethod[]
+	order_status: UTSJSONObject
+	inventory: ReportInventory
+	alerts: ReportAlert[]
+}
+
+function intValue(value: any | null): number {
+	if (value == null) return 0
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) return ''
+	return '' + value
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) return {} as UTSJSONObject
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	return parsed == null ? ({} as UTSJSONObject) : parsed!
+}
+
+function arrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text)
+	return parsed == null ? ([] as UTSJSONObject[]) : parsed!
+}
+
+function rawDataObject(raw: any): UTSJSONObject {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) throw new Error('报表接口响应解析失败')
+	const dataValue = rawObject!['data']
+	if (dataValue != null) {
+		const dataObject = objectValue(dataValue)
+		if (dataObject['overview'] != null) return dataObject
+	}
+	return rawObject!
+}
+
+function buildOverview(raw: UTSJSONObject): ReportOverview {
+	return {
+		sales_amount: stringValue(raw['sales_amount']),
+		order_count: intValue(raw['order_count']),
+		average_order_value: stringValue(raw['average_order_value']),
+		purchase_amount: stringValue(raw['purchase_amount']),
+		expense_amount: stringValue(raw['expense_amount']),
+		arrears_amount: stringValue(raw['arrears_amount']),
+		net_cashflow: stringValue(raw['net_cashflow']),
+	} as ReportOverview
+}
+
+function buildTrendItems(value: any | null): ReportTrendItem[] {
+	const rows = arrayValue(value)
+	const result: ReportTrendItem[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			date: stringValue(row['date']),
+			amount: stringValue(row['amount']),
+			order_count: intValue(row['order_count']),
+		} as ReportTrendItem)
+	}
+	return result
+}
+
+function buildPaymentMethods(value: any | null): ReportPaymentMethod[] {
+	const rows = arrayValue(value)
+	const result: ReportPaymentMethod[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			key: stringValue(row['key']),
+			label: stringValue(row['label']),
+			amount: stringValue(row['amount']),
+			count: intValue(row['count']),
+		} as ReportPaymentMethod)
+	}
+	return result
+}
+
+function buildInventory(raw: UTSJSONObject): ReportInventory {
+	return {
+		stock_item_count: intValue(raw['stock_item_count']),
+		total_quantity: intValue(raw['total_quantity']),
+		available_quantity: intValue(raw['available_quantity']),
+		low_stock_count: intValue(raw['low_stock_count']),
+		out_of_stock_count: intValue(raw['out_of_stock_count']),
+		no_movement_count: intValue(raw['no_movement_count']),
+		inventory_value: stringValue(raw['inventory_value']),
+	} as ReportInventory
+}
+
+function buildAlerts(value: any | null): ReportAlert[] {
+	const rows = arrayValue(value)
+	const result: ReportAlert[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			level: stringValue(row['level']),
+			label: stringValue(row['label']),
+			value: intValue(row['value']),
+		} as ReportAlert)
+	}
+	return result
+}
+
+export function buildDashboardReport(raw: any): DashboardReport {
+	const rawObject = rawDataObject(raw)
+	return {
+		overview: buildOverview(objectValue(rawObject['overview'])),
+		sales_trend: buildTrendItems(rawObject['sales_trend']),
+		payment_methods: buildPaymentMethods(rawObject['payment_methods']),
+		order_status: objectValue(rawObject['order_status']),
+		inventory: buildInventory(objectValue(rawObject['inventory'])),
+		alerts: buildAlerts(rawObject['alerts']),
+	} as DashboardReport
+}
+
+export async function getDashboardReport(period: ReportPeriod): Promise<DashboardReport> {
+	const raw = await request('/api/reports/dashboard/', 'GET', { period: period } as UTSJSONObject, true)
+	return buildDashboardReport(raw)
+}

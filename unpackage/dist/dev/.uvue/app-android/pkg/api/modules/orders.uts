@@ -1,0 +1,233 @@
+import { request } from '../index.uts';
+export type OrderListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+    status: string | null;
+    payment_method: string | null;
+    inventory_deducted: string | null;
+    date_from: string | null;
+    date_to: string | null;
+};
+export type OrderItem = {
+    id: number;
+    shop: number;
+    shop_name: string;
+    order_number: string;
+    payload: UTSJSONObject;
+    cashier_id: string;
+    kasa_number: string;
+    payment_method: string;
+    payment_method_display: string;
+    subtotal: string;
+    discount_amount: string;
+    tax_amount: string;
+    total_amount: string;
+    order_time: string;
+    status: string;
+    status_display: string;
+    error_message: string;
+    inventory_deducted: boolean;
+    inventory_deduct_time: string;
+    inventory_deduct_error: string;
+    created_at: string;
+    updated_at: string;
+    item_count: number;
+    quantity_count: number;
+};
+export type OrderListResponse = {
+    results: OrderItem[];
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+};
+export type OrderStatistics = {
+    total_count: number;
+    inventory_deducted_count: number;
+    inventory_pending_count: number;
+    received_count: number;
+    processed_count: number;
+    failed_count: number;
+};
+function stringValue(value: any | null): string {
+    if (value == null)
+        return '';
+    return '' + value;
+}
+function intValue(value: any | null): number {
+    const parsed = parseInt(stringValue(value));
+    if (isNaN(parsed))
+        return 0;
+    return parsed;
+}
+function boolValue(value: any | null): boolean {
+    const text = stringValue(value).toLowerCase();
+    return text == 'true' || text == '1' || text == 'yes';
+}
+function parseObject(value: any | null): UTSJSONObject | null {
+    if (value == null)
+        return null;
+    const text = JSON.stringify(value);
+    if (text == null || text == '')
+        return null;
+    return JSON.parseObject<UTSJSONObject>(text);
+}
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+    if (value == null)
+        return [] as UTSJSONObject[];
+    const text = JSON.stringify(value);
+    if (text == null || text == '')
+        return [] as UTSJSONObject[];
+    const parsed = JSON.parseArray<UTSJSONObject>(text);
+    if (parsed == null)
+        return [] as UTSJSONObject[];
+    return parsed!;
+}
+function rawDataObject(raw: any): UTSJSONObject {
+    const rawObject = parseObject(raw);
+    if (rawObject == null)
+        throw new Error('订单接口响应解析失败');
+    const dataObject = parseObject(rawObject['data']);
+    if (dataObject != null)
+        return dataObject!;
+    return rawObject!;
+}
+function buildQuery(data: OrderListQuery): UTSJSONObject {
+    const query = { page: data.page, page_size: data.page_size } as UTSJSONObject;
+    if (data.search != null && data.search != '')
+        query['search'] = data.search;
+    if (data.status != null && data.status != '')
+        query['status'] = data.status;
+    if (data.payment_method != null && data.payment_method != '')
+        query['payment_method'] = data.payment_method;
+    if (data.inventory_deducted != null && data.inventory_deducted != '')
+        query['inventory_deducted'] = data.inventory_deducted;
+    if (data.date_from != null && data.date_from != '')
+        query['date_from'] = data.date_from;
+    if (data.date_to != null && data.date_to != '')
+        query['date_to'] = data.date_to;
+    return query;
+}
+function getPayloadItems(payload: UTSJSONObject): UTSJSONObject[] {
+    let rows = parseObjectArray(payload['items']);
+    if (rows.length > 0)
+        return rows;
+    rows = parseObjectArray(payload['products']);
+    if (rows.length > 0)
+        return rows;
+    rows = parseObjectArray(payload['cart']);
+    return rows;
+}
+function getPayloadQuantity(items: UTSJSONObject[]): number {
+    let total = 0;
+    for (let index = 0; index < items.length; index += 1) {
+        const quantity = intValue(items[index]['quantity']);
+        if (quantity > 0)
+            total = total + quantity;
+    }
+    return total;
+}
+function buildOrderItem(rawObject: UTSJSONObject): OrderItem {
+    const payload = parseObject(rawObject['payload']);
+    const payloadObject = payload == null ? ({} as UTSJSONObject) : payload!;
+    const payloadItems = getPayloadItems(payloadObject);
+    return {
+        id: intValue(rawObject['id']),
+        shop: intValue(rawObject['shop']),
+        shop_name: stringValue(rawObject['shop_name']),
+        order_number: stringValue(rawObject['order_number']),
+        payload: payloadObject,
+        cashier_id: stringValue(rawObject['cashier_id']),
+        kasa_number: stringValue(rawObject['kasa_number']),
+        payment_method: stringValue(rawObject['payment_method']),
+        payment_method_display: stringValue(rawObject['payment_method_display']),
+        subtotal: stringValue(rawObject['subtotal']),
+        discount_amount: stringValue(rawObject['discount_amount']),
+        tax_amount: stringValue(rawObject['tax_amount']),
+        total_amount: stringValue(rawObject['total_amount']),
+        order_time: stringValue(rawObject['order_time']),
+        status: stringValue(rawObject['status']),
+        status_display: stringValue(rawObject['status_display']),
+        error_message: stringValue(rawObject['error_message']),
+        inventory_deducted: boolValue(rawObject['inventory_deducted']),
+        inventory_deduct_time: stringValue(rawObject['inventory_deduct_time']),
+        inventory_deduct_error: stringValue(rawObject['inventory_deduct_error']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+        item_count: payloadItems.length,
+        quantity_count: getPayloadQuantity(payloadItems),
+    } as OrderItem;
+}
+function buildItems(value: any | null): OrderItem[] {
+    const rawArray = parseObjectArray(value);
+    const result: OrderItem[] = [];
+    for (let index = 0; index < rawArray.length; index += 1)
+        result.push(buildOrderItem(rawArray[index]));
+    return result;
+}
+function buildListResponse(raw: any, query: OrderListQuery): OrderListResponse {
+    const rawObject = rawDataObject(raw);
+    let paginationObject: UTSJSONObject | null = null;
+    const rawPagination = rawObject['pagination'];
+    if (rawPagination != null)
+        paginationObject = parseObject(rawPagination);
+    const results = buildItems(rawObject['results']);
+    let totalCount = intValue(rawObject['count']);
+    if (totalCount <= 0)
+        totalCount = intValue(rawObject['total_count']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['total']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['count']);
+    if (totalCount <= 0)
+        totalCount = results.length;
+    let currentPage = intValue(rawObject['current_page']);
+    if (currentPage <= 0)
+        currentPage = intValue(rawObject['page']);
+    if (currentPage <= 0 && paginationObject != null)
+        currentPage = intValue(paginationObject!['page']);
+    if (currentPage <= 0)
+        currentPage = query.page;
+    let pageSize = intValue(rawObject['page_size']);
+    if (pageSize <= 0 && paginationObject != null)
+        pageSize = intValue(paginationObject!['page_size']);
+    if (pageSize <= 0)
+        pageSize = query.page_size;
+    let totalPages = intValue(rawObject['total_pages']);
+    if (totalPages <= 0 && paginationObject != null)
+        totalPages = intValue(paginationObject!['total_pages']);
+    if (totalPages <= 0 && pageSize > 0)
+        totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 0)
+        totalPages = 1;
+    return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as OrderListResponse;
+}
+function buildStatistics(raw: any): OrderStatistics {
+    const rawObject = rawDataObject(raw);
+    const statusDistribution = parseObject(rawObject['status_distribution']);
+    return {
+        total_count: intValue(rawObject['total_count']),
+        inventory_deducted_count: intValue(rawObject['inventory_deducted_count']),
+        inventory_pending_count: intValue(rawObject['inventory_pending_count']),
+        received_count: statusDistribution == null ? 0 : intValue(statusDistribution!['已接收']),
+        processed_count: statusDistribution == null ? 0 : intValue(statusDistribution!['已处理']),
+        failed_count: statusDistribution == null ? 0 : intValue(statusDistribution!['处理失败']),
+    } as OrderStatistics;
+}
+function detailPath(id: number | string): string {
+    return '/api/orders/orders/' + stringValue(id) + '/';
+}
+export async function getOrderList(data: OrderListQuery): Promise<OrderListResponse> {
+    const raw = await request('/api/orders/orders/', 'GET', buildQuery(data), true);
+    return buildListResponse(raw, data);
+}
+export async function getOrderDetail(id: number | string): Promise<OrderItem> {
+    const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildOrderItem(rawDataObject(raw));
+}
+export async function getOrderStatistics(data: OrderListQuery): Promise<OrderStatistics> {
+    const raw = await request('/api/orders/orders/statistics/', 'GET', buildQuery(data), true);
+    return buildStatistics(raw);
+}
+//# sourceMappingURL=orders.uts.map

@@ -76,6 +76,12 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	 */
 	accordion?: boolean
 
+	/**
+	 * 单选/多选允许选择的树层级，-1 表示不限制
+	 */
+	selectableLevel?: number
+	selectableLevelMessage?: string
+
 	placeholder?: string
 	title?: string
 	searchPlaceholder?: string
@@ -90,6 +96,9 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	showAddAction?: boolean
 	editActionText?: string
 	addActionText?: string
+	editPath?: string
+	addPath?: string
+	editQueryKey?: string
 }
 
 
@@ -107,6 +116,8 @@ const __sfc__ = defineComponent({
     expandOnClickNode: { type: Boolean, required: false, default: false },
     checkStrictly: { type: Boolean, required: false, default: true },
     accordion: { type: Boolean, required: false, default: false },
+    selectableLevel: { type: Number, required: false, default: -1 },
+    selectableLevelMessage: { type: String, required: false, default: '' },
     placeholder: { type: String, required: false, default: '请选择' },
     title: { type: String, required: false, default: '请选择' },
     searchPlaceholder: { type: String, required: false, default: '请输入关键词搜索' },
@@ -120,7 +131,10 @@ const __sfc__ = defineComponent({
     showEditAction: { type: Boolean, required: false, default: true },
     showAddAction: { type: Boolean, required: false, default: true },
     editActionText: { type: String, required: false, default: '编辑' },
-    addActionText: { type: String, required: false, default: '新增' }
+    addActionText: { type: String, required: false, default: '新增' },
+    editPath: { type: String, required: false, default: '' },
+    addPath: { type: String, required: false, default: '' },
+    editQueryKey: { type: String, required: false, default: 'id' }
   },
   emits: ["change", "multiChange", "open", "close", "edit", "add"],
   setup(__props, __setupCtx: SetupContext) {
@@ -189,6 +203,30 @@ function getNumberField(obj: UTSJSONObject, key: string) : number {
 	return value as number
 }
 
+function getItemLevel(item: UTSJSONObject) : number {
+	const value = item['level']
+	if (value == null) return -1
+	if (typeof value == 'number') return value as number
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return -1
+	return parsed
+}
+
+function isItemSelectable(item: UTSJSONObject) : boolean {
+	if (props.selectableLevel < 0) return true
+	return getItemLevel(item) == props.selectableLevel
+}
+
+function showUnselectableMessage() {
+	const message = props.selectableLevelMessage
+	if (message != '') {
+		uni.showToast({
+			title: message,
+			icon: 'none',
+		})
+	}
+}
+
 function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
 	const value = obj[key]
 	if (value == null) return []
@@ -210,7 +248,7 @@ function getBooleanField(obj: UTSJSONObject, key: string) : boolean {
 }
 
 function cloneItem(item: UTSJSONObject) : UTSJSONObject {
-	const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 377, 8), } as UTSJSONObject
+	const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 415, 8), } as UTSJSONObject
 	for (const key in item) {
 		next[key] = item[key]
 	}
@@ -229,7 +267,7 @@ function hasTreeChildren(item: UTSJSONObject) : boolean {
 }
 
 function buildFetchParams(page: number, keywordValue: string, id: string, parent: string = '') : UTSJSONObject {
-	const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 396, 8), 
+	const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 434, 8), 
 		page: page,
 		pageSize: props.pageSize,
 		keyword: keywordValue,
@@ -545,7 +583,7 @@ async function ensureTreeChildrenLoaded(item: UTSJSONObject) : Promise<void> {
 		const children = getListField(res, 'data')
 		displayList.value = replaceTreeChildren(displayList.value, parentValue, children)
 	} catch (e) {
-		console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:712")
+		console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:750")
 		uni.showToast({ title: '子节点加载失败', icon: 'none' })
 	} finally {
 		removeLoadingChildKey(parentValue)
@@ -722,7 +760,7 @@ async function loadData(isReset: boolean) {
 		}
 	} catch (e) {
 		if (seq != requestSeq) return
-		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:889")
+		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:927")
 		uni.showToast({ title: '数据加载失败', icon: 'none' })
 	} finally {
 		if (seq == requestSeq) {
@@ -744,7 +782,7 @@ async function fetchTextByValue(value: string) {
 			textInitialized.value = true
 		}
 	} catch (e) {
-		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:911")
+		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:949")
 	}
 }
 
@@ -890,13 +928,62 @@ function handleOverlayClick() {
 	}
 }
 
+function appendQueryValue(url: string, key: string, value: string) : string {
+	if (value == '') return url
+	const separator = url.indexOf('?') >= 0 ? '&' : '?'
+	return url + separator + key + '=' + value
+}
+
+function navigateToActionPath(url: string) {
+	listLoaded.value = false
+	uni.navigateTo({
+		url: url,
+	})
+}
+
+function getActionAddPath() : string {
+	const value = props.addPath
+	if (value == null) return ''
+	return value
+}
+
+function getActionEditPath() : string {
+	const value = props.editPath
+	if (value == null) return ''
+	return value
+}
+
+function getActionEditQueryKey() : string {
+	const value = props.editQueryKey
+	if (value == null || value == '') return 'id'
+	return value
+}
+
 function handleEditAction() {
 	if (props.disabled) return
+	const editPath = getActionEditPath()
+	if (editPath != '') {
+		const value = internalValue.value
+		if (value == '') {
+			uni.showToast({
+				title: '请先选择要编辑的项目',
+				icon: 'none',
+			})
+			return
+		}
+		navigateToActionPath(appendQueryValue(editPath, getActionEditQueryKey(), value))
+		return
+	}
 	emit('edit')
 }
 
 function handleAddAction() {
 	if (props.disabled) return
+	const addPath = getActionAddPath()
+	if (addPath != '') {
+		navigateToActionPath(addPath)
+		return
+	}
 	emit('add')
 }
 
@@ -1027,6 +1114,10 @@ function toggleMultiItem(item: UTSJSONObject) {
 
 function onItemClick(item: UTSJSONObject) {
 	if (props.disabled) return
+	if (!isItemSelectable(item)) {
+		showUnselectableMessage()
+		return
+	}
 
 	if (props.multiple) {
 		toggleMultiItem(item)

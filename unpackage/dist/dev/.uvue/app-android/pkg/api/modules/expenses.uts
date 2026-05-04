@@ -1,0 +1,342 @@
+import { baseUrl, request } from '../index.uts';
+export type ExpenseListQuery = {
+    search: string | null;
+    page: number;
+    page_size: number;
+    expenditure_type: string | null;
+    expenditure_type_id: string | null;
+    supplier: string | null;
+    supplier_id: string | null;
+    date_from: string | null;
+    date_to: string | null;
+    amount_min: string | null;
+    amount_max: string | null;
+};
+export type ExpenseMediaFile = {
+    id: string;
+    company: number;
+    original_filename: string;
+    file_type: string;
+    file_type_display: string;
+    mime_type: string;
+    file_size: number;
+    file_size_display: string;
+    file_url: string;
+    thumbnail_url: string;
+    signed_url: string;
+    signed_thumbnail_url: string;
+    object_id: string;
+    is_deleted: boolean;
+    created_at: string;
+    updated_at: string;
+};
+export type ExpenseItem = {
+    id: number;
+    expenditure_type: number;
+    expenditure_type_name: string;
+    amount: string;
+    expenditure_date: string;
+    invoice_number: string | null;
+    supplier: number;
+    supplier_name: string;
+    description: string | null;
+    note: string | null;
+    media_files: ExpenseMediaFile[];
+    files_count: number;
+    is_deleted: boolean;
+    created_at: string;
+    updated_at: string;
+};
+export type ExpenseListResponse = {
+    results: ExpenseItem[];
+    count: number;
+    total_count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+    summary: UTSJSONObject | null;
+};
+export type ExpenseOptionItem = {
+    value: string;
+    label: string;
+    extra: UTSJSONObject;
+};
+export type ExpenseOptionGroup = {
+    key: string;
+    label: string;
+    control: string;
+    count: number;
+    items: ExpenseOptionItem[];
+};
+export type ExpenseOptionsResponse = {
+    resource: string;
+    total_groups: number;
+    groups: ExpenseOptionGroup[];
+};
+export type ExpenseMutationData = {
+    expenditure_type_id: string | null;
+    supplier_id: string | null;
+    amount: string;
+    expenditure_date: string;
+    invoice_number: string | null;
+    description: string | null;
+    note: string | null;
+};
+function normalizeServerUrl(url: string): string {
+    if (url == '')
+        return '';
+    if (url.startsWith('http://localhost:8000'))
+        return baseUrl + url.substring('http://localhost:8000'.length);
+    if (url.startsWith('https://localhost:8000'))
+        return baseUrl + url.substring('https://localhost:8000'.length);
+    if (url.startsWith('http://127.0.0.1:8000'))
+        return baseUrl + url.substring('http://127.0.0.1:8000'.length);
+    if (url.startsWith('https://127.0.0.1:8000'))
+        return baseUrl + url.substring('https://127.0.0.1:8000'.length);
+    return url;
+}
+function intValue(value: any | null): number {
+    if (value == null)
+        return 0;
+    const parsed = parseInt('' + value);
+    if (isNaN(parsed))
+        return 0;
+    return parsed;
+}
+function stringValue(value: any | null): string {
+    if (value == null)
+        return '';
+    return '' + value;
+}
+function boolValue(value: any | null): boolean {
+    return stringValue(value) == 'true';
+}
+function buildExpenseListQuery(data: ExpenseListQuery): UTSJSONObject {
+    const query = { page: data.page, page_size: data.page_size } as UTSJSONObject;
+    if (data.search != null && data.search != '')
+        query['search'] = data.search;
+    if (data.expenditure_type != null && data.expenditure_type != '')
+        query['expenditure_type'] = data.expenditure_type;
+    if (data.expenditure_type_id != null && data.expenditure_type_id != '')
+        query['expenditure_type_id'] = data.expenditure_type_id;
+    if (data.supplier != null && data.supplier != '')
+        query['supplier'] = data.supplier;
+    if (data.supplier_id != null && data.supplier_id != '')
+        query['supplier_id'] = data.supplier_id;
+    if (data.date_from != null && data.date_from != '')
+        query['date_from'] = data.date_from;
+    if (data.date_to != null && data.date_to != '')
+        query['date_to'] = data.date_to;
+    if (data.amount_min != null && data.amount_min != '')
+        query['amount_min'] = data.amount_min;
+    if (data.amount_max != null && data.amount_max != '')
+        query['amount_max'] = data.amount_max;
+    return query;
+}
+function buildMediaFileFromObject(rawObject: UTSJSONObject): ExpenseMediaFile {
+    return {
+        id: stringValue(rawObject['id']),
+        company: intValue(rawObject['company']),
+        original_filename: stringValue(rawObject['original_filename']),
+        file_type: stringValue(rawObject['file_type']),
+        file_type_display: stringValue(rawObject['file_type_display']),
+        mime_type: stringValue(rawObject['mime_type']),
+        file_size: intValue(rawObject['file_size']),
+        file_size_display: stringValue(rawObject['file_size_display']),
+        file_url: normalizeServerUrl(stringValue(rawObject['file_url'])),
+        thumbnail_url: normalizeServerUrl(stringValue(rawObject['thumbnail_url'])),
+        signed_url: normalizeServerUrl(stringValue(rawObject['signed_url'])),
+        signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject['signed_thumbnail_url'])),
+        object_id: stringValue(rawObject['object_id']),
+        is_deleted: boolValue(rawObject['is_deleted']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+    } as ExpenseMediaFile;
+}
+function buildMediaFilesFromValue(value: any | null): ExpenseMediaFile[] {
+    if (value == null)
+        return [];
+    const text = JSON.stringify(value);
+    const rawArray = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text);
+    if (rawArray == null)
+        return [];
+    const result: ExpenseMediaFile[] = [];
+    for (let index = 0; index < rawArray!.length; index += 1) {
+        result.push(buildMediaFileFromObject(rawArray![index]));
+    }
+    return result;
+}
+function buildExpenseItemFromObject(rawObject: UTSJSONObject): ExpenseItem {
+    return {
+        id: intValue(rawObject['id']),
+        expenditure_type: intValue(rawObject['expenditure_type']),
+        expenditure_type_name: stringValue(rawObject['expenditure_type_name']),
+        amount: stringValue(rawObject['amount']),
+        expenditure_date: stringValue(rawObject['expenditure_date']),
+        invoice_number: stringValue(rawObject['invoice_number']),
+        supplier: intValue(rawObject['supplier']),
+        supplier_name: stringValue(rawObject['supplier_name']),
+        description: stringValue(rawObject['description']),
+        note: stringValue(rawObject['note']),
+        media_files: buildMediaFilesFromValue(rawObject['media_files']),
+        files_count: intValue(rawObject['files_count']),
+        is_deleted: boolValue(rawObject['is_deleted']),
+        created_at: stringValue(rawObject['created_at']),
+        updated_at: stringValue(rawObject['updated_at']),
+    } as ExpenseItem;
+}
+function buildExpenseItemsFromValue(value: any | null): ExpenseItem[] {
+    if (value == null)
+        return [];
+    const text = JSON.stringify(value);
+    const rawArray = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text);
+    if (rawArray == null)
+        return [];
+    const result: ExpenseItem[] = [];
+    for (let index = 0; index < rawArray!.length; index += 1) {
+        result.push(buildExpenseItemFromObject(rawArray![index]));
+    }
+    return result;
+}
+function rawDataObject(raw: any): UTSJSONObject {
+    const rawText = JSON.stringify(raw);
+    const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText);
+    if (rawObject == null)
+        throw new Error('支出接口响应解析失败');
+    const dataValue = rawObject!['data'];
+    if (dataValue != null) {
+        const dataText = JSON.stringify(dataValue);
+        const dataObject = dataText == null || dataText == '' ? null : JSON.parseObject<UTSJSONObject>(dataText);
+        if (dataObject != null)
+            return dataObject!;
+    }
+    return rawObject!;
+}
+export function buildExpenseListResponse(raw: any, query: ExpenseListQuery): ExpenseListResponse {
+    const rawObject = rawDataObject(raw);
+    let paginationObject: UTSJSONObject | null = null;
+    const rawPagination = rawObject['pagination'];
+    if (rawPagination != null) {
+        const paginationText = JSON.stringify(rawPagination);
+        if (paginationText != null && paginationText != '')
+            paginationObject = JSON.parseObject<UTSJSONObject>(paginationText);
+    }
+    const results = buildExpenseItemsFromValue(rawObject['results']);
+    let totalCount = intValue(rawObject['count']);
+    if (totalCount <= 0)
+        totalCount = intValue(rawObject['total_count']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['total']);
+    if (totalCount <= 0 && paginationObject != null)
+        totalCount = intValue(paginationObject!['count']);
+    if (totalCount <= 0)
+        totalCount = results.length;
+    let currentPage = intValue(rawObject['current_page']);
+    if (currentPage <= 0)
+        currentPage = intValue(rawObject['page']);
+    if (currentPage <= 0 && paginationObject != null)
+        currentPage = intValue(paginationObject!['page']);
+    if (currentPage <= 0)
+        currentPage = query.page;
+    let pageSize = intValue(rawObject['page_size']);
+    if (pageSize <= 0 && paginationObject != null)
+        pageSize = intValue(paginationObject!['page_size']);
+    if (pageSize <= 0)
+        pageSize = query.page_size;
+    let totalPages = intValue(rawObject['total_pages']);
+    if (totalPages <= 0 && paginationObject != null)
+        totalPages = intValue(paginationObject!['total_pages']);
+    if (totalPages <= 0 && pageSize > 0)
+        totalPages = Math.ceil(totalCount / pageSize);
+    if (totalPages <= 0)
+        totalPages = 1;
+    return {
+        results: results,
+        count: totalCount,
+        total_count: totalCount,
+        total_pages: totalPages,
+        current_page: currentPage,
+        page_size: pageSize,
+        summary: rawObject['summary'] == null ? null : (rawObject['summary'] as UTSJSONObject),
+    } as ExpenseListResponse;
+}
+function buildOptionsResponse(raw: any): ExpenseOptionsResponse {
+    const rawObject = rawDataObject(raw);
+    const groups: ExpenseOptionGroup[] = [];
+    const rawGroups = rawObject['groups'];
+    if (rawGroups != null) {
+        const groupsText = JSON.stringify(rawGroups);
+        const groupObjects = groupsText == null || groupsText == '' ? null : JSON.parseArray<UTSJSONObject>(groupsText);
+        if (groupObjects != null) {
+            for (let groupIndex = 0; groupIndex < groupObjects!.length; groupIndex += 1) {
+                const groupObject = groupObjects![groupIndex];
+                const items: ExpenseOptionItem[] = [];
+                const rawItems = groupObject['items'];
+                if (rawItems != null) {
+                    const itemsText = JSON.stringify(rawItems);
+                    const itemObjects = itemsText == null || itemsText == '' ? null : JSON.parseArray<UTSJSONObject>(itemsText);
+                    if (itemObjects != null) {
+                        for (let itemIndex = 0; itemIndex < itemObjects!.length; itemIndex += 1) {
+                            const itemObject = itemObjects![itemIndex];
+                            items.push({ value: stringValue(itemObject['value']), label: stringValue(itemObject['label']), extra: itemObject['extra'] == null ? ({} as UTSJSONObject) : (itemObject['extra'] as UTSJSONObject) } as ExpenseOptionItem);
+                        }
+                    }
+                }
+                groups.push({ key: stringValue(groupObject['key']), label: stringValue(groupObject['label']), control: stringValue(groupObject['control']), count: intValue(groupObject['count']), items: items } as ExpenseOptionGroup);
+            }
+        }
+    }
+    return { resource: stringValue(rawObject['resource']), total_groups: intValue(rawObject['total_groups']), groups: groups } as ExpenseOptionsResponse;
+}
+function buildMutationBody(data: ExpenseMutationData): UTSJSONObject {
+    const body = {
+        amount: data.amount,
+        expenditure_date: data.expenditure_date,
+        invoice_number: data.invoice_number == null ? '' : data.invoice_number,
+        description: data.description == null ? '' : data.description,
+        note: data.note == null ? '' : data.note,
+    } as UTSJSONObject;
+    if (data.expenditure_type_id != null && data.expenditure_type_id != '')
+        body['expenditure_type_id'] = parseInt(data.expenditure_type_id!);
+    else
+        body['expenditure_type_id'] = null;
+    if (data.supplier_id != null && data.supplier_id != '')
+        body['supplier_id'] = parseInt(data.supplier_id!);
+    else
+        body['supplier_id'] = null;
+    return body;
+}
+function detailPath(id: number | string): string {
+    return '/api/expenses/expenditures/' + stringValue(id) + '/';
+}
+export async function getExpenseList(data: ExpenseListQuery): Promise<ExpenseListResponse> {
+    const raw = await request('/api/expenses/expenditures/', 'GET', buildExpenseListQuery(data), true);
+    return buildExpenseListResponse(raw, data);
+}
+export async function getExpenseOptions(key: string | null = null, search: string | null = null, limit: number = 20): Promise<ExpenseOptionsResponse> {
+    const query = {} as UTSJSONObject;
+    if (key != null && key != '')
+        query['key'] = key;
+    if (search != null && search != '')
+        query['search'] = search;
+    if (limit > 0)
+        query['limit'] = limit;
+    const raw = await request('/api/expenses/expenditures/options/', 'GET', query, true);
+    return buildOptionsResponse(raw);
+}
+export async function getExpenseDetail(id: number | string): Promise<ExpenseItem> {
+    const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true);
+    return buildExpenseItemFromObject(rawDataObject(raw));
+}
+export async function createExpense(data: ExpenseMutationData): Promise<ExpenseItem> {
+    const raw = await request('/api/expenses/expenditures/', 'POST', buildMutationBody(data), true);
+    return buildExpenseItemFromObject(rawDataObject(raw));
+}
+export async function updateExpense(id: number | string, data: ExpenseMutationData): Promise<ExpenseItem> {
+    const raw = await request(detailPath(id), 'PUT', buildMutationBody(data), true);
+    return buildExpenseItemFromObject(rawDataObject(raw));
+}
+export function deleteExpense(id: number | string): Promise<any> {
+    return request(detailPath(id), 'DELETE', {} as UTSJSONObject, true);
+}
+//# sourceMappingURL=expenses.uts.map

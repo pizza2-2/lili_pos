@@ -2,36 +2,267 @@
 	<scroll-view class="page-scroll" style="flex:1" direction="vertical">
 		<view class="page">
 			<view class="status-bar-space"></view>
-			<view class="hero">
-				<text class="hero-title">报表</text>
-				<text class="hero-desc">查看门店核心经营指标与趋势。</text>
+
+			<view class="topbar">
+				<text class="page-title">报表</text>
+				<button class="refresh-btn" @click="loadReport">
+					<text class="refresh-text">刷新</text>
+				</button>
 			</view>
 
-			<view class="card">
-				<text class="card-label">今日销售额</text>
-				<text class="card-value">¥ 12,860.00</text>
-			</view>
-
-			<view class="stats-row">
-				<view class="stat-card stat-gap-right">
-					<text class="stat-label">订单数</text>
-					<text class="stat-value">128</text>
-				</view>
-				<view class="stat-card">
-					<text class="stat-label">客单价</text>
-					<text class="stat-value">¥ 100.47</text>
+			<view class="period-tabs">
+				<view
+					v-for="item in periodOptions"
+					:key="item.key"
+					:class="selectedPeriod == item.key ? 'period-tab period-tab-active' : 'period-tab'"
+					@click="changePeriod(item.key)"
+				>
+					<text :class="selectedPeriod == item.key ? 'period-text period-text-active' : 'period-text'">{{ item.label }}</text>
 				</view>
 			</view>
 
-			<view class="card">
-				<text class="card-label">说明</text>
-				<text class="card-desc">后续可以接经营报表、收银汇总、时段分析和员工业绩。</text>
+			<view v-if="errorMessage != '' && !isLoading" class="notice-card">
+				<text class="notice-title">加载失败</text>
+				<text class="notice-desc">{{ errorMessage }}</text>
+			</view>
+
+			<view class="hero-card surface-animate">
+				<text class="hero-label">{{ currentPeriodLabel }}销售额</text>
+				<text class="hero-value">{{ moneyText(overview.sales_amount) }}</text>
+				<view class="hero-meta">
+					<text class="hero-meta-text">订单 {{ overview.order_count.toString() }}</text>
+					<text class="hero-meta-text">客单价 {{ moneyText(overview.average_order_value) }}</text>
+				</view>
+			</view>
+
+			<view class="metrics-grid">
+				<view class="metric-card surface-animate">
+					<text class="metric-label">采购金额</text>
+					<text class="metric-value">{{ moneyText(overview.purchase_amount) }}</text>
+				</view>
+				<view class="metric-card metric-right surface-animate">
+					<text class="metric-label">支出金额</text>
+					<text class="metric-value">{{ moneyText(overview.expense_amount) }}</text>
+				</view>
+				<view class="metric-card surface-animate">
+					<text class="metric-label">供应商欠款</text>
+					<text class="metric-value">{{ moneyText(overview.arrears_amount) }}</text>
+				</view>
+				<view class="metric-card metric-right surface-animate">
+					<text class="metric-label">净现金流</text>
+					<text class="metric-value">{{ moneyText(overview.net_cashflow) }}</text>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<text class="section-title">销售趋势</text>
+				<view v-if="salesTrend.length == 0" class="empty-row">
+					<text class="empty-text">暂无销售数据</text>
+				</view>
+				<view v-for="item in salesTrend" :key="item.date" class="trend-row">
+					<text class="trend-date">{{ compactDate(item.date) }}</text>
+					<view class="trend-bar-track">
+						<view class="trend-bar" :style="'width:' + trendWidth(item.amount) + '%'"></view>
+					</view>
+					<text class="trend-amount">{{ moneyText(item.amount) }}</text>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<text class="section-title">支付方式</text>
+				<view v-for="item in paymentMethods" :key="item.key" class="list-row">
+					<text class="list-label">{{ item.label }}</text>
+					<text class="list-value">{{ item.count.toString() }} 单 / {{ moneyText(item.amount) }}</text>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<text class="section-title">库存概览</text>
+				<view class="inventory-grid">
+					<view class="inventory-item">
+						<text class="inventory-value">{{ inventory.stock_item_count.toString() }}</text>
+						<text class="inventory-label">库存项</text>
+					</view>
+					<view class="inventory-item">
+						<text class="inventory-value">{{ inventory.total_quantity.toString() }}</text>
+						<text class="inventory-label">库存总量</text>
+					</view>
+					<view class="inventory-item">
+						<text class="inventory-value">{{ inventory.low_stock_count.toString() }}</text>
+						<text class="inventory-label">低库存</text>
+					</view>
+					<view class="inventory-item">
+						<text class="inventory-value">{{ inventory.out_of_stock_count.toString() }}</text>
+						<text class="inventory-label">售罄</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<text class="section-title">提醒</text>
+				<view v-if="alerts.length == 0" class="empty-row">
+					<text class="empty-text">暂无异常提醒</text>
+				</view>
+				<view v-for="item in alerts" :key="item.label" class="alert-row">
+					<text :class="item.level == 'danger' ? 'alert-dot alert-dot-danger' : 'alert-dot'"></text>
+					<text class="alert-label">{{ item.label }}</text>
+					<text class="alert-value">{{ item.value.toString() }}</text>
+				</view>
+			</view>
+
+			<view v-if="isLoading" class="loading-mask">
+				<view class="loading-card">
+					<text class="loading-text">正在加载报表</text>
+				</view>
 			</view>
 		</view>
 	</scroll-view>
 </template>
 
 <script setup lang="uts">
+import { computed } from 'vue'
+import { DashboardReport, ReportAlert, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportTrendItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
+
+type PeriodOption = {
+	key: ReportPeriod
+	label: string
+}
+
+const periodOptions = [
+	{ key: 'today', label: '今日' } as PeriodOption,
+	{ key: 'week', label: '本周' } as PeriodOption,
+	{ key: 'month', label: '本月' } as PeriodOption,
+] as PeriodOption[]
+
+const selectedPeriod = ref<ReportPeriod>('today')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const overview = ref<ReportOverview>({
+	sales_amount: '0.00',
+	order_count: 0,
+	average_order_value: '0.00',
+	purchase_amount: '0.00',
+	expense_amount: '0.00',
+	arrears_amount: '0.00',
+	net_cashflow: '0.00',
+} as ReportOverview)
+const salesTrend = ref<ReportTrendItem[]>([] as ReportTrendItem[])
+const paymentMethods = ref<ReportPaymentMethod[]>([] as ReportPaymentMethod[])
+const inventory = ref<ReportInventory>({
+	stock_item_count: 0,
+	total_quantity: 0,
+	available_quantity: 0,
+	low_stock_count: 0,
+	out_of_stock_count: 0,
+	no_movement_count: 0,
+	inventory_value: '0.00',
+} as ReportInventory)
+const alerts = ref<ReportAlert[]>([] as ReportAlert[])
+
+const currentPeriodLabel = computed(() : string => {
+	for (let index = 0; index < periodOptions.length; index += 1) {
+		if (periodOptions[index].key == selectedPeriod.value) {
+			return periodOptions[index].label
+		}
+	}
+	return '今日'
+})
+
+const maxTrendAmount = computed(() : number => {
+	let maxValue = 0
+	for (let index = 0; index < salesTrend.value.length; index += 1) {
+		const parsed = parseFloat(salesTrend.value[index].amount)
+		if (!isNaN(parsed) && parsed > maxValue) {
+			maxValue = parsed
+		}
+	}
+	return maxValue
+})
+
+function moneyText(value: string): string {
+	if (value == '') {
+		return '¥ 0.00'
+	}
+	return '¥ ' + value
+}
+
+function compactDate(value: string): string {
+	if (value.length >= 10) {
+		return value.substring(5, 10)
+	}
+	return value
+}
+
+function trendWidth(value: string): number {
+	const maxValue = maxTrendAmount.value
+	if (maxValue <= 0) {
+		return 0
+	}
+	const parsed = parseFloat(value)
+	if (isNaN(parsed) || parsed <= 0) {
+		return 0
+	}
+	const width = Math.round((parsed / maxValue) * 100)
+	if (width < 8) {
+		return 8
+	}
+	return width
+}
+
+function applyReport(data: DashboardReport) {
+	overview.value = data.overview
+	salesTrend.value = data.sales_trend
+	paymentMethods.value = data.payment_methods
+	inventory.value = data.inventory
+	alerts.value = data.alerts
+}
+
+function parseErrorMessage(error: any): string {
+	if (error == null) {
+		return '报表加载失败'
+	}
+	const directMessage = (error as Error).message
+	if (directMessage != null && directMessage != '') {
+		return directMessage
+	}
+	const errorText = JSON.stringify(error)
+	if (errorText != null && errorText != '') {
+		return errorText
+	}
+	return '报表加载失败'
+}
+
+async function loadReport() {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const data = await getDashboardReport(selectedPeriod.value)
+		applyReport(data)
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function changePeriod(period: ReportPeriod) {
+	if (selectedPeriod.value == period) {
+		return
+	}
+	selectedPeriod.value = period
+	loadReport()
+}
+
+onLoad(() => {
+	loadReport()
+})
+
+onShow(() => {
+	loadReport()
+})
 </script>
 
 <style>
@@ -40,9 +271,10 @@
 }
 
 .page {
-	padding-left: 16px;
-	padding-right: 16px;
-	padding-bottom: 24px;
+	position: relative;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-bottom: 20px;
 	background-color: #F6F7FB;
 }
 
@@ -50,87 +282,408 @@
 	height: var(--status-bar-height);
 }
 
-.hero {
-	background-color: #0F172A;
-	border-radius: 20px;
-	padding: 20px;
+.topbar {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 8px;
+	padding-bottom: 8px;
 }
 
-.hero-title {
-	font-size: 24px;
-	line-height: 30px;
+.page-title {
+	font-size: 21px;
+	line-height: 26px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.refresh-btn {
+	height: 30px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	border-width: 0px;
+	background-color: #111827;
+	transition-property: transform, background-color;
+	transition-duration: 180ms;
+}
+
+.refresh-btn:active {
+	transform: scale(0.96);
+	background-color: #334155;
+}
+
+.refresh-text {
+	font-size: 12px;
+	font-weight: 600;
 	color: #FFFFFF;
-	font-weight: bold;
 }
 
-.hero-desc {
+.period-tabs {
+	flex-direction: row;
+	padding: 3px;
+	border-radius: 8px;
+	background-color: #E5E7EB;
+	animation-name: fade-slide-in;
+	animation-duration: 360ms;
+}
+
+.period-tab {
+	flex: 1;
+	height: 30px;
+	border-radius: 6px;
+	align-items: center;
+	justify-content: center;
+	transition-property: background-color, transform;
+	transition-duration: 180ms;
+}
+
+.period-tab-active {
+	background-color: #FFFFFF;
+	transform: scale(1.02);
+}
+
+.period-text {
+	font-size: 12px;
+	color: #64748B;
+}
+
+.period-text-active {
+	font-weight: 700;
+	color: #111827;
+}
+
+.notice-card,
+.hero-card,
+.section,
+.metric-card {
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+	background-color: #FFFFFF;
+}
+
+.surface-animate {
+	animation-name: fade-slide-in;
+	animation-duration: 420ms;
+	animation-timing-function: ease-out;
+}
+
+.notice-card {
+	margin-top: 10px;
+	padding: 12px;
+	animation-name: shake-in;
+	animation-duration: 320ms;
+}
+
+.notice-title {
+	font-size: 14px;
+	font-weight: 700;
+	color: #B91C1C;
+}
+
+.notice-desc {
+	margin-top: 5px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #7F1D1D;
+}
+
+.hero-card {
+	margin-top: 10px;
+	padding: 15px;
+	background-color: #111827;
+	border-color: #111827;
+}
+
+.hero-label {
+	font-size: 12px;
+	color: #CBD5E1;
+}
+
+.hero-value {
+	margin-top: 8px;
+	font-size: 26px;
+	line-height: 32px;
+	font-weight: 800;
+	color: #FFFFFF;
+	animation-name: number-pop;
+	animation-duration: 360ms;
+}
+
+.hero-meta {
+	flex-direction: row;
+	margin-top: 9px;
+}
+
+.hero-meta-text {
+	margin-right: 12px;
+	font-size: 12px;
+	color: #D1D5DB;
+}
+
+.metrics-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.metric-card {
+	width: 48%;
+	margin-bottom: 8px;
+	padding: 11px;
+	transition-property: transform, border-color;
+	transition-duration: 180ms;
+}
+
+.metric-card:active {
+	transform: scale(0.985);
+	border-color: #CBD5E1;
+}
+
+.metric-right {
+	margin-left: 4%;
+}
+
+.metric-label {
+	font-size: 11px;
+	color: #64748B;
+}
+
+.metric-value {
+	margin-top: 6px;
+	font-size: 15px;
+	line-height: 21px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.section {
+	margin-top: 10px;
+	padding: 11px;
+}
+
+.section-title {
 	font-size: 14px;
 	line-height: 20px;
-	color: #CBD5E1;
-	margin-top: 8px;
-}
-
-.card {
-	background-color: #FFFFFF;
-	border-radius: 18px;
-	padding: 18px;
-	margin-top: 14px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E5E7EB;
-}
-
-.card-label {
-	font-size: 13px;
-	line-height: 18px;
-	color: #94A3B8;
-}
-
-.card-value {
-	font-size: 28px;
-	line-height: 34px;
-	color: #0F172A;
-	font-weight: bold;
-	margin-top: 10px;
-}
-
-.card-desc {
-	font-size: 15px;
-	line-height: 22px;
-	color: #475569;
-	margin-top: 10px;
-}
-
-.stats-row {
-	flex-direction: row;
-	margin-top: 14px;
-}
-
-.stat-card {
-	flex: 1;
-	background-color: #FFFFFF;
-	border-radius: 18px;
-	padding: 18px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E5E7EB;
-}
-
-.stat-gap-right {
-	margin-right: 12px;
-}
-
-.stat-label {
-	font-size: 13px;
-	line-height: 18px;
-	color: #94A3B8;
-}
-
-.stat-value {
-	font-size: 22px;
-	line-height: 28px;
+	font-weight: 700;
 	color: #111827;
-	font-weight: bold;
-	margin-top: 10px;
+}
+
+.empty-row {
+	margin-top: 8px;
+	height: 30px;
+	justify-content: center;
+}
+
+.empty-text {
+	font-size: 12px;
+	color: #94A3B8;
+}
+
+.trend-row {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 9px;
+	animation-name: fade-slide-in;
+	animation-duration: 360ms;
+}
+
+.trend-date {
+	width: 38px;
+	font-size: 11px;
+	color: #64748B;
+}
+
+.trend-bar-track {
+	flex: 1;
+	height: 8px;
+	border-radius: 4px;
+	background-color: #E5E7EB;
+	overflow: hidden;
+}
+
+.trend-bar {
+	height: 8px;
+	border-radius: 4px;
+	background-color: #2563EB;
+	animation-name: bar-grow;
+	animation-duration: 520ms;
+	animation-timing-function: ease-out;
+}
+
+.trend-amount {
+	width: 74px;
+	text-align: right;
+	font-size: 11px;
+	color: #111827;
+}
+
+.list-row,
+.alert-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 32px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.list-label,
+.alert-label {
+	font-size: 13px;
+	color: #334155;
+}
+
+.list-value,
+.alert-value {
+	font-size: 12px;
+	font-weight: 600;
+	color: #111827;
+}
+
+.inventory-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 6px;
+}
+
+.inventory-item {
+	width: 50%;
+	padding-top: 8px;
+	padding-bottom: 6px;
+	animation-name: number-pop;
+	animation-duration: 340ms;
+}
+
+.inventory-value {
+	font-size: 17px;
+	line-height: 23px;
+	font-weight: 800;
+	color: #111827;
+}
+
+.inventory-label {
+	margin-top: 3px;
+	font-size: 11px;
+	color: #64748B;
+}
+
+.alert-dot {
+	width: 7px;
+	height: 7px;
+	margin-right: 8px;
+	border-radius: 4px;
+	background-color: #F59E0B;
+	animation-name: pulse-dot;
+	animation-duration: 1100ms;
+	animation-iteration-count: infinite;
+}
+
+.alert-dot-danger {
+	background-color: #DC2626;
+}
+
+.alert-label {
+	flex: 1;
+}
+
+.loading-mask {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(15, 23, 42, 0.12);
+}
+
+.loading-card {
+	padding: 12px 16px;
+	border-radius: 8px;
+	background-color: #111827;
+	animation-name: loading-pop;
+	animation-duration: 520ms;
+	animation-iteration-count: infinite;
+	animation-direction: alternate;
+}
+
+.loading-text {
+	font-size: 13px;
+	font-weight: 600;
+	color: #FFFFFF;
+}
+
+@keyframes fade-slide-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0px);
+	}
+}
+
+@keyframes number-pop {
+	from {
+		opacity: 0.4;
+		transform: scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes bar-grow {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes pulse-dot {
+	0% {
+		opacity: 0.55;
+		transform: scale(0.9);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1.25);
+	}
+	100% {
+		opacity: 0.55;
+		transform: scale(0.9);
+	}
+}
+
+@keyframes loading-pop {
+	from {
+		transform: scale(0.98);
+	}
+	to {
+		transform: scale(1.02);
+	}
+}
+
+@keyframes shake-in {
+	0% {
+		opacity: 0;
+		transform: translateX(-6px);
+	}
+	60% {
+		opacity: 1;
+		transform: translateX(2px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateX(0px);
+	}
 }
 </style>
