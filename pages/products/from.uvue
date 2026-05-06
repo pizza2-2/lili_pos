@@ -63,12 +63,14 @@ const initialData = ref<UTSJSONObject>({
 	barcode: '',
 	name_cn: '',
 	name_en: '',
+	name_other: '',
 	description: '',
 	category_id: '',
 	category_text: '',
 	supplier_id: '',
 	supplier_name: '',
 	purchase_price: '0.00',
+	net_purchase_price: '0.00',
 	cost_price: '0.00',
 	base_sales_price: '0.00',
 	status: 'ACTIVE',
@@ -494,12 +496,14 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		barcode: item.barcode,
 		name_cn: item.name_cn,
 		name_en: item.name_en,
+		name_other: item.name_other,
 		description: item.description,
 		category_id: categoryId,
 		category_text: categoryText,
 		supplier_id: supplierId,
 		supplier_name: item.supplier_name,
 		purchase_price: item.purchase_price == '' ? '0.00' : item.purchase_price,
+		net_purchase_price: item.net_purchase_price == '' ? '0.00' : item.net_purchase_price,
 		cost_price: item.cost_price == '' ? '0.00' : item.cost_price,
 		base_sales_price: item.base_sales_price == '' ? '0.00' : item.base_sales_price,
 		status: item.status == '' ? 'ACTIVE' : item.status,
@@ -528,9 +532,15 @@ const formSections = ref<UTSJSONObject[]>([
 			} as UTSJSONObject,
 			{
 				key: 'name_en',
-				label: '外文名称',
+				label: '波兰名称',
 				type: 'input',
-				placeholder: '请输入外文名称',
+				placeholder: '请输入波兰名称',
+			} as UTSJSONObject,
+			{
+				key: 'name_other',
+				label: '其他名称',
+				type: 'input',
+				placeholder: '请输入其他名称',
 			} as UTSJSONObject,
 			{
 				key: 'sku',
@@ -593,10 +603,17 @@ const formSections = ref<UTSJSONObject[]>([
 		fields: [
 			{
 				key: 'purchase_price',
-				label: '采购价',
+				label: '含税采购价',
 				type: 'number',
 				required: true,
-				placeholder: '请输入采购价',
+				placeholder: '请输入含税采购价',
+			} as UTSJSONObject,
+			{
+				key: 'net_purchase_price',
+				label: '不含税采购价',
+				type: 'number',
+				required: true,
+				placeholder: '请输入不含税采购价',
 			} as UTSJSONObject,
 			{
 				key: 'cost_price',
@@ -722,10 +739,12 @@ function buildProductMutationPayload(formDataObject: UTSJSONObject): ProductMuta
 	const barcode = getStringField(formDataObject, 'barcode').trim()
 	const nameCn = getStringField(formDataObject, 'name_cn').trim()
 	const nameEn = getStringField(formDataObject, 'name_en').trim()
+	const nameOther = getStringField(formDataObject, 'name_other').trim()
 	const description = getStringField(formDataObject, 'description').trim()
 	const categoryId = getStringField(formDataObject, 'category_id').trim()
 	const supplierId = getStringField(formDataObject, 'supplier_id').trim()
 	const purchasePrice = getStringField(formDataObject, 'purchase_price', '0.00').trim()
+	const netPurchasePrice = getStringField(formDataObject, 'net_purchase_price', '0.00').trim()
 	const costPrice = getStringField(formDataObject, 'cost_price', '0.00').trim()
 	const baseSalesPrice = getStringField(formDataObject, 'base_sales_price', '0.00').trim()
 	const status = getStringField(formDataObject, 'status', 'ACTIVE').trim()
@@ -734,10 +753,12 @@ function buildProductMutationPayload(formDataObject: UTSJSONObject): ProductMuta
 		barcode: barcode == '' ? null : barcode,
 		name_cn: nameCn,
 		name_en: nameEn == '' ? null : nameEn,
+		name_other: nameOther == '' ? null : nameOther,
 		description: description == '' ? null : description,
 		category: categoryId == '' ? null : categoryId,
 		supplier: supplierId == '' ? null : supplierId,
 		purchase_price: purchasePrice == '' ? '0.00' : purchasePrice,
+		net_purchase_price: netPurchasePrice == '' ? '0.00' : netPurchasePrice,
 		cost_price: costPrice == '' ? '0.00' : costPrice,
 		base_sales_price: baseSalesPrice == '' ? '0.00' : baseSalesPrice,
 		status: status == '' ? 'ACTIVE' : status,

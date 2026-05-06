@@ -37,12 +37,14 @@ export type ProductItem = {
 	barcode: string
 	name_cn: string
 	name_en: string
+	name_other: string
 	description: string
 	media_files: ProductMediaFile[]
 	category: any | null
 	supplier: number | null
 	supplier_name: string
 	purchase_price: string
+	net_purchase_price: string
 	cost_price: string
 	base_sales_price: string
 	status: string
@@ -64,10 +66,12 @@ export type ProductMutationData = {
 	barcode: string | null
 	name_cn: string
 	name_en: string | null
+	name_other: string | null
 	description: string | null
 	category: string | null
 	supplier: string | null
 	purchase_price: string
+	net_purchase_price: string
 	cost_price: string
 	base_sales_price: string
 	status: string
@@ -347,12 +351,14 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		barcode: stringValue(rawObject['barcode']),
 		name_cn: stringValue(rawObject['name_cn']),
 		name_en: stringValue(rawObject['name_en']),
+		name_other: stringValue(rawObject['name_other']),
 		description: stringValue(rawObject['description']),
 		media_files: buildProductMediaFilesFromValue(rawObject['media_files']),
 		category: rawObject['category'],
 		supplier: rawObject['supplier'] == null ? null : intValue(rawObject['supplier']),
 		supplier_name: stringValue(rawObject['supplier_name']),
 		purchase_price: stringValue(rawObject['purchase_price']),
+		net_purchase_price: stringValue(rawObject['net_purchase_price']),
 		cost_price: stringValue(rawObject['cost_price']),
 		base_sales_price: stringValue(rawObject['base_sales_price']),
 		status: stringValue(rawObject['status']),
@@ -737,6 +743,7 @@ function buildProductMutationBody(data: ProductMutationData): UTSJSONObject {
 	const body = {
 		name_cn: data.name_cn,
 		purchase_price: data.purchase_price,
+		net_purchase_price: data.net_purchase_price,
 		cost_price: data.cost_price,
 		base_sales_price: data.base_sales_price,
 		status: data.status,
@@ -753,6 +760,9 @@ function buildProductMutationBody(data: ProductMutationData): UTSJSONObject {
 	}
 	if (data.name_en != null) {
 		body['name_en'] = data.name_en
+	}
+	if (data.name_other != null) {
+		body['name_other'] = data.name_other
 	}
 	if (data.description != null) {
 		body['description'] = data.description

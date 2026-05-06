@@ -8,6 +8,7 @@
 			:showBack="false"
 			:showSearch="true"
 			:showFilter="true"
+			:showScan="true"
 			:showHome="false"
 			:filterActive="hasActiveFilter"
 			filterText="重置"
@@ -188,8 +189,12 @@ const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 
 const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'foreignNameText', label: '波兰名' } as UTSJSONObject,
+	{ key: 'otherNameText', label: '其他名' } as UTSJSONObject,
 	{ key: 'supplierText', label: '供应商' } as UTSJSONObject,
-	{ key: 'purchasePriceText', label: '进价' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '含税进价' } as UTSJSONObject,
+	{ key: 'netPurchasePriceText', label: '不含税进价' } as UTSJSONObject,
+	{ key: 'costPriceText', label: '成本' } as UTSJSONObject,
 	{ key: 'salesPriceText', label: '售价' } as UTSJSONObject,
 	{ key: 'salesCountText', label: '销量' } as UTSJSONObject,
 ])
@@ -723,6 +728,10 @@ function productDisplayName(item: ProductItem): string {
 	if (englishName != '') {
 		return englishName
 	}
+	const otherName = getDisplayText(item.name_other, '')
+	if (otherName != '') {
+		return otherName
+	}
 	return item.sku == '' ? ('商品 #' + item.id.toString()) : item.sku
 }
 
@@ -731,12 +740,17 @@ function productToListItem(item: ProductItem): UTSJSONObject {
 		id: item.id.toString(),
 		name: productDisplayName(item),
 		name_en: getDisplayText(item.name_en),
+		name_other: getDisplayText(item.name_other),
 		sku: getDisplayText(item.sku),
 		skuText: 'SKU：' + getDisplayText(item.sku),
 		barcode: getDisplayText(item.barcode),
 		barcodeText: '条码：' + getDisplayText(item.barcode),
+		foreignNameText: getDisplayText(item.name_en),
+		otherNameText: getDisplayText(item.name_other),
 		supplierText: getDisplayText(item.supplier_name),
 		purchasePriceText: getDisplayText(item.purchase_price),
+		netPurchasePriceText: getDisplayText(item.net_purchase_price),
+		costPriceText: getDisplayText(item.cost_price),
 		salesPriceText: getDisplayText(item.base_sales_price),
 		salesCountText: item.total_sales_quantity.toString(),
 		variantCountText: item.variant_count.toString(),
@@ -930,8 +944,24 @@ function handleFieldClick(payload: UTSJSONObject) {
 		copyText(stringValue(item['supplierText']), '供应商已复制', '暂无供应商')
 		return
 	}
+	if (key == 'foreignNameText') {
+		copyText(stringValue(item['foreignNameText']), '波兰名已复制', '暂无波兰名')
+		return
+	}
+	if (key == 'otherNameText') {
+		copyText(stringValue(item['otherNameText']), '其他名已复制', '暂无其他名')
+		return
+	}
 	if (key == 'purchasePriceText') {
-		copyText(stringValue(item['purchasePriceText']), '进价已复制', '暂无进价')
+		copyText(stringValue(item['purchasePriceText']), '含税进价已复制', '暂无含税进价')
+		return
+	}
+	if (key == 'netPurchasePriceText') {
+		copyText(stringValue(item['netPurchasePriceText']), '不含税进价已复制', '暂无不含税进价')
+		return
+	}
+	if (key == 'costPriceText') {
+		copyText(stringValue(item['costPriceText']), '成本已复制', '暂无成本')
 		return
 	}
 	if (key == 'salesPriceText') {
@@ -1211,13 +1241,13 @@ onShow(() => {
 
 .product-filter-btn-light-text {
 	font-size: 13px;
-	line-height: 13px;
+	line-height: 18px;
 	color: #475569;
 }
 
 .product-filter-btn-primary-text {
 	font-size: 13px;
-	line-height: 13px;
+	line-height: 18px;
 	color: #FFFFFF;
 }
 
@@ -1288,7 +1318,7 @@ onShow(() => {
 
 .product-filter-option-text {
 	font-size: 12px;
-	line-height: 12px;
+	line-height: 17px;
 	color: #334155;
 }
 
