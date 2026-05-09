@@ -1,0 +1,182 @@
+<template>
+	<view class="page">
+		<view class="status-bar-space"></view>
+		<view class="topbar">
+			<text class="title">扫码测试</text>
+			<view class="back-btn" @click="goBack()">
+				<text class="back-text">返回</text>
+			</view>
+		</view>
+
+		<view class="panel">
+			<text class="label">扫描结果</text>
+			<text class="result-text">{{ resultText }}</text>
+			<text class="label second-label">扫码类型</text>
+			<text class="type-text">{{ typeText }}</text>
+		</view>
+
+		<view class="scan-btn" @click="scan()">
+			<text class="scan-btn-text">开启扫描</text>
+		</view>
+
+		<view v-if="errorMessage != ''" class="error-box">
+			<text class="error-text">{{ errorMessage }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	scanCode,
+	type GeneralCallbackResult,
+	type ScanCodeOption,
+	type ScanCodeSuccessCallbackResult,
+} from '@/uni_modules/lime-scan'
+
+const result = ref('')
+const type = ref('')
+const errorMessage = ref('')
+
+const resultText = computed((): string => {
+	if (result.value == '') return '暂无结果'
+	return result.value
+})
+
+const typeText = computed((): string => {
+	if (type.value == '') return '暂无类型'
+	return type.value
+})
+
+function scan() {
+	errorMessage.value = ''
+	scanCode({
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			result.value = res.result
+			type.value = res.scanType
+			console.log('扫码类型:', res.scanType)
+			console.log('扫码结果:', res.result)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			errorMessage.value = res.errMsg == '' ? '扫码失败' : res.errMsg
+			console.log('扫码失败:', errorMessage.value)
+		},
+		complete: (res: GeneralCallbackResult) => {
+			console.log('扫码完成:', res.errMsg)
+		},
+	} as ScanCodeOption)
+}
+
+function goBack() {
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.switchTab({ url: '/pages/tabbar/settings' })
+		},
+	})
+}
+</script>
+
+<style>
+.page {
+	background-color: #F6F8FB;
+	padding-left: 18px;
+	padding-right: 18px;
+	padding-bottom: 24px;
+}
+
+.status-bar-space {
+	height: var(--status-bar-height);
+}
+
+.topbar {
+	height: 52px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.title {
+	font-size: 22px;
+	line-height: 28px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.back-btn {
+	height: 36px;
+	padding-left: 16px;
+	padding-right: 16px;
+	border-radius: 18px;
+	align-items: center;
+	justify-content: center;
+	background-color: #E5E7EB;
+}
+
+.back-text {
+	font-size: 14px;
+	color: #334155;
+}
+
+.panel {
+	margin-top: 16px;
+	padding: 18px;
+	border-radius: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	background-color: #FFFFFF;
+}
+
+.label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.second-label {
+	margin-top: 18px;
+}
+
+.result-text {
+	margin-top: 8px;
+	font-size: 18px;
+	line-height: 26px;
+	font-weight: 600;
+	color: #111827;
+}
+
+.type-text {
+	margin-top: 8px;
+	font-size: 16px;
+	line-height: 22px;
+	color: #334155;
+}
+
+.scan-btn {
+	margin-top: 22px;
+	height: 48px;
+	border-radius: 10px;
+	align-items: center;
+	justify-content: center;
+	background-color: #2563EB;
+}
+
+.scan-btn-text {
+	font-size: 16px;
+	font-weight: 600;
+	color: #FFFFFF;
+}
+
+.error-box {
+	margin-top: 14px;
+	padding: 12px;
+	border-radius: 8px;
+	background-color: #FEF2F2;
+}
+
+.error-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #B91C1C;
+}
+</style>

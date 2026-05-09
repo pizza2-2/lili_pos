@@ -1,0 +1,11 @@
+framework module SwiftApiTrans {
+  umbrella header "SwiftApiTrans.h"
+  export *
+
+  module * { export * }
+}
+
+module SwiftApiTrans.Swift {
+  header "SwiftApiTrans-Swift.h"
+  requires objc
+}

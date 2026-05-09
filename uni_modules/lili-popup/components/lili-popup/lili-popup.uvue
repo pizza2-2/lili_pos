@@ -99,7 +99,7 @@ const confirmDangerValue = ref<boolean>(props.confirmDanger)
 const autoCloseValue = ref<boolean>(props.autoClose)
 
 function syncStyle() {
-	panelStyle.value = `width:${props.width};max-width:100%;`
+	panelStyle.value = `width:${props.width};`
 	rootStyle.value = `z-index:${props.zIndex};`
 }
 
@@ -340,7 +340,6 @@ defineExpose({
 .lp-panel {
 	position: relative;
 	width: 100%;
-	max-width: 100%;
 	background-color: #FFFFFF;
 	border-radius: 28rpx;
 	padding-top: 34rpx;

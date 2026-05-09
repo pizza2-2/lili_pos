@@ -119,6 +119,8 @@
 									:selectableLevelMessage="getFieldSelectableLevelMessage(field)"
 									:showEditAction="showBottomSelectEdit(field)"
 									:showAddAction="showBottomSelectAdd(field)"
+									:showScan="showBottomSelectScan(field)"
+									:scanOnlyFromCamera="getBottomSelectScanOnlyFromCamera(field)"
 									:addPath="getBottomSelectAddPath(field)"
 									:editPath="getBottomSelectEditPath(field)"
 									:editQueryKey="getBottomSelectEditQueryKey(field)"
@@ -176,6 +178,12 @@
 </template>
 
 <script setup lang="uts">
+import {
+	scanCode,
+	type GeneralCallbackResult,
+	type ScanCodeOption,
+	type ScanCodeSuccessCallbackResult,
+} from '@/uni_modules/lime-scan'
 import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
@@ -355,6 +363,10 @@ function isUploadField(field: UTSJSONObject) : boolean {
 
 function getFieldShowScan(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showScan', false)
+}
+
+function getFieldScanOnlyFromCamera(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'scanOnlyFromCamera', true)
 }
 
 function getFieldShowAdd(field: UTSJSONObject) : boolean {
@@ -575,6 +587,14 @@ function showBottomSelectEdit(field: UTSJSONObject) : boolean {
 
 function showBottomSelectAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAddAction', true)
+}
+
+function showBottomSelectScan(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showScan', false)
+}
+
+function getBottomSelectScanOnlyFromCamera(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'scanOnlyFromCamera', true)
 }
 
 function getFieldTree(field: UTSJSONObject) : boolean {
@@ -1042,12 +1062,35 @@ function handleFloatingActionClick() {
 }
 
 function handleScanClick(field: UTSJSONObject) {
-	emit('input-scan', {
-		field: field,
-		key: getFieldKey(field),
-		mode: props.mode,
-		formData: formData.value,
-	} as UTSJSONObject)
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	scanCode({
+		onlyFromCamera: getFieldScanOnlyFromCamera(field),
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			setFieldValueByKey(key, scanResult)
+			clearFieldError(key)
+			refreshDirtyState()
+			emitFieldChange(field, scanResult)
+			emit('input-scan', {
+				field: field,
+				key: key,
+				value: scanResult,
+				scanType: res.scanType,
+				mode: props.mode,
+				formData: formData.value,
+			} as UTSJSONObject)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({
+				title: message,
+				icon: 'none',
+			})
+		},
+	} as ScanCodeOption)
 }
 
 function handleAddClick(field: UTSJSONObject) {

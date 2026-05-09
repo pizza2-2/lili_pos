@@ -8,6 +8,7 @@
 			:showBack="true"
 			:showSearch="true"
 			:showFilter="true"
+			:showScan="true"
 			:showHome="true"
 			:filterActive="hasActiveFilter"
 			filterText="重置"
@@ -15,6 +16,7 @@
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
+			@scan="handleScanSearch"
 			@update:filterVisible="handleFilterVisibleChange"
 			@filter-open="handleFilterOpen"
 		>
@@ -101,6 +103,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 
 const keyword = ref('')
 const refreshStorageKey = 'refresh:pages:inventory-management:index'
@@ -209,6 +212,24 @@ function handleSearchClear() {
 	keyword.value = ''
 	currentPage.value = 1
 	loadItems()
+}
+
+function handleScanSearch() {
+	scanCode({
+		onlyFromCamera: true,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			keyword.value = scanResult
+			currentPage.value = 1
+			filterVisible.value = false
+			loadItems()
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({ title: message, icon: 'none' })
+		},
+	} as ScanCodeOption)
 }
 
 function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }

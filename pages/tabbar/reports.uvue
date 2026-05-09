@@ -324,8 +324,6 @@ onShow(() => {
 	padding: 3px;
 	border-radius: 8px;
 	background-color: #E5E7EB;
-	animation-name: fade-slide-in;
-	animation-duration: 360ms;
 }
 
 .period-tab {
@@ -365,16 +363,11 @@ onShow(() => {
 }
 
 .surface-animate {
-	animation-name: fade-slide-in;
-	animation-duration: 420ms;
-	animation-timing-function: ease-out;
 }
 
 .notice-card {
 	margin-top: 10px;
 	padding: 12px;
-	animation-name: shake-in;
-	animation-duration: 320ms;
 }
 
 .notice-title {
@@ -406,10 +399,8 @@ onShow(() => {
 	margin-top: 8px;
 	font-size: 26px;
 	line-height: 32px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #FFFFFF;
-	animation-name: number-pop;
-	animation-duration: 360ms;
 }
 
 .hero-meta {
@@ -486,8 +477,6 @@ onShow(() => {
 	flex-direction: row;
 	align-items: center;
 	margin-top: 9px;
-	animation-name: fade-slide-in;
-	animation-duration: 360ms;
 }
 
 .trend-date {
@@ -508,9 +497,6 @@ onShow(() => {
 	height: 8px;
 	border-radius: 4px;
 	background-color: #2563EB;
-	animation-name: bar-grow;
-	animation-duration: 520ms;
-	animation-timing-function: ease-out;
 }
 
 .trend-amount {
@@ -554,14 +540,12 @@ onShow(() => {
 	width: 50%;
 	padding-top: 8px;
 	padding-bottom: 6px;
-	animation-name: number-pop;
-	animation-duration: 340ms;
 }
 
 .inventory-value {
 	font-size: 17px;
 	line-height: 23px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #111827;
 }
 
@@ -577,9 +561,6 @@ onShow(() => {
 	margin-right: 8px;
 	border-radius: 4px;
 	background-color: #F59E0B;
-	animation-name: pulse-dot;
-	animation-duration: 1100ms;
-	animation-iteration-count: infinite;
 }
 
 .alert-dot-danger {
@@ -605,85 +586,11 @@ onShow(() => {
 	padding: 12px 16px;
 	border-radius: 8px;
 	background-color: #111827;
-	animation-name: loading-pop;
-	animation-duration: 520ms;
-	animation-iteration-count: infinite;
-	animation-direction: alternate;
 }
 
 .loading-text {
 	font-size: 13px;
 	font-weight: 600;
 	color: #FFFFFF;
-}
-
-@keyframes fade-slide-in {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0px);
-	}
-}
-
-@keyframes number-pop {
-	from {
-		opacity: 0.4;
-		transform: scale(0.96);
-	}
-	to {
-		opacity: 1;
-		transform: scale(1);
-	}
-}
-
-@keyframes bar-grow {
-	from {
-		transform: scaleX(0);
-	}
-	to {
-		transform: scaleX(1);
-	}
-}
-
-@keyframes pulse-dot {
-	0% {
-		opacity: 0.55;
-		transform: scale(0.9);
-	}
-	50% {
-		opacity: 1;
-		transform: scale(1.25);
-	}
-	100% {
-		opacity: 0.55;
-		transform: scale(0.9);
-	}
-}
-
-@keyframes loading-pop {
-	from {
-		transform: scale(0.98);
-	}
-	to {
-		transform: scale(1.02);
-	}
-}
-
-@keyframes shake-in {
-	0% {
-		opacity: 0;
-		transform: translateX(-6px);
-	}
-	60% {
-		opacity: 1;
-		transform: translateX(2px);
-	}
-	100% {
-		opacity: 1;
-		transform: translateX(0px);
-	}
 }
 </style>

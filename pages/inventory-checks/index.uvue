@@ -155,7 +155,7 @@ function handleMenu(payload: UTSJSONObject) {
 	else if (actionKey == 'reload') loadItems()
 }
 
-function handleCreate(payload: UTSJSONObject) {
+function handleCreate() {
 	uni.navigateTo({ url: '/pages/inventory-checks/from' })
 }
 

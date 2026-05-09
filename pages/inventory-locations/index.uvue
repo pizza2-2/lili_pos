@@ -267,7 +267,7 @@ function handleMenu(payload: UTSJSONObject) {
 	else if (actionKey == 'edit' && item != null) uni.navigateTo({ url: '/pages/inventory-locations/from?id=' + stringField(item as UTSJSONObject, 'rawId') })
 }
 
-function handleCreate(payload: UTSJSONObject) {
+function handleCreate() {
 	uni.navigateTo({ url: '/pages/inventory-locations/from' })
 }
 

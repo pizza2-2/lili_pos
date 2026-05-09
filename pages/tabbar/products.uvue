@@ -15,6 +15,7 @@
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
+			@scan="handleScanSearch"
 			@update:filterVisible="handleFilterVisibleChange"
 			@filter-open="handleFilterOpen"
 		>
@@ -163,6 +164,7 @@ import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
 import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 
 type ProductSelectOption = {
 	value: string
@@ -189,27 +191,18 @@ const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'foreignNameText', label: '波兰名' } as UTSJSONObject,
-	{ key: 'otherNameText', label: '其他名' } as UTSJSONObject,
-	{ key: 'supplierText', label: '供应商' } as UTSJSONObject,
-	{ key: 'purchasePriceText', label: '含税进价' } as UTSJSONObject,
-	{ key: 'netPurchasePriceText', label: '不含税进价' } as UTSJSONObject,
-	{ key: 'costPriceText', label: '成本' } as UTSJSONObject,
-	{ key: 'salesPriceText', label: '售价' } as UTSJSONObject,
-	{ key: 'salesCountText', label: '销量' } as UTSJSONObject,
+	{ key: 'supplierText', label: '供应商：' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '含税进价：' } as UTSJSONObject,
+	{ key: 'salesPriceText', label: '售价：' } as UTSJSONObject,
+	{ key: 'salesCountText', label: '销量：' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
-	{ key: 'copy-sku', text: '复制SKU' } as UTSJSONObject,
-	{ key: 'copy-barcode', text: '复制条码' } as UTSJSONObject,
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
-	ACTIVE: 'success',
-	INACTIVE: 'danger',
-	DRAFT: 'warning',
 	新品: 'violet',
 	精选: 'info',
 	热销: 'warning',
@@ -703,10 +696,6 @@ function getProductImage(item: ProductItem): string {
 
 function buildProductTags(item: ProductItem): string[] {
 	const result: string[] = []
-	const statusText = getDisplayText(item.status, '')
-	if (statusText != '') {
-		result.push(statusText)
-	}
 	if (item.is_new) {
 		result.push('新品')
 	}
@@ -796,6 +785,24 @@ function handleSearchClear() {
 	keyword.value = ''
 	currentPage.value = 1
 	loadProducts()
+}
+
+function handleScanSearch() {
+	scanCode({
+		onlyFromCamera: true,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			keyword.value = scanResult
+			currentPage.value = 1
+			closeFilterDrawer()
+			loadProducts()
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({ title: message, icon: 'none' })
+		},
+	} as ScanCodeOption)
 }
 
 async function handleFilterOpen() {

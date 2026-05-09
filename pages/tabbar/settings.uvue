@@ -92,6 +92,7 @@ const groups = ref<MenuGroup[]>([
 				{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
 			],
 			[
+				{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
 				{ label: '分享', icon: '', iconPath: '/static/menu-icons/share.svg', path: null, action: 'todo', disabled: true },
 			],
 		],

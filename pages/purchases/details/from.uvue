@@ -108,7 +108,7 @@ const formSections = ref<UTSJSONObject[]>([
 		description: '',
 		defaultOpen: true,
 		fields: [
-			{ key: 'product', textKey: 'product_text', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
+			{ key: 'product', textKey: 'product_text', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', showScan: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
 			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
 			{ key: 'received_quantity', label: '已收货数量', type: 'number', placeholder: '通常由收货操作更新' } as UTSJSONObject,
 			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,

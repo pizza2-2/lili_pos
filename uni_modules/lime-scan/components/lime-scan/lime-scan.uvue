@@ -1,0 +1,128 @@
+<template>
+	<view class="demo-block">
+		<text class="demo-block__title-text ultra">Scan 扫码</text>
+		<text class="demo-block__desc-text">基于华为统一扫码库实现在的原生扫码插件。</text>
+		<view class="demo-block__body">
+			<view class="demo-block card">
+				<text class="demo-block__title-text large">基础使用</text>
+				<view class="demo-block__body">
+					<view v-if="scanResult != ''">
+						<text>结果：{{scanResult}}</text>
+					</view>
+					<image v-if="qrcode !=''" :src="qrcode"></image>
+					<button @click="scan">扫码</button>
+					<button @click="createQrcode">生成二维码(安卓、ios)</button>
+				</view>
+			</view>
+	
+		</view>
+	</view>
+</template>
+
+
+<script lang="uts" setup>
+	import { scanCode, type ScanCodeOption, createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan';
+	let scanResult = ref('');
+	let qrcode = ref('');
+	const scan = () => {
+		scanCode({
+			// scanType: ['ean13'],
+			success(res){
+				const result = res.result
+				scanResult.value = result;
+				console.log('>>>>>>>>>>>>>>>>>>')
+				// uni.showToast({
+				// 	title: result
+				// })
+			},
+			fail(err) {
+				scanResult.value = '扫码失败'
+				console.log('err', err)
+			}
+		} as ScanCodeOption)
+	}
+	
+	const createQrcode = () => {
+		// #ifdef APP-ANDROID || APP-IOS
+		createQRCode({
+			width: 300,
+			height:300,
+			content: 'limeui.qcoon.cn',
+			success(src: string) {
+				qrcode.value = src;
+				console.log('77777777777777777',src)
+			},
+			fail(err) {
+				console.log('88888888888', err)
+			}
+		} as CreateQRCodeOptions)
+		// #endif
+	}
+</script>
+
+<style lang="scss">
+	.row {
+		flex-direction: row;
+		flex-wrap: wrap;
+	}
+
+	.btn {
+		margin-bottom: 20rpx;
+		margin-right: 20rpx;
+	}
+
+	.demo-block {
+		margin: 32px 10px 0;
+
+		// overflow: visible;
+		&.card {
+			background-color: white;
+			padding: 30rpx;
+			margin-bottom: 20rpx !important;
+		}
+
+		&__title {
+			margin: 0;
+			margin-top: 8px;
+
+			&-text {
+				color: rgba(0, 0, 0, 0.6);
+				font-weight: 400;
+				font-size: 14px;
+				line-height: 16px;
+				display: flex;
+
+				&.large {
+					color: rgba(0, 0, 0, 0.9);
+					font-size: 18px;
+					font-weight: 700;
+					line-height: 26px;
+				}
+
+				&.ultra {
+					color: rgba(0, 0, 0, 0.9);
+					font-size: 24px;
+					font-weight: 700;
+					line-height: 32px;
+				}
+			}
+		}
+
+		&__desc-text {
+			color: rgba(0, 0, 0, 0.6);
+			margin: 8px 16px 0 0;
+			font-size: 14px;
+			line-height: 22px;
+		}
+
+		&__body {
+			margin: 16px 0;
+			overflow: visible;
+
+			.demo-block {
+				// margin-top: 0px;
+				margin: 0;
+			}
+		}
+	}
+</style>

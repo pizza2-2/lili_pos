@@ -35,6 +35,13 @@
 				"navigationBarTitleText":"我的"
 			}
 		},
+		{
+			"path": "pages/test/scan",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText":"扫码测试"
+			}
+		},
 		{	//应用升级
 			"path" : "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup"
 		},

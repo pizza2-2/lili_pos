@@ -191,7 +191,7 @@ function consumeRefresh(): boolean {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadPurchases() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadPurchases() }
-function handleCreate(payload: UTSJSONObject) { uni.navigateTo({ url: '/pages/purchases/from' }) }
+function handleCreate() { uni.navigateTo({ url: '/pages/purchases/from' }) }
 function handleItemClick(payload: UTSJSONObject) {
 	const id = stringValue(payload['rawId'], stringValue(payload['id']))
 	if (id != '') uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + id })

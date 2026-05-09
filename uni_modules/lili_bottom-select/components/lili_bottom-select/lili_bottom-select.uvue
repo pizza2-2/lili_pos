@@ -51,7 +51,9 @@
 		<!-- 搜索框 -->
 		<view class="bs-search-bar">
 			<view class="bs-search-inner">
-				<text class="bs-search-icon">🔍</text>
+				<view v-if="showScan" class="bs-search-scan" @click="handleScanSearch">
+					<image class="bs-search-scan-image" src="/static/icon/扫码.png" mode="aspectFit"></image>
+				</view>
 				<input
 					class="bs-search-input"
 					v-model="keyword"
@@ -167,6 +169,13 @@
 </template>
 
 <script setup lang="uts">
+import {
+	scanCode,
+	type GeneralCallbackResult,
+	type ScanCodeOption,
+	type ScanCodeSuccessCallbackResult,
+} from '@/uni_modules/lime-scan'
+
 type SelectChangePayload = {
 	value: string
 	text: string
@@ -263,6 +272,8 @@ type Props = {
 	closeOnOverlay?: boolean
 	showEditAction?: boolean
 	showAddAction?: boolean
+	showScan?: boolean
+	scanOnlyFromCamera?: boolean
 	editActionText?: string
 	addActionText?: string
 	editPath?: string
@@ -297,6 +308,8 @@ const props = withDefaults(defineProps<Props>(), {
 	closeOnOverlay: true,
 	showEditAction: true,
 	showAddAction: true,
+	showScan: false,
+	scanOnlyFromCamera: true,
 	editActionText: '编辑',
 	addActionText: '新增',
 	editPath: '',
@@ -1242,6 +1255,29 @@ function confirmSingleItem(item: UTSJSONObject) {
 	close()
 }
 
+async function applyScanKeyword(scanResult: string) {
+	if (scanResult == '') return
+	keyword.value = scanResult
+	await triggerSearch()
+}
+
+function handleScanSearch() {
+	if (props.disabled) return
+	scanCode({
+		onlyFromCamera: props.scanOnlyFromCamera,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			applyScanKeyword(res.result)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({
+				title: message,
+				icon: 'none',
+			})
+		},
+	} as ScanCodeOption)
+}
+
 function toggleMultiItem(item: UTSJSONObject) {
 	if (props.tree && !props.checkStrictly) {
 		const allItems = collectSelfAndDescendantItems(item)
@@ -1642,10 +1678,17 @@ defineExpose({
 	height: 36px;
 }
 
-.bs-search-icon {
-	font-size: 14px;
-	color: #999999;
-	margin-right: 6px;
+.bs-search-scan {
+	width: 36px;
+	height: 36px;
+	align-items: center;
+	justify-content: center;
+	margin-right: 4px;
+}
+
+.bs-search-scan-image {
+	width: 24px;
+	height: 24px;
 }
 
 .bs-search-input {
