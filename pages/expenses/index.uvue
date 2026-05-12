@@ -4,16 +4,68 @@
 			title="支出管理"
 			searchPlaceholder="支出类型、供应商、发票号、备注"
 			:searchValue="keyword"
-			:filterVisible="false"
+			:filterVisible="filterVisible"
 			:showBack="true"
 			:showSearch="true"
-			:showFilter="false"
+			:showFilter="true"
 			:showHome="true"
+			:filterActive="hasActiveFilter"
 			homePath="/pages/tabbar/settings"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
-		/>
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="expense-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="expense-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="expense-filter-scroll-inner">
+							<view v-if="filterOptionsLoading" class="expense-filter-state">
+								<text class="expense-filter-state-text">筛选选项加载中...</text>
+							</view>
+
+							<view v-else-if="filterOptionsError != ''" class="expense-filter-state">
+								<text class="expense-filter-state-text">{{ filterOptionsError }}</text>
+							</view>
+
+							<view v-else-if="filterDefinitions.length == 0" class="expense-filter-state">
+								<text class="expense-filter-state-text">暂无可用筛选项</text>
+							</view>
+
+							<view v-else class="expense-filter-groups">
+								<view
+									v-for="filter in filterDefinitions"
+									:key="filter.key"
+									class="expense-filter-group"
+								>
+									<text class="expense-filter-group-title">{{ filter.label }}</text>
+									<view class="expense-filter-options">
+										<view
+											v-for="option in filter.options"
+											:key="filter.key + '-' + option.value"
+											:class="isFilterOptionSelected(filter.param, option.value) ? 'expense-filter-option expense-filter-option-active' : 'expense-filter-option'"
+											@click="toggleFilterOption(filter.param, option.value)"
+										>
+											<text :class="isFilterOptionSelected(filter.param, option.value) ? 'expense-filter-option-text expense-filter-option-text-active' : 'expense-filter-option-text'">{{ option.label }}</text>
+										</view>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="expense-filter-actions">
+						<view class="expense-filter-btn expense-filter-btn-light" @click="handleFilterReset">
+							<text class="expense-filter-btn-light-text">重置</text>
+						</view>
+						<view class="expense-filter-btn expense-filter-btn-primary" @click="applySelectedFilters">
+							<text class="expense-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
 
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
@@ -71,11 +123,17 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deleteExpense, ExpenseItem, ExpenseListResponse, getExpenseList } from '@/pkg/api/modules/expenses.uts'
+import { deleteExpense, ExpenseFilterDefinition, ExpenseFilterOptionsResponse, ExpenseItem, ExpenseListResponse, getExpenseFilterOptions, getExpenseList } from '@/pkg/api/modules/expenses.uts'
+
+type ExpenseSelectedFilter = {
+	param: string
+	value: string
+}
 
 const expenseListRefreshStorageKey = 'refresh:pages:expenses:index'
 
 const keyword = ref('')
+const filterVisible = ref(false)
 const expenses = ref<ExpenseItem[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -84,6 +142,12 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const pageTotalAmount = ref('0.00')
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<ExpenseFilterOptionsResponse | null>(null)
+const selectedFilters = ref<ExpenseSelectedFilter[]>([])
+const filterPanelHeight = ref(400)
+const filterContentHeight = ref(336)
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'typeText', label: '类型:' } as UTSJSONObject,
@@ -105,24 +169,66 @@ function stringValue(value: any | null, fallback: string = ''): string {
 }
 
 function parseErrorMessage(error: any, fallback: string): string {
-	let message = fallback
-	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const errorText = JSON.stringify(error)
-		if (errorText != null && errorText != '') {
-			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
-			if (parsedError != null) {
-				const rawMessage = parsedError['message']
-				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
-					if (parsedMessage != '') message = parsedMessage
-				}
+	const text = stringValue(error)
+	if (text == '' || text == '[object Object]') return fallback
+	if (text.startsWith('Error: ')) return text.substring(7)
+	return text
+}
+
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 400) nextPanelHeight = 400
+	if (nextPanelHeight < 300) nextPanelHeight = 300
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 220) nextContentHeight = 220
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: ExpenseSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as ExpenseSelectedFilter)
 			}
-			if (message == fallback) message = errorText
+			updated = true
+			continue
 		}
+		nextFilters.push(filter)
 	}
-	return message
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as ExpenseSelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return selectedFilterValue(param) == value
+}
+
+function toggleFilterOption(param: string, value: string) {
+	const currentValue = selectedFilterValue(param)
+	setSelectedFilterValue(param, currentValue == value ? '' : value)
 }
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
@@ -156,9 +262,9 @@ async function loadExpenses() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
-			expenditure_type: null,
+			expenditure_type: selectedFilterValue('expenditure_type') == '' ? null : selectedFilterValue('expenditure_type'),
 			expenditure_type_id: null,
-			supplier: null,
+			supplier: selectedFilterValue('supplier') == '' ? null : selectedFilterValue('supplier'),
 			supplier_id: null,
 			date_from: null,
 			date_to: null,
@@ -232,6 +338,33 @@ function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadExpenses() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadExpenses() }
 
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getExpenseFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as ExpenseSelectedFilter[]
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadExpenses()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadExpenses()
+}
+
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
 	if (pageValue == null) return
@@ -302,9 +435,13 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedFilters.value.length > 0
+})
+
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
-	if (keyword.value != '') return '没有匹配的支出记录'
+	if (hasActiveFilter.value) return '没有匹配的支出记录'
 	return '暂无支出记录'
 })
 
@@ -316,8 +453,22 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	]
 })
 
-onLoad(() => { loadExpenses() })
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+const filterDefinitions = computed((): ExpenseFilterDefinition[] => {
+	if (filterOptions.value == null) return [] as ExpenseFilterDefinition[]
+	return filterOptions.value!.filters
+})
+
+onLoad(() => { updateFilterPanelLayout(); loadExpenses() })
 onShow(() => {
+	updateFilterPanelLayout()
 	if (consumeExpenseListRefreshNeeded()) loadExpenses()
 })
 </script>
@@ -331,4 +482,23 @@ onShow(() => {
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.expense-filter-panel { position: relative; padding-top: 2px; }
+.expense-filter-content-scroll { padding-right: 2px; }
+.expense-filter-scroll-inner { padding-bottom: 58px; }
+.expense-filter-state { height: 112px; border-radius: 12px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.expense-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.expense-filter-groups { margin-bottom: 6px; }
+.expense-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.expense-filter-group-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.expense-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.expense-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.expense-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.expense-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.expense-filter-option-text-active { color: #FFFFFF; }
+.expense-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.expense-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.expense-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.expense-filter-btn-primary { background-color: #0F172A; }
+.expense-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.expense-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
 </style>

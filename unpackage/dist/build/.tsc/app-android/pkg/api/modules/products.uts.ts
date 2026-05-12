@@ -1,0 +1,958 @@
+import { baseUrl, request } from '../index.uts'
+
+export type ProductListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	filters: ProductSelectedFilter[]
+}
+
+export type ProductSelectedFilter = {
+	param: string
+	value: string
+}
+
+export type ProductMediaFile = {
+	id: string
+	company: number
+	original_filename: string
+	file_type: string
+	file_type_display: string
+	mime_type: string
+	file_size: number
+	file_size_display: string
+	file_url: string
+	thumbnail_url: string
+	signed_url: string
+	signed_thumbnail_url: string
+	object_id: string
+	is_deleted: boolean
+	created_at: string
+	updated_at: string
+}
+
+export type ProductItem = {
+	id: number
+	sku: string
+	barcode: string
+	name_cn: string
+	name_en: string
+	name_other: string
+	description: string
+	media_files: ProductMediaFile[]
+	category: any | null
+	supplier: number | null
+	supplier_name: string
+	purchase_price: string
+	net_purchase_price: string
+	cost_price: string
+	base_sales_price: string
+	status: string
+	is_featured: boolean
+	is_new: boolean
+	is_bestseller: boolean
+	sort_order: number
+	rating: string
+	variant_count: number
+	total_sales_quantity: number
+	total_sales_amount: string
+	last_sale_date: string | null
+	created_at: string
+	updated_at: string
+}
+
+export type ProductMutationData = {
+	sku: string | null
+	barcode: string | null
+	name_cn: string
+	name_en: string | null
+	name_other: string | null
+	description: string | null
+	category: string | null
+	supplier: string | null
+	purchase_price: string
+	net_purchase_price: string
+	cost_price: string
+	base_sales_price: string
+	status: string
+	is_featured: boolean
+	is_new: boolean
+	is_bestseller: boolean
+	sort_order: number
+}
+
+export type ProductListResponse = {
+	results: ProductItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ProductFilterOption = {
+	value: string
+	label: string
+}
+
+export type ProductFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: ProductFilterOption[]
+}
+
+export type ProductFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: ProductFilterDefinition[]
+}
+
+export type ProductPricingFormulaItem = {
+	id: number
+	company: number
+	name: string
+	code: string
+	expression: string
+	description: string
+	is_active: boolean
+	supported_functions: string[]
+	created_at: string
+	updated_at: string
+}
+
+export type ProductPricingFormulaListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+}
+
+export type ProductPricingFormulaListResponse = {
+	results: ProductPricingFormulaItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ProductPricingFormulaMutationData = {
+	name: string
+	code: string
+	expression: string
+	description: string
+	is_active: boolean
+}
+
+export type ProductPricingFormulaPreviewResponse = {
+	expression: string
+	inputs: UTSJSONObject
+	result: string
+}
+
+const productsBasePath = '/api/products/products/'
+const productPricingFormulasBasePath = '/api/products/pricing-formulas/'
+const productDiscountsBasePath = '/api/products/discounts/'
+const attributeTypesBasePath = '/api/products/attribute-types/'
+const attributeValuesBasePath = '/api/products/attribute-values/'
+const barcodeSequencesBasePath = '/api/products/barcode-sequences/'
+
+function buildListQuery(data: ProductListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+
+	for (let filterIndex = 0; filterIndex < data.filters.length; filterIndex += 1) {
+		const filter = data.filters[filterIndex]
+		if (filter.param != '' && filter.value != '') {
+			query[filter.param] = filter.value
+		}
+	}
+
+	return query
+}
+
+function buildPricingFormulaListQuery(data: ProductPricingFormulaListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') {
+		query['search'] = data.search
+	}
+
+	return query
+}
+
+function normalizeServerUrl(url: string): string {
+	if (url == '') {
+		return ''
+	}
+
+	if (url.startsWith('http://localhost:8000')) {
+		return baseUrl + url.substring('http://localhost:8000'.length)
+	}
+
+	if (url.startsWith('https://localhost:8000')) {
+		return baseUrl + url.substring('https://localhost:8000'.length)
+	}
+
+	if (url.startsWith('http://127.0.0.1:8000')) {
+		return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	}
+
+	if (url.startsWith('https://127.0.0.1:8000')) {
+		return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	}
+
+	return url
+}
+
+function normalizeProductMediaFiles(files: ProductMediaFile[]) {
+	for (let mediaIndex = 0; mediaIndex < files.length; mediaIndex += 1) {
+		const mediaFile = files[mediaIndex]
+		mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
+		mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
+		mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
+		mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+	}
+}
+
+function normalizeProductItem(item: ProductItem): ProductItem {
+	normalizeProductMediaFiles(item.media_files)
+	return item
+}
+
+function normalizeProductList(data: ProductListResponse): ProductListResponse {
+	for (let productIndex = 0; productIndex < data.results.length; productIndex += 1) {
+		data.results[productIndex] = normalizeProductItem(data.results[productIndex])
+	}
+	return data
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return [] as UTSJSONObject[]
+	}
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return [] as UTSJSONObject[]
+	}
+	return parsed!
+}
+
+function intValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+
+	const text = '' + value
+	if (text == '') {
+		return 0
+	}
+
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return 0
+	}
+
+	return parsed
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+
+	return '' + value
+}
+
+function booleanValue(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) {
+		return []
+	}
+
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<any>(text)
+	if (parsed == null) {
+		return []
+	}
+
+	const result: string[] = []
+	for (let index = 0; index < parsed!.length; index += 1) {
+		result.push(stringValue(parsed![index]))
+	}
+	return result
+}
+
+function buildProductMediaFileFromObject(rawObject: UTSJSONObject): ProductMediaFile {
+	return {
+		id: stringValue(rawObject['id']),
+		company: intValue(rawObject['company']),
+		original_filename: stringValue(rawObject['original_filename']),
+		file_type: stringValue(rawObject['file_type']),
+		file_type_display: stringValue(rawObject['file_type_display']),
+		mime_type: stringValue(rawObject['mime_type']),
+		file_size: intValue(rawObject['file_size']),
+		file_size_display: stringValue(rawObject['file_size_display']),
+		file_url: normalizeServerUrl(stringValue(rawObject['file_url'])),
+		thumbnail_url: normalizeServerUrl(stringValue(rawObject['thumbnail_url'])),
+		signed_url: normalizeServerUrl(stringValue(rawObject['signed_url'])),
+		signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject['signed_thumbnail_url'])),
+		object_id: stringValue(rawObject['object_id']),
+		is_deleted: booleanValue(rawObject['is_deleted']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ProductMediaFile
+}
+
+function buildProductMediaFilesFromValue(value: any | null): ProductMediaFile[] {
+	const rawArray = parseObjectArray(value)
+	const result: ProductMediaFile[] = []
+	for (let index = 0; index < rawArray.length; index += 1) {
+		result.push(buildProductMediaFileFromObject(rawArray[index]))
+	}
+	return result
+}
+
+function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
+	return {
+		id: intValue(rawObject['id']),
+		sku: stringValue(rawObject['sku']),
+		barcode: stringValue(rawObject['barcode']),
+		name_cn: stringValue(rawObject['name_cn']),
+		name_en: stringValue(rawObject['name_en']),
+		name_other: stringValue(rawObject['name_other']),
+		description: stringValue(rawObject['description']),
+		media_files: buildProductMediaFilesFromValue(rawObject['media_files']),
+		category: rawObject['category'],
+		supplier: rawObject['supplier'] == null ? null : intValue(rawObject['supplier']),
+		supplier_name: stringValue(rawObject['supplier_name']),
+		purchase_price: stringValue(rawObject['purchase_price']),
+		net_purchase_price: stringValue(rawObject['net_purchase_price']),
+		cost_price: stringValue(rawObject['cost_price']),
+		base_sales_price: stringValue(rawObject['base_sales_price']),
+		status: stringValue(rawObject['status']),
+		is_featured: booleanValue(rawObject['is_featured']),
+		is_new: booleanValue(rawObject['is_new']),
+		is_bestseller: booleanValue(rawObject['is_bestseller']),
+		sort_order: intValue(rawObject['sort_order']),
+		rating: stringValue(rawObject['rating']),
+		variant_count: intValue(rawObject['variant_count']),
+		total_sales_quantity: intValue(rawObject['total_sales_quantity']),
+		total_sales_amount: stringValue(rawObject['total_sales_amount']),
+		last_sale_date: rawObject['last_sale_date'] == null ? null : stringValue(rawObject['last_sale_date']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ProductItem
+}
+
+function buildProductItemResponse(raw: any): ProductItem {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('商品详情响应解析失败')
+	}
+	return buildProductItemFromObject(rawObject!)
+}
+
+function buildPricingFormulaItemFromObject(rawObject: UTSJSONObject): ProductPricingFormulaItem {
+	return {
+		id: intValue(rawObject['id']),
+		company: intValue(rawObject['company']),
+		name: stringValue(rawObject['name']),
+		code: stringValue(rawObject['code']),
+		expression: stringValue(rawObject['expression']),
+		description: stringValue(rawObject['description']),
+		is_active: booleanValue(rawObject['is_active']),
+		supported_functions: stringArrayValue(rawObject['supported_functions']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ProductPricingFormulaItem
+}
+
+function buildPricingFormulaItemResponse(raw: any): ProductPricingFormulaItem {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('价格公式详情响应解析失败')
+	}
+	return buildPricingFormulaItemFromObject(rawObject!)
+}
+
+function buildPricingFormulaListResponse(raw: any, query: ProductPricingFormulaListQuery): ProductPricingFormulaListResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('价格公式列表响应解析失败')
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) {
+		const paginationText = JSON.stringify(rawPagination)
+		if (paginationText != null && paginationText != '') {
+			paginationObject = JSON.parseObject<UTSJSONObject>(paginationText)
+		}
+	}
+
+	let results: ProductPricingFormulaItem[] = []
+	const rawResults = rawObject['results']
+	if (rawResults != null) {
+		const resultObjects = parseObjectArray(rawResults)
+		for (let resultIndex = 0; resultIndex < resultObjects.length; resultIndex += 1) {
+			results.push(buildPricingFormulaItemFromObject(resultObjects[resultIndex]))
+		}
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total_count'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject['total'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject['count'])
+	if (totalCount <= 0) totalCount = results.length
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) currentPage = intValue(rawObject['current_page'])
+	if (currentPage <= 0 && paginationObject != null) currentPage = intValue(paginationObject['page'])
+	if (currentPage <= 0) currentPage = query.page
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0) pageSize = intValue(rawObject['per_page'])
+	if (pageSize <= 0 && paginationObject != null) pageSize = intValue(paginationObject['page_size'])
+	if (pageSize <= 0) pageSize = query.page_size
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0) totalPages = intValue(rawObject['pages'])
+	if (totalPages <= 0) totalPages = intValue(rawObject['num_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['num_pages'])
+	if (totalPages <= 0 && pageSize > 0) totalPages = Math.ceil(totalCount / pageSize)
+	if (totalPages <= 0) totalPages = 1
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as ProductPricingFormulaListResponse
+}
+
+function buildPricingFormulaMutationBody(data: ProductPricingFormulaMutationData): UTSJSONObject {
+	return {
+		name: data.name,
+		code: data.code,
+		expression: data.expression,
+		description: data.description,
+		is_active: data.is_active,
+	} as UTSJSONObject
+}
+
+function buildPricingFormulaPreviewResponse(raw: any): ProductPricingFormulaPreviewResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('价格公式试算响应解析失败')
+	}
+	return {
+		expression: stringValue(rawObject['expression']),
+		inputs: rawObject['inputs'] == null ? ({} as UTSJSONObject) : (rawObject['inputs'] as UTSJSONObject),
+		result: stringValue(rawObject['result']),
+	} as ProductPricingFormulaPreviewResponse
+}
+
+function buildProductListResponse(raw: any, query: ProductListQuery): ProductListResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('商品列表响应解析失败')
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) {
+		const paginationText = JSON.stringify(rawPagination)
+		if (paginationText != null && paginationText != '') {
+			paginationObject = JSON.parseObject<UTSJSONObject>(paginationText)
+		}
+	}
+
+	let results: ProductItem[] = []
+	const rawResults = rawObject['results']
+	if (rawResults != null) {
+		const resultObjects = parseObjectArray(rawResults)
+		for (let resultIndex = 0; resultIndex < resultObjects.length; resultIndex += 1) {
+			results.push(buildProductItemFromObject(resultObjects[resultIndex]))
+		}
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total'])
+	}
+	if (totalCount <= 0) {
+		totalCount = intValue(rawObject['total_count'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['total'])
+	}
+	if (totalCount <= 0 && paginationObject != null) {
+		totalCount = intValue(paginationObject['count'])
+	}
+	if (totalCount <= 0) {
+		totalCount = results.length
+	}
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) {
+		currentPage = intValue(rawObject['current_page'])
+	}
+	if (currentPage <= 0 && paginationObject != null) {
+		currentPage = intValue(paginationObject['page'])
+	}
+	if (currentPage <= 0) {
+		currentPage = query.page
+	}
+
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0) {
+		pageSize = intValue(rawObject['per_page'])
+	}
+	if (pageSize <= 0 && paginationObject != null) {
+		pageSize = intValue(paginationObject['page_size'])
+	}
+	if (pageSize <= 0) {
+		pageSize = query.page_size
+	}
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0) {
+		totalPages = intValue(rawObject['pages'])
+	}
+	if (totalPages <= 0) {
+		totalPages = intValue(rawObject['num_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['total_pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['pages'])
+	}
+	if (totalPages <= 0 && paginationObject != null) {
+		totalPages = intValue(paginationObject['num_pages'])
+	}
+	if (totalPages <= 0 && pageSize > 0) {
+		totalPages = Math.ceil(totalCount / pageSize)
+	}
+	if (totalPages <= 0) {
+		totalPages = 1
+	}
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as ProductListResponse
+}
+
+function buildProductFilterOptionsResponse(raw: any): ProductFilterOptionsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('商品过滤选项解析失败')
+	}
+
+	let filters: ProductFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filtersText = JSON.stringify(rawFilters)
+		const filterObjects = filtersText == null || filtersText == '' ? null : JSON.parseArray<UTSJSONObject>(filtersText)
+		if (filterObjects != null) {
+			const nextFilters: ProductFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects!.length; filterIndex += 1) {
+				const filterObject = filterObjects![filterIndex]
+				let options: ProductFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionsText = JSON.stringify(rawOptions)
+					const optionObjects = optionsText == null || optionsText == '' ? null : JSON.parseArray<UTSJSONObject>(optionsText)
+					if (optionObjects != null) {
+						const nextOptions: ProductFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects!.length; optionIndex += 1) {
+							const optionObject = optionObjects![optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as ProductFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: booleanValue(filterObject['multiple']),
+					options: options,
+				} as ProductFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as ProductFilterOptionsResponse
+}
+
+function productDetailPath(id: number | string): string {
+	return productsBasePath + stringValue(id) + '/'
+}
+
+function pricingFormulaDetailPath(id: number | string): string {
+	return productPricingFormulasBasePath + stringValue(id) + '/'
+}
+
+function resourceDetailPath(basePath: string, id: number | string): string {
+	return basePath + stringValue(id) + '/'
+}
+
+function buildConfigListQuery(search: string | null, page: number, pageSize: number, extra: UTSJSONObject = {} as UTSJSONObject): UTSJSONObject {
+	const query = {
+		page: page,
+		page_size: pageSize,
+	} as UTSJSONObject
+	if (search != null && search != '') {
+		query['search'] = search
+	}
+	const attributeType = extra['attribute_type']
+	if (attributeType != null && ('' + attributeType) != '') {
+		query['attribute_type'] = attributeType
+	}
+	const status = extra['status']
+	if (status != null && ('' + status) != '') {
+		query['status'] = status
+	}
+	const discountType = extra['discount_type']
+	if (discountType != null && ('' + discountType) != '') {
+		query['discount_type'] = discountType
+	}
+	const shop = extra['shop']
+	if (shop != null && ('' + shop) != '') {
+		query['shop'] = shop
+	}
+	return query
+}
+
+function buildConfigListResponse(raw: any, page: number, pageSize: number): UTSJSONObject {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('配置列表响应解析失败')
+	}
+
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) {
+		const paginationText = JSON.stringify(rawPagination)
+		if (paginationText != null && paginationText != '') {
+			paginationObject = JSON.parseObject<UTSJSONObject>(paginationText)
+		}
+	}
+
+	let results: UTSJSONObject[] = []
+	const rawResults = rawObject['results']
+	if (rawResults != null) {
+		results = parseObjectArray(rawResults)
+	}
+
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total_count'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject['total'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject['count'])
+	if (totalCount <= 0) totalCount = results.length
+
+	let currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0) currentPage = intValue(rawObject['current_page'])
+	if (currentPage <= 0 && paginationObject != null) currentPage = intValue(paginationObject['page'])
+	if (currentPage <= 0) currentPage = page
+
+	let resolvedPageSize = intValue(rawObject['page_size'])
+	if (resolvedPageSize <= 0) resolvedPageSize = intValue(rawObject['per_page'])
+	if (resolvedPageSize <= 0 && paginationObject != null) resolvedPageSize = intValue(paginationObject['page_size'])
+	if (resolvedPageSize <= 0) resolvedPageSize = pageSize
+
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0) totalPages = intValue(rawObject['pages'])
+	if (totalPages <= 0) totalPages = intValue(rawObject['num_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject['num_pages'])
+	if (totalPages <= 0 && resolvedPageSize > 0) totalPages = Math.ceil(totalCount / resolvedPageSize)
+	if (totalPages <= 0) totalPages = 1
+
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: resolvedPageSize,
+	} as UTSJSONObject
+}
+
+function buildProductMutationBody(data: ProductMutationData): UTSJSONObject {
+	const body = {
+		name_cn: data.name_cn,
+		purchase_price: data.purchase_price,
+		net_purchase_price: data.net_purchase_price,
+		cost_price: data.cost_price,
+		base_sales_price: data.base_sales_price,
+		status: data.status,
+		is_featured: data.is_featured,
+		is_new: data.is_new,
+		is_bestseller: data.is_bestseller,
+		sort_order: data.sort_order,
+	} as UTSJSONObject
+	if (data.sku != null) {
+		body['sku'] = data.sku
+	}
+	if (data.barcode != null) {
+		body['barcode'] = data.barcode
+	}
+	if (data.name_en != null) {
+		body['name_en'] = data.name_en
+	}
+	if (data.name_other != null) {
+		body['name_other'] = data.name_other
+	}
+	if (data.description != null) {
+		body['description'] = data.description
+	}
+	if (data.category != null) {
+		body['category'] = data.category
+	}
+	if (data.supplier != null) {
+		body['supplier'] = data.supplier
+	}
+	return body
+}
+
+export async function getProductList(data: ProductListQuery): Promise<ProductListResponse> {
+	const raw = await request(
+		productsBasePath,
+		'GET',
+		buildListQuery(data),
+		true
+	)
+
+	return normalizeProductList(buildProductListResponse(raw, data))
+}
+
+export async function getProductFilterOptions(): Promise<ProductFilterOptionsResponse> {
+	const raw = await request(
+		productsBasePath + 'filter-options/',
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+
+	return buildProductFilterOptionsResponse(raw)
+}
+
+export async function getProductDetail(id: number | string): Promise<ProductItem> {
+	const raw = await request(
+		productDetailPath(id),
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+	return normalizeProductItem(buildProductItemResponse(raw))
+}
+
+export async function createProduct(data: ProductMutationData): Promise<ProductItem> {
+	const raw = await request(
+		productsBasePath,
+		'POST',
+		buildProductMutationBody(data),
+		true
+	)
+	return normalizeProductItem(buildProductItemResponse(raw))
+}
+
+export async function updateProduct(id: number | string, data: ProductMutationData): Promise<ProductItem> {
+	const raw = await request(
+		productDetailPath(id),
+		'PUT',
+		buildProductMutationBody(data),
+		true
+	)
+	return normalizeProductItem(buildProductItemResponse(raw))
+}
+
+export async function getProductPricingFormulaDetail(id: number | string): Promise<ProductPricingFormulaItem> {
+	const raw = await request(
+		pricingFormulaDetailPath(id),
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+	return buildPricingFormulaItemResponse(raw)
+}
+
+export async function getProductPricingFormulaList(data: ProductPricingFormulaListQuery): Promise<ProductPricingFormulaListResponse> {
+	const raw = await request(
+		productPricingFormulasBasePath,
+		'GET',
+		buildPricingFormulaListQuery(data),
+		true
+	)
+	return buildPricingFormulaListResponse(raw, data)
+}
+
+export async function createProductPricingFormula(data: ProductPricingFormulaMutationData): Promise<ProductPricingFormulaItem> {
+	const raw = await request(
+		productPricingFormulasBasePath,
+		'POST',
+		buildPricingFormulaMutationBody(data),
+		true
+	)
+	return buildPricingFormulaItemResponse(raw)
+}
+
+export async function updateProductPricingFormula(id: number | string, data: ProductPricingFormulaMutationData): Promise<ProductPricingFormulaItem> {
+	const raw = await request(
+		pricingFormulaDetailPath(id),
+		'PUT',
+		buildPricingFormulaMutationBody(data),
+		true
+	)
+	return buildPricingFormulaItemResponse(raw)
+}
+
+export async function previewProductPricingFormula(id: number | string, value: string): Promise<ProductPricingFormulaPreviewResponse> {
+	const raw = await request(
+		pricingFormulaDetailPath(id) + 'preview/',
+		'POST',
+		{
+			value: value,
+		} as UTSJSONObject,
+		true
+	)
+	return buildPricingFormulaPreviewResponse(raw)
+}
+
+export async function getProductConfigList(basePath: string, search: string | null, page: number, pageSize: number, extra: UTSJSONObject = {} as UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(
+		basePath,
+		'GET',
+		buildConfigListQuery(search, page, pageSize, extra),
+		true
+	)
+	return buildConfigListResponse(raw, page, pageSize)
+}
+
+export async function getProductConfigDetail(basePath: string, id: number | string): Promise<UTSJSONObject> {
+	const raw = await request(
+		resourceDetailPath(basePath, id),
+		'GET',
+		{} as UTSJSONObject,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('配置详情响应解析失败')
+	}
+	return parsed!
+}
+
+export async function createProductConfig(basePath: string, data: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(
+		basePath,
+		'POST',
+		data,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('配置创建响应解析失败')
+	}
+	return parsed!
+}
+
+export async function updateProductConfig(basePath: string, id: number | string, data: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(
+		resourceDetailPath(basePath, id),
+		'PUT',
+		data,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('配置保存响应解析失败')
+	}
+	return parsed!
+}
+
+export function deleteProductConfig(basePath: string, id: number | string): Promise<any> {
+	return request(
+		resourceDetailPath(basePath, id),
+		'DELETE',
+		{} as UTSJSONObject,
+		true
+	)
+}
+
+export function productDiscountsPath(): string {
+	return productDiscountsBasePath
+}
+
+export function attributeTypesPath(): string {
+	return attributeTypesBasePath
+}
+
+export function attributeValuesPath(): string {
+	return attributeValuesBasePath
+}
+
+export function barcodeSequencesPath(): string {
+	return barcodeSequencesBasePath
+}

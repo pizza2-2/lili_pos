@@ -3,6 +3,7 @@
 	<view class="bs-trigger-wrapper" @click="open">
 		<slot name="trigger">
 			<view class="bs-trigger-default">
+				<image v-if="internalImage != ''" class="bs-trigger-image" :src="internalImage" mode="aspectFill"></image>
 				<text :class="displayText != '' ? 'bs-trigger-text' : 'bs-trigger-placeholder'">
 					{{ displayText != '' ? displayText : placeholder }}
 				</text>
@@ -128,9 +129,13 @@
 							<view v-else class="bs-tree-toggle-placeholder"></view>
 						</view>
 
-						<text :class="isItemSelected(row.item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label'">
-							{{ fieldLabel(row.item, labelKey) }}
-						</text>
+						<image v-if="getItemImage(row.item) != ''" class="bs-item-image" :src="getItemImage(row.item)" mode="aspectFill"></image>
+						<view class="bs-item-texts">
+							<text :class="isItemSelected(row.item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label'">
+								{{ fieldLabel(row.item, labelKey) }}
+							</text>
+							<text v-if="getItemSubtitle(row.item) != ''" class="bs-item-subtitle">{{ getItemSubtitle(row.item) }}</text>
+						</view>
 					</view>
 
 					<!-- 选中 / 半选图标 -->
@@ -179,6 +184,7 @@ import {
 type SelectChangePayload = {
 	value: string
 	text: string
+	image: string
 	item: UTSJSONObject
 }
 
@@ -208,6 +214,11 @@ type Props = {
 	 * 单选显示文本
 	 */
 	valueText?: string
+
+	/**
+	 * 单选显示图片
+	 */
+	valueImage?: string
 
 	/**
 	 * 多选值
@@ -267,6 +278,8 @@ type Props = {
 	disabled?: boolean
 	labelKey?: string
 	valueKey?: string
+	imageKey?: string
+	subtitleKey?: string
 	pageSize?: number
 	searchDelay?: number
 	closeOnOverlay?: boolean
@@ -284,6 +297,7 @@ type Props = {
 const props = withDefaults(defineProps<Props>(), {
 	value: '',
 	valueText: '',
+	valueImage: '',
 	values: () : string[] => [],
 	multiple: false,
 
@@ -303,6 +317,8 @@ const props = withDefaults(defineProps<Props>(), {
 	disabled: false,
 	labelKey: 'text',
 	valueKey: 'value',
+	imageKey: '',
+	subtitleKey: '',
 	pageSize: 20,
 	searchDelay: 300,
 	closeOnOverlay: true,
@@ -332,6 +348,7 @@ const panelVisible = ref<boolean>(false)
 
 const internalValue = ref<string>(props.value ?? '')
 const internalText = ref<string>(props.valueText ?? '')
+const internalImage = ref<string>(props.valueImage ?? '')
 const textInitialized = ref<boolean>((props.valueText ?? '') != '')
 
 const selectedItems = ref<UTSJSONObject[]>([])
@@ -372,6 +389,18 @@ function getItemValue(item: UTSJSONObject) : string {
 
 function getItemLabel(item: UTSJSONObject) : string {
 	return fieldLabel(item, props.labelKey)
+}
+
+function getItemImage(item: UTSJSONObject) : string {
+	const key = props.imageKey ?? ''
+	if (key == '') return ''
+	return fieldLabel(item, key)
+}
+
+function getItemSubtitle(item: UTSJSONObject) : string {
+	const key = props.subtitleKey ?? ''
+	if (key == '') return ''
+	return fieldLabel(item, key)
 }
 
 function getNumberField(obj: UTSJSONObject, key: string) : number {
@@ -956,6 +985,7 @@ async function fetchTextByValue(value: string) {
 
 		if (item != null) {
 			internalText.value = getItemLabel(item)
+			internalImage.value = getItemImage(item)
 			textInitialized.value = true
 		}
 	} catch (e) {
@@ -989,6 +1019,7 @@ watch(
 			if (newVal != '') {
 				if (props.valueText != '') {
 					internalText.value = props.valueText
+					internalImage.value = props.valueImage ?? ''
 					textInitialized.value = true
 				} else {
 					textInitialized.value = false
@@ -1013,8 +1044,16 @@ watch(
 
 		if (internalValue.value == '') {
 			internalText.value = ''
+			internalImage.value = ''
 			textInitialized.value = false
 		}
+	}
+)
+
+watch(
+	() : string => props.valueImage ?? '',
+	(newImage: string) => {
+		internalImage.value = newImage
 	}
 )
 
@@ -1047,6 +1086,7 @@ onMounted(() => {
 	if (!props.multiple && internalValue.value != '') {
 		if (props.valueText != '') {
 			internalText.value = props.valueText
+			internalImage.value = props.valueImage ?? ''
 			textInitialized.value = true
 		} else {
 			fetchTextByValue(internalValue.value)
@@ -1245,12 +1285,14 @@ function getSelectIcon(item: UTSJSONObject) : string {
 function confirmSingleItem(item: UTSJSONObject) {
 	const value = getItemValue(item)
 	const text = getItemLabel(item)
+	const image = getItemImage(item)
 
 	internalValue.value = value
 	internalText.value = text
+	internalImage.value = image
 	textInitialized.value = true
 
-	emit('change', { value: value, text: text, item: item } as UTSJSONObject)
+	emit('change', { value: value, text: text, image: image, item: item } as UTSJSONObject)
 
 	close()
 }
@@ -1393,6 +1435,7 @@ function setValue(value: string, text: string) {
 		fetchTextByValue(value)
 	} else {
 		internalText.value = ''
+		internalImage.value = ''
 		textInitialized.value = false
 	}
 }
@@ -1405,6 +1448,7 @@ function getValue() : SelectChangePayload {
 	return {
 		value: internalValue.value,
 		text: internalText.value,
+		image: internalImage.value,
 		item: {} as UTSJSONObject,
 	} as SelectChangePayload
 }
@@ -1423,6 +1467,7 @@ function getValues() : MultiSelectChangePayload {
 function clearValue() {
 	internalValue.value = ''
 	internalText.value = ''
+	internalImage.value = ''
 	textInitialized.value = false
 }
 
@@ -1520,6 +1565,15 @@ defineExpose({
 	border-bottom-width: 1px;
 	border-bottom-color: #E5E5E5;
 	border-bottom-style: solid;
+}
+
+.bs-trigger-image {
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	margin-right: 10px;
+	background-color: #EEF2F7;
+	flex-shrink: 0;
 }
 
 .bs-trigger-text {
@@ -1781,6 +1835,21 @@ defineExpose({
 	margin-right: 12px;
 }
 
+.bs-item-image {
+	width: 42px;
+	height: 42px;
+	border-radius: 10px;
+	margin-right: 10px;
+	background-color: #EEF2F7;
+	flex-shrink: 0;
+}
+
+.bs-item-texts {
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+}
+
 .bs-tree-prefix {
 	flex-direction: row;
 	align-items: center;
@@ -1817,11 +1886,19 @@ defineExpose({
 .bs-item-label {
 	flex: 1;
 	font-size: 14px;
+	line-height: 20px;
 	color: #333333;
 }
 
 .bs-item-label-selected {
 	color: #4A90E2;
+}
+
+.bs-item-subtitle {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #7B8796;
 }
 
 .bs-check-icon-wrapper {

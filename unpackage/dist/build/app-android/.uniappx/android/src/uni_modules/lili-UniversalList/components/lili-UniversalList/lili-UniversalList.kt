@@ -1,0 +1,1133 @@
+@file:Suppress("UNCHECKED_CAST", "USELESS_CAST", "INAPPLICABLE_JVM_NAME", "UNUSED_ANONYMOUS_PARAMETER", "SENSELESS_COMPARISON", "NAME_SHADOWING", "UNNECESSARY_NOT_NULL_ASSERTION")
+package uni.UNI1CE1B14
+import io.dcloud.uniapp.*
+import io.dcloud.uniapp.extapi.*
+import io.dcloud.uniapp.framework.*
+import io.dcloud.uniapp.runtime.*
+import io.dcloud.uniapp.vue.*
+import io.dcloud.uniapp.vue.shared.*
+import io.dcloud.unicloud.*
+import io.dcloud.uts.*
+import io.dcloud.uts.Map
+import io.dcloud.uts.Set
+import io.dcloud.uts.UTSAndroid
+import kotlin.properties.Delegates
+import io.dcloud.uniapp.extapi.showActionSheet as uni_showActionSheet
+open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList : VueComponent {
+    constructor(__ins: ComponentInternalInstance) : super(__ins) {}
+    open var items: UTSArray<UTSJSONObject> by `$props`
+    open var keyField: String by `$props`
+    open var titleField: String by `$props`
+    open var subtitleField: String by `$props`
+    open var metaField: String by `$props`
+    open var imageField: String by `$props`
+    open var imageListField: String by `$props`
+    open var showImage: Boolean by `$props`
+    open var fields: UTSArray<UTSJSONObject> by `$props`
+    open var tagField: String by `$props`
+    open var tagColorMap: UTSJSONObject by `$props`
+    open var showActions: Boolean by `$props`
+    open var actions: UTSArray<UTSJSONObject> by `$props`
+    open var selectionMode: Boolean by `$props`
+    open var selectedItems: UTSArray<String> by `$props`
+    open var longPressToSelect: Boolean by `$props`
+    open var showSelectAll: Boolean by `$props`
+    open var batchActions: UTSArray<UTSJSONObject> by `$props`
+    open var batchInfoText: String by `$props`
+    open var loading: Boolean by `$props`
+    open var loadingText: String by `$props`
+    open var keepContentOnLoading: Boolean by `$props`
+    open var inlineLoadingText: String by `$props`
+    open var emptyText: String by `$props`
+    open var emptyIcon: String by `$props`
+    open var showChevron: Boolean by `$props`
+    open var showMenu: Boolean by `$props`
+    open var menuActions: UTSArray<UTSJSONObject> by `$props`
+    open var showPagination: Boolean by `$props`
+    open var currentPage: Number by `$props`
+    open var totalPages: Number by `$props`
+    open var totalCount: Number by `$props`
+    open var summaryTitle: String by `$props`
+    open var summaryItems: UTSArray<UTSJSONObject> by `$props`
+    open var summaryCollapsedByDefault: Boolean by `$props`
+    open var showFloatingAdd: Boolean by `$props`
+    open var floatingAddText: String by `$props`
+    open var enablePreviewSave: Boolean by `$props`
+    open var enablePreviewShare: Boolean by `$props`
+    open fun enterSelectionMode(seedItem: UTSJSONObject? = null) {
+        callKotlinFunction(this.`$exposed`["enterSelectionMode"]!!, _uA(
+            seedItem
+        ))
+    }
+    open var exitSelectionMode: () -> Unit
+        get() {
+            return unref(this.`$exposed`["exitSelectionMode"]) as () -> Unit
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "exitSelectionMode", value)
+        }
+    open var toggleSelectAll: () -> Unit
+        get() {
+            return unref(this.`$exposed`["toggleSelectAll"]) as () -> Unit
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "toggleSelectAll", value)
+        }
+    open var getSelectedItems: () -> UTSArray<String>
+        get() {
+            return unref(this.`$exposed`["getSelectedItems"]) as () -> UTSArray<String>
+        }
+        set(value) {
+            setRefValue(this.`$exposed`, "getSelectedItems", value)
+        }
+    companion object {
+        @Suppress("UNUSED_PARAMETER", "UNUSED_VARIABLE")
+        var setup: (__props: GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, __setupCtx: SetupContext) -> Any? = fun(__props, __setupCtx): Any? {
+            val __expose = __setupCtx.expose
+            val __ins = getCurrentInstance()!!
+            val _ctx = __ins.proxy as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList
+            val _cache = __ins.renderCache
+            val props = __props
+            fun emit(event: String, vararg do_not_transform_spread: Any?) {
+                __ins.emit(event, *do_not_transform_spread)
+            }
+            val previewImages = ref(_uA<String>())
+            val previewIndex = ref<Number>(0)
+            val previewVisible = ref<Boolean>(false)
+            val previewItem = ref<UTSJSONObject?>(null)
+            val summaryExpanded = ref<Boolean>(!props.summaryCollapsedByDefault)
+            val internalSelectionMode = ref<Boolean>(props.selectionMode)
+            val internalSelectedItems = ref<UTSArray<String>>(props.selectedItems.slice())
+            val showBlockingLoading = computed<Boolean>(fun(): Boolean {
+                if (!props.loading) {
+                    return false
+                }
+                if (!props.keepContentOnLoading) {
+                    return true
+                }
+                return props.items.length == 0
+            }
+            )
+            val showInlineLoading = computed<Boolean>(fun(): Boolean {
+                return props.loading && props.keepContentOnLoading && props.items.length > 0
+            }
+            )
+            val showSummaryBar = computed<Boolean>(fun(): Boolean {
+                return props.summaryItems.length > 0
+            }
+            )
+            val selectionModeActive = computed<Boolean>(fun(): Boolean {
+                return props.selectionMode || internalSelectionMode.value
+            }
+            )
+            val showBatchBar = computed<Boolean>(fun(): Boolean {
+                return selectionModeActive.value
+            }
+            )
+            val batchInfoText = computed<String>(fun(): String {
+                if (props.batchInfoText != "") {
+                    return props.batchInfoText
+                }
+                return "已选 " + internalSelectedItems.value.length + " 项"
+            }
+            )
+            val allSelected = computed<Boolean>(fun(): Boolean {
+                if (props.items.length == 0) {
+                    return false
+                }
+                return internalSelectedItems.value.length > 0 && internalSelectedItems.value.length == props.items.length
+            }
+            )
+            val summaryArrowText = computed<String>(fun(): String {
+                return if (summaryExpanded.value) {
+                    "⌃"
+                } else {
+                    "⌄"
+                }
+            }
+            )
+            fun gen_stringValue_fn(value: Any?): String {
+                if (value == null) {
+                    return ""
+                }
+                return "" + value
+            }
+            val stringValue = ::gen_stringValue_fn
+            fun gen_summaryItemLabel_fn(item: UTSJSONObject): String {
+                return stringValue(item["label"])
+            }
+            val summaryItemLabel = ::gen_summaryItemLabel_fn
+            fun gen_summaryItemValue_fn(item: UTSJSONObject): String {
+                return stringValue(item["value"])
+            }
+            val summaryItemValue = ::gen_summaryItemValue_fn
+            fun gen_summaryItemKey_fn(item: UTSJSONObject, index: Number): String {
+                val key = stringValue(item["key"])
+                if (key != "") {
+                    return key
+                }
+                return "summary-" + index
+            }
+            val summaryItemKey = ::gen_summaryItemKey_fn
+            fun gen_toggleSummaryExpanded_fn() {
+                summaryExpanded.value = !summaryExpanded.value
+            }
+            val toggleSummaryExpanded = ::gen_toggleSummaryExpanded_fn
+            fun gen_safeCurrentPage_fn(): Number {
+                if (props.currentPage <= 0) {
+                    return 1
+                }
+                return props.currentPage
+            }
+            val safeCurrentPage = ::gen_safeCurrentPage_fn
+            fun gen_safeTotalPages_fn(): Number {
+                if (props.totalPages <= 0) {
+                    return 1
+                }
+                return props.totalPages
+            }
+            val safeTotalPages = ::gen_safeTotalPages_fn
+            fun gen_safeTotalCount_fn(): Number {
+                if (props.totalCount < 0) {
+                    return 0
+                }
+                return props.totalCount
+            }
+            val safeTotalCount = ::gen_safeTotalCount_fn
+            val currentPageText = computed<String>(fun(): String {
+                return "" + safeCurrentPage()
+            }
+            )
+            val totalPagesText = computed<String>(fun(): String {
+                return "" + safeTotalPages()
+            }
+            )
+            val totalCountText = computed<String>(fun(): String {
+                return "" + safeTotalCount()
+            }
+            )
+            fun gen_objectField_fn(obj: UTSJSONObject, key: String): Any? {
+                return obj[key]
+            }
+            val objectField = ::gen_objectField_fn
+            fun gen_fieldText_fn(item: UTSJSONObject, path: String): String {
+                if (path == "") {
+                    return ""
+                }
+                var current: Any? = item
+                val parts = path.split(".")
+                run {
+                    var i: Number = 0
+                    while(i < parts.length){
+                        if (current == null) {
+                            return ""
+                        }
+                        val currentObj = current as UTSJSONObject
+                        current = currentObj[parts[i]]
+                        i++
+                    }
+                }
+                return stringValue(current)
+            }
+            val fieldText = ::gen_fieldText_fn
+            fun gen_fieldLabel_fn(field: UTSJSONObject): String {
+                return stringValue(field["label"])
+            }
+            val fieldLabel = ::gen_fieldLabel_fn
+            fun gen_fieldIcon_fn(field: UTSJSONObject): String {
+                return stringValue(field["icon"])
+            }
+            val fieldIcon = ::gen_fieldIcon_fn
+            fun gen_fieldType_fn(field: UTSJSONObject): String {
+                return stringValue(field["type"])
+            }
+            val fieldType = ::gen_fieldType_fn
+            fun gen_fieldKey_fn(field: UTSJSONObject, index: Number): String {
+                val key = stringValue(field["key"])
+                if (key != "") {
+                    return key
+                }
+                return "field-" + index
+            }
+            val fieldKey = ::gen_fieldKey_fn
+            fun gen_actionKey_fn(action: UTSJSONObject, index: Number): String {
+                val key = stringValue(action["key"])
+                if (key != "") {
+                    return key
+                }
+                return "action-" + index
+            }
+            val actionKey = ::gen_actionKey_fn
+            fun gen_actionText_fn(action: UTSJSONObject): String {
+                return stringValue(action["text"])
+            }
+            val actionText = ::gen_actionText_fn
+            fun gen_menuText_fn(action: UTSJSONObject): String {
+                return stringValue(action["text"])
+            }
+            val menuText = ::gen_menuText_fn
+            fun gen_actionIcon_fn(action: UTSJSONObject): String {
+                return stringValue(action["icon"])
+            }
+            val actionIcon = ::gen_actionIcon_fn
+            fun gen_actionTone_fn(action: UTSJSONObject): String {
+                val tone = stringValue(action["tone"])
+                if (tone != "") {
+                    return tone
+                }
+                return "info"
+            }
+            val actionTone = ::gen_actionTone_fn
+            fun gen_stringArrayContains_fn(list: UTSArray<String>, value: String): Boolean {
+                run {
+                    var i: Number = 0
+                    while(i < list.length){
+                        if (list[i] == value) {
+                            return true
+                        }
+                        i++
+                    }
+                }
+                return false
+            }
+            val stringArrayContains = ::gen_stringArrayContains_fn
+            fun gen_displayField_fn(item: UTSJSONObject, field: UTSJSONObject): String {
+                val raw = fieldText(item, stringValue(field["key"]))
+                val type = fieldType(field)
+                if (type == "price") {
+                    if (raw == "") {
+                        return ""
+                    }
+                    return "¥ " + raw
+                }
+                if (type == "status") {
+                    return raw
+                }
+                return raw
+            }
+            val displayField = ::gen_displayField_fn
+            fun gen_itemId_fn(item: UTSJSONObject): String {
+                return fieldText(item, props.keyField)
+            }
+            val itemId = ::gen_itemId_fn
+            fun gen_itemKey_fn(item: UTSJSONObject, index: Number): String {
+                val key = itemId(item)
+                if (key != "") {
+                    return key
+                }
+                return "item-" + index
+            }
+            val itemKey = ::gen_itemKey_fn
+            fun gen_isSelected_fn(item: UTSJSONObject): Boolean {
+                val id = itemId(item)
+                if (id == "") {
+                    return false
+                }
+                run {
+                    var i: Number = 0
+                    while(i < internalSelectedItems.value.length){
+                        if (internalSelectedItems.value[i] == id) {
+                            return true
+                        }
+                        i++
+                    }
+                }
+                return false
+            }
+            val isSelected = ::gen_isSelected_fn
+            fun gen_emitSelectedItems_fn(nextSelected: UTSArray<String>) {
+                internalSelectedItems.value = nextSelected
+                emit("update:selectedItems", nextSelected)
+                emit("selection-change", nextSelected)
+            }
+            val emitSelectedItems = ::gen_emitSelectedItems_fn
+            fun enterSelectionMode(seedItem: UTSJSONObject? = null) {
+                if (selectionModeActive.value) {
+                    return
+                }
+                internalSelectionMode.value = true
+                emit("update:selectionMode", true)
+                if (seedItem != null) {
+                    val seedId = itemId(seedItem!!)
+                    if (seedId != "") {
+                        emitSelectedItems(_uA(
+                            seedId
+                        ))
+                    }
+                }
+                emit("selection-enter", _uO("item" to seedItem, "selectedItems" to internalSelectedItems.value))
+            }
+            fun gen_exitSelectionMode_fn() {
+                internalSelectionMode.value = false
+                emitSelectedItems(_uA<String>())
+                emit("update:selectionMode", false)
+                emit("selection-exit", _uO("selectedItems" to _uA<String>()))
+            }
+            val exitSelectionMode = ::gen_exitSelectionMode_fn
+            fun gen_toggleSelection_fn(item: UTSJSONObject) {
+                val id = itemId(item)
+                if (id == "") {
+                    return
+                }
+                val nextSelected: UTSArray<String> = _uA()
+                var removed = false
+                run {
+                    var i: Number = 0
+                    while(i < internalSelectedItems.value.length){
+                        val current = internalSelectedItems.value[i]
+                        if (current == id) {
+                            removed = true
+                            i++
+                            continue
+                        }
+                        nextSelected.push(current)
+                        i++
+                    }
+                }
+                if (!removed) {
+                    nextSelected.push(id)
+                }
+                emitSelectedItems(nextSelected)
+            }
+            val toggleSelection = ::gen_toggleSelection_fn
+            fun gen_handleItemClick_fn(item: UTSJSONObject) {
+                if (selectionModeActive.value) {
+                    toggleSelection(item)
+                    return
+                }
+                emit("item-click", item)
+            }
+            val handleItemClick = ::gen_handleItemClick_fn
+            fun gen_handleItemLongPress_fn(item: UTSJSONObject) {
+                if (!props.longPressToSelect) {
+                    return
+                }
+                enterSelectionMode(item)
+            }
+            val handleItemLongPress = ::gen_handleItemLongPress_fn
+            fun gen_toggleSelectAll_fn() {
+                if (allSelected.value) {
+                    emitSelectedItems(_uA<String>())
+                    emit("select-all", _uO("selected" to false, "selectedItems" to _uA<String>()))
+                    return
+                }
+                val nextSelected: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.items.length){
+                        val id = itemId(props.items[i])
+                        if (id != "") {
+                            nextSelected.push(id)
+                        }
+                        i++
+                    }
+                }
+                emitSelectedItems(nextSelected)
+                emit("select-all", _uO("selected" to true, "selectedItems" to nextSelected))
+            }
+            val toggleSelectAll = ::gen_toggleSelectAll_fn
+            fun gen_handleSubtitleClick_fn(item: UTSJSONObject) {
+                emit("subtitle-click", _uO("item" to item, "field" to props.subtitleField, "value" to fieldText(item, props.subtitleField)))
+            }
+            val handleSubtitleClick = ::gen_handleSubtitleClick_fn
+            fun gen_handleMetaClick_fn(item: UTSJSONObject) {
+                emit("meta-click", _uO("item" to item, "field" to props.metaField, "value" to fieldText(item, props.metaField)))
+            }
+            val handleMetaClick = ::gen_handleMetaClick_fn
+            fun gen_handleFieldClick_fn(item: UTSJSONObject, field: UTSJSONObject) {
+                emit("field-click", _uO("item" to item, "field" to field, "key" to stringValue(field["key"]), "label" to fieldLabel(field), "value" to displayField(item, field)))
+            }
+            val handleFieldClick = ::gen_handleFieldClick_fn
+            fun gen_imageListFromItem_fn(item: UTSJSONObject): UTSArray<String> {
+                val images: UTSArray<String> = _uA()
+                val mainImage = fieldText(item, props.imageField)
+                if (mainImage != "") {
+                    images.push(mainImage)
+                }
+                if (props.imageListField != "") {
+                    val raw = objectField(item, props.imageListField)
+                    if (raw != null) {
+                        if (raw is UTSArray<*>) {
+                            val list = raw as UTSArray<Any>
+                            run {
+                                var i: Number = 0
+                                while(i < list.length){
+                                    val imageUrl = stringValue(list[i])
+                                    if (imageUrl != "" && !stringArrayContains(images, imageUrl)) {
+                                        images.push(imageUrl)
+                                    }
+                                    i++
+                                }
+                            }
+                        } else {
+                            val text = stringValue(raw)
+                            if (text != "") {
+                                val parts = text.split(",")
+                                run {
+                                    var i: Number = 0
+                                    while(i < parts.length){
+                                        val imageUrl = parts[i].trim()
+                                        if (imageUrl != "" && !stringArrayContains(images, imageUrl)) {
+                                            images.push(imageUrl)
+                                        }
+                                        i++
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return images
+            }
+            val imageListFromItem = ::gen_imageListFromItem_fn
+            fun gen_firstImage_fn(item: UTSJSONObject): String {
+                val list = imageListFromItem(item)
+                if (list.length == 0) {
+                    return ""
+                }
+                return list[0]
+            }
+            val firstImage = ::gen_firstImage_fn
+            fun gen_imageCount_fn(item: UTSJSONObject): Number {
+                return imageListFromItem(item).length
+            }
+            val imageCount = ::gen_imageCount_fn
+            fun gen_openPreview_fn(item: UTSJSONObject, index: Number) {
+                val list = imageListFromItem(item)
+                if (list.length == 0) {
+                    return
+                }
+                previewImages.value = list
+                previewIndex.value = index
+                previewVisible.value = true
+                previewItem.value = item
+            }
+            val openPreview = ::gen_openPreview_fn
+            fun gen_handlePreviewVisibleChange_fn(value: Boolean) {
+                previewVisible.value = value
+            }
+            val handlePreviewVisibleChange = ::gen_handlePreviewVisibleChange_fn
+            fun gen_handlePreviewIndexChange_fn(value: Number) {
+                previewIndex.value = value
+            }
+            val handlePreviewIndexChange = ::gen_handlePreviewIndexChange_fn
+            fun gen_handlePreviewOpen_fn(payload: UTSJSONObject) {
+                emit("image-preview", _uO("item" to previewItem.value, "preview" to payload))
+            }
+            val handlePreviewOpen = ::gen_handlePreviewOpen_fn
+            fun gen_handlePreviewClose_fn(payload: UTSJSONObject) {
+                emit("preview-close", _uO("item" to previewItem.value, "preview" to payload))
+                previewItem.value = null
+            }
+            val handlePreviewClose = ::gen_handlePreviewClose_fn
+            fun gen_tagList_fn(item: UTSJSONObject): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                if (props.tagField == "") {
+                    return result
+                }
+                val raw = objectField(item, props.tagField)
+                if (raw == null) {
+                    return result
+                }
+                if (raw is UTSArray<*>) {
+                    val list = raw as UTSArray<Any>
+                    run {
+                        var i: Number = 0
+                        while(i < list.length){
+                            val tag = stringValue(list[i])
+                            if (tag != "") {
+                                result.push(tag)
+                            }
+                            i++
+                        }
+                    }
+                    return result
+                }
+                val text = stringValue(raw)
+                if (text == "") {
+                    return result
+                }
+                val parts = text.split(",")
+                run {
+                    var i: Number = 0
+                    while(i < parts.length){
+                        val tag = parts[i].trim()
+                        if (tag != "") {
+                            result.push(tag)
+                        }
+                        i++
+                    }
+                }
+                return result
+            }
+            val tagList = ::gen_tagList_fn
+            fun gen_toneForTag_fn(tag: String): String {
+                val mapped = objectField(props.tagColorMap, tag)
+                val mappedText = stringValue(mapped)
+                if (mappedText != "") {
+                    return mappedText
+                }
+                if (tag.indexOf("完成") >= 0 || tag.indexOf("成功") >= 0 || tag.indexOf("启用") >= 0) {
+                    return "success"
+                }
+                if (tag.indexOf("取消") >= 0 || tag.indexOf("失败") >= 0 || tag.indexOf("禁用") >= 0) {
+                    return "danger"
+                }
+                if (tag.indexOf("待") >= 0 || tag.indexOf("预警") >= 0 || tag.indexOf("热销") >= 0) {
+                    return "warning"
+                }
+                if (tag.indexOf("新品") >= 0 || tag.indexOf("推荐") >= 0) {
+                    return "violet"
+                }
+                return "info"
+            }
+            val toneForTag = ::gen_toneForTag_fn
+            fun gen_tagClass_fn(tag: String): String {
+                val tone = toneForTag(tag)
+                return "lul-tag lul-tag-" + tone
+            }
+            val tagClass = ::gen_tagClass_fn
+            fun gen_tagTextClass_fn(tag: String): String {
+                val tone = toneForTag(tag)
+                return "lul-tag-text lul-tag-text-" + tone
+            }
+            val tagTextClass = ::gen_tagTextClass_fn
+            fun gen_actionClass_fn(action: UTSJSONObject): String {
+                return "lul-action lul-action-" + actionTone(action)
+            }
+            val actionClass = ::gen_actionClass_fn
+            fun gen_actionTextClass_fn(action: UTSJSONObject): String {
+                return "lul-action-text lul-action-text-" + actionTone(action)
+            }
+            val actionTextClass = ::gen_actionTextClass_fn
+            fun gen_actionIconClass_fn(action: UTSJSONObject): String {
+                return "lul-action-icon lul-action-text-" + actionTone(action)
+            }
+            val actionIconClass = ::gen_actionIconClass_fn
+            fun gen_handleAction_fn(item: UTSJSONObject, action: UTSJSONObject) {
+                emit("action", _uO("item" to item, "action" to action))
+            }
+            val handleAction = ::gen_handleAction_fn
+            fun gen_handleMenu_fn(item: UTSJSONObject) {
+                if (props.menuActions.length == 0) {
+                    return
+                }
+                val itemList: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.menuActions.length){
+                        itemList.push(menuText(props.menuActions[i]))
+                        i++
+                    }
+                }
+                uni_showActionSheet(ShowActionSheetOptions(itemList = itemList, success = fun(res){
+                    val selectedIndex = res.tapIndex
+                    if (selectedIndex < 0 || selectedIndex >= props.menuActions.length) {
+                        return
+                    }
+                    emit("menu", _uO("item" to item, "action" to props.menuActions[selectedIndex], "index" to selectedIndex))
+                }
+                ))
+            }
+            val handleMenu = ::gen_handleMenu_fn
+            fun gen_canGoPrev_fn(): Boolean {
+                return safeCurrentPage() > 1
+            }
+            val canGoPrev = ::gen_canGoPrev_fn
+            fun gen_canGoNext_fn(): Boolean {
+                return safeCurrentPage() < safeTotalPages()
+            }
+            val canGoNext = ::gen_canGoNext_fn
+            fun gen_emitPageChange_fn(page: Number) {
+                emit("page-change", _uO("page" to page, "currentPage" to safeCurrentPage(), "totalPages" to safeTotalPages(), "totalCount" to safeTotalCount()))
+            }
+            val emitPageChange = ::gen_emitPageChange_fn
+            fun gen_goPrevPage_fn() {
+                if (!canGoPrev()) {
+                    return
+                }
+                emitPageChange(safeCurrentPage() - 1)
+            }
+            val goPrevPage = ::gen_goPrevPage_fn
+            fun gen_goNextPage_fn() {
+                if (!canGoNext()) {
+                    return
+                }
+                emitPageChange(safeCurrentPage() + 1)
+            }
+            val goNextPage = ::gen_goNextPage_fn
+            fun gen_handleFloatingAdd_fn() {
+                emit("floating-add")
+            }
+            val handleFloatingAdd = ::gen_handleFloatingAdd_fn
+            fun gen_selectedItemObjects_fn(): UTSArray<UTSJSONObject> {
+                val result: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.items.length){
+                        if (isSelected(props.items[i])) {
+                            result.push(props.items[i])
+                        }
+                        i++
+                    }
+                }
+                return result
+            }
+            val selectedItemObjects = ::gen_selectedItemObjects_fn
+            fun gen_handleBatchAction_fn(action: UTSJSONObject) {
+                emit("batch-action", _uO("action" to action, "selectedItems" to internalSelectedItems.value, "selectedRows" to selectedItemObjects()))
+            }
+            val handleBatchAction = ::gen_handleBatchAction_fn
+            watch(fun(): UTSArray<String> {
+                return props.selectedItems
+            }
+            , fun(newValue: UTSArray<String>){
+                val nextSelected: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < newValue.length){
+                        nextSelected.push(newValue[i])
+                        i++
+                    }
+                }
+                internalSelectedItems.value = nextSelected
+            }
+            )
+            watch(fun(): Boolean {
+                return props.selectionMode
+            }
+            , fun(newValue: Boolean){
+                internalSelectionMode.value = newValue
+                if (!newValue && internalSelectedItems.value.length > 0) {
+                    internalSelectedItems.value = _uA<String>()
+                }
+            }
+            )
+            __expose(_uM("enterSelectionMode" to ::enterSelectionMode, "exitSelectionMode" to exitSelectionMode, "toggleSelectAll" to toggleSelectAll, "getSelectedItems" to fun(): UTSArray<String> {
+                return internalSelectedItems.value
+            }
+            ))
+            return fun(): Any? {
+                val _component_lili_preview = resolveEasyComponent("lili-preview", GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass)
+                return _cE("view", _uM("class" to "lul-root"), _uA(
+                    if (isTrue(unref(showSummaryBar))) {
+                        _cE("view", _uM("key" to 0, "class" to "lul-summary-wrap"), _uA(
+                            _cE("view", _uM("class" to "lul-summary-toggle", "onClick" to withModifiers(toggleSummaryExpanded, _uA(
+                                "stop"
+                            ))), _uA(
+                                _cE("view", _uM("class" to "lul-summary-toggle-main"), _uA(
+                                    _cE("text", _uM("class" to "lul-summary-toggle-title"), _tD(props.summaryTitle), 1)
+                                )),
+                                _cE("text", _uM("class" to "lul-summary-toggle-arrow"), _tD(unref(summaryArrowText)), 1)
+                            )),
+                            if (isTrue(unref(summaryExpanded))) {
+                                _cE("view", _uM("key" to 0, "class" to "lul-summary-panel"), _uA(
+                                    _cE(Fragment, null, RenderHelpers.renderList(props.summaryItems, fun(summaryItem, summaryIndex, __index, _cached): Any {
+                                        return _cE("view", _uM("key" to summaryItemKey(summaryItem, summaryIndex), "class" to "lul-summary-item"), _uA(
+                                            _cE("text", _uM("class" to "lul-summary-item-label"), _tD(summaryItemLabel(summaryItem)), 1),
+                                            _cE("text", _uM("class" to "lul-summary-item-value"), _tD(summaryItemValue(summaryItem)), 1)
+                                        ))
+                                    }), 128)
+                                ))
+                            } else {
+                                _cC("v-if", true)
+                            }
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(unref(showBlockingLoading))) {
+                        _cE("view", _uM("key" to 1, "class" to "lul-state-card"), _uA(
+                            _cE("view", _uM("class" to "lul-loading-dot")),
+                            _cE("text", _uM("class" to "lul-state-title"), _tD(_ctx.loadingText), 1),
+                            _cE("text", _uM("class" to "lul-state-desc"), "请稍候，列表正在更新。")
+                        ))
+                    } else {
+                        if (_ctx.items.length == 0) {
+                            _cE("view", _uM("key" to 2, "class" to "lul-state-card"), _uA(
+                                _cE("view", _uM("class" to "lul-empty-badge"), _uA(
+                                    _cE("text", _uM("class" to "lul-empty-badge-text"), _tD(_ctx.emptyIcon), 1)
+                                )),
+                                _cE("text", _uM("class" to "lul-state-title"), _tD(_ctx.emptyText), 1),
+                                _cE("text", _uM("class" to "lul-state-desc"), "当前没有可展示的数据。")
+                            ))
+                        } else {
+                            _cE("view", _uM("key" to 3, "class" to "lul-list"), _uA(
+                                if (isTrue(unref(showInlineLoading))) {
+                                    _cE("view", _uM("key" to 0, "class" to "lul-inline-loading"), _uA(
+                                        _cE("view", _uM("class" to "lul-inline-loading-dot")),
+                                        _cE("text", _uM("class" to "lul-inline-loading-text"), _tD(_ctx.inlineLoadingText), 1)
+                                    ))
+                                } else {
+                                    _cC("v-if", true)
+                                }
+                                ,
+                                _cE(Fragment, null, RenderHelpers.renderList(_ctx.items, fun(item, itemIndex, __index, _cached): Any {
+                                    return _cE("view", _uM("key" to itemKey(item, itemIndex), "class" to _nC(if (isSelected(item)) {
+                                        "lul-card lul-card-selected"
+                                    } else {
+                                        "lul-card"
+                                    }
+                                    ), "onClick" to fun(){
+                                        handleItemClick(item)
+                                    }
+                                    , "onLongpress" to fun(){
+                                        handleItemLongPress(item)
+                                    }
+                                    ), _uA(
+                                        _cE("view", _uM("class" to "lul-card-top"), _uA(
+                                            _cE("view", _uM("class" to "lul-card-top-left"), _uA(
+                                                if (isTrue(unref(selectionModeActive))) {
+                                                    _cE("view", _uM("key" to 0, "class" to "lul-check-wrap", "onClick" to withModifiers(fun(){
+                                                        toggleSelection(item)
+                                                    }, _uA(
+                                                        "stop"
+                                                    ))), _uA(
+                                                        _cE("view", _uM("class" to _nC(if (isSelected(item)) {
+                                                            "lul-check lul-check-active"
+                                                        } else {
+                                                            "lul-check"
+                                                        })), _uA(
+                                                            if (isTrue(isSelected(item))) {
+                                                                _cE("text", _uM("key" to 0, "class" to "lul-check-icon"), "✓")
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            }
+                                                        ), 2)
+                                                    ), 8, _uA(
+                                                        "onClick"
+                                                    ))
+                                                } else {
+                                                    _cC("v-if", true)
+                                                }
+                                                ,
+                                                if (isTrue(_ctx.showImage && firstImage(item) != "")) {
+                                                    _cE("view", _uM("key" to 1, "class" to "lul-cover-wrap"), _uA(
+                                                        _cE("image", _uM("class" to "lul-cover", "src" to firstImage(item), "mode" to "aspectFill", "onClick" to withModifiers(fun(){
+                                                            openPreview(item, 0)
+                                                        }, _uA(
+                                                            "stop"
+                                                        ))), null, 8, _uA(
+                                                            "src",
+                                                            "onClick"
+                                                        )),
+                                                        if (imageCount(item) > 1) {
+                                                            _cE("view", _uM("key" to 0, "class" to "lul-cover-count"), _uA(
+                                                                _cE("text", _uM("class" to "lul-cover-count-text"), "+" + _tD(imageCount(item) - 1), 1)
+                                                            ))
+                                                        } else {
+                                                            _cC("v-if", true)
+                                                        }
+                                                    ))
+                                                } else {
+                                                    _cC("v-if", true)
+                                                }
+                                                ,
+                                                _cE("view", _uM("class" to "lul-main"), _uA(
+                                                    _cE("view", _uM("class" to "lul-headline-row"), _uA(
+                                                        _cE("view", _uM("class" to "lul-title-wrap"), _uA(
+                                                            if (_ctx.titleField != "") {
+                                                                _cE("text", _uM("key" to 0, "class" to "lul-title"), _tD(fieldText(item, _ctx.titleField)), 1)
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            }
+                                                            ,
+                                                            if (isTrue(_ctx.subtitleField != "" && fieldText(item, _ctx.subtitleField) != "")) {
+                                                                _cE("text", _uM("key" to 1, "class" to "lul-subtitle", "onClick" to withModifiers(fun(){
+                                                                    handleSubtitleClick(item)
+                                                                }, _uA(
+                                                                    "stop"
+                                                                ))), _tD(fieldText(item, _ctx.subtitleField)), 9, _uA(
+                                                                    "onClick"
+                                                                ))
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            }
+                                                            ,
+                                                            if (isTrue(_ctx.metaField != "" && fieldText(item, _ctx.metaField) != "")) {
+                                                                _cE("text", _uM("key" to 2, "class" to "lul-meta", "onClick" to withModifiers(fun(){
+                                                                    handleMetaClick(item)
+                                                                }, _uA(
+                                                                    "stop"
+                                                                ))), _tD(fieldText(item, _ctx.metaField)), 9, _uA(
+                                                                    "onClick"
+                                                                ))
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            }
+                                                        )),
+                                                        if (isTrue(_ctx.showMenu && !unref(selectionModeActive))) {
+                                                            _cE("view", _uM("key" to 0, "class" to "lul-menu-wrap", "onClick" to withModifiers(fun(){
+                                                                handleMenu(item)
+                                                            }, _uA(
+                                                                "stop"
+                                                            ))), _uA(
+                                                                _cE("image", _uM("class" to "lul-menu-image", "src" to "/static/icon/更多.png", "mode" to "aspectFit"))
+                                                            ), 8, _uA(
+                                                                "onClick"
+                                                            ))
+                                                        } else {
+                                                            _cC("v-if", true)
+                                                        }
+                                                        ,
+                                                        if (isTrue(_ctx.showChevron && !unref(selectionModeActive))) {
+                                                            _cE("view", _uM("key" to 1, "class" to "lul-chevron-wrap"), _uA(
+                                                                _cE("text", _uM("class" to "lul-chevron"), "›")
+                                                            ))
+                                                        } else {
+                                                            _cC("v-if", true)
+                                                        }
+                                                    )),
+                                                    if (tagList(item).length > 0) {
+                                                        _cE("view", _uM("key" to 0, "class" to "lul-tags"), _uA(
+                                                            _cE(Fragment, null, RenderHelpers.renderList(tagList(item), fun(tag, tagIndex, __index, _cached): Any {
+                                                                return _cE("view", _uM("key" to (tag + "-" + tagIndex), "class" to _nC(tagClass(tag))), _uA(
+                                                                    _cE("text", _uM("class" to _nC(tagTextClass(tag))), _tD(tag), 3)
+                                                                ), 2)
+                                                            }), 128)
+                                                        ))
+                                                    } else {
+                                                        _cC("v-if", true)
+                                                    }
+                                                ))
+                                            )),
+                                            if (_ctx.fields.length > 0) {
+                                                _cE("view", _uM("key" to 0, "class" to "lul-fields"), _uA(
+                                                    _cE(Fragment, null, RenderHelpers.renderList(_ctx.fields, fun(field, fieldIndex, __index, _cached): Any {
+                                                        return _cE("view", _uM("key" to fieldKey(field, fieldIndex), "class" to "lul-field-chip", "onClick" to withModifiers(fun(){
+                                                            handleFieldClick(item, field)
+                                                        }, _uA(
+                                                            "stop"
+                                                        ))), _uA(
+                                                            if (fieldIcon(field) != "") {
+                                                                _cE("text", _uM("key" to 0, "class" to "lul-field-icon"), _tD(fieldIcon(field)), 1)
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            },
+                                                            if (fieldLabel(field) != "") {
+                                                                _cE("text", _uM("key" to 1, "class" to "lul-field-label"), _tD(fieldLabel(field)), 1)
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            },
+                                                            _cE("text", _uM("class" to "lul-field-value"), _tD(displayField(item, field)), 1)
+                                                        ), 8, _uA(
+                                                            "onClick"
+                                                        ))
+                                                    }), 128)
+                                                ))
+                                            } else {
+                                                _cC("v-if", true)
+                                            }
+                                        ))
+                                    ), 42, _uA(
+                                        "onClick",
+                                        "onLongpress"
+                                    ))
+                                }
+                                ), 128),
+                                if (isTrue(_ctx.showPagination)) {
+                                    _cE("view", _uM("key" to 1, "class" to "lul-pagination"), _uA(
+                                        _cE("view", _uM("class" to "lul-pagination-summary"), _uA(
+                                            _cE("text", _uM("class" to "lul-pagination-summary-text"), "共 " + _tD(unref(totalCountText)) + " 条", 1),
+                                            _cE("text", _uM("class" to "lul-pagination-summary-text"), "第 " + _tD(unref(currentPageText)) + " / " + _tD(unref(totalPagesText)) + " 页", 1)
+                                        )),
+                                        _cE("view", _uM("class" to "lul-pagination-actions"), _uA(
+                                            _cE("view", _uM("class" to _nC(if (canGoPrev()) {
+                                                "lul-page-btn"
+                                            } else {
+                                                "lul-page-btn lul-page-btn-disabled"
+                                            }), "onClick" to goPrevPage), _uA(
+                                                _cE("text", _uM("class" to _nC(if (canGoPrev()) {
+                                                    "lul-page-btn-text"
+                                                } else {
+                                                    "lul-page-btn-text lul-page-btn-text-disabled"
+                                                })), "上一页", 2)
+                                            ), 2),
+                                            _cE("view", _uM("class" to _nC(if (canGoNext()) {
+                                                "lul-page-btn lul-page-btn-primary"
+                                            } else {
+                                                "lul-page-btn lul-page-btn-primary lul-page-btn-disabled-primary"
+                                            }), "onClick" to goNextPage), _uA(
+                                                _cE("text", _uM("class" to _nC(if (canGoNext()) {
+                                                    "lul-page-btn-text lul-page-btn-text-light"
+                                                } else {
+                                                    "lul-page-btn-text lul-page-btn-text-disabled-light"
+                                                })), "下一页", 2)
+                                            ), 2)
+                                        ))
+                                    ))
+                                } else {
+                                    _cC("v-if", true)
+                                }
+                            ))
+                        }
+                    }
+                    ,
+                    if (isTrue(unref(previewVisible))) {
+                        _cV(_component_lili_preview, _uM("key" to 4, "images" to unref(previewImages), "initialIndex" to unref(previewIndex), "visible" to unref(previewVisible), "showList" to false, "enableSave" to _ctx.enablePreviewSave, "enableShare" to _ctx.enablePreviewShare, "onUpdate:visible" to handlePreviewVisibleChange, "onUpdate:index" to handlePreviewIndexChange, "onPreview" to handlePreviewOpen, "onClose" to handlePreviewClose), null, 8, _uA(
+                            "images",
+                            "initialIndex",
+                            "visible",
+                            "enableSave",
+                            "enableShare"
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 5, "class" to "lul-batch-spacer"))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 6, "class" to "lul-batch-bar"), _uA(
+                            _cE("view", _uM("class" to "lul-batch-bar-main"), _uA(
+                                if (isTrue(props.showSelectAll)) {
+                                    _cE("view", _uM("key" to 0, "class" to "lul-batch-select-all", "onClick" to toggleSelectAll), _uA(
+                                        _cE("view", _uM("class" to _nC(if (unref(allSelected)) {
+                                            "lul-check lul-check-active"
+                                        } else {
+                                            "lul-check"
+                                        })), _uA(
+                                            if (isTrue(unref(allSelected))) {
+                                                _cE("text", _uM("key" to 0, "class" to "lul-check-icon"), "✓")
+                                            } else {
+                                                _cC("v-if", true)
+                                            }
+                                        ), 2),
+                                        _cE("text", _uM("class" to "lul-batch-select-all-text"), _tD(if (unref(allSelected)) {
+                                            "取消全选"
+                                        } else {
+                                            "全选"
+                                        }), 1)
+                                    ))
+                                } else {
+                                    _cC("v-if", true)
+                                },
+                                _cE("view", _uM("class" to "lul-batch-info"), _uA(
+                                    _cE("text", _uM("class" to "lul-batch-info-text"), _tD(unref(batchInfoText)), 1)
+                                )),
+                                _cE("scroll-view", _uM("scroll-x" to "true", "class" to "lul-batch-actions-scroll"), _uA(
+                                    _cE("view", _uM("class" to "lul-batch-actions"), _uA(
+                                        _cE(Fragment, null, RenderHelpers.renderList(props.batchActions, fun(action, actionIndex, __index, _cached): Any {
+                                            return _cE("view", _uM("key" to actionKey(action, actionIndex), "class" to "lul-batch-action", "onClick" to fun(){
+                                                handleBatchAction(action)
+                                            }), _uA(
+                                                _cE("text", _uM("class" to "lul-batch-action-text"), _tD(actionText(action)), 1)
+                                            ), 8, _uA(
+                                                "onClick"
+                                            ))
+                                        }), 128),
+                                        _cE("view", _uM("class" to "lul-batch-action lul-batch-action-light", "onClick" to exitSelectionMode), _uA(
+                                            _cE("text", _uM("class" to "lul-batch-action-text lul-batch-action-text-light"), "取消")
+                                        ))
+                                    ))
+                                ))
+                            ))
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                    ,
+                    if (isTrue(props.showFloatingAdd && !unref(showBatchBar))) {
+                        _cE("view", _uM("key" to 7, "class" to "lul-floating-add", "onClick" to handleFloatingAdd), _uA(
+                            _cE("text", _uM("class" to "lul-floating-add-text"), _tD(props.floatingAddText), 1)
+                        ))
+                    } else {
+                        _cC("v-if", true)
+                    }
+                ))
+            }
+        }
+        val styles: Map<String, Map<String, Map<String, Any>>> by lazy {
+            _nCS(_uA(
+                styles0,
+                styles1
+            ))
+        }
+        val styles0: Map<String, Map<String, Map<String, Any>>>
+            get() {
+                return _uM("lul-root" to _pS(_uM("width" to "100%")), "lul-list" to _pS(_uM("width" to "100%")), "lul-summary-wrap" to _pS(_uM("marginBottom" to 4)), "lul-summary-toggle" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 7, "paddingBottom" to 7, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-toggle-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "minHeight" to 16, "justifyContent" to "center")), "lul-summary-toggle-title" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-summary-toggle-arrow" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "12px", "color" to "#475569")), "lul-summary-panel" to _pS(_uM("marginTop" to 4, "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 6, "paddingBottom" to 6, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-summary-item" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 3, "paddingBottom" to 3)), "lul-summary-item-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "14px", "color" to "#64748B")), "lul-summary-item-value" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "fontWeight" to "700", "color" to "#0F172A")), "lul-inline-loading" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 8, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#EFF6FF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-inline-loading-dot" to _pS(_uM("width" to 8, "height" to 8, "borderTopLeftRadius" to 4, "borderTopRightRadius" to 4, "borderBottomRightRadius" to 4, "borderBottomLeftRadius" to 4, "backgroundColor" to "#2563EB")), "lul-inline-loading-text" to _pS(_uM("marginLeft" to 8, "fontSize" to 12, "lineHeight" to "16px", "color" to "#1D4ED8", "fontWeight" to "600")), "lul-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "marginBottom" to 6, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-card-selected" to _pS(_uM("backgroundColor" to "#F8FBFF", "borderTopColor" to "#7CC4FF", "borderRightColor" to "#7CC4FF", "borderBottomColor" to "#7CC4FF", "borderLeftColor" to "#7CC4FF")), "lul-card-top" to _pS(_uM("width" to "100%")), "lul-card-top-left" to _pS(_uM("flexDirection" to "row")), "lul-check-wrap" to _pS(_uM("width" to 26, "paddingTop" to 4, "alignItems" to "flex-start")), "lul-check" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1", "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#FFFFFF")), "lul-check-active" to _pS(_uM("borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "backgroundColor" to "#0F172A")), "lul-check-icon" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-cover-wrap" to _pS(_uM("width" to 64, "height" to 64, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "overflow" to "hidden", "backgroundColor" to "#E2E8F0", "position" to "relative", "marginRight" to 8)), "lul-cover" to _pS(_uM("width" to 64, "height" to 64)), "lul-cover-count" to _pS(_uM("position" to "absolute", "right" to 6, "bottom" to 6, "paddingLeft" to 5, "paddingRight" to 5, "paddingTop" to 2, "paddingBottom" to 2, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "rgba(15,23,42,0.72)")), "lul-cover-count-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "10px", "color" to "#FFFFFF")), "lul-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "lul-headline-row" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between")), "lul-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingRight" to 6)), "lul-title" to _pS(_uM("fontSize" to 15, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "700")), "lul-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#64748B", "marginTop" to 2)), "lul-meta" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#475569", "marginTop" to 2)), "lul-menu-wrap" to _pS(_uM("width" to 24, "height" to 24, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6)), "lul-menu-icon" to _pS(_uM("fontSize" to 15, "lineHeight" to "15px", "color" to "#64748B")), "lul-menu-image" to _pS(_uM("width" to 16, "height" to 16)), "lul-chevron-wrap" to _pS(_uM("width" to 16, "alignItems" to "flex-end", "paddingTop" to 1)), "lul-chevron" to _pS(_uM("fontSize" to 16, "lineHeight" to "16px", "color" to "#94A3B8")), "lul-tags" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 6, "alignItems" to "center")), "lul-tag" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "height" to 22, "paddingLeft" to 8, "paddingRight" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "marginRight" to 5, "marginBottom" to 4)), "lul-tag-info" to _pS(_uM("backgroundColor" to "#E0F2FE")), "lul-tag-success" to _pS(_uM("backgroundColor" to "#DCFCE7")), "lul-tag-warning" to _pS(_uM("backgroundColor" to "#FEF3C7")), "lul-tag-danger" to _pS(_uM("backgroundColor" to "#FEE2E2")), "lul-tag-violet" to _pS(_uM("backgroundColor" to "#EDE9FE")), "lul-tag-muted" to _pS(_uM("backgroundColor" to "#E2E8F0")), "lul-tag-text" to _pS(_uM("fontSize" to 10, "lineHeight" to "16px", "fontWeight" to "600")), "lul-tag-text-info" to _pS(_uM("color" to "#0369A1")), "lul-tag-text-success" to _pS(_uM("color" to "#15803D")), "lul-tag-text-warning" to _pS(_uM("color" to "#B45309")), "lul-tag-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-tag-text-violet" to _pS(_uM("color" to "#6D28D9")), "lul-tag-text-muted" to _pS(_uM("color" to "#475569")), "lul-fields" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8, "paddingTop" to 8, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E7ECF3")), "lul-field-chip" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "paddingLeft" to 8, "paddingRight" to 8, "paddingTop" to 5, "paddingBottom" to 5, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "marginRight" to 5, "marginTop" to 4, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "lul-field-icon" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-field-value" to _pS(_uM("fontSize" to 11, "lineHeight" to "15px")), "lul-actions" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 14)), "lul-action" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "center", "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 9, "paddingBottom" to 9, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "marginRight" to 10, "marginTop" to 8, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid")), "lul-action-info" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#BFDBFE", "borderRightColor" to "#BFDBFE", "borderBottomColor" to "#BFDBFE", "borderLeftColor" to "#BFDBFE")), "lul-action-success" to _pS(_uM("backgroundColor" to "#F0FDF4", "borderTopColor" to "#BBF7D0", "borderRightColor" to "#BBF7D0", "borderBottomColor" to "#BBF7D0", "borderLeftColor" to "#BBF7D0")), "lul-action-warning" to _pS(_uM("backgroundColor" to "#FFF7ED", "borderTopColor" to "#FED7AA", "borderRightColor" to "#FED7AA", "borderBottomColor" to "#FED7AA", "borderLeftColor" to "#FED7AA")), "lul-action-danger" to _pS(_uM("backgroundColor" to "#FEF2F2", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA")), "lul-action-icon" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "marginRight" to 4)), "lul-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "fontWeight" to "700")), "lul-action-text-info" to _pS(_uM("color" to "#1D4ED8")), "lul-action-text-success" to _pS(_uM("color" to "#15803D")), "lul-action-text-warning" to _pS(_uM("color" to "#C2410C")), "lul-action-text-danger" to _pS(_uM("color" to "#B91C1C")), "lul-state-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 22, "borderBottomLeftRadius" to 22, "paddingTop" to 34, "paddingBottom" to 34, "paddingLeft" to 20, "paddingRight" to 20, "alignItems" to "center", "justifyContent" to "center", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-empty-badge" to _pS(_uM("width" to 56, "height" to 56, "borderTopLeftRadius" to 28, "borderTopRightRadius" to 28, "borderBottomRightRadius" to 28, "borderBottomLeftRadius" to 28, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "lul-empty-badge-text" to _pS(_uM("fontSize" to 24, "lineHeight" to "24px", "color" to "#64748B")), "lul-loading-dot" to _pS(_uM("width" to 18, "height" to 18, "borderTopLeftRadius" to 9, "borderTopRightRadius" to 9, "borderBottomRightRadius" to 9, "borderBottomLeftRadius" to 9, "backgroundColor" to "#0F172A")), "lul-state-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "700", "marginTop" to 14)), "lul-state-desc" to _pS(_uM("fontSize" to 13, "lineHeight" to "19px", "color" to "#64748B", "marginTop" to 6)), "lul-pagination" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingLeft" to 16, "paddingRight" to 16, "paddingTop" to 14, "paddingBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E7ECF3", "borderRightColor" to "#E7ECF3", "borderBottomColor" to "#E7ECF3", "borderLeftColor" to "#E7ECF3")), "lul-pagination-summary" to _pS(_uM("flexDirection" to "row", "justifyContent" to "space-between")), "lul-pagination-summary-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B")), "lul-pagination-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 12)), "lul-page-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center")), "lul-page-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A", "marginLeft" to 10)), "lul-page-btn-disabled" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopColor" to "#E5E7EB", "borderRightColor" to "#E5E7EB", "borderBottomColor" to "#E5E7EB", "borderLeftColor" to "#E5E7EB")), "lul-page-btn-disabled-primary" to _pS(_uM("backgroundColor" to "#CBD5E1", "borderTopColor" to "#CBD5E1", "borderRightColor" to "#CBD5E1", "borderBottomColor" to "#CBD5E1", "borderLeftColor" to "#CBD5E1")), "lul-page-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#334155", "fontWeight" to "700")), "lul-page-btn-text-light" to _pS(_uM("color" to "#FFFFFF")), "lul-page-btn-text-disabled" to _pS(_uM("color" to "#94A3B8")), "lul-page-btn-text-disabled-light" to _pS(_uM("color" to "#E2E8F0")), "lul-floating-add" to _pS(_uM("position" to "fixed", "right" to 14, "bottom" to 18, "height" to 36, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "rgba(15,23,42,0.92)")), "lul-floating-add-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "16px", "color" to "#FFFFFF")), "lul-batch-bar" to _pS(_uM("position" to "fixed", "left" to 0, "right" to 0, "bottom" to 0, "paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 10, "paddingBottom" to 14, "backgroundColor" to "rgba(255,255,255,0.98)", "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "#E2E8F0")), "lul-batch-spacer" to _pS(_uM("height" to 72)), "lul-batch-bar-main" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "lul-batch-select-all" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "minWidth" to 84)), "lul-batch-select-all-text" to _pS(_uM("marginLeft" to 8, "fontSize" to 13, "lineHeight" to "16px", "color" to "#0F172A", "fontWeight" to "600")), "lul-batch-info" to _pS(_uM("marginLeft" to 12, "marginRight" to 12)), "lul-batch-info-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#64748B")), "lul-batch-actions-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "lul-batch-actions" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "flex-end")), "lul-batch-action" to _pS(_uM("height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 8)), "lul-batch-action-light" to _pS(_uM("backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")))
+            }
+        val styles1: Map<String, Map<String, Map<String, Any>>>
+            get() {
+                return _uM("lul-batch-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#FFFFFF", "fontWeight" to "700")), "lul-batch-action-text-light" to _pS(_uM("color" to "#475569")))
+            }
+        var inheritAttrs = true
+        var inject: Map<String, Map<String, Any?>> = _uM()
+        var emits: Map<String, Any?> = _uM("item-click" to null, "action" to null, "batch-action" to null, "update:selectedItems" to null, "update:selectionMode" to null, "selection-change" to null, "selection-enter" to null, "selection-exit" to null, "select-all" to null, "image-preview" to null, "preview-close" to null, "menu" to null, "page-change" to null, "subtitle-click" to null, "field-click" to null, "meta-click" to null, "floating-add" to null)
+        var props = _nP(_uM("items" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "keyField" to _uM("type" to "String", "required" to false, "default" to "id"), "titleField" to _uM("type" to "String", "required" to false, "default" to "title"), "subtitleField" to _uM("type" to "String", "required" to false, "default" to ""), "metaField" to _uM("type" to "String", "required" to false, "default" to ""), "imageField" to _uM("type" to "String", "required" to false, "default" to "image"), "imageListField" to _uM("type" to "String", "required" to false, "default" to "images"), "showImage" to _uM("type" to "Boolean", "required" to false, "default" to true), "fields" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "tagField" to _uM("type" to "String", "required" to false, "default" to "tags"), "tagColorMap" to _uM("type" to "UTSJSONObject", "required" to false, "default" to fun(): UTSJSONObject {
+            return (_uO("进行中" to "info", "已完成" to "success", "已取消" to "danger", "待处理" to "warning", "草稿" to "muted", "启用" to "success", "禁用" to "danger", "新品" to "violet", "热销" to "warning", "推荐" to "info"))
+        }
+        ), "showActions" to _uM("type" to "Boolean", "required" to false, "default" to false), "actions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA(
+                _uO("key" to "detail", "text" to "详情", "icon" to "⌕", "tone" to "info"),
+                _uO("key" to "edit", "text" to "编辑", "icon" to "✎", "tone" to "success")
+            )
+        }
+        ), "selectionMode" to _uM("type" to "Boolean", "required" to false, "default" to false), "selectedItems" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
+            return _uA()
+        }
+        ), "longPressToSelect" to _uM("type" to "Boolean", "required" to false, "default" to true), "showSelectAll" to _uM("type" to "Boolean", "required" to false, "default" to true), "batchActions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "batchInfoText" to _uM("type" to "String", "required" to false, "default" to ""), "loading" to _uM("type" to "Boolean", "required" to false, "default" to false), "loadingText" to _uM("type" to "String", "required" to false, "default" to "加载中..."), "keepContentOnLoading" to _uM("type" to "Boolean", "required" to false, "default" to false), "inlineLoadingText" to _uM("type" to "String", "required" to false, "default" to "刷新中..."), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "emptyIcon" to _uM("type" to "String", "required" to false, "default" to "◌"), "showChevron" to _uM("type" to "Boolean", "required" to false, "default" to true), "showMenu" to _uM("type" to "Boolean", "required" to false, "default" to false), "menuActions" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "showPagination" to _uM("type" to "Boolean", "required" to false, "default" to false), "currentPage" to _uM("type" to "Number", "required" to false, "default" to 1), "totalPages" to _uM("type" to "Number", "required" to false, "default" to 1), "totalCount" to _uM("type" to "Number", "required" to false, "default" to 0), "summaryTitle" to _uM("type" to "String", "required" to false, "default" to "统计信息"), "summaryItems" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+            return _uA()
+        }
+        ), "summaryCollapsedByDefault" to _uM("type" to "Boolean", "required" to false, "default" to true), "showFloatingAdd" to _uM("type" to "Boolean", "required" to false, "default" to false), "floatingAddText" to _uM("type" to "String", "required" to false, "default" to "新增"), "enablePreviewSave" to _uM("type" to "Boolean", "required" to false, "default" to true), "enablePreviewShare" to _uM("type" to "Boolean", "required" to false, "default" to true)))
+        var propsNeedCastKeys = _uA(
+            "items",
+            "keyField",
+            "titleField",
+            "subtitleField",
+            "metaField",
+            "imageField",
+            "imageListField",
+            "showImage",
+            "fields",
+            "tagField",
+            "tagColorMap",
+            "showActions",
+            "actions",
+            "selectionMode",
+            "selectedItems",
+            "longPressToSelect",
+            "showSelectAll",
+            "batchActions",
+            "batchInfoText",
+            "loading",
+            "loadingText",
+            "keepContentOnLoading",
+            "inlineLoadingText",
+            "emptyText",
+            "emptyIcon",
+            "showChevron",
+            "showMenu",
+            "menuActions",
+            "showPagination",
+            "currentPage",
+            "totalPages",
+            "totalCount",
+            "summaryTitle",
+            "summaryItems",
+            "summaryCollapsedByDefault",
+            "showFloatingAdd",
+            "floatingAddText",
+            "enablePreviewSave",
+            "enablePreviewShare"
+        )
+        var components: Map<String, CreateVueComponent> = _uM()
+    }
+}

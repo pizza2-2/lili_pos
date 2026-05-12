@@ -87,17 +87,19 @@
 					:inlineLoadingText="inlineLoadingText"
 					:emptyText="emptyText"
 					emptyIcon="◎"
-					:showMenu="true"
+					:showMenu="showMenu"
 					:menuActions="menuActions"
 					:showChevron="false"
 					:showPagination="true"
 					:currentPage="currentPage"
 					:totalPages="totalPages"
 					:totalCount="totalCount"
-					:showFloatingAdd="true"
+					:showFloatingAdd="showFloatingAdd"
 					floatingAddText="新增"
 					@item-click="handleItemClick"
 					@field-click="handleFieldClick"
+					@subtitle-click="handleFieldClick"
+					@meta-click="handleFieldClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
 					@floating-add="handleCreate"
@@ -113,6 +115,7 @@ import {
 	attributeTypesPath,
 	attributeValuesPath,
 	barcodeSequencesPath,
+	addProductDiscountToProduct,
 	deleteProductConfig,
 	getProductConfigList,
 	productDiscountsPath,
@@ -135,8 +138,14 @@ const statusFilter = ref<string | null>(null)
 const discountTypeFilter = ref<string | null>(null)
 const selectedStatus = ref<string | null>(null)
 const selectedDiscountType = ref<string | null>(null)
+const selectionMode = ref(false)
+const selectionProductId = ref('')
+const selectionBaseSalesPrice = ref('0.00')
 
 const menuActions = computed((): UTSJSONObject[] => {
+	if (resource.value == 'discount' && selectionMode.value) {
+		return [] as UTSJSONObject[]
+	}
 	if (resource.value == 'attribute-type') {
 		return [
 			{ key: 'values', text: '属性值' } as UTSJSONObject,
@@ -152,11 +161,129 @@ const menuActions = computed((): UTSJSONObject[] => {
 	]
 })
 
-function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
-	const value = obj[key]
-	if (value == null) return fallback
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
 	const text = '' + value
 	return text == '' ? fallback : text
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	const text = stringValue(value)
+	return text == '' ? fallback : text
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	const text = stringValue(value)
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function formatMoneyText(value: string, fallback: string = '0.00'): string {
+	const numberValue = floatValue(value, -1)
+	if (numberValue < 0) {
+		return fallback
+	}
+	return numberValue.toFixed(2)
+}
+
+function calculateDiscountedPriceText(basePriceText: string, discountRule: UTSJSONObject): string {
+	const basePrice = floatValue(basePriceText, 0)
+	if (basePrice <= 0) {
+		return '0.00'
+	}
+	const discountType = getStringField(discountRule, 'discount_type')
+	let percentValue = floatValue(discountRule['discount_percentage'])
+	if (percentValue > 0 && discountType == 'PERCENTAGE') {
+		return formatMoneyText((basePrice * (1 - percentValue / 100)).toString())
+	}
+	let amountValue = floatValue(discountRule['discount_amount'])
+	if (amountValue <= 0 && discountRule['discount_amount_fixed'] != null) {
+		amountValue = floatValue(discountRule['discount_amount_fixed'])
+	}
+	if (amountValue > 0 && (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED')) {
+		const nextPrice = basePrice - amountValue
+		if (nextPrice <= 0) return '0.00'
+		return formatMoneyText(nextPrice.toString())
+	}
+	return basePrice.toFixed(2)
+}
+
+function buildDiscountSelectionStorageKey(productId: string): string {
+	return 'selected_discount_for_product:' + productId
+}
+
+function findDiscountById(discountId: string): UTSJSONObject | null {
+	for (let index = 0; index < items.value.length; index += 1) {
+		const item = items.value[index]
+		if (getStringField(item, 'id') == discountId) {
+			return item
+		}
+	}
+	return null
+}
+
+async function handleDiscountSelect(discountItem: UTSJSONObject) {
+	const discountId = getStringField(discountItem, 'id')
+	if (discountId == '') {
+		uni.showToast({
+			title: '无法读取折扣信息',
+			icon: 'none',
+		})
+		return
+	}
+	if (selectionProductId.value == '') {
+		uni.showToast({
+			title: '未找到商品信息',
+			icon: 'none',
+		})
+		return
+	}
+	const baseSalesPrice = selectionBaseSalesPrice.value == '' ? '0.00' : selectionBaseSalesPrice.value
+	const finalPrice = calculateDiscountedPriceText(baseSalesPrice, discountItem)
+	const selection = {
+		product_id: selectionProductId.value,
+		discount_id: discountId,
+		discount_name: getStringField(discountItem, 'name', getStringField(discountItem, 'discount_name')),
+		discount_type: getStringField(discountItem, 'discount_type'),
+		discount_percentage: getStringField(discountItem, 'discount_percentage'),
+		discount_amount: getStringField(discountItem, 'discount_amount'),
+		discount_amount_fixed: getStringField(discountItem, 'discount_amount_fixed'),
+		min_quantity: getStringField(discountItem, 'min_quantity'),
+		original_price: baseSalesPrice,
+		final_price: finalPrice,
+	} as UTSJSONObject
+
+	try {
+		uni.showLoading({
+			title: '添加中',
+			mask: true,
+		})
+		await addProductDiscountToProduct(selectionProductId.value, discountId)
+		uni.setStorageSync(buildDiscountSelectionStorageKey(selectionProductId.value), JSON.stringify(selection))
+		uni.showToast({
+			title: '折扣已添加',
+			icon: 'success',
+		})
+		uni.navigateBack({
+			delta: 1,
+		})
+	} catch (error) {
+		uni.showToast({
+			title: takeLatestResponseMessage('折扣添加失败'),
+			icon: 'none',
+		})
+	} finally {
+		uni.hideLoading()
+	}
 }
 
 function getNumberField(obj: UTSJSONObject, key: string): number {
@@ -354,6 +481,16 @@ function applyFilter() {
 	loadItems()
 }
 
+const showMenu = computed((): boolean => {
+	if (resource.value == 'discount' && selectionMode.value) return false
+	return true
+})
+
+const showFloatingAdd = computed((): boolean => {
+	if (resource.value == 'discount' && selectionMode.value) return false
+	return true
+})
+
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
 	if (pageValue == null) return
@@ -372,10 +509,40 @@ function openAttributeValues(item: UTSJSONObject) {
 	})
 }
 
+function resolveListClickItem(payload: UTSJSONObject): UTSJSONObject {
+	const wrappedItem = payload['item']
+	if (wrappedItem != null) {
+		return wrappedItem as UTSJSONObject
+	}
+	return payload
+}
+
+function selectDiscountListItem(itemObject: UTSJSONObject) {
+	const rawId = getStringField(itemObject, 'rawId')
+	if (rawId == '') {
+		uni.showToast({
+			title: '无法读取折扣信息',
+			icon: 'none',
+		})
+		return
+	}
+	const sourceItem = findDiscountById(rawId)
+	if (sourceItem == null) {
+		uni.showToast({
+			title: '该折扣信息已失效',
+			icon: 'none',
+		})
+		return
+	}
+	handleDiscountSelect(sourceItem)
+}
+
 function handleItemClick(payload: UTSJSONObject) {
-	const item = payload['item']
-	if (item == null) return
-	const itemObject = item as UTSJSONObject
+	const itemObject = resolveListClickItem(payload)
+	if (resource.value == 'discount' && selectionMode.value) {
+		selectDiscountListItem(itemObject)
+		return
+	}
 	if (resource.value == 'attribute-type') {
 		openAttributeValues(itemObject)
 		return
@@ -384,6 +551,11 @@ function handleItemClick(payload: UTSJSONObject) {
 }
 
 function handleFieldClick(payload: UTSJSONObject) {
+	if (resource.value == 'discount' && selectionMode.value) {
+		const item = payload['item']
+		if (item == null) return
+		selectDiscountListItem(item as UTSJSONObject)
+	}
 }
 
 async function confirmDelete(id: string) {
@@ -509,6 +681,18 @@ const listItems = computed((): UTSJSONObject[] => {
 onLoad((event: OnLoadOptions) => {
 	const resourceValue = event['resource']
 	resource.value = resourceValue == null ? 'discount' : (resourceValue as string)
+	const modeValue = event['mode']
+	const modeText = stringValue(modeValue)
+	selectionMode.value = modeText.toLowerCase() == 'select'
+	const productIdValue = event['product_id']
+	selectionProductId.value = productIdValue == null ? '' : (productIdValue as string)
+	const baseSalesPriceValue = event['base_sales_price']
+	if (baseSalesPriceValue != null) {
+		const nextBaseSalesPrice = stringValue(baseSalesPriceValue)
+		selectionBaseSalesPrice.value = nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice
+	} else {
+		selectionBaseSalesPrice.value = '0.00'
+	}
 	const attributeTypeValue = event['attribute_type']
 	parentAttributeTypeId.value = attributeTypeValue == null ? '' : (attributeTypeValue as string)
 	const attributeTypeNameValue = event['attribute_type_name']

@@ -1,0 +1,451 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="选择商品折扣"
+			searchPlaceholder="输入折扣名称、编码"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showHome="false"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadDiscounts">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="meta"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载折扣"
+					:keepContentOnLoading="true"
+					inlineLoadingText="折扣列表刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showChevron="true"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="折扣统计"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					@item-click="handleItemClick"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import {
+	addProductDiscountToProduct,
+	getAvailableProductDiscountsForProduct,
+} from '@/pkg/api/modules/products.uts'
+
+const productId = ref('')
+const baseSalesPrice = ref('0.00')
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const discounts = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const discountListStorageKeyPrefix = 'selected_discount_for_product:'
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'discountRuleText', label: '折扣规则' } as UTSJSONObject,
+	{ key: 'discountTypeText', label: '类型' } as UTSJSONObject,
+	{ key: 'discountedPriceText', label: '折扣后售价' } as UTSJSONObject,
+	{ key: 'minQuantityText', label: '最低数量' } as UTSJSONObject,
+])
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') {
+			message = directMessage
+		}
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					message = rawMessage as string
+				}
+			}
+		}
+	}
+	return message
+}
+
+function formatMoneyText(value: string, fallback: string = '0.00'): string {
+	const numberValue = floatValue(value, -1)
+	if (numberValue < 0) {
+		return fallback
+	}
+	return numberValue.toFixed(2)
+}
+
+function getDiscountRuleText(item: UTSJSONObject): string {
+	const discountDisplay = getStringField(item, 'discount_display')
+	if (discountDisplay != '') return discountDisplay
+	const discountType = getStringField(item, 'discount_type')
+	const percentValue = getStringField(item, 'discount_percentage')
+	if (discountType == 'PERCENTAGE' && percentValue != '') {
+		return '折扣：' + percentValue + '%'
+	}
+	const fixedAmount = getStringField(item, 'discount_amount_fixed', getStringField(item, 'discount_amount'))
+	if (fixedAmount != '') {
+		return '减' + fixedAmount
+	}
+	return '未设置规则'
+}
+
+function getDiscountTypeText(item: UTSJSONObject): string {
+	const discountType = getStringField(item, 'discount_type')
+	if (discountType == 'PERCENTAGE') {
+		return '百分比'
+	}
+	if (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED') {
+		return '固定金额'
+	}
+	return discountType == '' ? '未知' : discountType
+}
+
+function calculateDiscountedPriceText(basePriceText: string, item: UTSJSONObject): string {
+	const basePrice = floatValue(basePriceText, 0)
+	if (basePrice <= 0) {
+		return '0.00'
+	}
+	const discountType = getStringField(item, 'discount_type')
+	const percentValue = floatValue(item['discount_percentage'])
+	if (discountType == 'PERCENTAGE' && percentValue > 0) {
+		return formatMoneyText((basePrice * (1 - percentValue / 100)).toString())
+	}
+	let amountValue = floatValue(item['discount_amount'])
+	if (amountValue <= 0 && item['discount_amount_fixed'] != null) {
+		amountValue = floatValue(item['discount_amount_fixed'])
+	}
+	if (amountValue > 0 && (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED')) {
+		const nextPrice = basePrice - amountValue
+		if (nextPrice <= 0) return '0.00'
+		return formatMoneyText(nextPrice.toString())
+	}
+	return basePrice.toFixed(2)
+}
+
+function itemId(item: UTSJSONObject): string {
+	return getStringField(item, 'id')
+}
+
+function parseDiscountResults(response: UTSJSONObject): void {
+	const rawResults = response['results']
+	if (rawResults == null) {
+		discounts.value = [] as UTSJSONObject[]
+	} else {
+		discounts.value = rawResults as UTSJSONObject[]
+	}
+	totalCount.value = intValue(response['total_count'])
+	totalPages.value = intValue(response['total_pages'])
+	currentPage.value = intValue(response['current_page'])
+	pageSize.value = intValue(response['page_size'], 20)
+	if (totalPages.value <= 0) totalPages.value = 1
+	if (currentPage.value <= 0) currentPage.value = 1
+	if (pageSize.value <= 0) pageSize.value = 20
+}
+
+function mapItemToListItem(item: UTSJSONObject): UTSJSONObject {
+	const ruleText = getDiscountRuleText(item)
+	const typeText = getDiscountTypeText(item)
+	const minQuantity = getStringField(item, 'min_quantity', '1')
+	const discountedPrice = calculateDiscountedPriceText(baseSalesPrice.value, item)
+	const id = itemId(item)
+	return {
+		id: id,
+		rawId: id,
+		name: getStringField(item, 'name', getStringField(item, 'discount_name', '未命名折扣')),
+		meta: getStringField(item, 'status', getStringField(item, 'status_text', '-')),
+		subtitle: ruleText,
+		discountRuleText: ruleText,
+		discountTypeText: typeText,
+		discountedPriceText: discountedPrice,
+		minQuantityText: minQuantity,
+		basePriceForCompute: baseSalesPrice.value,
+	} as UTSJSONObject
+}
+
+async function loadDiscounts() {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getAvailableProductDiscountsForProduct(
+			productId.value,
+			keyword.value == '' ? null : keyword.value,
+			currentPage.value,
+			pageSize.value,
+			{ status: 'ACTIVE' },
+		)
+		parseDiscountResults(response)
+	} catch (error) {
+		discounts.value = [] as UTSJSONObject[]
+		totalCount.value = 0
+		currentPage.value = 1
+		totalPages.value = 1
+		errorMessage.value = parseErrorMessage(error, '折扣列表加载失败')
+	}
+	isLoading.value = false
+}
+
+function findDiscountById(discountId: string): UTSJSONObject | null {
+	for (let index = 0; index < discounts.value.length; index++) {
+		const item = discounts.value[index]
+		if (itemId(item) == discountId) {
+			return item
+		}
+	}
+	return null
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadDiscounts()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadDiscounts()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadDiscounts()
+}
+
+async function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	const itemObject = item as UTSJSONObject
+	const discountId = getStringField(itemObject, 'rawId')
+	const sourceItem = findDiscountById(discountId)
+	if (sourceItem == null) return
+	if (productId.value == '') {
+		uni.showToast({
+			title: '未找到商品信息',
+			icon: 'none',
+		})
+		return
+	}
+	const selection = {
+		product_id: productId.value,
+		discount_id: discountId,
+		discount_name: getStringField(sourceItem, 'name', getStringField(sourceItem, 'discount_name')),
+		discount_type: getStringField(sourceItem, 'discount_type'),
+		discount_percentage: getStringField(sourceItem, 'discount_percentage'),
+		discount_amount: getStringField(sourceItem, 'discount_amount'),
+		discount_amount_fixed: getStringField(sourceItem, 'discount_amount_fixed'),
+		min_quantity: getStringField(sourceItem, 'min_quantity'),
+		original_price: baseSalesPrice.value,
+		final_price: calculateDiscountedPriceText(baseSalesPrice.value, sourceItem),
+	} as UTSJSONObject
+
+	try {
+		uni.showLoading({
+			title: '添加中',
+			mask: true,
+		})
+		await addProductDiscountToProduct(productId.value, discountId)
+		uni.setStorageSync(
+			discountListStorageKeyPrefix + productId.value,
+			JSON.stringify(selection),
+		)
+		uni.showToast({
+			title: takeLatestResponseMessage('折扣已添加'),
+			icon: 'success',
+		})
+		setTimeout(() => {
+			uni.navigateBack({
+				delta: 1,
+			})
+		}, 300)
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '折扣添加失败'),
+			icon: 'none',
+		})
+	} finally {
+		uni.hideLoading()
+	}
+}
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '总数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'selected', label: '当前页', value: discounts.value.length.toString() } as UTSJSONObject,
+	]
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < discounts.value.length; index++) {
+		result.push(mapItemToListItem(discounts.value[index]))
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '未匹配到可用折扣'
+	return '暂无可用折扣'
+})
+
+onLoad((event: OnLoadOptions) => {
+	const idValue = event['id']
+	productId.value = idValue == null ? '' : (idValue as string)
+	const rawBaseSalesPriceValue = event['base_sales_price']
+	if (rawBaseSalesPriceValue != null) {
+		const safeBaseSalesPrice = '' + rawBaseSalesPriceValue
+		if (safeBaseSalesPrice != '') {
+			baseSalesPrice.value = '' + decodeURIComponent(safeBaseSalesPrice)
+		}
+	}
+	loadDiscounts()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding-left: 18px;
+	padding-right: 18px;
+	padding-top: 18px;
+	padding-bottom: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	color: #B42318;
+	font-weight: bold;
+	line-height: 22px;
+}
+
+.error-desc {
+	font-size: 14px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	line-height: 20px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	color: #FFFFFF;
+	line-height: 20px;
+}
+</style>

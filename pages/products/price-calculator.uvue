@@ -1,0 +1,774 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="计算价格"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			homePath="/pages/tabbar/products"
+			backgroundColor="#EEF2F7"
+		/>
+
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="loading" class="state-card">
+					<text class="state-text">正在加载...</text>
+				</view>
+
+				<view v-else-if="errorMessage != ''" class="state-card">
+					<text class="state-title">加载失败</text>
+					<text class="state-text">{{ errorMessage }}</text>
+					<view class="small-btn" @click="loadData">
+						<text class="small-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<view v-else class="workspace">
+					<view class="price-strip">
+						<view class="price-main">
+							<text class="price-caption">基础售价</text>
+							<text class="price-current">{{ priceContext.base_sales_price }}</text>
+						</view>
+						<view class="price-meta">
+							<text class="price-meta-label">{{ calculating ? '计算中' : '公式数量' }}</text>
+							<text class="price-meta-value">{{ calculating ? '...' : previewItems.length }}</text>
+						</view>
+					</view>
+
+					<view class="context-grid">
+						<view class="context-cell">
+							<text class="context-label">含税采购</text>
+							<text class="context-value">{{ priceContext.purchase_price }}</text>
+						</view>
+						<view class="context-cell context-cell-mid">
+							<text class="context-label">不含税</text>
+							<text class="context-value">{{ priceContext.net_purchase_price }}</text>
+						</view>
+						<view class="context-cell">
+							<text class="context-label">成本</text>
+							<text class="context-value">{{ priceContext.cost_price }}</text>
+						</view>
+					</view>
+
+					<view class="list-title-row">
+						<text class="list-title">价格方案</text>
+						<text class="list-subtitle">点击结果写回商品</text>
+					</view>
+
+					<view v-if="previewItems.length == 0" class="empty-box">
+						<text class="empty-title">{{ calculating ? '正在计算价格' : '暂无可用公式' }}</text>
+						<text class="empty-text">{{ calculating ? '请稍候' : '请先启用价格公式' }}</text>
+					</view>
+
+					<view
+						v-for="(item, index) in previewItems"
+						:key="'pr-' + item.formulaId"
+						class="quote-row"
+					>
+						<view class="quote-index">
+							<text class="quote-index-text">{{ index + 1 }}</text>
+						</view>
+						<view class="quote-body">
+							<view class="quote-top">
+								<view class="quote-name-wrap">
+									<text class="quote-name">{{ item.formulaName }}</text>
+									<text class="quote-code">{{ item.formulaCode }}</text>
+								</view>
+								<view class="quote-source">
+									<text class="quote-source-text">{{ item.sourceLabel }}</text>
+								</view>
+							</view>
+
+							<view class="quote-price-line">
+								<view class="quote-before">
+									<text class="quote-label">计算前</text>
+									<text class="quote-before-value">{{ item.sourceValue }}</text>
+								</view>
+								<view class="quote-divider">
+									<text class="quote-divider-text">/</text>
+								</view>
+								<view class="quote-after">
+									<text class="quote-label quote-label-after">计算后</text>
+									<text class="quote-after-value">{{ item.result }}</text>
+								</view>
+							</view>
+
+							<text v-if="item.expression != ''" class="quote-expression">{{ item.expression }}</text>
+
+							<view v-if="item.error != ''" class="quote-error">
+								<text class="quote-error-text">{{ item.error }}</text>
+							</view>
+							<view
+								v-else
+								class="quote-action"
+								@click="applyPrice(item.result, item.formulaName)"
+							>
+								<text class="quote-action-text">使用这个价格</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	ProductItem,
+	ProductPricingFormulaItem,
+	ProductPricingFormulaListQuery,
+	ProductPricingFormulaBatchPreviewRequest,
+	ProductPricingFormulaBatchPreviewResult,
+	getProductDetail,
+	getProductPricingFormulaList,
+	batchPreviewProductPricingFormulas,
+} from '@/pkg/api/modules/products.uts'
+
+type PriceContext = {
+	purchase_price: string
+	net_purchase_price: string
+	cost_price: string
+	base_sales_price: string
+}
+
+type FormulaPreviewItem = {
+	formulaId: string
+	formulaName: string
+	formulaCode: string
+	expression: string
+	sourceLabel: string
+	sourceValue: string
+	result: string
+	error: string
+}
+
+const productId = ref('')
+const loading = ref(false)
+const calculating = ref(false)
+const errorMessage = ref('')
+const previewItems = ref<FormulaPreviewItem[]>([])
+
+const priceContext = ref<PriceContext>({
+	purchase_price: '',
+	net_purchase_price: '',
+	cost_price: '',
+	base_sales_price: '',
+} as PriceContext)
+const formulas = ref<ProductPricingFormulaItem[]>([])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parsePriceContext(product: ProductItem): PriceContext {
+	return {
+		purchase_price: stringValue(product.purchase_price, '0.00'),
+		net_purchase_price: stringValue(product.net_purchase_price, '0.00'),
+		cost_price: stringValue(product.cost_price, '0.00'),
+		base_sales_price: stringValue(product.base_sales_price, '0.00'),
+	} as PriceContext
+}
+
+function getContextValue(context: PriceContext, key: string): string {
+	if (key == 'purchase_price') {
+		return stringValue(context.purchase_price, '0.00')
+	}
+	if (key == 'net_purchase_price') {
+		return stringValue(context.net_purchase_price, '0.00')
+	}
+	if (key == 'cost_price') {
+		return stringValue(context.cost_price, '0.00')
+	}
+	if (key == 'base_sales_price') {
+		return stringValue(context.base_sales_price, '0.00')
+	}
+	return '0.00'
+}
+
+function resolveSourceKey(item: ProductPricingFormulaBatchPreviewResult): string {
+	const expression = item.expression.toUpperCase()
+	if (expression.indexOf('COST_PRICE') >= 0) {
+		return 'cost_price'
+	}
+	if (expression.indexOf('BASE_SALES_PRICE') >= 0) {
+		return 'base_sales_price'
+	}
+	if (expression.indexOf('NET_PURCHASE_PRICE') >= 0) {
+		return 'net_purchase_price'
+	}
+	if (expression.indexOf('PURCHASE_PRICE') >= 0) {
+		return 'purchase_price'
+	}
+	if (item.source_label == '成本价') {
+		return 'cost_price'
+	}
+	if (item.source_label == '基础销售价') {
+		return 'base_sales_price'
+	}
+	if (item.source_label == '不含税采购价') {
+		return 'net_purchase_price'
+	}
+	if (item.source_label == '含税采购价') {
+		return 'purchase_price'
+	}
+	return ''
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error == null) {
+		return message
+	}
+
+	const errorText = JSON.stringify(error)
+	if (errorText != null && errorText != '' && errorText != '{}' && errorText != 'null') {
+		return errorText
+	}
+
+	const directText = '' + error
+	if (directText != '' && directText != '[object Object]') {
+		return directText
+	}
+
+	return message
+}
+
+function buildFormulaRequestPayload(formulas: ProductPricingFormulaItem[]): ProductPricingFormulaBatchPreviewRequest {
+	const formulaIds: number[] = []
+	for (let index = 0; index < formulas.length; index += 1) {
+		formulaIds.push(formulas[index].id)
+	}
+	return {
+		purchase_price: priceContext.value.purchase_price,
+		net_purchase_price: priceContext.value.net_purchase_price,
+		cost_price: priceContext.value.cost_price,
+		base_sales_price: priceContext.value.base_sales_price,
+		formula_ids: formulaIds,
+		profitable_only: false,
+	} as ProductPricingFormulaBatchPreviewRequest
+}
+
+function mapPreviewItem(item: ProductPricingFormulaBatchPreviewResult, context: PriceContext): FormulaPreviewItem {
+	const sourceKey = resolveSourceKey(item)
+	const sourceValue = sourceKey == '' ? '未设置固定数据源' : getContextValue(context, sourceKey)
+	return {
+		formulaId: stringValue(item.formula_id),
+		formulaName: item.name,
+		formulaCode: item.code,
+		expression: item.expression,
+		sourceLabel: item.source_label == '' ? '计算前价格' : item.source_label,
+		sourceValue: sourceValue,
+		result: item.result,
+		error: item.error,
+	} as FormulaPreviewItem
+}
+
+function buildPreviewItems(results: ProductPricingFormulaBatchPreviewResult[], context: PriceContext): FormulaPreviewItem[] {
+	const items: FormulaPreviewItem[] = []
+	for (let index = 0; index < results.length; index += 1) {
+		const rawItem = results[index]
+		const item = mapPreviewItem(rawItem, context)
+		items.push(item)
+	}
+	return items
+}
+
+async function tryCalculate() {
+	if (formulas.value.length == 0) {
+		previewItems.value = []
+		calculating.value = false
+		return
+	}
+	calculating.value = true
+	previewItems.value = []
+
+	try {
+		const batchPayload = buildFormulaRequestPayload(formulas.value)
+		const result = await batchPreviewProductPricingFormulas(batchPayload)
+		const resultInputs = result.inputs == null ? priceContext.value : {
+			purchase_price: stringValue(result.inputs['PURCHASE_PRICE'], '0.00'),
+			net_purchase_price: stringValue(result.inputs['NET_PURCHASE_PRICE'], '0.00'),
+			cost_price: stringValue(result.inputs['COST_PRICE'], '0.00'),
+			base_sales_price: stringValue(result.inputs['BASE_SALES_PRICE'], '0.00'),
+		} as PriceContext
+
+		const context = resultInputs
+		priceContext.value = context
+		previewItems.value = buildPreviewItems(result.results, context)
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error, '公式计算失败')
+	} finally {
+		calculating.value = false
+	}
+}
+
+function applyPrice(price: string, formulaName: string) {
+	if (price == '') {
+		return
+	}
+	uni.setStorageSync('calc_result:' + productId.value, price)
+	uni.showToast({
+		title: '已填入: ' + formulaName,
+		icon: 'success',
+	})
+	uni.navigateBack({
+		delta: 1,
+	})
+}
+
+async function loadData() {
+	if (productId.value == '') {
+		errorMessage.value = '缺少商品ID'
+		return
+	}
+	loading.value = true
+	errorMessage.value = ''
+	try {
+		const detail = await getProductDetail(productId.value)
+		priceContext.value = parsePriceContext(detail)
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error, '商品信息加载失败')
+		loading.value = false
+		return
+	}
+
+	try {
+		const formulaList = await getProductPricingFormulaList({
+			search: null,
+			page: 1,
+			page_size: 100,
+		} as ProductPricingFormulaListQuery)
+		const activeFormulas: ProductPricingFormulaItem[] = []
+		for (let i = 0; i < formulaList.results.length; i++) {
+			if (formulaList.results[i].is_active) {
+				activeFormulas.push(formulaList.results[i])
+			}
+		}
+		formulas.value = activeFormulas
+	} catch (error) {
+		formulas.value = []
+	}
+
+	calculating.value = true
+	await tryCalculate()
+	loading.value = false
+}
+
+onLoad((event: OnLoadOptions) => {
+	const idValue = event['id']
+	productId.value = idValue == null ? '' : stringValue(idValue)
+	loadData()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	position: relative;
+	background-color: #F6F7F9;
+}
+
+.page-scroll {
+	flex: 1;
+}
+
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 44px;
+}
+
+.workspace {
+	flex: 1;
+}
+
+.price-strip {
+	flex-direction: row;
+	align-items: stretch;
+	border-radius: 6px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.price-main {
+	flex: 1;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+}
+
+.price-caption {
+	font-size: 10px;
+	line-height: 12px;
+	color: #6B7280;
+}
+
+.price-current {
+	margin-top: 1px;
+	font-size: 20px;
+	line-height: 24px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.price-meta {
+	width: 64px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+	align-items: center;
+	justify-content: center;
+	background-color: #F3F4F6;
+	border-top-right-radius: 6px;
+	border-bottom-right-radius: 6px;
+	border-left-width: 1px;
+	border-left-style: solid;
+	border-left-color: #E5E7EB;
+}
+
+.price-meta-label {
+	font-size: 10px;
+	line-height: 11px;
+	color: #6B7280;
+}
+
+.price-meta-value {
+	margin-top: 1px;
+	font-size: 14px;
+	line-height: 17px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.context-grid {
+	margin-top: 5px;
+	flex-direction: row;
+	border-radius: 6px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.context-cell {
+	flex: 1;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+.context-cell-mid {
+	border-left-width: 1px;
+	border-left-style: solid;
+	border-left-color: #EEF0F3;
+	border-right-width: 1px;
+	border-right-style: solid;
+	border-right-color: #EEF0F3;
+}
+
+.context-label {
+	font-size: 10px;
+	line-height: 11px;
+	color: #9CA3AF;
+}
+
+.context-value {
+	margin-top: 1px;
+	font-size: 11px;
+	line-height: 14px;
+	color: #374151;
+	font-weight: bold;
+}
+
+.list-title-row {
+	margin-top: 9px;
+	margin-bottom: 4px;
+	padding-left: 1px;
+	padding-right: 1px;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+}
+
+.list-title {
+	font-size: 13px;
+	line-height: 16px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.list-subtitle {
+	font-size: 10px;
+	line-height: 12px;
+	color: #9CA3AF;
+}
+
+.quote-row {
+	margin-top: 4px;
+	flex-direction: row;
+	align-items: stretch;
+}
+
+.quote-index {
+	width: 20px;
+	padding-top: 8px;
+	align-items: center;
+	background-color: #FFFFFF;
+	border-top-left-radius: 6px;
+	border-bottom-left-radius: 6px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+	border-right-width: 0;
+}
+
+.quote-index-text {
+	font-size: 10px;
+	line-height: 12px;
+	color: #9CA3AF;
+	font-weight: bold;
+}
+
+.quote-body {
+	flex: 1;
+	padding-left: 7px;
+	padding-right: 7px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-top-right-radius: 6px;
+	border-bottom-right-radius: 6px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.quote-top {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.quote-name-wrap {
+	flex: 1;
+	padding-right: 6px;
+}
+
+.quote-name {
+	font-size: 12px;
+	line-height: 15px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.quote-code {
+	margin-top: 1px;
+	font-size: 10px;
+	line-height: 11px;
+	color: #9CA3AF;
+}
+
+.quote-source {
+	height: 16px;
+	padding-left: 5px;
+	padding-right: 5px;
+	border-radius: 3px;
+	align-items: center;
+	justify-content: center;
+	background-color: #F3F4F6;
+}
+
+.quote-source-text {
+	font-size: 10px;
+	line-height: 10px;
+	color: #6B7280;
+}
+
+.quote-price-line {
+	margin-top: 5px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.quote-before {
+	flex: 1;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	border-radius: 4px;
+	background-color: #F9FAFB;
+}
+
+.quote-after {
+	flex: 1;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	border-radius: 4px;
+	background-color: #F3F7F4;
+}
+
+.quote-label {
+	font-size: 10px;
+	line-height: 11px;
+	color: #9CA3AF;
+}
+
+.quote-label-after {
+	color: #6B7280;
+}
+
+.quote-before-value {
+	margin-top: 1px;
+	font-size: 12px;
+	line-height: 15px;
+	color: #374151;
+	font-weight: bold;
+}
+
+.quote-after-value {
+	margin-top: 1px;
+	font-size: 13px;
+	line-height: 16px;
+	color: #111827;
+	font-weight: bold;
+}
+
+.quote-divider {
+	width: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.quote-divider-text {
+	font-size: 10px;
+	line-height: 12px;
+	color: #D1D5DB;
+}
+
+.quote-expression {
+	margin-top: 4px;
+	font-size: 10px;
+	line-height: 12px;
+	color: #9CA3AF;
+}
+
+.quote-action {
+	margin-top: 5px;
+	height: 25px;
+	border-radius: 4px;
+	align-items: center;
+	justify-content: center;
+	background-color: #111827;
+}
+
+.quote-action-text {
+	font-size: 11px;
+	line-height: 12px;
+	color: #FFFFFF;
+}
+
+.quote-error {
+	margin-top: 5px;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 4px;
+	background-color: #FEF2F2;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+}
+
+.quote-error-text {
+	font-size: 10px;
+	line-height: 12px;
+	color: #B91C1C;
+}
+
+.state-card {
+	padding-top: 32px;
+	padding-bottom: 32px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	background-color: #FFFFFF;
+	align-items: center;
+	justify-content: center;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+}
+
+.state-title {
+	font-size: 14px;
+	line-height: 19px;
+	color: #B91C1C;
+	font-weight: bold;
+}
+
+.state-text {
+	margin-top: 5px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+	text-align: center;
+}
+
+.empty-box {
+	margin-top: 6px;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 20px;
+	padding-bottom: 20px;
+	border-radius: 8px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+	align-items: center;
+	justify-content: center;
+}
+
+.empty-title {
+	font-size: 13px;
+	line-height: 16px;
+	color: #374151;
+	font-weight: bold;
+}
+
+.empty-text {
+	margin-top: 4px;
+	font-size: 11px;
+	line-height: 14px;
+	color: #9CA3AF;
+	text-align: center;
+}
+
+.small-btn {
+	margin-top: 10px;
+	height: 32px;
+	padding-left: 14px;
+	padding-right: 14px;
+	border-radius: 4px;
+	align-items: center;
+	justify-content: center;
+	background-color: #111827;
+}
+
+.small-btn-text {
+	font-size: 12px;
+	line-height: 13px;
+	color: #FFFFFF;
+}
+</style>

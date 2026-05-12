@@ -1,0 +1,301 @@
+import { computed } from 'vue';
+import { DashboardReport, ReportAlert, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportTrendItem, getDashboardReport } from '@/pkg/api/modules/reports.uts';
+type PeriodOption = {
+    key: ReportPeriod;
+    label: string;
+};
+const __sfc__ = defineComponent({
+    __name: 'reports',
+    setup(__props) {
+        const __ins = getCurrentInstance()!;
+        const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+        const _cache = __ins.renderCache;
+        const periodOptions = [
+            { key: 'today', label: '今日' } as PeriodOption,
+            { key: 'week', label: '本周' } as PeriodOption,
+            { key: 'month', label: '本月' } as PeriodOption,
+        ] as PeriodOption[];
+        const selectedPeriod = ref<ReportPeriod>('today');
+        const isLoading = ref(false);
+        const errorMessage = ref('');
+        const overview = ref<ReportOverview>({
+            sales_amount: '0.00',
+            order_count: 0,
+            average_order_value: '0.00',
+            purchase_amount: '0.00',
+            expense_amount: '0.00',
+            arrears_amount: '0.00',
+            net_cashflow: '0.00',
+        } as ReportOverview);
+        const salesTrend = ref<ReportTrendItem[]>([] as ReportTrendItem[]);
+        const paymentMethods = ref<ReportPaymentMethod[]>([] as ReportPaymentMethod[]);
+        const inventory = ref<ReportInventory>({
+            stock_item_count: 0,
+            total_quantity: 0,
+            available_quantity: 0,
+            low_stock_count: 0,
+            out_of_stock_count: 0,
+            no_movement_count: 0,
+            inventory_value: '0.00',
+        } as ReportInventory);
+        const alerts = ref<ReportAlert[]>([] as ReportAlert[]);
+        const currentPeriodLabel = computed((): string => {
+            for (let index = 0; index < periodOptions.length; index += 1) {
+                if (periodOptions[index].key == selectedPeriod.value) {
+                    return periodOptions[index].label;
+                }
+            }
+            return '今日';
+        });
+        const maxTrendAmount = computed((): number => {
+            let maxValue = 0;
+            for (let index = 0; index < salesTrend.value.length; index += 1) {
+                const parsed = parseFloat(salesTrend.value[index].amount);
+                if (!isNaN(parsed) && parsed > maxValue) {
+                    maxValue = parsed;
+                }
+            }
+            return maxValue;
+        });
+        function moneyText(value: string): string {
+            if (value == '') {
+                return '¥ 0.00';
+            }
+            return '¥ ' + value;
+        }
+        function compactDate(value: string): string {
+            if (value.length >= 10) {
+                return value.substring(5, 10);
+            }
+            return value;
+        }
+        function trendWidth(value: string): number {
+            const maxValue = maxTrendAmount.value;
+            if (maxValue <= 0) {
+                return 0;
+            }
+            const parsed = parseFloat(value);
+            if (isNaN(parsed) || parsed <= 0) {
+                return 0;
+            }
+            const width = Math.round((parsed / maxValue) * 100);
+            if (width < 8) {
+                return 8;
+            }
+            return width;
+        }
+        function applyReport(data: DashboardReport) {
+            overview.value = data.overview;
+            salesTrend.value = data.sales_trend;
+            paymentMethods.value = data.payment_methods;
+            inventory.value = data.inventory;
+            alerts.value = data.alerts;
+        }
+        function parseErrorMessage(error: any): string {
+            if (error == null) {
+                return '报表加载失败';
+            }
+            const directMessage = (error as Error).message;
+            if (directMessage != null && directMessage != '') {
+                return directMessage;
+            }
+            const errorText = JSON.stringify(error);
+            if (errorText != null && errorText != '') {
+                return errorText;
+            }
+            return '报表加载失败';
+        }
+        async function loadReport(): Promise<void> {
+            if (isLoading.value) {
+                return;
+            }
+            isLoading.value = true;
+            errorMessage.value = '';
+            try {
+                const data = await getDashboardReport(selectedPeriod.value);
+                applyReport(data);
+            }
+            catch (error: any) {
+                errorMessage.value = parseErrorMessage(error);
+            }
+            finally {
+                isLoading.value = false;
+            }
+        }
+        function changePeriod(period: ReportPeriod) {
+            if (selectedPeriod.value == period) {
+                return;
+            }
+            selectedPeriod.value = period;
+            loadReport();
+        }
+        onLoad((_options) => {
+            loadReport();
+        });
+        onShow(() => {
+            loadReport();
+        });
+        return (): any | null => {
+            return _cE("scroll-view", _uM({
+                class: "page-scroll",
+                style: _nS(_uM({ "flex": "1" })),
+                direction: "vertical"
+            }), [
+                _cE("view", _uM({ class: "page" }), [
+                    _cE("view", _uM({ class: "status-bar-space" })),
+                    _cE("view", _uM({ class: "topbar" }), [
+                        _cE("text", _uM({ class: "page-title" }), "报表"),
+                        _cE("button", _uM({
+                            class: "refresh-btn",
+                            onClick: loadReport
+                        }), [
+                            _cE("text", _uM({ class: "refresh-text" }), "刷新")
+                        ])
+                    ]),
+                    _cE("view", _uM({ class: "period-tabs" }), [
+                        _cE(Fragment, null, RenderHelpers.renderList(periodOptions, (item, __key, __index, _cached): any => {
+                            return _cE("view", _uM({
+                                key: item.key,
+                                class: _nC(unref(selectedPeriod) == item.key ? 'period-tab period-tab-active' : 'period-tab'),
+                                onClick: () => { changePeriod(item.key); }
+                            }), [
+                                _cE("text", _uM({
+                                    class: _nC(unref(selectedPeriod) == item.key ? 'period-text period-text-active' : 'period-text')
+                                }), _tD(item.label), 3 /* TEXT, CLASS */)
+                            ], 10 /* CLASS, PROPS */, ["onClick"]);
+                        }), 64 /* STABLE_FRAGMENT */)
+                    ]),
+                    isTrue(unref(errorMessage) != '' && !unref(isLoading))
+                        ? _cE("view", _uM({
+                            key: 0,
+                            class: "notice-card"
+                        }), [
+                            _cE("text", _uM({ class: "notice-title" }), "加载失败"),
+                            _cE("text", _uM({ class: "notice-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */)
+                        ])
+                        : _cC("v-if", true),
+                    _cE("view", _uM({ class: "hero-card surface-animate" }), [
+                        _cE("text", _uM({ class: "hero-label" }), _tD(currentPeriodLabel.value) + "销售额", 1 /* TEXT */),
+                        _cE("text", _uM({ class: "hero-value" }), _tD(moneyText(unref(overview).sales_amount)), 1 /* TEXT */),
+                        _cE("view", _uM({ class: "hero-meta" }), [
+                            _cE("text", _uM({ class: "hero-meta-text" }), "订单 " + _tD(unref(overview).order_count.toString(10)), 1 /* TEXT */),
+                            _cE("text", _uM({ class: "hero-meta-text" }), "客单价 " + _tD(moneyText(unref(overview).average_order_value)), 1 /* TEXT */)
+                        ])
+                    ]),
+                    _cE("view", _uM({ class: "metrics-grid" }), [
+                        _cE("view", _uM({ class: "metric-card surface-animate" }), [
+                            _cE("text", _uM({ class: "metric-label" }), "采购金额"),
+                            _cE("text", _uM({ class: "metric-value" }), _tD(moneyText(unref(overview).purchase_amount)), 1 /* TEXT */)
+                        ]),
+                        _cE("view", _uM({ class: "metric-card metric-right surface-animate" }), [
+                            _cE("text", _uM({ class: "metric-label" }), "支出金额"),
+                            _cE("text", _uM({ class: "metric-value" }), _tD(moneyText(unref(overview).expense_amount)), 1 /* TEXT */)
+                        ]),
+                        _cE("view", _uM({ class: "metric-card surface-animate" }), [
+                            _cE("text", _uM({ class: "metric-label" }), "供应商欠款"),
+                            _cE("text", _uM({ class: "metric-value" }), _tD(moneyText(unref(overview).arrears_amount)), 1 /* TEXT */)
+                        ]),
+                        _cE("view", _uM({ class: "metric-card metric-right surface-animate" }), [
+                            _cE("text", _uM({ class: "metric-label" }), "净现金流"),
+                            _cE("text", _uM({ class: "metric-value" }), _tD(moneyText(unref(overview).net_cashflow)), 1 /* TEXT */)
+                        ])
+                    ]),
+                    _cE("view", _uM({ class: "section surface-animate" }), [
+                        _cE("text", _uM({ class: "section-title" }), "销售趋势"),
+                        unref(salesTrend).length == 0
+                            ? _cE("view", _uM({
+                                key: 0,
+                                class: "empty-row"
+                            }), [
+                                _cE("text", _uM({ class: "empty-text" }), "暂无销售数据")
+                            ])
+                            : _cC("v-if", true),
+                        _cE(Fragment, null, RenderHelpers.renderList(unref(salesTrend), (item, __key, __index, _cached): any => {
+                            return _cE("view", _uM({
+                                key: item.date,
+                                class: "trend-row"
+                            }), [
+                                _cE("text", _uM({ class: "trend-date" }), _tD(compactDate(item.date)), 1 /* TEXT */),
+                                _cE("view", _uM({ class: "trend-bar-track" }), [
+                                    _cE("view", _uM({
+                                        class: "trend-bar",
+                                        style: _nS('width:' + trendWidth(item.amount) + '%')
+                                    }), null, 4 /* STYLE */)
+                                ]),
+                                _cE("text", _uM({ class: "trend-amount" }), _tD(moneyText(item.amount)), 1 /* TEXT */)
+                            ]);
+                        }), 128 /* KEYED_FRAGMENT */)
+                    ]),
+                    _cE("view", _uM({ class: "section surface-animate" }), [
+                        _cE("text", _uM({ class: "section-title" }), "支付方式"),
+                        _cE(Fragment, null, RenderHelpers.renderList(unref(paymentMethods), (item, __key, __index, _cached): any => {
+                            return _cE("view", _uM({
+                                key: item.key,
+                                class: "list-row"
+                            }), [
+                                _cE("text", _uM({ class: "list-label" }), _tD(item.label), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "list-value" }), _tD(item.count.toString(10)) + " 单 / " + _tD(moneyText(item.amount)), 1 /* TEXT */)
+                            ]);
+                        }), 128 /* KEYED_FRAGMENT */)
+                    ]),
+                    _cE("view", _uM({ class: "section surface-animate" }), [
+                        _cE("text", _uM({ class: "section-title" }), "库存概览"),
+                        _cE("view", _uM({ class: "inventory-grid" }), [
+                            _cE("view", _uM({ class: "inventory-item" }), [
+                                _cE("text", _uM({ class: "inventory-value" }), _tD(unref(inventory).stock_item_count.toString(10)), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "inventory-label" }), "库存项")
+                            ]),
+                            _cE("view", _uM({ class: "inventory-item" }), [
+                                _cE("text", _uM({ class: "inventory-value" }), _tD(unref(inventory).total_quantity.toString(10)), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "inventory-label" }), "库存总量")
+                            ]),
+                            _cE("view", _uM({ class: "inventory-item" }), [
+                                _cE("text", _uM({ class: "inventory-value" }), _tD(unref(inventory).low_stock_count.toString(10)), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "inventory-label" }), "低库存")
+                            ]),
+                            _cE("view", _uM({ class: "inventory-item" }), [
+                                _cE("text", _uM({ class: "inventory-value" }), _tD(unref(inventory).out_of_stock_count.toString(10)), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "inventory-label" }), "售罄")
+                            ])
+                        ])
+                    ]),
+                    _cE("view", _uM({ class: "section surface-animate" }), [
+                        _cE("text", _uM({ class: "section-title" }), "提醒"),
+                        unref(alerts).length == 0
+                            ? _cE("view", _uM({
+                                key: 0,
+                                class: "empty-row"
+                            }), [
+                                _cE("text", _uM({ class: "empty-text" }), "暂无异常提醒")
+                            ])
+                            : _cC("v-if", true),
+                        _cE(Fragment, null, RenderHelpers.renderList(unref(alerts), (item, __key, __index, _cached): any => {
+                            return _cE("view", _uM({
+                                key: item.label,
+                                class: "alert-row"
+                            }), [
+                                _cE("text", _uM({
+                                    class: _nC(item.level == 'danger' ? 'alert-dot alert-dot-danger' : 'alert-dot')
+                                }), null, 2 /* CLASS */),
+                                _cE("text", _uM({ class: "alert-label" }), _tD(item.label), 1 /* TEXT */),
+                                _cE("text", _uM({ class: "alert-value" }), _tD(item.value.toString(10)), 1 /* TEXT */)
+                            ]);
+                        }), 128 /* KEYED_FRAGMENT */)
+                    ]),
+                    isTrue(unref(isLoading))
+                        ? _cE("view", _uM({
+                            key: 1,
+                            class: "loading-mask"
+                        }), [
+                            _cE("view", _uM({ class: "loading-card" }), [
+                                _cE("text", _uM({ class: "loading-text" }), "正在加载报表")
+                            ])
+                        ])
+                        : _cC("v-if", true)
+                ])
+            ], 4 /* STYLE */);
+        };
+    }
+});
+export default __sfc__;
+const GenPagesTabbarReportsStyles = [_uM([["page-scroll", _pS(_uM([["backgroundColor", "#F6F7FB"]]))], ["page", _pS(_uM([["position", "relative"], ["paddingLeft", 10], ["paddingRight", 10], ["paddingBottom", 20], ["backgroundColor", "#F6F7FB"]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT]]))], ["topbar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 8], ["paddingBottom", 8]]))], ["page-title", _pS(_uM([["fontSize", 21], ["lineHeight", "26px"], ["fontWeight", "700"], ["color", "#111827"]]))], ["refresh-btn", _pS(_uM([["height", 30], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 0], ["borderRightWidth", 0], ["borderBottomWidth", 0], ["borderLeftWidth", 0], ["backgroundColor", "#111827"], ["transitionProperty", "transform,backgroundColor"], ["transitionDuration", "180ms"], ["transform:active", "scale(0.96)"], ["backgroundColor:active", "#334155"]]))], ["refresh-text", _pS(_uM([["fontSize", 12], ["fontWeight", "600"], ["color", "#FFFFFF"]]))], ["period-tabs", _pS(_uM([["flexDirection", "row"], ["paddingTop", 3], ["paddingRight", 3], ["paddingBottom", 3], ["paddingLeft", 3], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#E5E7EB"]]))], ["period-tab", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 30], ["borderTopLeftRadius", 6], ["borderTopRightRadius", 6], ["borderBottomRightRadius", 6], ["borderBottomLeftRadius", 6], ["alignItems", "center"], ["justifyContent", "center"], ["transitionProperty", "backgroundColor,transform"], ["transitionDuration", "180ms"]]))], ["period-tab-active", _pS(_uM([["backgroundColor", "#FFFFFF"], ["transform", "scale(1.02)"]]))], ["period-text", _pS(_uM([["fontSize", 12], ["color", "#64748B"]]))], ["period-text-active", _pS(_uM([["fontWeight", "700"], ["color", "#111827"]]))], ["notice-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["backgroundColor", "#FFFFFF"], ["marginTop", 10], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12]]))], ["hero-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#111827"], ["borderRightColor", "#111827"], ["borderBottomColor", "#111827"], ["borderLeftColor", "#111827"], ["backgroundColor", "#111827"], ["marginTop", 10], ["paddingTop", 15], ["paddingRight", 15], ["paddingBottom", 15], ["paddingLeft", 15]]))], ["section", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["backgroundColor", "#FFFFFF"], ["marginTop", 10], ["paddingTop", 11], ["paddingRight", 11], ["paddingBottom", 11], ["paddingLeft", 11]]))], ["metric-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"], ["backgroundColor", "#FFFFFF"], ["width", "48%"], ["marginBottom", 8], ["paddingTop", 11], ["paddingRight", 11], ["paddingBottom", 11], ["paddingLeft", 11], ["transitionProperty", "transform,borderColor"], ["transitionDuration", "180ms"], ["transform:active", "scale(0.985)"], ["borderTopColor:active", "#CBD5E1"], ["borderRightColor:active", "#CBD5E1"], ["borderBottomColor:active", "#CBD5E1"], ["borderLeftColor:active", "#CBD5E1"]]))], ["notice-title", _pS(_uM([["fontSize", 14], ["fontWeight", "700"], ["color", "#B91C1C"]]))], ["notice-desc", _pS(_uM([["marginTop", 5], ["fontSize", 12], ["lineHeight", "18px"], ["color", "#7F1D1D"]]))], ["hero-label", _pS(_uM([["fontSize", 12], ["color", "#CBD5E1"]]))], ["hero-value", _pS(_uM([["marginTop", 8], ["fontSize", 26], ["lineHeight", "32px"], ["fontWeight", "700"], ["color", "#FFFFFF"]]))], ["hero-meta", _pS(_uM([["flexDirection", "row"], ["marginTop", 9]]))], ["hero-meta-text", _pS(_uM([["marginRight", 12], ["fontSize", 12], ["color", "#D1D5DB"]]))], ["metrics-grid", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["metric-right", _pS(_uM([["marginLeft", "4%"]]))], ["metric-label", _pS(_uM([["fontSize", 11], ["color", "#64748B"]]))], ["metric-value", _pS(_uM([["marginTop", 6], ["fontSize", 15], ["lineHeight", "21px"], ["fontWeight", "700"], ["color", "#111827"]]))], ["section-title", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["fontWeight", "700"], ["color", "#111827"]]))], ["empty-row", _pS(_uM([["marginTop", 8], ["height", 30], ["justifyContent", "center"]]))], ["empty-text", _pS(_uM([["fontSize", 12], ["color", "#94A3B8"]]))], ["trend-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["marginTop", 9]]))], ["trend-date", _pS(_uM([["width", 38], ["fontSize", 11], ["color", "#64748B"]]))], ["trend-bar-track", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 8], ["borderTopLeftRadius", 4], ["borderTopRightRadius", 4], ["borderBottomRightRadius", 4], ["borderBottomLeftRadius", 4], ["backgroundColor", "#E5E7EB"], ["overflow", "hidden"]]))], ["trend-bar", _pS(_uM([["height", 8], ["borderTopLeftRadius", 4], ["borderTopRightRadius", 4], ["borderBottomRightRadius", 4], ["borderBottomLeftRadius", 4], ["backgroundColor", "#2563EB"]]))], ["trend-amount", _pS(_uM([["width", 74], ["textAlign", "right"], ["fontSize", 11], ["color", "#111827"]]))], ["list-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["minHeight", 32], ["borderBottomWidth", 1], ["borderBottomStyle", "solid"], ["borderBottomColor", "#F1F5F9"]]))], ["alert-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["minHeight", 32], ["borderBottomWidth", 1], ["borderBottomStyle", "solid"], ["borderBottomColor", "#F1F5F9"]]))], ["list-label", _pS(_uM([["fontSize", 13], ["color", "#334155"]]))], ["alert-label", _pS(_uM([["fontSize", 13], ["color", "#334155"], ["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["list-value", _pS(_uM([["fontSize", 12], ["fontWeight", "600"], ["color", "#111827"]]))], ["alert-value", _pS(_uM([["fontSize", 12], ["fontWeight", "600"], ["color", "#111827"]]))], ["inventory-grid", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 6]]))], ["inventory-item", _pS(_uM([["width", "50%"], ["paddingTop", 8], ["paddingBottom", 6]]))], ["inventory-value", _pS(_uM([["fontSize", 17], ["lineHeight", "23px"], ["fontWeight", "700"], ["color", "#111827"]]))], ["inventory-label", _pS(_uM([["marginTop", 3], ["fontSize", 11], ["color", "#64748B"]]))], ["alert-dot", _pS(_uM([["width", 7], ["height", 7], ["marginRight", 8], ["borderTopLeftRadius", 4], ["borderTopRightRadius", 4], ["borderBottomRightRadius", 4], ["borderBottomLeftRadius", 4], ["backgroundColor", "#F59E0B"]]))], ["alert-dot-danger", _pS(_uM([["backgroundColor", "#DC2626"]]))], ["loading-mask", _pS(_uM([["position", "absolute"], ["left", 0], ["top", 0], ["right", 0], ["bottom", 0], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.12)"]]))], ["loading-card", _pS(_uM([["paddingTop", 12], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#111827"]]))], ["loading-text", _pS(_uM([["fontSize", 13], ["fontWeight", "600"], ["color", "#FFFFFF"]]))], ["@TRANSITION", _uM([["refresh-btn", _uM([["property", "transform,backgroundColor"], ["duration", "180ms"]])], ["period-tab", _uM([["property", "backgroundColor,transform"], ["duration", "180ms"]])], ["metric-card", _uM([["property", "transform,borderColor"], ["duration", "180ms"]])]])]])];

@@ -15,6 +15,7 @@
 				:formSections="formSections"
 				:initialData="initialData"
 				:leaveSignal="leaveSignal"
+				:dirtySignal="dirtySignal"
 				uploadContentTypeModel="product"
 				@submit="handleSubmit"
 				@cancel="handleCancel"
@@ -23,10 +24,80 @@
 				@dirty-change="handleDirtyChange"
 				@bottom-select-add="handleBottomSelectAdd"
 				@bottom-select-edit="handleBottomSelectEdit"
+				@input-add="handleInputAdd"
 				@upload="handleUpload"
 				@upload-delete="handleUploadDelete"
 				@upload-error="handleUploadError"
-			/>
+			>
+				<template #field-discount_rule="{ value }">
+					<view class="discount-card-section">
+						<view
+							v-if="discountCards.length == 0 && !discountCardsLoading"
+							class="discount-empty-card"
+						>
+							<text class="discount-empty-title">暂无折扣规则</text>
+							<text class="discount-empty-desc">可以为当前商品添加一个或多个折扣规则</text>
+						</view>
+
+						<view
+							v-for="(discount, discountIndex) in discountCards"
+							:key="discountCardKey(discount, discountIndex)"
+							class="discount-card"
+						>
+							<view class="discount-card-head">
+								<view class="discount-card-title-wrap">
+									<text class="discount-card-title">{{ discountCardName(discount) }}</text>
+									<text class="discount-card-rule">{{ discountRuleText(discount) }}</text>
+								</view>
+								<view class="discount-delete-btn" @tap.stop="confirmRemoveDiscount(discount)">
+									<text class="discount-delete-text">删除</text>
+								</view>
+							</view>
+							<view class="discount-card-grid">
+								<view class="discount-card-cell">
+									<text class="discount-card-label">折后价</text>
+									<text class="discount-card-value discount-card-price">{{ discountFinalPriceText(discount) }}</text>
+								</view>
+								<view class="discount-card-cell">
+									<text class="discount-card-label">类型</text>
+									<text class="discount-card-value">{{ discountTypeText(discount) }}</text>
+								</view>
+								<view class="discount-card-cell">
+									<text class="discount-card-label">最低数量</text>
+									<text class="discount-card-value">{{ getStringField(discount, 'min_quantity', '1') }}</text>
+								</view>
+								<view class="discount-card-cell">
+									<text class="discount-card-label">优先级</text>
+									<text class="discount-card-value">{{ getStringField(discount, 'priority', '-') }}</text>
+								</view>
+							</view>
+						</view>
+
+						<view v-if="discountCardsLoading" class="discount-loading-card">
+							<text class="discount-loading-text">正在加载折扣规则...</text>
+						</view>
+
+						<text
+							v-if="value != '' && value != '0.00'"
+							class="discount-active-price"
+						>
+							当前折后售价：{{ value }}
+						</text>
+
+						<view class="discount-action-btn" @tap="openDiscountSelector">
+							<text class="discount-action-btn-text">添加折扣</text>
+						</view>
+					</view>
+				</template>
+			</lili-UniversaForm>
+		</view>
+
+		<view
+			v-if="formMode == 'edit' && productId != ''"
+			class="float-btn"
+			@click="openPriceCalculator"
+		>
+			<text class="float-btn-text">计算价格</text>
 		</view>
 
 		<view v-if="savingVisible" class="page-saving-mask">
@@ -40,11 +111,12 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { ProductItem, ProductMutationData, createProduct, getProductDetail, updateProduct } from '@/pkg/api/modules/products.uts'
+import { ProductItem, ProductMutationData, createProduct, getProductConfigList, getProductDetail, productDiscountsPath, removeProductDiscountFromProduct, updateProduct } from '@/pkg/api/modules/products.uts'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 
 const productListRefreshStorageKey = 'refresh:pages:products:index'
+const productDiscountSelectionStorageKey = 'selected_discount_for_product:'
 
 type SelectOption = {
 	value: string
@@ -54,9 +126,12 @@ type SelectOption = {
 const formMode = ref('create')
 const productId = ref('')
 const leaveSignal = ref(0)
+const dirtySignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const discountCards = ref<UTSJSONObject[]>([])
+const discountCardsLoading = ref(false)
 
 const initialData = ref<UTSJSONObject>({
 	sku: '',
@@ -73,6 +148,9 @@ const initialData = ref<UTSJSONObject>({
 	net_purchase_price: '0.00',
 	cost_price: '0.00',
 	base_sales_price: '0.00',
+	discount_rule: '',
+	discount_rule_id: '',
+	discounted_base_sales_price: '0.00',
 	status: 'ACTIVE',
 	is_featured: false,
 	is_new: false,
@@ -108,6 +186,18 @@ function intValue(value: any | null, fallback: number = 0): number {
 	return parsed
 }
 
+function floatValue(value: any | null, fallback: number = 0): number {
+	const text = stringValue(value)
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
 function booleanValue(value: any | null): boolean {
 	if (value == null) {
 		return false
@@ -118,6 +208,37 @@ function booleanValue(value: any | null): boolean {
 
 function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
 	return stringValue(obj[key], fallback)
+}
+
+function formatMoneyText(value: string, fallback: string = '0.00'): string {
+	const numberValue = floatValue(value, -1)
+	if (numberValue < 0) {
+		return fallback
+	}
+	return numberValue.toFixed(2)
+}
+
+function calculateDiscountedPriceText(productSalesPriceText: string, discountRule: UTSJSONObject): string {
+	const basePrice = floatValue(productSalesPriceText, 0)
+	if (basePrice <= 0) {
+		return '0.00'
+	}
+	const discountType = getStringField(discountRule, 'discount_type')
+	let percentValue = floatValue(discountRule['discount_percentage'])
+	if (percentValue > 0 && discountType == 'PERCENTAGE') {
+		return formatMoneyText((basePrice * (1 - percentValue / 100)).toString())
+	}
+
+	let amountValue = floatValue(discountRule['discount_amount'])
+	if (amountValue <= 0 && discountRule['discount_amount_fixed'] != null) {
+		amountValue = floatValue(discountRule['discount_amount_fixed'])
+	}
+	if (amountValue > 0 && (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED')) {
+		const nextPrice = basePrice - amountValue
+		if (nextPrice <= 0) return '0.00'
+		return formatMoneyText(nextPrice.toString())
+	}
+	return basePrice.toFixed(2)
 }
 
 function getArrayField(obj: UTSJSONObject, key: string): string[] {
@@ -490,6 +611,8 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		categoryText = categoryTextOverride
 	}
 	const supplierId = item.supplier == null ? '' : stringValue(item.supplier)
+	const discountRuleText = item.discount_info == null || !item.discount_info.has_discount ? '' : item.discount_info.discount_name
+	const discountedBaseSalesPrice = item.discount_info == null || !item.discount_info.has_discount ? '' : item.discount_info.final_price
 
 	return {
 		sku: item.sku,
@@ -506,6 +629,9 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		net_purchase_price: item.net_purchase_price == '' ? '0.00' : item.net_purchase_price,
 		cost_price: item.cost_price == '' ? '0.00' : item.cost_price,
 		base_sales_price: item.base_sales_price == '' ? '0.00' : item.base_sales_price,
+		discount_rule: discountRuleText,
+		discount_rule_id: item.discount_info == null ? '' : stringValue(item.discount_info.discount_id),
+		discounted_base_sales_price: discountedBaseSalesPrice,
 		status: item.status == '' ? 'ACTIVE' : item.status,
 		is_featured: item.is_featured,
 		is_new: item.is_new,
@@ -521,7 +647,7 @@ const formSections = ref<UTSJSONObject[]>([
 		key: 'base',
 		title: '基础信息',
 		description: '',
-		defaultOpen: true,
+		defaultOpen: false,
 		fields: [
 			{
 				key: 'name_cn',
@@ -599,7 +725,7 @@ const formSections = ref<UTSJSONObject[]>([
 		key: 'price',
 		title: '价格信息',
 		description: '',
-		defaultOpen: true,
+		defaultOpen: false,
 		fields: [
 			{
 				key: 'purchase_price',
@@ -628,6 +754,12 @@ const formSections = ref<UTSJSONObject[]>([
 				type: 'number',
 				required: true,
 				placeholder: '请输入基础售价',
+			} as UTSJSONObject,
+			{
+				key: 'discount_rule',
+				label: '折扣规则',
+				type: 'custom',
+				readonly: true,
 			} as UTSJSONObject,
 		] as UTSJSONObject[],
 	} as UTSJSONObject,
@@ -700,6 +832,40 @@ function markProductListRefreshNeeded(): void {
 	uni.setStorageSync(productListRefreshStorageKey, '1')
 }
 
+async function loadProductDiscountCards(): Promise<void> {
+	if (productId.value == '') {
+		discountCards.value = [] as UTSJSONObject[]
+		return
+	}
+	if (discountCardsLoading.value) {
+		return
+	}
+	discountCardsLoading.value = true
+	try {
+		const response = await getProductConfigList(
+			productDiscountsPath(),
+			null,
+			1,
+			100,
+			{ product: productId.value } as UTSJSONObject,
+		)
+		const rawResults = response['results']
+		if (rawResults == null) {
+			discountCards.value = [] as UTSJSONObject[]
+		} else {
+			discountCards.value = rawResults as UTSJSONObject[]
+		}
+	} catch (error) {
+		discountCards.value = [] as UTSJSONObject[]
+		uni.showToast({
+			title: parseErrorMessage(error, '折扣规则加载失败'),
+			icon: 'none',
+		})
+	} finally {
+		discountCardsLoading.value = false
+	}
+}
+
 async function loadProductDetailData(idText: string): Promise<void> {
 	if (idText == '') {
 		return
@@ -712,11 +878,226 @@ async function loadProductDetailData(idText: string): Promise<void> {
 			categoryText = await resolveCategoryOptionText(categoryId)
 		}
 		initialData.value = buildInitialDataFromProduct(detail, categoryText)
+		await loadProductDiscountCards()
 	} catch (error) {
 		uni.showToast({
 			title: parseErrorMessage(error, '商品详情加载失败'),
 			icon: 'none',
 		})
+	}
+}
+
+function discountCardKey(discount: UTSJSONObject, index: number): string {
+	const id = getStringField(discount, 'id')
+	if (id != '') return id
+	return 'discount-' + index.toString()
+}
+
+function discountCardName(discount: UTSJSONObject): string {
+	return getStringField(discount, 'name', getStringField(discount, 'discount_name', '未命名折扣'))
+}
+
+function discountRuleText(discount: UTSJSONObject): string {
+	const display = getStringField(discount, 'discount_display')
+	if (display != '') return display
+	const discountType = getStringField(discount, 'discount_type')
+	const percentValue = getStringField(discount, 'discount_percentage')
+	if (discountType == 'PERCENTAGE' && percentValue != '') {
+		return percentValue + '% 折扣'
+	}
+	const amount = getStringField(discount, 'discount_amount', getStringField(discount, 'discount_amount_fixed'))
+	if (amount != '') {
+		return '减 ' + amount
+	}
+	return '未设置规则'
+}
+
+function discountTypeText(discount: UTSJSONObject): string {
+	const discountType = getStringField(discount, 'discount_type')
+	if (discountType == 'PERCENTAGE') return '百分比'
+	if (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED') return '固定金额'
+	return discountType == '' ? '-' : discountType
+}
+
+function discountFinalPriceText(discount: UTSJSONObject): string {
+	const directValue = getStringField(discount, 'final_price')
+	if (directValue != '') {
+		return formatMoneyText(directValue, directValue)
+	}
+	return calculateDiscountedPriceText(getStringField(initialData.value, 'base_sales_price', '0.00'), discount)
+}
+
+function upsertDiscountCardFromSelection(selected: UTSJSONObject): void {
+	const discountId = getStringField(selected, 'discount_id')
+	if (discountId == '') {
+		return
+	}
+	const nextCard = {
+		id: discountId,
+		name: getStringField(selected, 'discount_name', getStringField(selected, 'name', '未命名折扣')),
+		discount_type: getStringField(selected, 'discount_type'),
+		discount_percentage: getStringField(selected, 'discount_percentage'),
+		discount_amount: getStringField(selected, 'discount_amount', getStringField(selected, 'discount_amount_fixed')),
+		discount_amount_fixed: getStringField(selected, 'discount_amount_fixed'),
+		min_quantity: getStringField(selected, 'min_quantity', '1'),
+		priority: '-',
+		final_price: getStringField(selected, 'final_price'),
+	} as UTSJSONObject
+	const nextCards: UTSJSONObject[] = []
+	let replaced = false
+	for (let index = 0; index < discountCards.value.length; index += 1) {
+		const currentCard = discountCards.value[index]
+		if (getStringField(currentCard, 'id') == discountId) {
+			nextCards.push(nextCard)
+			replaced = true
+		} else {
+			nextCards.push(currentCard)
+		}
+	}
+	if (!replaced) {
+		nextCards.unshift(nextCard)
+	}
+	discountCards.value = nextCards
+}
+
+async function removeDiscountFromProduct(discountId: string): Promise<void> {
+	if (productId.value == '' || discountId == '') {
+		return
+	}
+	try {
+		uni.showLoading({
+			title: '删除中',
+			mask: true,
+		})
+		await removeProductDiscountFromProduct(productId.value, discountId)
+		await loadProductDetailData(productId.value)
+		uni.showToast({
+			title: '折扣已删除',
+			icon: 'success',
+		})
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '折扣删除失败'),
+			icon: 'none',
+		})
+	} finally {
+		uni.hideLoading()
+	}
+}
+
+function confirmRemoveDiscount(discount: UTSJSONObject): void {
+	const discountId = getStringField(discount, 'id')
+	if (discountId == '') {
+		return
+	}
+	uni.showModal({
+		title: '删除折扣',
+		content: '确定移除这个折扣规则吗？',
+		success: (res) => {
+			if (res.confirm) {
+				removeDiscountFromProduct(discountId)
+			}
+		},
+	})
+}
+
+function buildDiscountSelectionStorageKey(): string {
+	return productDiscountSelectionStorageKey + productId.value
+}
+
+function readStorageText(key: string): string {
+	const rawValue = uni.getStorageSync(key)
+	if (rawValue == null) {
+		return ''
+	}
+	const text = '' + rawValue
+	return text == null ? '' : text
+}
+
+function parseStoredJson(value: any): UTSJSONObject | null {
+	const rawText = '' + value
+	if (rawText == '') {
+		return null
+	}
+	const parsed = JSON.parseObject<UTSJSONObject>(rawText)
+	if (parsed != null) {
+		return parsed
+	}
+	return null
+}
+
+function cloneInitialData(): UTSJSONObject {
+	const source = initialData.value
+	const result = {} as UTSJSONObject
+	for (const key in source) {
+		result[key] = source[key]
+	}
+	return result
+}
+
+function applySelectedDiscount() {
+	if (productId.value == '') {
+		return
+	}
+	const selectedStorageText = readStorageText(buildDiscountSelectionStorageKey())
+	if (selectedStorageText == '') {
+		return
+	}
+	const selected = parseStoredJson(selectedStorageText)
+	if (selected == null) {
+		return
+	}
+	const selectedProductId = getStringField(selected, 'product_id')
+	if (selectedProductId != '' && selectedProductId != productId.value) {
+		return
+	}
+	const nextData = cloneInitialData()
+	const currentBaseSalesPrice = getStringField(nextData, 'base_sales_price', '0.00')
+	const baseSalesPriceFromSelection = getStringField(selected, 'original_price', currentBaseSalesPrice)
+	const discountPriceFromSelection = getStringField(selected, 'final_price')
+	let finalPrice = ''
+	if (discountPriceFromSelection == '') {
+		finalPrice = calculateDiscountedPriceText(baseSalesPriceFromSelection, selected)
+	} else {
+		finalPrice = discountPriceFromSelection
+	}
+	nextData['discount_rule'] = getStringField(selected, 'discount_name', getStringField(selected, 'name'))
+	nextData['discount_rule_id'] = getStringField(selected, 'discount_id')
+	nextData['discounted_base_sales_price'] = formatMoneyText(finalPrice, '')
+	nextData['base_sales_price'] = baseSalesPriceFromSelection
+	initialData.value = nextData
+	upsertDiscountCardFromSelection(selected)
+	loadProductDiscountCards()
+	uni.removeStorageSync(buildDiscountSelectionStorageKey())
+	uni.showToast({
+		title: '折扣已添加',
+		icon: 'success',
+	})
+}
+
+function openDiscountSelector() {
+	const safeProductId = '' + productId.value
+	if (safeProductId == '') {
+		uni.showToast({
+			title: '请先保存商品后再选择折扣',
+			icon: 'none',
+		})
+		return
+	}
+	let baseSalesPrice = getStringField(initialData.value, 'base_sales_price', '0.00')
+	if (baseSalesPrice == '') {
+		baseSalesPrice = '0.00'
+	}
+	uni.navigateTo({
+		url: '/pages/products/config-model/index?resource=discount&mode=select&product_id=' + safeProductId + '&base_sales_price=' + encodeURIComponent(baseSalesPrice),
+	})
+}
+
+function handleInputAdd(payload: UTSJSONObject) {
+	const keyValue = getStringField(payload, 'key')
+	if (keyValue == 'discount_rule') {
+		openDiscountSelector()
+		return
 	}
 }
 
@@ -957,6 +1338,40 @@ function handleUploadError(payload: UTSJSONObject) {
 	})
 }
 
+function openPriceCalculator() {
+	if (productId.value == '') {
+		uni.showToast({
+			title: '请先保存商品后再计算',
+			icon: 'none',
+		})
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/products/price-calculator?id=' + productId.value,
+	})
+}
+
+function applyCalculatedPrice() {
+	if (productId.value == '') {
+		return
+	}
+	const storageKey = 'calc_result:' + productId.value
+	const calculatedPrice = readStorageText(storageKey)
+	if (calculatedPrice == '') {
+		return
+	}
+	uni.removeStorageSync(storageKey)
+	const currentData = cloneInitialData()
+	const nextBaseSalesPrice = calculatedPrice.trim()
+	currentData['base_sales_price'] = nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice
+	initialData.value = currentData
+	dirtySignal.value = dirtySignal.value + 1
+	uni.showToast({
+		title: '基础售价已填入计算结果',
+		icon: 'success',
+	})
+}
+
 onLoad((event: OnLoadOptions) => {
 	leaveSignal.value = 0
 	const idValue = event['id']
@@ -965,6 +1380,11 @@ onLoad((event: OnLoadOptions) => {
 	if (formMode.value == 'edit') {
 		loadProductDetailData(productId.value)
 	}
+})
+
+onShow(() => {
+	applyCalculatedPrice()
+	applySelectedDiscount()
 })
 </script>
 
@@ -1006,6 +1426,167 @@ onLoad((event: OnLoadOptions) => {
 
 .page-saving-text {
 	font-size: 13px;
+	line-height: 16px;
+	color: #FFFFFF;
+}
+
+.float-btn {
+	position: absolute;
+	right: 14px;
+	bottom: 112px;
+	height: 32px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 16px;
+	align-items: center;
+	justify-content: center;
+	flex-direction: row;
+	background-color: #111827;
+	z-index: 9998;
+}
+
+.float-btn-text {
+	font-size: 12px;
+	line-height: 14px;
+	color: #FFFFFF;
+	text-align: center;
+}
+
+.discount-card-section {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+.discount-empty-card,
+.discount-loading-card {
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	background-color: #F8FAFC;
+	padding: 12px;
+	margin-bottom: 10px;
+}
+
+.discount-empty-title {
+	font-size: 14px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.discount-empty-desc,
+.discount-loading-text {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.discount-card {
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5E1;
+	background-color: #FFFFFF;
+	padding: 12px;
+	margin-bottom: 10px;
+}
+
+.discount-card-head {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.discount-card-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.discount-card-title {
+	font-size: 15px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.discount-card-rule {
+	margin-top: 3px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.discount-delete-btn {
+	height: 28px;
+	border-radius: 6px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FCA5A5;
+	background-color: #FEF2F2;
+	padding-left: 10px;
+	padding-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.discount-delete-text {
+	font-size: 12px;
+	line-height: 14px;
+	color: #B91C1C;
+}
+
+.discount-card-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.discount-card-cell {
+	width: 50%;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+.discount-card-label {
+	font-size: 11px;
+	line-height: 14px;
+	color: #94A3B8;
+}
+
+.discount-card-value {
+	margin-top: 2px;
+	font-size: 13px;
+	line-height: 17px;
+	color: #334155;
+}
+
+.discount-card-price {
+	color: #0F766E;
+	font-size: 15px;
+	font-weight: bold;
+}
+
+.discount-active-price {
+	margin-bottom: 10px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F766E;
+}
+
+.discount-action-btn {
+	align-items: center;
+	justify-content: center;
+	height: 38px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.discount-action-btn-text {
+	font-size: 14px;
 	line-height: 16px;
 	color: #FFFFFF;
 }

@@ -1020,13 +1020,13 @@ onShow(() => {
 
 .supplier-filter-btn-light-text {
 	font-size: 14px;
-	line-height: 14px;
+	line-height: 20px;
 	color: #475569;
 }
 
 .supplier-filter-btn-primary-text {
 	font-size: 14px;
-	line-height: 14px;
+	line-height: 20px;
 	color: #FFFFFF;
 }
 
@@ -1063,7 +1063,7 @@ onShow(() => {
 
 .supplier-filter-group-title {
 	font-size: 14px;
-	line-height: 18px;
+	line-height: 22px;
 	color: #0F172A;
 	font-weight: bold;
 }
@@ -1097,7 +1097,7 @@ onShow(() => {
 
 .supplier-filter-option-text {
 	font-size: 13px;
-	line-height: 13px;
+	line-height: 18px;
 	color: #475569;
 }
 

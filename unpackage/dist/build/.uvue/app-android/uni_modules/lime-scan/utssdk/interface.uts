@@ -1,0 +1,86 @@
+export type ScanType = 'QR_CODE' | 'AZTEC' | 'CODABAR' | 'CODE_39' | 'CODE_93' | 'CODE_128' | 'DATA_MATRIX' | 'EAN_8' | 'EAN_13' | 'ITF' | 'MAXICODE' | 'PDF_417' | 'RSS_14' | 'RSS_EXPANDED' | 'UPC_A' | 'UPC_E' | 'UPC_EAN_EXTENSION' | 'WX_CODE' | 'CODE_25';
+export type ScanFormatTypeCode = 'barCode' | 'codabar' | 'code39' | 'code93' | 'code128' | 'datamatrix' | 'dataMatrix' | 'ean8' | 'ean13' | 'itf' | 'upcA' | 'upcE' | 'pdf417' | 'qrCode' | 'aztec';
+export interface GeneralCallbackResult {
+    /** 错误信息 */
+    errMsg: string;
+}
+/** 接口调用结束的回调函数（调用成功、失败都会执行） */
+export type ScanCodeCompleteCallback = (res: GeneralCallbackResult) => void;
+/** 接口调用失败的回调函数 */
+export type ScanCodeFailCallback = (res: GeneralCallbackResult) => void;
+export interface ScanCodeSuccessCallbackResult {
+    /** 所扫码的字符集 */
+    charSet: string;
+    /** 当所扫的码为当前小程序二维码时，会返回此字段，内容为二维码携带的 path */
+    path: string;
+    /** 原始数据，base64编码 */
+    rawData: string;
+    /** 所扫码的内容 */
+    result: string;
+    /** 所扫码的类型
+     *
+     * 可选值：
+     * - 'QR_CODE': 二维码;
+     * - 'AZTEC': 一维码;
+     * - 'CODABAR': 一维码;
+     * - 'CODE_39': 一维码;
+     * - 'CODE_93': 一维码;
+     * - 'CODE_128': 一维码;
+     * - 'DATA_MATRIX': 二维码;
+     * - 'EAN_8': 一维码;
+     * - 'EAN_13': 一维码;
+     * - 'ITF': 一维码;
+     * - 'MAXICODE': 一维码;
+     * - 'PDF_417': 二维码;
+     * - 'RSS_14': 一维码;
+     * - 'RSS_EXPANDED': 一维码;
+     * - 'UPC_A': 一维码;
+     * - 'UPC_E': 一维码;
+     * - 'UPC_EAN_EXTENSION': 一维码;
+     * - 'WX_CODE': 二维码;
+     * - 'CODE_25': 一维码; */
+    scanType: ScanType;
+    errMsg: string;
+}
+/** 接口调用成功的回调函数 */
+export type ScanCodeSuccessCallback = (result: ScanCodeSuccessCallbackResult) => void;
+export type ScanCodeOption = {
+    /** 接口调用结束的回调函数（调用成功、失败都会执行） */
+    complete?: ScanCodeCompleteCallback;
+    /** 接口调用失败的回调函数 */
+    fail?: ScanCodeFailCallback;
+    /**
+     *
+     * 是否只能从相机扫码，不允许从相册选择图片 */
+    onlyFromCamera?: boolean;
+    /**
+     *
+     * 扫码类型
+     *
+     * 可选值：
+     * - 'barCode': 一维码;
+     * - 'qrCode': 二维码;
+     * - 'datamatrix': Data Matrix 码;
+     * - 'pdf417': PDF417 条码; */
+    // scanType ?: Array<'barCode' | 'qrCode' | 'datamatrix' | 'pdf417'>
+    scanType?: Array<ScanFormatTypeCode>;
+    /** 接口调用成功的回调函数 */
+    success?: ScanCodeSuccessCallback;
+    scanMode?: 'multiProcessor' | 'default' | 'custom';
+    /**
+     * 是否开启连续扫码模式
+     */
+    continuous?: boolean | null;
+};
+export type CreateQRCodeallback = (result: string) => void;
+export type CreateQRCodeOptions = {
+    content: string;
+    height?: number;
+    width?: number;
+    complete?: CreateQRCodeallback;
+    success?: CreateQRCodeallback;
+    fail?: CreateQRCodeallback;
+};
+export interface HMScanManager {
+    scanCode(options: ScanCodeOption): void;
+}

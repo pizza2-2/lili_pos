@@ -55,6 +55,32 @@ export type PurchaseOptionItem = {
 	text: string
 }
 
+export type PurchaseSelectedFilter = {
+	param: string
+	value: string
+}
+
+export type PurchaseFilterOption = {
+	value: string
+	label: string
+}
+
+export type PurchaseFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: PurchaseFilterOption[]
+}
+
+export type PurchaseFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: PurchaseFilterDefinition[]
+}
+
 export type PurchaseDetailItem = {
 	id: number
 	purchase: number
@@ -432,6 +458,52 @@ function buildDetailListResponse(raw: any, query: PurchaseDetailListQuery): Purc
 	return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as PurchaseDetailListResponse
 }
 
+function buildPurchaseFilterOptionsResponse(raw: any): PurchaseFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: PurchaseFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filterObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters))
+		if (filterObjects != null) {
+			const nextFilters: PurchaseFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+				const filterObject = filterObjects[filterIndex]
+				let options: PurchaseFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions))
+					if (optionObjects != null) {
+						const nextOptions: PurchaseFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+							const optionObject = optionObjects[optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as PurchaseFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: stringValue(filterObject['multiple']) == 'true',
+					options: options,
+				} as PurchaseFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as PurchaseFilterOptionsResponse
+}
+
 function buildPurchaseDetailFilterOptionsResponse(raw: any): PurchaseDetailFilterOptionsResponse {
 	const rawObject = rawDataObject(raw)
 	let filters: PurchaseDetailFilterDefinition[] = []
@@ -576,6 +648,11 @@ export function purchaseProductTemplateDownloadUrl(id: number | string): string 
 export async function getPurchaseList(data: PurchaseListQuery): Promise<PurchaseListResponse> {
 	const raw = await request('/api/purchases/purchases/', 'GET', buildQuery(data), true)
 	return buildListResponse(raw, data)
+}
+
+export async function getPurchaseFilterOptions(): Promise<PurchaseFilterOptionsResponse> {
+	const raw = await request('/api/purchases/purchases/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildPurchaseFilterOptionsResponse(raw)
 }
 
 export async function getPurchaseDetail(id: number | string): Promise<PurchaseItem> {

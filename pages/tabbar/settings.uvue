@@ -4,23 +4,30 @@
 			<view class="status-bar-space"></view>
 
 			<view class="topbar">
-
 				<text class="page-title">功能菜单</text>
-
 			</view>
 
 			<view class="content">
 				<view v-for="group in groups" :key="group.label" class="group">
 					<text class="group-label">{{ group.label }}（{{ getGroupCount(group) }}）</text>
 
-					<view v-for="row in group.rows" :key="row[0].label" class="grid-row">
+					<view
+						v-for="(row, rowIndex) in chunkMenu(group.items)"
+						:key="group.label + '-' + rowIndex"
+						class="grid-row"
+					>
 						<view
 							v-for="(item, index) in row"
 							:key="item.label"
-							:class="index != 3 ? 'grid-item grid-item-gap' : 'grid-item'"
+							:class="['grid-item', index !== row.length - 1 ? 'grid-item-gap' : '', item.disabled ? 'grid-item-disabled' : '']"
 							@click="handleTap(item)"
 						>
-							<image v-if="item.iconPath != null && item.iconPath != ''" class="grid-image-icon" :src="item.iconPath" mode="aspectFit"></image>
+							<image
+								v-if="item.iconPath != null && item.iconPath != ''"
+								class="grid-image-icon"
+								:src="item.iconPath"
+								mode="aspectFit"
+							></image>
 							<text v-else class="grid-icon">{{ item.icon }}</text>
 							<text class="grid-text">{{ item.label }}</text>
 						</view>
@@ -43,69 +50,55 @@ type MenuItem = {
 
 type MenuGroup = {
 	label: string
-	rows: MenuItem[][]
+	items: MenuItem[]
 }
 
 const groups = ref<MenuGroup[]>([
 	{
-		label: '常用页面',
-		rows: [
-			[
-				{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
-				{ label: '商店', icon: '', iconPath: '/static/menu-icons/shop.svg', path: '/pages/shop/index', action: 'navigateTo', disabled: false },
-			],
+		label: '店铺与经营概览',
+		items: [
+			{ label: '商店', icon: '', iconPath: '/static/menu-icons/shop.svg', path: '/pages/shop/index', action: 'navigateTo', disabled: false },
+			{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+			{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
+			{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false },
+			{ label: '支出管理', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/expenses/index', action: 'navigateTo', disabled: false },
 		],
 	},
 	{
-		label: '分类设置',
-		rows: [
-			[
-				{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false },
-				{ label: '收银分类', icon: '', iconPath: '/static/menu-icons/cash-category.svg', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
-			],
+		label: '商品与标签配置',
+		items: [
+			{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false },
+			{ label: '收银分类', icon: '', iconPath: '/static/menu-icons/cash-category.svg', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
+			{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false },
+			{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false },
+			{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false },
+			{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
 		],
 	},
 	{
-		label: '门店配置',
-		rows: [
-			[
-				{ label: '收银台', icon: '', iconPath: '/static/menu-icons/cash-register.svg', path: null, action: 'todo', disabled: true },
-				{ label: '打印机', icon: '', iconPath: '/static/menu-icons/printer.svg', path: null, action: 'todo', disabled: true },
-				{ label: '支付', icon: '', iconPath: '/static/menu-icons/payment.svg', path: null, action: 'todo', disabled: true },
-				{ label: '权限', icon: '', iconPath: '/static/menu-icons/permission.svg', path: null, action: 'todo', disabled: true },
-			],
+		label: '收银与店务配置',
+		items: [
+			{ label: '收银台', icon: '', iconPath: '/static/menu-icons/cash-register.svg', path: null, action: 'todo', disabled: true },
+			{ label: '打印机', icon: '', iconPath: '/static/menu-icons/printer.svg', path: null, action: 'todo', disabled: true },
+			{ label: '支付', icon: '', iconPath: '/static/menu-icons/payment.svg', path: null, action: 'todo', disabled: true },
+			{ label: '权限', icon: '', iconPath: '/static/menu-icons/permission.svg', path: null, action: 'todo', disabled: true },
 		],
 	},
 	{
-		label: '系统工具',
-		rows: [
-			[
-				{ label: '价格计算公式', icon: '', iconPath: '/static/menu-icons/pricing-formula.svg', path: '/pages/products/pricing-formula/index', action: 'navigateTo', disabled: false },
-				{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false },
-				{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false },
-				{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false },
-			],
-			[
-				{ label: 'KSeF发票', icon: '', iconPath: '/static/menu-icons/ksef-invoice.svg', path: '/pages/ksef/index', action: 'navigateTo', disabled: false },
-				{ label: '支出管理', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/expenses/index', action: 'navigateTo', disabled: false },
-				{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false },
-				{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
-			],
-			[
-				{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
-				{ label: '分享', icon: '', iconPath: '/static/menu-icons/share.svg', path: null, action: 'todo', disabled: true },
-			],
+		label: '库存与盘点',
+		items: [
+			{ label: '库存管理', icon: '', iconPath: '/static/menu-icons/inventory.svg', path: '/pages/inventory-management/index', action: 'navigateTo', disabled: false },
+			{ label: '库存位置', icon: '', iconPath: '/static/menu-icons/inventory-location.svg', path: '/pages/inventory-locations/index', action: 'navigateTo', disabled: false },
+			{ label: '调拨单', icon: '', iconPath: '/static/menu-icons/inventory-transfer.svg', path: '/pages/inventory-transfers/index', action: 'navigateTo', disabled: false },
+			{ label: '盘点单', icon: '', iconPath: '/static/menu-icons/inventory-check.svg', path: '/pages/inventory-checks/index', action: 'navigateTo', disabled: false },
 		],
 	},
 	{
-		label: '库存管理',
-		rows: [
-			[
-				{ label: '库存管理', icon: '', iconPath: '/static/menu-icons/inventory.svg', path: '/pages/inventory-management/index', action: 'navigateTo', disabled: false },
-				{ label: '库存位置', icon: '', iconPath: '/static/menu-icons/inventory-location.svg', path: '/pages/inventory-locations/index', action: 'navigateTo', disabled: false },
-				{ label: '调拨单', icon: '', iconPath: '/static/menu-icons/inventory-transfer.svg', path: '/pages/inventory-transfers/index', action: 'navigateTo', disabled: false },
-				{ label: '盘点单', icon: '', iconPath: '/static/menu-icons/inventory-check.svg', path: '/pages/inventory-checks/index', action: 'navigateTo', disabled: false },
-			],
+		label: '价格与税务',
+		items: [
+			{ label: '价格计算公式', icon: '', iconPath: '/static/menu-icons/pricing-formula.svg', path: '/pages/products/pricing-formula/index', action: 'navigateTo', disabled: false },
+			{ label: 'KSeF发票', icon: '', iconPath: '/static/menu-icons/ksef-invoice.svg', path: '/pages/ksef/index', action: 'navigateTo', disabled: false },
+			{ label: '分享', icon: '', iconPath: '/static/menu-icons/share.svg', path: null, action: 'todo', disabled: true },
 		],
 	},
 ])
@@ -133,26 +126,16 @@ function handleTap(item: MenuItem) {
 	}
 }
 
-function showSizeTip() {
-	uni.showToast({
-		title: '字号设置待接入',
-		icon: 'none',
-	})
-}
-
-function showLocaleTip() {
-	uni.showToast({
-		title: '语言设置待接入',
-		icon: 'none',
-	})
+function chunkMenu(items: MenuItem[], size: number = 4): MenuItem[][] {
+	const rows: MenuItem[][] = []
+	for (let i = 0; i < items.length; i += size) {
+		rows.push(items.slice(i, i + size))
+	}
+	return rows
 }
 
 function getGroupCount(group: MenuGroup): number {
-	let count = 0
-	for (let rowIndex = 0; rowIndex < group.rows.length; rowIndex += 1) {
-		count += group.rows[rowIndex].length
-	}
-	return count
+	return group.items.length
 }
 </script>
 
@@ -201,27 +184,6 @@ function getGroupCount(group: MenuGroup): number {
 	line-height: 20px;
 	color: #111827;
 	font-weight: bold;
-	margin-left: 8px;
-}
-
-.action-button {
-	width: 32px;
-	height: 32px;
-	border-radius: 16px;
-	background-color: #0F172A;
-	align-items: center;
-	justify-content: center;
-}
-
-.action-button-gap {
-	margin-right: 12px;
-	background-color: #64748B;
-}
-
-.action-icon {
-	font-size: 14px;
-	line-height: 14px;
-	color: #FFFFFF;
 }
 
 .content {
@@ -253,6 +215,11 @@ function getGroupCount(group: MenuGroup): number {
 	background-color: #FFFFFF;
 	align-items: center;
 	padding-top: 18px;
+	opacity: 1;
+}
+
+.grid-item-disabled {
+	opacity: 0.45;
 }
 
 .grid-item-gap {

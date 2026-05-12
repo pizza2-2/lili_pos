@@ -21,8 +21,15 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { createPurchaseDetail, getPurchaseDetailItem, getPurchaseOptionList, PurchaseDetailItem, PurchaseDetailMutationData, PurchaseOptionItem, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { createPurchaseDetail, getPurchaseDetailItem, PurchaseDetailItem, PurchaseDetailMutationData, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+
+type ProductOption = {
+	value: string
+	text: string
+	image: string
+	subtitle: string
+}
 
 const refreshStorageKey = 'refresh:pages:purchases:details:index'
 const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
@@ -40,26 +47,80 @@ function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''):
 }
 
 function parseErrorMessage(error: any, fallback: string): string {
-	let message = fallback
-	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const errorText = JSON.stringify(error)
-		if (errorText != null && errorText != '') {
-			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
-			if (parsedError != null) {
-				const rawMessage = parsedError['message']
-				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
-					if (parsedMessage != '') message = parsedMessage
-				}
-			}
-		}
-	}
-	return message
+	if (error == null) return fallback
+	const errorText = JSON.stringify(error)
+	if (errorText == null || errorText == '') return fallback
+	const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+	if (parsedError == null) return errorText
+	const rawMessage = parsedError['message']
+	if (rawMessage == null) return errorText
+	const message = '' + rawMessage
+	return message == '' ? fallback : message
 }
 
-function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject): UTSJSONObject {
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function intValue(value: any | null): number {
+	if (value == null) return 0
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function firstStringField(obj: UTSJSONObject, keys: string[]): string {
+	for (let i = 0; i < keys.length; i++) {
+		const text = getStringField(obj, keys[i])
+		if (text != '') return text
+	}
+	return ''
+}
+
+function extractRows(raw: any | null): UTSJSONObject[] {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) return parseObjectArray(raw)
+	const results = parseObjectArray(rawObject['results'])
+	if (results.length > 0) return results
+	const dataRows = parseObjectArray(rawObject['data'])
+	if (dataRows.length > 0) return dataRows
+	const dataObject = parseObject(rawObject['data'])
+	if (dataObject != null) {
+		const nestedResults = parseObjectArray(dataObject!['results'])
+		if (nestedResults.length > 0) return nestedResults
+	}
+	return parseObjectArray(raw)
+}
+
+function productImageFromRow(row: UTSJSONObject): string {
+	const direct = firstStringField(row, ['image', 'product_image', 'cover_image'])
+	if (direct != '') return direct
+	const mediaFiles = parseObjectArray(row['media_files'])
+	for (let i = 0; i < mediaFiles.length; i++) {
+		const image = firstStringField(mediaFiles[i], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
+		if (image != '') return image
+	}
+	const productMediaFiles = parseObjectArray(row['product_media_files'])
+	for (let j = 0; j < productMediaFiles.length; j++) {
+		const image = firstStringField(productMediaFiles[j], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
+		if (image != '') return image
+	}
+	return ''
+}
+
+function buildSelectResponse(source: ProductOption[], params: UTSJSONObject): UTSJSONObject {
 	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
@@ -67,7 +128,7 @@ function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject
 		const option = source[index]
 		if (id != '' && option.value != id) continue
 		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
-		result.push({ value: option.value, text: option.text } as UTSJSONObject)
+		result.push({ value: option.value, text: option.text, image: option.image, subtitle: option.subtitle } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
 }
@@ -75,7 +136,27 @@ function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject
 async function fetchProductOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const keyword = getStringField(params, 'keyword')
 	const id = getStringField(params, 'id')
-	const options = await getPurchaseOptionList('/api/products/products/', keyword == '' ? null : keyword, 'name_cn', 'barcode')
+	const query = {
+		page: intValue(params['page']) <= 0 ? 1 : intValue(params['page']),
+		page_size: intValue(params['pageSize']) <= 0 ? 20 : intValue(params['pageSize']),
+	} as UTSJSONObject
+	if (keyword != '') {
+		query['search'] = keyword
+		query['keyword'] = keyword
+	}
+	if (id != '') query['id'] = id
+	const raw = await request('/api/products/products/', 'GET', query, true)
+	const rows = extractRows(raw)
+	const options: ProductOption[] = []
+	for (let i = 0; i < rows.length; i++) {
+		const row = rows[i]
+		const value = getStringField(row, 'id')
+		let text = getStringField(row, 'name_cn')
+		const barcode = getStringField(row, 'barcode')
+		if (barcode != '') text = text + ' / ' + barcode
+		const subtitle = firstStringField(row, ['sku', 'barcode'])
+		options.push({ value: value, text: text, image: productImageFromRow(row), subtitle: subtitle } as ProductOption)
+	}
 	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
 }
 
@@ -83,6 +164,7 @@ function initialCreateData(): UTSJSONObject {
 	return {
 		product: '',
 		product_text: '',
+		product_image: '',
 		quantity: '',
 		received_quantity: '0',
 		notes: '',
@@ -92,9 +174,12 @@ function initialCreateData(): UTSJSONObject {
 function buildInitialDataFromDetail(item: PurchaseDetailItem): UTSJSONObject {
 	let productText = item.product_name
 	if (item.product_barcode != '') productText = productText + ' / ' + item.product_barcode
+	const itemObject = parseObject(item)
+	const productImage = itemObject == null ? '' : productImageFromRow(itemObject!)
 	return {
 		product: item.product.toString(),
 		product_text: productText,
+		product_image: productImage,
 		quantity: item.quantity.toString(),
 		received_quantity: item.received_quantity.toString(),
 		notes: item.notes,
@@ -108,7 +193,7 @@ const formSections = ref<UTSJSONObject[]>([
 		description: '',
 		defaultOpen: true,
 		fields: [
-			{ key: 'product', textKey: 'product_text', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', showScan: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
+			{ key: 'product', textKey: 'product_text', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', imageKey: 'image', subtitleKey: 'subtitle', showScan: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
 			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
 			{ key: 'received_quantity', label: '已收货数量', type: 'number', placeholder: '通常由收货操作更新' } as UTSJSONObject,
 			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,

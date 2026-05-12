@@ -59,6 +59,20 @@ export type ProductItem = {
 	last_sale_date: string | null
 	created_at: string
 	updated_at: string
+	discount_info: ProductDiscountInfo | null
+}
+
+export type ProductDiscountInfo = {
+	has_discount: boolean
+	discount_id: number | null
+	discount_name: string
+	discount_type: string
+	original_price: string
+	final_price: string
+	discount_amount: string
+	discount_percentage: string
+	discount_amount_fixed: string
+	min_quantity: number
 }
 
 export type ProductMutationData = {
@@ -145,6 +159,35 @@ export type ProductPricingFormulaMutationData = {
 	expression: string
 	description: string
 	is_active: boolean
+}
+
+export type ProductPricingFormulaBatchPreviewResult = {
+	formula_id: number
+	name: string
+	code: string
+	expression: string
+	result: string
+	profit: string
+	margin_rate: string
+	source_label: string
+	profitable: boolean
+	error: string
+}
+
+export type ProductPricingFormulaBatchPreviewResponse = {
+	results: ProductPricingFormulaBatchPreviewResult[]
+	count: number
+	limit: number
+	inputs: UTSJSONObject
+}
+
+export type ProductPricingFormulaBatchPreviewRequest = {
+	purchase_price: string
+	net_purchase_price: string
+	cost_price: string
+	base_sales_price: string
+	formula_ids: number[]
+	profitable_only: boolean
 }
 
 export type ProductPricingFormulaPreviewResponse = {
@@ -373,6 +416,7 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		last_sale_date: rawObject['last_sale_date'] == null ? null : stringValue(rawObject['last_sale_date']),
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
+		discount_info: parseProductDiscountInfo(rawObject['discount_info']),
 	} as ProductItem
 }
 
@@ -488,6 +532,40 @@ function buildPricingFormulaPreviewResponse(raw: any): ProductPricingFormulaPrev
 		inputs: rawObject['inputs'] == null ? ({} as UTSJSONObject) : (rawObject['inputs'] as UTSJSONObject),
 		result: stringValue(rawObject['result']),
 	} as ProductPricingFormulaPreviewResponse
+}
+
+function buildBatchPreviewResponse(raw: any): ProductPricingFormulaBatchPreviewResponse {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		throw new Error('价格公式批量试算响应解析失败')
+	}
+
+	const rawResults = parseObjectArray(rawObject['results'])
+	const results: ProductPricingFormulaBatchPreviewResult[] = []
+	for (let index = 0; index < rawResults.length; index += 1) {
+		const item = rawResults[index]
+		results.push({
+			formula_id: intValue(item['formula_id']),
+			name: stringValue(item['name']),
+			code: stringValue(item['code']),
+			expression: stringValue(item['expression']),
+			result: stringValue(item['result']),
+			profit: stringValue(item['profit']),
+			margin_rate: stringValue(item['margin_rate']),
+			source_label: stringValue(item['source_label']),
+			profitable: booleanValue(item['profitable']),
+			error: stringValue(item['error']),
+		} as ProductPricingFormulaBatchPreviewResult)
+	}
+
+	const inputs = rawObject['inputs'] == null ? {} as UTSJSONObject : (rawObject['inputs'] as UTSJSONObject)
+
+	return {
+		results: results,
+		count: intValue(rawObject['count']),
+		limit: intValue(rawObject['limit']),
+		inputs: inputs,
+	} as ProductPricingFormulaBatchPreviewResponse
 }
 
 function buildProductListResponse(raw: any, query: ProductListQuery): ProductListResponse {
@@ -677,6 +755,10 @@ function buildConfigListQuery(search: string | null, page: number, pageSize: num
 	const shop = extra['shop']
 	if (shop != null && ('' + shop) != '') {
 		query['shop'] = shop
+	}
+	const product = extra['product']
+	if (product != null && ('' + product) != '') {
+		query['product'] = product
 	}
 	return query
 }
@@ -880,6 +962,23 @@ export async function previewProductPricingFormula(id: number | string, value: s
 	return buildPricingFormulaPreviewResponse(raw)
 }
 
+export async function batchPreviewProductPricingFormulas(data: ProductPricingFormulaBatchPreviewRequest): Promise<ProductPricingFormulaBatchPreviewResponse> {
+	const raw = await request(
+		productPricingFormulasBasePath + 'batch-preview/',
+		'POST',
+		{
+			purchase_price: data.purchase_price,
+			net_purchase_price: data.net_purchase_price,
+			cost_price: data.cost_price,
+			base_sales_price: data.base_sales_price,
+			formula_ids: data.formula_ids,
+			profitable_only: data.profitable_only,
+		} as UTSJSONObject,
+		true
+	)
+	return buildBatchPreviewResponse(raw)
+}
+
 export async function getProductConfigList(basePath: string, search: string | null, page: number, pageSize: number, extra: UTSJSONObject = {} as UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request(
 		basePath,
@@ -888,6 +987,98 @@ export async function getProductConfigList(basePath: string, search: string | nu
 		true
 	)
 	return buildConfigListResponse(raw, page, pageSize)
+}
+
+export async function getAvailableProductDiscountsForProduct(productId: string | number, search: string | null, page: number, pageSize: number, extra: UTSJSONObject = {} as UTSJSONObject): Promise<UTSJSONObject> {
+	const query = {
+		product: productId,
+		page: page,
+		page_size: pageSize,
+	} as UTSJSONObject
+	if (search != null && search != '') {
+		query['search'] = search
+	}
+	const status = stringValue(extra['status'])
+	if (status != '') {
+		query['status'] = status
+	}
+	const discountType = stringValue(extra['discount_type'])
+	if (discountType != '') {
+		query['discount_type'] = discountType
+	}
+	const shop = stringValue(extra['shop'])
+	if (shop != '') {
+		query['shop'] = shop
+	}
+	const raw = await request(
+		productDiscountsBasePath + 'available-for-product/',
+		'GET',
+		query,
+		true
+	)
+	return buildConfigListResponse(raw, page, pageSize)
+}
+
+export async function addProductDiscountToProduct(productId: string | number, discountId: string | number): Promise<UTSJSONObject> {
+	const raw = await request(
+		productDiscountsBasePath + stringValue(discountId) + '/add-product/',
+		'POST',
+		{
+			product: stringValue(productId),
+		} as UTSJSONObject,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('绑定折扣响应解析失败')
+	}
+	return parsed!
+}
+
+export async function removeProductDiscountFromProduct(productId: string | number, discountId: string | number): Promise<UTSJSONObject> {
+	const raw = await request(
+		productDiscountsBasePath + stringValue(discountId) + '/remove-product/',
+		'POST',
+		{
+			product: stringValue(productId),
+		} as UTSJSONObject,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('移除折扣响应解析失败')
+	}
+	return parsed!
+}
+
+function parseProductDiscountInfo(value: any | null): ProductDiscountInfo | null {
+	if (value == null) {
+		return null
+	}
+	const source = parseObject(value)
+	if (source == null) {
+		return null
+	}
+	const discountIdValue = source['discount_id']
+	let discountId: number | null = null
+	if (discountIdValue != null) {
+		const parsedDiscountId = parseInt('' + discountIdValue)
+		if (!isNaN(parsedDiscountId)) {
+			discountId = parsedDiscountId
+		}
+	}
+	return {
+		has_discount: booleanValue(source['has_discount']),
+		discount_id: discountId,
+		discount_name: stringValue(source['discount_name']),
+		discount_type: stringValue(source['discount_type']),
+		original_price: stringValue(source['original_price']),
+		final_price: stringValue(source['final_price']),
+		discount_amount: stringValue(source['discount_amount']),
+		discount_percentage: stringValue(source['discount_percentage']),
+		discount_amount_fixed: stringValue(source['discount_amount_fixed']),
+		min_quantity: intValue(source['min_quantity']),
+	} as ProductDiscountInfo
 }
 
 export async function getProductConfigDetail(basePath: string, id: number | string): Promise<UTSJSONObject> {

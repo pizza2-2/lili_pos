@@ -144,6 +144,20 @@
 			}
 		},
 		{
+			"path": "pages/products/discount-selector",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/products/price-calculator",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/products/pricing-formula",
 			"style": {
 				"navigationStyle":"custom",

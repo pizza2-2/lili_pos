@@ -1,0 +1,97 @@
+import {
+	scanCode,
+	type GeneralCallbackResult,
+	type ScanCodeOption,
+	type ScanCodeSuccessCallbackResult,
+} from '@/uni_modules/lime-scan'
+
+
+const __sfc__ = defineComponent({
+  __name: 'scan',
+  setup(__props) {
+const __ins = getCurrentInstance()!;
+const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
+const _cache = __ins.renderCache;
+
+const result = ref('')
+const type = ref('')
+const errorMessage = ref('')
+
+const resultText = computed((): string => {
+	if (result.value == '') return '暂无结果'
+	return result.value
+})
+
+const typeText = computed((): string => {
+	if (type.value == '') return '暂无类型'
+	return type.value
+})
+
+function scan() {
+	errorMessage.value = ''
+	scanCode({
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			result.value = res.result
+			type.value = res.scanType
+			console.log('扫码类型:', res.scanType)
+			console.log('扫码结果:', res.result)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			errorMessage.value = res.errMsg == '' ? '扫码失败' : res.errMsg
+			console.log('扫码失败:', errorMessage.value)
+		},
+		complete: (res: GeneralCallbackResult) => {
+			console.log('扫码完成:', res.errMsg)
+		},
+	} as ScanCodeOption)
+}
+
+function goBack() {
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.switchTab({ url: '/pages/tabbar/settings' })
+		},
+	})
+}
+
+return (): any | null => {
+
+  return _cE("view", _uM({ class: "page" }), [
+    _cE("view", _uM({ class: "status-bar-space" })),
+    _cE("view", _uM({ class: "topbar" }), [
+      _cE("text", _uM({ class: "title" }), "扫码测试"),
+      _cE("view", _uM({
+        class: "back-btn",
+        onClick: () => {goBack()}
+      }), [
+        _cE("text", _uM({ class: "back-text" }), "返回")
+      ], 8 /* PROPS */, ["onClick"])
+    ]),
+    _cE("view", _uM({ class: "panel" }), [
+      _cE("text", _uM({ class: "label" }), "扫描结果"),
+      _cE("text", _uM({ class: "result-text" }), _tD(unref(resultText)), 1 /* TEXT */),
+      _cE("text", _uM({ class: "label second-label" }), "扫码类型"),
+      _cE("text", _uM({ class: "type-text" }), _tD(unref(typeText)), 1 /* TEXT */)
+    ]),
+    _cE("view", _uM({
+      class: "scan-btn",
+      onClick: () => {scan()}
+    }), [
+      _cE("text", _uM({ class: "scan-btn-text" }), "开启扫描")
+    ], 8 /* PROPS */, ["onClick"]),
+    unref(errorMessage) != ''
+      ? _cE("view", _uM({
+          key: 0,
+          class: "error-box"
+        }), [
+          _cE("text", _uM({ class: "error-text" }), _tD(unref(errorMessage)), 1 /* TEXT */)
+        ])
+      : _cC("v-if", true)
+  ])
+}
+}
+
+})
+export default __sfc__
+const GenPagesTestScanStyles = [_uM([["page", _pS(_uM([["backgroundColor", "#F6F8FB"], ["paddingLeft", 18], ["paddingRight", 18], ["paddingBottom", 24]]))], ["status-bar-space", _pS(_uM([["height", CSS_VAR_STATUS_BAR_HEIGHT]]))], ["topbar", _pS(_uM([["height", 52], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["title", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["fontWeight", "700"], ["color", "#111827"]]))], ["back-btn", _pS(_uM([["height", 36], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#E5E7EB"]]))], ["back-text", _pS(_uM([["fontSize", 14], ["color", "#334155"]]))], ["panel", _pS(_uM([["marginTop", 16], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["backgroundColor", "#FFFFFF"]]))], ["label", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["second-label", _pS(_uM([["marginTop", 18]]))], ["result-text", _pS(_uM([["marginTop", 8], ["fontSize", 18], ["lineHeight", "26px"], ["fontWeight", "600"], ["color", "#111827"]]))], ["type-text", _pS(_uM([["marginTop", 8], ["fontSize", 16], ["lineHeight", "22px"], ["color", "#334155"]]))], ["scan-btn", _pS(_uM([["marginTop", 22], ["height", 48], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#2563EB"]]))], ["scan-btn-text", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#FFFFFF"]]))], ["error-box", _pS(_uM([["marginTop", 14], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#FEF2F2"]]))], ["error-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#B91C1C"]]))]])]

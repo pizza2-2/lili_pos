@@ -110,6 +110,9 @@
 									:disabled="isReadonly(field)"
 									:labelKey="getBottomSelectLabelKey(field)"
 									:valueKey="getBottomSelectValueKey(field)"
+									:imageKey="getBottomSelectImageKey(field)"
+									:subtitleKey="getBottomSelectSubtitleKey(field)"
+									:valueImage="getBottomSelectValueImage(field)"
 									:pageSize="getBottomSelectPageSize(field)"
 									:searchDelay="getBottomSelectSearchDelay(field)"
 									:tree="getFieldTree(field)"
@@ -147,6 +150,19 @@
 									@delete="handleUploadDelete(field, $event)"
 									@error="handleUploadError(field, $event)"
 								/>
+							</view>
+
+							<view v-else-if="isCustomField(field)" class="uf-custom-field">
+								<slot
+									:name="getFieldSlotName(field)"
+									:field="field"
+									:value="getStringFieldValue(field)"
+									:readonly="isReadonly(field)"
+								>
+									<view class="uf-plain-value">
+										<text class="uf-plain-value-text">{{ getStringFieldValue(field) }}</text>
+									</view>
+								</slot>
 							</view>
 
 							<view v-else class="uf-plain-value">
@@ -198,6 +214,7 @@ type Props = {
 	showFooter?: boolean
 	enableBackConfirm?: boolean
 	leaveSignal?: number
+	dirtySignal?: number
 	uploadContentTypeModel?: string
 	showFloatingAction?: boolean
 	floatingActionText?: string
@@ -213,6 +230,7 @@ const props = withDefaults(defineProps<Props>(), {
 	showFooter: true,
 	enableBackConfirm: true,
 	leaveSignal: 0,
+	dirtySignal: 0,
 	uploadContentTypeModel: '',
 	showFloatingAction: false,
 	floatingActionText: '快捷',
@@ -359,6 +377,16 @@ function isBottomSelectField(field: UTSJSONObject) : boolean {
 
 function isUploadField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'upload'
+}
+
+function isCustomField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'custom'
+}
+
+function getFieldSlotName(field: UTSJSONObject) : string {
+	const key = getFieldKey(field)
+	if (key == '') return 'field'
+	return 'field-' + key
 }
 
 function getFieldShowScan(field: UTSJSONObject) : boolean {
@@ -510,14 +538,34 @@ function getBottomSelectValueKey(field: UTSJSONObject) : string {
 	return 'value'
 }
 
+function getBottomSelectImageKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'imageKey')
+}
+
+function getBottomSelectSubtitleKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'subtitleKey')
+}
+
 function getBottomSelectTextKey(field: UTSJSONObject) : string {
 	return getStringField(field, 'textKey')
+}
+
+function getBottomSelectImageValueKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'imageValueKey')
 }
 
 function getBottomSelectValueText(field: UTSJSONObject) : string {
 	const textKey = getBottomSelectTextKey(field)
 	if (textKey == '') return ''
 	const value = formData.value[textKey]
+	if (value == null) return ''
+	return '' + value
+}
+
+function getBottomSelectValueImage(field: UTSJSONObject) : string {
+	const imageValueKey = getBottomSelectImageValueKey(field)
+	if (imageValueKey == '') return ''
+	const value = formData.value[imageValueKey]
 	if (value == null) return ''
 	return '' + value
 }
@@ -734,6 +782,13 @@ function markSnapshot() {
 	}
 }
 
+function markDirty() {
+	if (!dirty.value) {
+		dirty.value = true
+		emit('dirty-change', true)
+	}
+}
+
 function applyInitialValues() {
 	const nextData = {} as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
@@ -752,6 +807,11 @@ function applyInitialValues() {
 			if (textKey != '') {
 				const incomingText = props.initialData[textKey]
 				nextData[textKey] = incomingText == null ? '' : incomingText
+			}
+			const imageValueKey = getBottomSelectImageValueKey(field)
+			if (imageValueKey != '') {
+				const incomingImage = props.initialData[imageValueKey]
+				nextData[imageValueKey] = incomingImage == null ? '' : incomingImage
 			}
 			if (isUploadField(field)) {
 				const itemsKey = getUploadFileItemsKey(field)
@@ -848,6 +908,10 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 	const textKey = getBottomSelectTextKey(field)
 	if (textKey != '') {
 		setFieldValueByKey(textKey, getStringField(payloadObject, 'text'))
+	}
+	const imageValueKey = getBottomSelectImageValueKey(field)
+	if (imageValueKey != '') {
+		setFieldValueByKey(imageValueKey, getStringField(payloadObject, 'image'))
 	}
 	clearFieldError(key)
 	refreshDirtyState()
@@ -1132,6 +1196,13 @@ watch(
 	() => {
 		allowNativeBackOnce.value = true
 		dirty.value = false
+	}
+)
+
+watch(
+	() : number => props.dirtySignal,
+	() => {
+		markDirty()
 	}
 )
 

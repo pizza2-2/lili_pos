@@ -20,7 +20,7 @@ const refreshStorageKey = 'refresh:pages:inventory-management:index'
 const leaveSignal = ref(0)
 const submitting = ref(false)
 const stockId = ref('')
-const initialData = ref<UTSJSONObject>({ stock_id: '', product_name: '', quantity_change: '', transaction_type: 'ADJUSTMENT', unit_cost: '', notes: '' } as UTSJSONObject)
+const initialData = ref<UTSJSONObject>({ stock_id: '', product: '', product_name: '', product_image: '', quantity_change: '', transaction_type: 'ADJUSTMENT', unit_cost: '', notes: '' } as UTSJSONObject)
 const typeOptions = ref<SelectOption[]>([
 	{ value: 'ADJUSTMENT', text: '盘点调整' } as SelectOption,
 	{ value: 'DAMAGE', text: '损坏' } as SelectOption,
@@ -30,6 +30,18 @@ const typeOptions = ref<SelectOption[]>([
 
 function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string { const value = obj[key]; if (value == null) return fallback; return '' + value }
 function parseErrorMessage(error: any, fallback: string): string { if (error == null) return fallback; const text = JSON.stringify(error); if (text == null || text == '') return fallback; return text }
+function parseObjectArray(value: any | null): UTSJSONObject[] { if (value == null) return [] as UTSJSONObject[]; const text = JSON.stringify(value); if (text == null || text == '') return [] as UTSJSONObject[]; const parsed = JSON.parseArray<UTSJSONObject>(text); if (parsed == null) return [] as UTSJSONObject[]; return parsed! }
+function firstStringField(obj: UTSJSONObject, keys: string[]): string { for (let i = 0; i < keys.length; i++) { const text = getStringField(obj, keys[i]); if (text != '') return text } return '' }
+function firstImageFromStock(detail: UTSJSONObject): string {
+	const direct = getStringField(detail, 'product_image')
+	if (direct != '') return direct
+	const mediaFiles = parseObjectArray(detail['product_media_files'])
+	for (let i = 0; i < mediaFiles.length; i++) {
+		const image = firstStringField(mediaFiles[i], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
+		if (image != '') return image
+	}
+	return ''
+}
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
 	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const result: UTSJSONObject[] = []
@@ -40,6 +52,15 @@ function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTS
 	return { results: result, total_count: result.length } as UTSJSONObject
 }
 async function fetchTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> { return buildSelectResponse(typeOptions.value, params) }
+async function fetchCurrentProductOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const productValue = getStringField(initialData.value, 'product')
+	const productText = getStringField(initialData.value, 'product_name')
+	const productImage = getStringField(initialData.value, 'product_image')
+	const option = { value: productValue, text: productText, image: productImage, subtitle: getStringField(initialData.value, 'stock_id') } as UTSJSONObject
+	const result: UTSJSONObject[] = []
+	if (productValue != '') result.push(option)
+	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
+}
 
 const formSections = ref<UTSJSONObject[]>([
 	{
@@ -48,7 +69,7 @@ const formSections = ref<UTSJSONObject[]>([
 		description: '',
 		defaultOpen: true,
 		fields: [
-			{ key: 'product_name', label: '商品', type: 'input', disabled: true, placeholder: '从库存列表进入后自动带出' } as UTSJSONObject,
+			{ key: 'product', textKey: 'product_name', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', disabled: true, title: '当前商品', placeholder: '从库存列表进入后自动带出', imageKey: 'image', subtitleKey: 'subtitle', showAddAction: false, showEditAction: false, fetchData: fetchCurrentProductOptions } as UTSJSONObject,
 			{ key: 'stock_id', label: '库存ID', type: 'input', required: true, disabled: true } as UTSJSONObject,
 			{ key: 'quantity_change', label: '调整数量', type: 'input', required: true, placeholder: '正数入库，负数出库' } as UTSJSONObject,
 			{ key: 'transaction_type', label: '调整类型', type: 'bottomSelect', title: '选择调整类型', placeholder: '请选择调整类型', showAddAction: false, showEditAction: false, fetchData: fetchTypeOptions } as UTSJSONObject,
@@ -67,7 +88,9 @@ async function loadDetail(idText: string) {
 		const detail = await getInventoryStockDetail(idText)
 		initialData.value = {
 			stock_id: idText,
+			product: getStringField(detail, 'product'),
 			product_name: getStringField(detail, 'product_name', '-') + ' / ' + getStringField(detail, 'location_name', '-'),
+			product_image: firstImageFromStock(detail),
 			quantity_change: '',
 			transaction_type: 'ADJUSTMENT',
 			unit_cost: getStringField(detail, 'average_cost'),

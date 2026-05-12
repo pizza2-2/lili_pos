@@ -6,6 +6,8 @@ export type InventoryListQuery = {
 	page_size: number
 	status: string | null
 	alert_status: string | null
+	supplier?: string | null
+	category?: string | null
 	transaction_type: string | null
 	location_type: string | null
 	is_active: string | null
@@ -51,6 +53,8 @@ function buildQuery(data: InventoryListQuery): UTSJSONObject {
 	if (data.search != null && data.search != '') query['search'] = data.search
 	if (data.status != null && data.status != '') query['status'] = data.status
 	if (data.alert_status != null && data.alert_status != '') query['alert_status'] = data.alert_status
+	if (data.supplier != null && data.supplier != '') query['supplier'] = data.supplier
+	if (data.category != null && data.category != '') query['category'] = data.category
 	if (data.transaction_type != null && data.transaction_type != '') query['transaction_type'] = data.transaction_type
 	if (data.location_type != null && data.location_type != '') query['location_type'] = data.location_type
 	if (data.is_active != null && data.is_active != '') query['is_active'] = data.is_active

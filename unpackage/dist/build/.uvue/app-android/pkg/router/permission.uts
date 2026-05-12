@@ -1,0 +1,29 @@
+import { authState } from '@/store/auth';
+// 白名单,无需登录跳转页面
+const routerWhiteList = [
+    '/pages/login/login',
+    '/pages/webview/webview',
+    '/pages/privacy/privacy'
+];
+const loginUrl = '/pages/login/login'; //登录页面地址
+// 路由跳转拦截
+const navigateToInterceptor = {
+    invoke: function (options: NavigateToOptions) {
+        // 获取要跳转的页面路径（url去掉"?"和"?"后的参数）
+        const url: string = options.url.split('?')[0];
+        // 判断当前窗口是白名单，如果是则不重定向路由
+        let pass = routerWhiteList.findIndex((eUrl: string): boolean => eUrl == url);
+        // 不是白名单并且没有token,重定向到登录界面
+        if (pass == -1 && authState.token == '') {
+            options.url = loginUrl;
+        }
+    }
+} as AddInterceptorOptions;
+// 添加路由拦截权限
+export function routerPermission() {
+    uni.addInterceptor("navigateTo", navigateToInterceptor);
+}
+// 移除路由拦截权限
+export function removeRouterPermission() {
+    uni.removeInterceptor('navigateTo');
+}

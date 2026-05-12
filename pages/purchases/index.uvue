@@ -4,16 +4,83 @@
 			title="采购单"
 			searchPlaceholder="采购单号、供应商、备注"
 			:searchValue="keyword"
-			:filterVisible="false"
+			:filterVisible="filterVisible"
 			:showBack="true"
 			:showSearch="true"
-			:showFilter="false"
+			:showFilter="true"
 			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
 			homePath="/pages/tabbar/settings"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
-		/>
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="purchase-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="purchase-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="purchase-filter-scroll-inner">
+							<view class="purchase-filter-select-group">
+								<text class="purchase-filter-select-title">供应商</text>
+								<view class="purchase-filter-select-wrap">
+									<liliBottomSelect
+										:value="supplierFilterValue"
+										:valueText="supplierFilterText"
+										title="选择供应商"
+										placeholder="请选择供应商"
+										searchPlaceholder="请输入供应商名称"
+										emptyText="暂无供应商"
+										:showAddAction="false"
+										:showEditAction="false"
+										:fetchData="fetchSupplierFilterOptions"
+										@change="handleSupplierFilterChange"
+									/>
+								</view>
+							</view>
+
+							<view v-if="filterOptionsLoading" class="purchase-filter-state">
+								<text class="purchase-filter-state-text">筛选选项加载中...</text>
+							</view>
+
+							<view v-else-if="filterOptionsError != ''" class="purchase-filter-state">
+								<text class="purchase-filter-state-text">{{ filterOptionsError }}</text>
+							</view>
+
+							<view v-else-if="filterDefinitions.length > 0" class="purchase-filter-groups">
+								<view
+									v-for="filter in filterDefinitions"
+									:key="filter.key"
+									class="purchase-filter-group"
+								>
+									<text class="purchase-filter-group-title">{{ filter.label }}</text>
+									<view class="purchase-filter-options">
+										<view
+											v-for="option in filter.options"
+											:key="filter.key + '-' + option.value"
+											:class="isFilterOptionSelected(filter.param, option.value) ? 'purchase-filter-option purchase-filter-option-active' : 'purchase-filter-option'"
+											@click="toggleFilterOption(filter.param, option.value, filter.multiple)"
+										>
+											<text :class="isFilterOptionSelected(filter.param, option.value) ? 'purchase-filter-option-text purchase-filter-option-text-active' : 'purchase-filter-option-text'">{{ option.label }}</text>
+										</view>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="purchase-filter-actions">
+						<view class="purchase-filter-btn purchase-filter-btn-light" @click="handleFilterReset">
+							<text class="purchase-filter-btn-light-text">重置</text>
+						</view>
+						<view class="purchase-filter-btn purchase-filter-btn-primary" @click="applySelectedFilters">
+							<text class="purchase-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
@@ -62,11 +129,18 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deletePurchase, getPurchaseList, PurchaseItem, PurchaseListResponse, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
+
+type PurchaseSelectOption = {
+	value: string
+	text: string
+}
 
 const refreshStorageKey = 'refresh:pages:purchases:index'
 const keyword = ref('')
+const filterVisible = ref(false)
 const purchases = ref<PurchaseItem[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -75,6 +149,14 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const pageTotalAmount = ref('0.00')
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<PurchaseFilterOptionsResponse | null>(null)
+const selectedFilters = ref<PurchaseSelectedFilter[]>([])
+const supplierFilterValue = ref('')
+const supplierFilterText = ref('')
+const filterPanelHeight = ref(420)
+const filterContentHeight = ref(356)
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'supplierText', label: '供应商:' } as UTSJSONObject,
@@ -120,6 +202,156 @@ function parseErrorMessage(error: any, fallback: string): string {
 	return message
 }
 
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 420) nextPanelHeight = 420
+	if (nextPanelHeight < 320) nextPanelHeight = 320
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 240) nextContentHeight = 240
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: PurchaseSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as PurchaseSelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as PurchaseSelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function splitSelectedValues(value: string): string[] {
+	if (value == '') return [] as string[]
+	const parts = value.split(',')
+	const result: string[] = []
+	for (let index = 0; index < parts.length; index += 1) {
+		const text = parts[index].trim()
+		if (text != '') result.push(text)
+	}
+	return result
+}
+
+function extractOptionObjects(value: any | null): UTSJSONObject[] {
+	const rawObject = parseObject(value)
+	if (rawObject != null) {
+		let items = parseObjectArray(rawObject['items'])
+		if (items.length > 0) return items
+		items = parseObjectArray(rawObject['results'])
+		if (items.length > 0) return items
+		items = parseObjectArray(rawObject['data'])
+		if (items.length > 0) return items
+		items = parseObjectArray(rawObject['options'])
+		if (items.length > 0) return items
+		const groups = parseObjectArray(rawObject['groups'])
+		for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+			const groupItems = parseObjectArray(groups[groupIndex]['items'])
+			if (groupItems.length > 0) return groupItems
+		}
+	}
+	return parseObjectArray(value)
+}
+
+function buildOptionValue(item: UTSJSONObject): string {
+	const directValue = stringValue(item['value'])
+	if (directValue != '') return directValue
+	const idValue = stringValue(item['id'])
+	if (idValue != '') return idValue
+	const codeValue = stringValue(item['code'])
+	if (codeValue != '') return codeValue
+	return stringValue(item['key'])
+}
+
+function buildOptionText(item: UTSJSONObject): string {
+	const textValue = stringValue(item['text'])
+	if (textValue != '') return textValue
+	const labelValue = stringValue(item['label'])
+	if (labelValue != '') return labelValue
+	const fullNameValue = stringValue(item['full_name'])
+	if (fullNameValue != '') return fullNameValue
+	const nameValue = stringValue(item['name'])
+	if (nameValue != '') return nameValue
+	return buildOptionValue(item)
+}
+
+function buildSelectOptions(value: any | null): PurchaseSelectOption[] {
+	const source = extractOptionObjects(value)
+	const result: PurchaseSelectOption[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const item = source[index]
+		const optionValue = buildOptionValue(item)
+		const optionText = buildOptionText(item)
+		if (optionValue == '' && optionText == '') continue
+		result.push({
+			value: optionValue,
+			text: optionText == '' ? optionValue : optionText,
+		} as PurchaseSelectOption)
+	}
+	return result
+}
+
+function buildBottomSelectResponse(source: PurchaseSelectOption[], params: UTSJSONObject): UTSJSONObject {
+	const keywordValue = stringValue(params['keyword']).toLowerCase()
+	const idValue = stringValue(params['id'])
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (idValue != '' && option.value != idValue) continue
+		if (keywordValue != '' && option.text.toLowerCase().indexOf(keywordValue) < 0 && option.value.toLowerCase().indexOf(keywordValue) < 0) continue
+		result.push({ value: option.value, text: option.text } as UTSJSONObject)
+	}
+	return { data: result, total: result.length } as UTSJSONObject
+}
+
+async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request('/api/procurement/suppliers/options/', 'GET', {} as UTSJSONObject, true)
+	return buildBottomSelectResponse(buildSelectOptions(raw), params)
+}
+
 function applyResponse(response: PurchaseListResponse) {
 	purchases.value = response.results
 	currentPage.value = response.current_page
@@ -143,9 +375,9 @@ async function loadPurchases() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
-			status: null,
-			receive_status: null,
-			supplier: null,
+			status: selectedFilterValue('status') == '' ? null : selectedFilterValue('status'),
+			receive_status: selectedFilterValue('receive_status') == '' ? null : selectedFilterValue('receive_status'),
+			supplier: supplierFilterValue.value == '' ? null : supplierFilterValue.value,
 			date_from: null,
 			date_to: null,
 			min_amount: null,
@@ -191,6 +423,65 @@ function consumeRefresh(): boolean {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadPurchases() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadPurchases() }
+
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getPurchaseFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleSupplierFilterChange(payload: UTSJSONObject) {
+	supplierFilterValue.value = stringValue(payload['value'])
+	supplierFilterText.value = stringValue(payload['text'])
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return splitSelectedValues(selectedFilterValue(param)).includes(value)
+}
+
+function toggleFilterOption(param: string, value: string, multiple: boolean) {
+	const currentValues = splitSelectedValues(selectedFilterValue(param))
+	if (!multiple) {
+		setSelectedFilterValue(param, currentValues.includes(value) ? '' : value)
+		return
+	}
+	const nextValues: string[] = []
+	let alreadySelected = false
+	for (let index = 0; index < currentValues.length; index += 1) {
+		const currentValue = currentValues[index]
+		if (currentValue == value) {
+			alreadySelected = true
+			continue
+		}
+		nextValues.push(currentValue)
+	}
+	if (!alreadySelected) nextValues.push(value)
+	setSelectedFilterValue(param, nextValues.join(','))
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as PurchaseSelectedFilter[]
+	supplierFilterValue.value = ''
+	supplierFilterText.value = ''
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadPurchases()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadPurchases()
+}
+
 function handleCreate() { uni.navigateTo({ url: '/pages/purchases/from' }) }
 function handleItemClick(payload: UTSJSONObject) {
 	const id = stringValue(payload['rawId'], stringValue(payload['id']))
@@ -261,9 +552,13 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || supplierFilterValue.value != '' || selectedFilters.value.length > 0
+})
+
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
-	if (keyword.value != '') return '没有匹配的采购单'
+	if (hasActiveFilter.value) return '没有匹配的采购单'
 	return '暂无采购单'
 })
 
@@ -275,8 +570,24 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	]
 })
 
-onLoad(() => { loadPurchases() })
-onShow(() => { if (consumeRefresh()) loadPurchases() })
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+const filterDefinitions = computed((): PurchaseFilterDefinition[] => {
+	if (filterOptions.value == null) return [] as PurchaseFilterDefinition[]
+	return filterOptions.value.filters
+})
+
+onLoad(() => { updateFilterPanelLayout(); loadPurchases() })
+onShow(() => {
+	updateFilterPanelLayout()
+	if (consumeRefresh()) loadPurchases()
+})
 </script>
 
 <style>
@@ -288,4 +599,26 @@ onShow(() => { if (consumeRefresh()) loadPurchases() })
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.purchase-filter-panel { position: relative; padding-top: 2px; }
+.purchase-filter-content-scroll { padding-right: 2px; }
+.purchase-filter-scroll-inner { padding-bottom: 58px; }
+.purchase-filter-select-group,
+.purchase-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.purchase-filter-select-title,
+.purchase-filter-group-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.purchase-filter-select-wrap { margin-top: 8px; }
+.purchase-filter-state { height: 112px; border-radius: 12px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.purchase-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.purchase-filter-groups { margin-bottom: 6px; }
+.purchase-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.purchase-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.purchase-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.purchase-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.purchase-filter-option-text-active { color: #FFFFFF; }
+.purchase-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.purchase-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.purchase-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.purchase-filter-btn-primary { background-color: #0F172A; }
+.purchase-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.purchase-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
 </style>

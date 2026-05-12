@@ -110,9 +110,9 @@
 				<view v-if="errorMessage != '' && !isLoading" class="error-card">
 					<text class="error-title">加载失败</text>
 					<text class="error-desc">{{ errorMessage }}</text>
-					<button class="retry-btn" @click="loadProducts">
+					<view class="retry-btn" @click="loadProducts">
 						<text class="retry-btn-text">重新加载</text>
-					</button>
+					</view>
 				</view>
 
 				<lili-UniversalList
