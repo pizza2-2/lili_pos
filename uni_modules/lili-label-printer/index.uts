@@ -1,0 +1,477 @@
+import Manifest from 'android.Manifest'
+import Activity from 'android.app.Activity'
+import Build from 'android.os.Build'
+import Context from 'android.content.Context'
+import Intent from 'android.content.Intent'
+import Settings from 'android.provider.Settings'
+import LocationManager from 'android.location.LocationManager'
+import BluetoothAdapter from 'android.bluetooth.BluetoothAdapter'
+import BluetoothDevice from 'android.bluetooth.BluetoothDevice'
+import BluetoothManager from 'android.bluetooth.BluetoothManager'
+import BluetoothSocket from 'android.bluetooth.BluetoothSocket'
+import BroadcastReceiver from 'android.content.BroadcastReceiver'
+import IntentFilter from 'android.content.IntentFilter'
+import UUID from 'java.util.UUID'
+import Charset from 'java.nio.charset.Charset'
+import Thread from 'java.lang.Thread'
+
+export type LabelPrinterDevice = {
+	name: string
+	address: string
+	type: string
+	bondState: string
+	rssi: number
+	connected: boolean
+}
+
+export type LabelPrinterResult = {
+	success: boolean
+	code: string
+	message: string
+	data: UTSJSONObject | null
+}
+
+export type PrintTsplOptions = {
+	address: string
+	tspl: string
+	charset?: string
+	chunkSize?: number
+	delayMs?: number
+}
+
+const sppUuidText = '00001101-0000-1000-8000-00805F9B34FB'
+let activeSocket: BluetoothSocket | null = null
+let activeDevice: BluetoothDevice | null = null
+let discoveryReceiver: BroadcastReceiver | null = null
+let discoveryDevices: LabelPrinterDevice[] = []
+let discoveryResolve: ((devices: LabelPrinterDevice[]) => void) | null = null
+let discoveryTimer: number = -1
+
+function makeResult(success: boolean, code: string, message: string, data: UTSJSONObject | null): LabelPrinterResult {
+	return { success: success, code: code, message: message, data: data } as LabelPrinterResult
+}
+
+function getActivity(): Activity {
+	return UTSAndroid.getUniActivity() as Activity
+}
+
+function getAdapter(): BluetoothAdapter | null {
+	const manager = getActivity().getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+	if (manager == null) {
+		return null
+	}
+	return manager.getAdapter()
+}
+
+function isAndroid12(): boolean {
+	return Build.VERSION.SDK_INT >= 31
+}
+
+function scanPermissions(): string[] {
+	if (isAndroid12()) {
+		return [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT]
+	}
+	return [Manifest.permission.ACCESS_FINE_LOCATION]
+}
+
+function connectPermissions(): string[] {
+	if (isAndroid12()) {
+		return [Manifest.permission.BLUETOOTH_CONNECT]
+	}
+	return []
+}
+
+function hasPermissions(permissions: string[]): boolean {
+	if (permissions.length == 0) {
+		return true
+	}
+	return UTSAndroid.checkSystemPermissionGranted(getActivity(), permissions)
+}
+
+function bluetoothEnabled(adapter: BluetoothAdapter): boolean {
+	try {
+		return adapter.isEnabled()
+	} catch (error) {
+		return false
+	}
+}
+
+function isLocationServiceEnabled(): boolean {
+	const manager = getActivity().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+	if (manager == null) {
+		return false
+	}
+	let gpsEnabled = false
+	let networkEnabled = false
+	try {
+		gpsEnabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+	} catch (error) {
+		gpsEnabled = false
+	}
+	try {
+		networkEnabled = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+	} catch (error) {
+		networkEnabled = false
+	}
+	return gpsEnabled || networkEnabled
+}
+
+function deviceBondState(device: BluetoothDevice): string {
+	const state = device.getBondState()
+	if (state == BluetoothDevice.BOND_BONDED) {
+		return 'BONDED'
+	}
+	if (state == BluetoothDevice.BOND_BONDING) {
+		return 'BONDING'
+	}
+	return 'NONE'
+}
+
+function deviceType(device: BluetoothDevice): string {
+	if (Build.VERSION.SDK_INT < 18) {
+		return 'CLASSIC'
+	}
+	const type = device.getType()
+	if (type == BluetoothDevice.DEVICE_TYPE_LE) {
+		return 'BLE'
+	}
+	if (type == BluetoothDevice.DEVICE_TYPE_DUAL) {
+		return 'DUAL'
+	}
+	if (type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+		return 'CLASSIC'
+	}
+	return 'UNKNOWN'
+}
+
+function safeDeviceName(device: BluetoothDevice): string {
+	let name = ''
+	try {
+		name = device.getName()
+	} catch (error) {
+		name = ''
+	}
+	if (name == null || name == '') {
+		return '未知蓝牙设备'
+	}
+	return name
+}
+
+function toPrinterDevice(device: BluetoothDevice, rssi: number): LabelPrinterDevice {
+	const address = device.getAddress()
+	let connected = false
+	if (activeDevice != null && activeSocket != null) {
+		connected = activeDevice!.getAddress() == address && activeSocket!.isConnected()
+	}
+	return {
+		name: safeDeviceName(device),
+		address: address,
+		type: deviceType(device),
+		bondState: deviceBondState(device),
+		rssi: rssi,
+		connected: connected
+	} as LabelPrinterDevice
+}
+
+function addOrUpdateDevice(device: BluetoothDevice, rssi: number) {
+	const item = toPrinterDevice(device, rssi)
+	console.log('[lili-label-printer] found device name=' + item.name + ', address=' + item.address + ', type=' + item.type + ', bond=' + item.bondState + ', rssi=' + item.rssi.toString())
+	let found = false
+	for (let i = 0; i < discoveryDevices.length; i++) {
+		if (discoveryDevices[i].address == item.address) {
+			discoveryDevices[i] = item
+			found = true
+			break
+		}
+	}
+	if (!found) {
+		discoveryDevices.push(item)
+	}
+}
+
+function getBluetoothDeviceExtra(intent: Intent): BluetoothDevice | null {
+	return intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+}
+
+function closeActiveSocket() {
+	if (activeSocket != null) {
+		try {
+			activeSocket!.close()
+		} catch (error) {}
+	}
+	activeSocket = null
+	activeDevice = null
+}
+
+function finishDiscovery() {
+	console.log('[lili-label-printer] finish discovery, count=' + discoveryDevices.length.toString())
+	const adapter = getAdapter()
+	if (adapter != null) {
+		try {
+			if (adapter.isDiscovering()) {
+				adapter.cancelDiscovery()
+			}
+		} catch (error) {}
+	}
+	if (discoveryReceiver != null) {
+		try {
+			getActivity().unregisterReceiver(discoveryReceiver)
+		} catch (error) {}
+	}
+	discoveryReceiver = null
+	if (discoveryTimer >= 0) {
+		clearTimeout(discoveryTimer)
+		discoveryTimer = -1
+	}
+	if (discoveryResolve != null) {
+		const resolver = discoveryResolve!
+		discoveryResolve = null
+		resolver(discoveryDevices)
+	}
+}
+
+class LabelDiscoveryReceiver extends BroadcastReceiver() {
+	override onReceive(context: Context, intent: Intent): void {
+		const action = intent.getAction()
+		if (action == BluetoothDevice.ACTION_FOUND) {
+			const device = getBluetoothDeviceExtra(intent)
+			const rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
+			if (device != null) {
+				addOrUpdateDevice(device as BluetoothDevice, rssi)
+			}
+			return
+		}
+		if (action == BluetoothAdapter.ACTION_DISCOVERY_FINISHED) {
+			finishDiscovery()
+		}
+	}
+}
+
+export function checkBluetoothEnvironment(): LabelPrinterResult {
+	const adapter = getAdapter()
+	if (adapter == null) {
+		return makeResult(false, 'BLUETOOTH_UNSUPPORTED', '当前设备不支持蓝牙', null)
+	}
+	const scanGranted = hasPermissions(scanPermissions())
+	const connectGranted = hasPermissions(connectPermissions())
+	const enabled = bluetoothEnabled(adapter)
+	const locationEnabled = isAndroid12() ? true : isLocationServiceEnabled()
+	const data = {
+		bluetoothSupported: true,
+		bluetoothEnabled: enabled,
+		locationPermissionGranted: scanGranted,
+		bluetoothPermissionGranted: connectGranted,
+		locationServiceEnabled: locationEnabled
+	} as UTSJSONObject
+	if (!enabled) {
+		return makeResult(false, 'BLUETOOTH_DISABLED', '蓝牙未开启', data)
+	}
+	if (!scanGranted || !connectGranted) {
+		return makeResult(false, 'LOCATION_PERMISSION_REQUIRED', '缺少蓝牙或位置权限', data)
+	}
+	if (!locationEnabled) {
+		return makeResult(false, 'LOCATION_SERVICE_DISABLED', '系统位置服务未开启，可能无法搜索蓝牙设备', data)
+	}
+	return makeResult(true, 'OK', '蓝牙环境正常', data)
+}
+
+export function requestBluetoothEnable(): LabelPrinterResult {
+	const adapter = getAdapter()
+	if (adapter == null) {
+		return makeResult(false, 'BLUETOOTH_UNSUPPORTED', '当前设备不支持蓝牙', null)
+	}
+	if (bluetoothEnabled(adapter)) {
+		return makeResult(true, 'BLUETOOTH_ENABLED', '蓝牙已开启', null)
+	}
+	const intent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+	getActivity().startActivity(intent)
+	return makeResult(true, 'BLUETOOTH_ENABLE_REQUESTED', '已打开蓝牙开启请求，请确认后返回', null)
+}
+
+export function requestLocationPermission(): Promise<LabelPrinterResult> {
+	return new Promise((resolve) => {
+		const permissions = scanPermissions()
+		if (hasPermissions(permissions)) {
+			resolve(makeResult(true, 'PERMISSION_GRANTED', '蓝牙和位置权限已授权', null))
+			return
+		}
+		try {
+			UTSAndroid.requestSystemPermission(getActivity(), permissions, (allRight: boolean, grantedList: string[]) => {
+				if (allRight) {
+					resolve(makeResult(true, 'PERMISSION_GRANTED', '蓝牙和位置权限已授权', null))
+					return
+				}
+				resolve(makeResult(false, 'PERMISSION_DENIED', '权限未完全授权，无法搜索蓝牙打印机', null))
+			}, (doNotAskAgain: boolean, grantedList: string[]) => {
+				if (doNotAskAgain) {
+					resolve(makeResult(false, 'PERMISSION_NEED_SETTINGS', '权限已被拒绝且不再询问，请到系统设置开启', null))
+					return
+				}
+				resolve(makeResult(false, 'PERMISSION_DENIED', '权限授权失败，无法搜索蓝牙打印机', null))
+			})
+		} catch (error) {
+			resolve(makeResult(false, 'PERMISSION_MANIFEST_MISSING', '蓝牙权限未写入自定义基座，请重新打包自定义基座', null))
+		}
+	})
+}
+
+export function openLocationSettings(): LabelPrinterResult {
+	const intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+	getActivity().startActivity(intent)
+	return makeResult(true, 'LOCATION_SETTINGS_OPENED', '已打开系统位置设置', null)
+}
+
+export function getPairedPrinters(): LabelPrinterDevice[] {
+	const adapter = getAdapter()
+	if (adapter == null || !bluetoothEnabled(adapter)) {
+		return []
+	}
+	if (!hasPermissions(connectPermissions())) {
+		return []
+	}
+	const devices = adapter.getBondedDevices()
+	const list: LabelPrinterDevice[] = []
+	const iterator = devices.iterator()
+	while (iterator.hasNext()) {
+		const item = iterator.next() as BluetoothDevice
+		list.push(toPrinterDevice(item, 0))
+	}
+	return list
+}
+
+export function searchBluetoothPrinters(durationMs: number = 10000): Promise<LabelPrinterDevice[]> {
+	return new Promise((resolve) => {
+		const environment = checkBluetoothEnvironment()
+		if (!environment.success) {
+			console.log('[lili-label-printer] discovery blocked: ' + environment.code + ', ' + environment.message)
+			resolve([])
+			return
+		}
+		const adapter = getAdapter()
+		if (adapter == null) {
+			console.log('[lili-label-printer] discovery blocked: bluetooth adapter is null')
+			resolve([])
+			return
+		}
+		stopBluetoothDiscovery()
+		discoveryDevices = []
+		discoveryResolve = resolve
+		discoveryReceiver = new LabelDiscoveryReceiver()
+		const filter = new IntentFilter()
+		filter.addAction(BluetoothDevice.ACTION_FOUND)
+		filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+		getActivity().registerReceiver(discoveryReceiver, filter)
+		try {
+			if (adapter.isDiscovering()) {
+				adapter.cancelDiscovery()
+			}
+			const started = adapter.startDiscovery()
+			console.log('[lili-label-printer] start discovery result=' + started.toString() + ', durationMs=' + durationMs.toString())
+			if (!started) {
+				finishDiscovery()
+				return
+			}
+		} catch (error) {
+			console.log('[lili-label-printer] start discovery failed')
+			finishDiscovery()
+			return
+		}
+		discoveryTimer = setTimeout(() => {
+			finishDiscovery()
+		}, durationMs)
+	})
+}
+
+export function stopBluetoothDiscovery(): LabelPrinterResult {
+	finishDiscovery()
+	return makeResult(true, 'DISCOVERY_STOPPED', '已停止搜索蓝牙设备', null)
+}
+
+export function connectPrinter(address: string): LabelPrinterResult {
+	const environment = checkBluetoothEnvironment()
+	if (!environment.success && environment.code != 'LOCATION_SERVICE_DISABLED') {
+		return environment
+	}
+	const adapter = getAdapter()
+	if (adapter == null) {
+		return makeResult(false, 'BLUETOOTH_UNSUPPORTED', '当前设备不支持蓝牙', null)
+	}
+	if (address == '') {
+		return makeResult(false, 'ADDRESS_EMPTY', '打印机地址不能为空', null)
+	}
+	stopBluetoothDiscovery()
+	closeActiveSocket()
+	try {
+		const device = adapter.getRemoteDevice(address)
+		const socket = device.createRfcommSocketToServiceRecord(UUID.fromString(sppUuidText))
+		socket.connect()
+		activeSocket = socket
+		activeDevice = device
+		const data = {
+			name: safeDeviceName(device),
+			address: device.getAddress(),
+			type: deviceType(device),
+			bondState: deviceBondState(device)
+		} as UTSJSONObject
+		return makeResult(true, 'CONNECTED', '已连接蓝牙打印机', data)
+	} catch (error) {
+		closeActiveSocket()
+		return makeResult(false, 'CONNECT_FAILED', '连接蓝牙打印机失败，请确认设备已开机并处于可连接状态', null)
+	}
+}
+
+export function disconnectPrinter(): LabelPrinterResult {
+	closeActiveSocket()
+	return makeResult(true, 'DISCONNECTED', '已断开蓝牙打印机', null)
+}
+
+export function getConnectedPrinter(): LabelPrinterResult {
+	if (activeDevice == null || activeSocket == null || !activeSocket!.isConnected()) {
+		return makeResult(false, 'NOT_CONNECTED', '当前未连接蓝牙打印机', null)
+	}
+	const data = {
+		name: safeDeviceName(activeDevice!),
+		address: activeDevice!.getAddress(),
+		type: deviceType(activeDevice!),
+		bondState: deviceBondState(activeDevice!)
+	} as UTSJSONObject
+	return makeResult(true, 'CONNECTED', '已连接蓝牙打印机', data)
+}
+
+export function printTspl(options: PrintTsplOptions): LabelPrinterResult {
+	if (options.address == '') {
+		return makeResult(false, 'ADDRESS_EMPTY', '请先选择蓝牙打印机', null)
+	}
+	if (options.tspl == '') {
+		return makeResult(false, 'TSPL_EMPTY', '打印内容不能为空', null)
+	}
+	if (activeDevice == null || activeSocket == null || !activeSocket!.isConnected() || activeDevice!.getAddress() != options.address) {
+		const connectResult = connectPrinter(options.address)
+		if (!connectResult.success) {
+			return connectResult
+		}
+	}
+	try {
+		const charsetName = options.charset == null || options.charset == '' ? 'GBK' : options.charset!
+		const chunkSize = (options.chunkSize == null || options.chunkSize! <= 0 ? 256 : options.chunkSize!).toInt()
+		const delayMs = (options.delayMs == null || options.delayMs! < 0 ? 20 : options.delayMs!).toLong()
+		const bytes = options.tspl.toByteArray(Charset.forName(charsetName))
+		const output = activeSocket!.getOutputStream()
+		let offset: Int = 0
+		while (offset < bytes.size) {
+			let count = chunkSize
+			if (offset + count > bytes.size) {
+				count = (bytes.size - offset).toInt()
+			}
+			output.write(bytes, offset.toInt(), count.toInt())
+			output.flush()
+			if (delayMs > 0) {
+				Thread.sleep(delayMs)
+			}
+			offset += count
+		}
+		return makeResult(true, 'PRINTED', '打印指令已发送', null)
+	} catch (error) {
+		return makeResult(false, 'PRINT_FAILED', '发送打印指令失败，请检查打印机连接', null)
+	}
+}

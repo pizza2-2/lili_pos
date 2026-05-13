@@ -1,0 +1,61 @@
+{
+  "id": "lili-label-printer",
+  "displayName": "LILI 标签蓝牙打印",
+  "version": "1.0.0",
+  "description": "蓝牙标签打印机搜索、连接和 TSPL 打印",
+  "keywords": [
+    "bluetooth",
+    "printer",
+    "label",
+    "tspl"
+  ],
+  "engines": {
+    "HBuilderX": "^4.71",
+    "uni-app-x": "^4.71"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "declaration": {
+      "ads": "无",
+      "data": "无",
+      "permissions": "安卓：\n  <uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />\n  <uses-permission android:name=\"android.permission.BLUETOOTH\" android:maxSdkVersion=\"30\" />\n  <uses-permission android:name=\"android.permission.BLUETOOTH_ADMIN\" android:maxSdkVersion=\"30\" />\n  <uses-permission android:name=\"android.permission.BLUETOOTH_SCAN\" android:usesPermissionFlags=\"neverForLocation\" />\n  <uses-permission android:name=\"android.permission.BLUETOOTH_CONNECT\" />\n"
+    }
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": {
+        "tcb": "n",
+        "aliyun": "n"
+      },
+      "client": {
+        "Vue": {
+          "vue2": "n",
+          "vue3": "y"
+        },
+        "App": {
+          "app-vue": "n",
+          "app-nvue": "n",
+          "app-uvue": "y"
+        },
+        "H5-mobile": {
+          "Safari": "n",
+          "Android Browser": "n",
+          "微信浏览器(Android)": "n",
+          "QQ浏览器(Android)": "n"
+        },
+        "H5-pc": {
+          "Chrome": "n",
+          "IE": "n",
+          "Edge": "n",
+          "Firefox": "n",
+          "Safari": "n"
+        },
+        "小程序": {
+          "微信": "n"
+        }
+      }
+    }
+  }
+}

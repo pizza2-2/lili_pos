@@ -179,6 +179,20 @@
 			}
 		},
 		{
+			"path": "pages/label-print/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/printer-settings/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/products/config-model/index",
 			"style": {
 				"navigationStyle":"custom",

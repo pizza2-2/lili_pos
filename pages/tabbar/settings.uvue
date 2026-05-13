@@ -79,7 +79,8 @@ const groups = ref<MenuGroup[]>([
 		label: '收银与店务配置',
 		items: [
 			{ label: '收银台', icon: '', iconPath: '/static/menu-icons/cash-register.svg', path: null, action: 'todo', disabled: true },
-			{ label: '打印机', icon: '', iconPath: '/static/menu-icons/printer.svg', path: null, action: 'todo', disabled: true },
+			{ label: '打印机设置', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/printer-settings/index', action: 'navigateTo', disabled: false },
+			{ label: '标签打印', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/label-print/index', action: 'navigateTo', disabled: false },
 			{ label: '支付', icon: '', iconPath: '/static/menu-icons/payment.svg', path: null, action: 'todo', disabled: true },
 			{ label: '权限', icon: '', iconPath: '/static/menu-icons/permission.svg', path: null, action: 'todo', disabled: true },
 		],

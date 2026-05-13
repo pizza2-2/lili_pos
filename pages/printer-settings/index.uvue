@@ -1,0 +1,384 @@
+<template>
+	<view class="page">
+		<lili-universal-filter title="打印机设置" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/tabbar/settings" backgroundColor="#F3F6FA" />
+		<scroll-view class="page-scroll" direction="vertical">
+			<view class="content">
+				<view class="status-card">
+					<view class="status-main">
+						<text class="status-label">当前打印机</text>
+						<text class="status-title">{{ printerTitle }}</text>
+						<text class="status-subtitle">{{ printerSubtitle }}</text>
+					</view>
+					<view :class="connectedAddress != '' ? 'status-badge status-badge-on' : 'status-badge'">
+						<text :class="connectedAddress != '' ? 'status-badge-text status-badge-text-on' : 'status-badge-text'">{{ connectedAddress != '' ? '已连接' : '未连接' }}</text>
+					</view>
+				</view>
+
+				<view class="action-card">
+					<view class="action-row">
+						<view class="action-btn action-btn-light" @click="checkEnvironment()">
+							<text class="action-btn-light-text">检查环境</text>
+						</view>
+						<view class="action-btn action-btn-primary" @click="searchPrinters()">
+							<text class="action-btn-primary-text">{{ searching ? '搜索中' : '搜索设备' }}</text>
+						</view>
+					</view>
+					<view class="action-row">
+						<view class="action-btn action-btn-light" @click="disconnectCurrentPrinter()">
+							<text class="action-btn-light-text">断开连接</text>
+						</view>
+						<view class="action-btn action-btn-dark" @click="printTestLabel()">
+							<text class="action-btn-dark-text">测试打印</text>
+						</view>
+					</view>
+					<text class="hint-text">{{ messageText }}</text>
+				</view>
+
+				<view class="list-card">
+					<view class="section-head">
+						<text class="section-title">搜索结果</text>
+						<text class="section-count">{{ devices.length.toString() }} 台</text>
+					</view>
+					<view v-if="devices.length == 0" class="empty-box">
+						<text class="empty-title">暂无设备</text>
+						<text class="empty-desc">点击“搜索设备”，只显示本次扫描到的蓝牙设备。</text>
+					</view>
+					<view v-else class="device-list">
+						<view v-for="device in devices" :key="device.address" :class="selectedAddress == device.address ? 'device-row device-row-active' : 'device-row'" @click="connectDevice(device)">
+							<view class="device-main">
+								<text :class="selectedAddress == device.address ? 'device-name device-name-active' : 'device-name'">{{ device.name }}</text>
+								<text class="device-meta">{{ device.address }} / {{ device.type }} / {{ device.bondState }}</text>
+								<text class="device-rssi">RSSI {{ device.rssi.toString() }}</text>
+							</view>
+							<view :class="selectedAddress == device.address ? 'device-action device-action-active' : 'device-action'">
+								<text :class="selectedAddress == device.address ? 'device-action-text device-action-text-active' : 'device-action-text'">{{ selectedAddress == device.address ? '已选' : '连接' }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="log-card">
+					<view class="section-head">
+						<text class="section-title">调试日志</text>
+						<text class="section-count" @click="clearLogs()">清空</text>
+					</view>
+					<text class="log-text">{{ logText }}</text>
+				</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { checkBluetoothEnvironment, requestBluetoothEnable, requestLocationPermission, openLocationSettings, searchBluetoothPrinters, connectPrinter, disconnectPrinter, getConnectedPrinter, printTspl, LabelPrinterDevice, LabelPrinterResult } from '@/uni_modules/lili-label-printer/index.uts'
+
+const defaultPrinterStorageKey = 'label-print:default-printer'
+const devices = ref<LabelPrinterDevice[]>([])
+const selectedAddress = ref('')
+const selectedName = ref('')
+const connectedAddress = ref('')
+const messageText = ref('请先检查蓝牙环境，或直接搜索附近设备。')
+const logText = ref('等待操作')
+const searching = ref(false)
+const connecting = ref(false)
+
+const printerTitle = computed((): string => {
+	if (selectedName.value != '') return selectedName.value
+	return '未选择打印机'
+})
+
+const printerSubtitle = computed((): string => {
+	if (selectedAddress.value != '') return selectedAddress.value
+	return '连接后会自动保存为默认标签打印机'
+})
+
+function resultMessage(result: LabelPrinterResult, fallback: string): string {
+	if (result.message != '') return result.message
+	return fallback
+}
+
+function resultStringData(result: LabelPrinterResult, key: string): string {
+	if (result.data == null) return ''
+	const value = result.data![key]
+	if (value == null) return ''
+	return value.toString()
+}
+
+function nowText(): string {
+	const date = new Date()
+	const hour = date.getHours().toString().padStart(2, '0')
+	const minute = date.getMinutes().toString().padStart(2, '0')
+	const second = date.getSeconds().toString().padStart(2, '0')
+	return hour + ':' + minute + ':' + second
+}
+
+function appendLog(text: string) {
+	const line = nowText() + ' ' + text
+	if (logText.value == '' || logText.value == '等待操作') {
+		logText.value = line
+	} else {
+		logText.value = logText.value + '\n' + line
+	}
+	console.log('[printer-settings] ' + text)
+}
+
+function clearLogs() {
+	logText.value = '等待操作'
+}
+
+function saveDefaultPrinter(name: string, address: string) {
+	if (address == '') return
+	const payload = { name: name, address: address } as UTSJSONObject
+	uni.setStorageSync(defaultPrinterStorageKey, JSON.stringify(payload))
+	appendLog('已保存默认打印机 ' + name + ' ' + address)
+}
+
+function updateConnectedFromResult(result: LabelPrinterResult) {
+	const name = resultStringData(result, 'name')
+	const address = resultStringData(result, 'address')
+	if (address == '') return
+	selectedAddress.value = address
+	connectedAddress.value = address
+	selectedName.value = name == '' ? '标签打印机' : name
+	saveDefaultPrinter(selectedName.value, selectedAddress.value)
+}
+
+function loadDefaultPrinterInfo() {
+	const stored = uni.getStorageSync(defaultPrinterStorageKey)
+	if (stored == null || stored == '') return
+	try {
+		const data = JSON.parse(stored as string) as UTSJSONObject
+		const name = data['name']
+		const address = data['address']
+		if (address != null && address.toString() != '') {
+			selectedAddress.value = address.toString()
+			selectedName.value = name == null ? '默认标签打印机' : name.toString()
+			messageText.value = '已读取默认打印机，请点击搜索或直接测试连接。'
+			appendLog('读取默认打印机 ' + selectedName.value + ' ' + selectedAddress.value)
+		}
+	} catch (error) {
+		appendLog('读取默认打印机失败')
+	}
+}
+
+onLoad(() => {
+	loadDefaultPrinterInfo()
+	const connected = getConnectedPrinter()
+	if (connected.success) {
+		updateConnectedFromResult(connected)
+		appendLog('检测到已连接打印机')
+	}
+})
+
+function showActionMessage(result: LabelPrinterResult, fallback: string) {
+	uni.showToast({ title: resultMessage(result, fallback), icon: result.success ? 'success' : 'none' })
+}
+
+function checkEnvironment() {
+	const result = checkBluetoothEnvironment()
+	messageText.value = resultMessage(result, '蓝牙环境检查完成')
+	appendLog('环境检查：' + result.code + ' / ' + resultMessage(result, ''))
+	showActionMessage(result, '蓝牙环境检查完成')
+}
+
+function ensurePrinterEnvironment(done: (ready: boolean) => void) {
+	const result = checkBluetoothEnvironment()
+	messageText.value = resultMessage(result, '蓝牙环境检查完成')
+	appendLog('环境检查：' + result.code + ' / ' + resultMessage(result, ''))
+	if (result.success) {
+		done(true)
+		return
+	}
+	if (result.code == 'BLUETOOTH_DISABLED') {
+		uni.showModal({
+			title: '需要开启蓝牙',
+			content: '搜索和连接标签打印机需要先开启系统蓝牙。',
+			confirmText: '打开蓝牙',
+			cancelText: '取消',
+			success: (modal) => {
+				if (modal.confirm) {
+					const openResult = requestBluetoothEnable()
+					messageText.value = resultMessage(openResult, '已请求开启蓝牙')
+					appendLog('请求开启蓝牙：' + openResult.code)
+					showActionMessage(openResult, '已请求开启蓝牙')
+				}
+				done(false)
+			}
+		})
+		return
+	}
+	if (result.code == 'LOCATION_PERMISSION_REQUIRED') {
+		uni.showModal({
+			title: '需要蓝牙权限',
+			content: '搜索蓝牙打印机需要蓝牙权限，请允许后再搜索。',
+			confirmText: '去授权',
+			cancelText: '取消',
+			success: (modal) => {
+				if (!modal.confirm) {
+					done(false)
+					return
+				}
+				requestLocationPermission().then((permissionResult) => {
+					messageText.value = resultMessage(permissionResult, '权限请求完成')
+					appendLog('权限请求：' + permissionResult.code + ' / ' + resultMessage(permissionResult, ''))
+					showActionMessage(permissionResult, '权限请求完成')
+					done(permissionResult.success)
+				})
+			}
+		})
+		return
+	}
+	if (result.code == 'LOCATION_SERVICE_DISABLED') {
+		uni.showModal({
+			title: '需要开启位置服务',
+			content: '当前系统版本搜索蓝牙设备需要开启位置服务。',
+			confirmText: '去开启',
+			cancelText: '继续',
+			success: (modal) => {
+				if (modal.confirm) {
+					const openResult = openLocationSettings()
+					messageText.value = resultMessage(openResult, '已打开位置设置')
+					appendLog('打开位置设置：' + openResult.code)
+					showActionMessage(openResult, '已打开位置设置')
+					done(false)
+					return
+				}
+				done(true)
+			}
+		})
+		return
+	}
+	showActionMessage(result, '蓝牙环境异常')
+	done(false)
+}
+
+function searchPrinters() {
+	if (searching.value) return
+	ensurePrinterEnvironment((ready) => {
+		if (!ready) return
+		searching.value = true
+		devices.value = []
+		messageText.value = '正在搜索附近蓝牙设备...'
+		appendLog('开始搜索蓝牙设备')
+		searchBluetoothPrinters(10000).then((resultDevices) => {
+			searching.value = false
+			devices.value = resultDevices
+			messageText.value = '搜索完成，发现 ' + resultDevices.length.toString() + ' 台设备'
+			appendLog('搜索完成，发现 ' + resultDevices.length.toString() + ' 台设备')
+			for (let i = 0; i < resultDevices.length; i++) {
+				const item = resultDevices[i]
+				appendLog('#' + (i + 1).toString() + ' ' + item.name + ' / ' + item.address + ' / ' + item.type + ' / ' + item.bondState + ' / RSSI ' + item.rssi.toString())
+			}
+		})
+	})
+}
+
+function connectDevice(device: any) {
+	if (connecting.value) return
+	const current = device as LabelPrinterDevice
+	connecting.value = true
+	selectedAddress.value = current.address
+	selectedName.value = current.name
+	messageText.value = '正在连接 ' + current.name
+	appendLog('开始连接 ' + current.name + ' ' + current.address)
+	const result = connectPrinter(current.address)
+	connecting.value = false
+	messageText.value = resultMessage(result, '连接完成')
+	appendLog('连接结果：' + result.code + ' / ' + resultMessage(result, ''))
+	if (result.success) {
+		updateConnectedFromResult(result)
+	}
+	showActionMessage(result, '连接完成')
+}
+
+function disconnectCurrentPrinter() {
+	const result = disconnectPrinter()
+	connectedAddress.value = ''
+	messageText.value = resultMessage(result, '已断开打印机')
+	appendLog('断开连接：' + result.code)
+	showActionMessage(result, '已断开打印机')
+}
+
+function buildTestTspl(): string {
+	let command = ''
+	command = command + 'SIZE 40 mm,30 mm\r\n'
+	command = command + 'GAP 2 mm,0 mm\r\n'
+	command = command + 'DIRECTION 1\r\n'
+	command = command + 'REFERENCE 0,0\r\n'
+	command = command + 'CLS\r\n'
+	command = command + 'SPEED 4\r\n'
+	command = command + 'DENSITY 12\r\n'
+	command = command + 'TEXT 24,24,"TSS24.BF2",0,1,1,"LILI TEST"\r\n'
+	command = command + 'TEXT 24,64,"TSS24.BF2",0,1,1,"TSPL OK"\r\n'
+	command = command + 'BARCODE 24,110,"128",60,1,0,2,2,"1234567890"\r\n'
+	command = command + 'PRINT 1,1\r\n'
+	return command
+}
+
+function printTestLabel() {
+	if (selectedAddress.value == '') {
+		uni.showToast({ title: '请先选择打印机', icon: 'none' })
+		return
+	}
+	const result = printTspl({
+		address: selectedAddress.value,
+		tspl: buildTestTspl(),
+		charset: 'GBK',
+		chunkSize: 256,
+		delayMs: 20
+	})
+	messageText.value = resultMessage(result, '测试打印完成')
+	appendLog('测试打印：' + result.code + ' / ' + resultMessage(result, ''))
+	if (result.success) {
+		const connected = getConnectedPrinter()
+		if (connected.success) updateConnectedFromResult(connected)
+	}
+	showActionMessage(result, '测试打印完成')
+}
+</script>
+
+<style>
+.page { flex: 1; background-color: #F3F6FA; }
+.page-scroll { flex: 1; }
+.content { padding: 14px; }
+.status-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 14px; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.status-main { flex: 1; padding-right: 10px; }
+.status-label { font-size: 11px; color: #64748B; margin-bottom: 4px; }
+.status-title { font-size: 18px; font-weight: 700; color: #0F172A; }
+.status-subtitle { font-size: 12px; color: #64748B; margin-top: 5px; }
+.status-badge { height: 30px; border-radius: 15px; padding-left: 12px; padding-right: 12px; background-color: #EEF2F7; align-items: center; justify-content: center; }
+.status-badge-on { background-color: #DCFCE7; }
+.status-badge-text { font-size: 12px; color: #64748B; font-weight: 700; }
+.status-badge-text-on { color: #166534; }
+.action-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 12px; margin-bottom: 10px; }
+.action-row { flex-direction: row; margin-bottom: 8px; }
+.action-btn { flex: 1; height: 40px; border-radius: 10px; align-items: center; justify-content: center; margin-right: 8px; }
+.action-btn-light { background-color: #F8FAFC; border: 1px solid #CBD5E1; }
+.action-btn-primary { background-color: #2563EB; }
+.action-btn-dark { background-color: #0F172A; }
+.action-btn-light-text { color: #0F172A; font-size: 13px; font-weight: 700; }
+.action-btn-primary-text { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+.action-btn-dark-text { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+.hint-text { font-size: 12px; color: #475569; line-height: 18px; margin-top: 2px; }
+.list-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 12px; margin-bottom: 10px; }
+.section-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.section-title { font-size: 15px; color: #0F172A; font-weight: 700; }
+.section-count { font-size: 12px; color: #64748B; }
+.empty-box { min-height: 100px; align-items: center; justify-content: center; border-radius: 12px; background-color: #F8FAFC; }
+.empty-title { font-size: 15px; color: #0F172A; font-weight: 700; }
+.empty-desc { font-size: 12px; color: #64748B; margin-top: 6px; text-align: center; }
+.device-list { border-top: 1px solid #E2E8F0; }
+.device-row { min-height: 72px; flex-direction: row; align-items: center; border-bottom: 1px solid #E2E8F0; padding-top: 8px; padding-bottom: 8px; }
+.device-row-active { background-color: #EFF6FF; }
+.device-main { flex: 1; padding-right: 10px; }
+.device-name { font-size: 15px; color: #0F172A; font-weight: 700; }
+.device-name-active { color: #1D4ED8; }
+.device-meta { font-size: 11px; color: #64748B; margin-top: 4px; }
+.device-rssi { font-size: 11px; color: #94A3B8; margin-top: 3px; }
+.device-action { height: 32px; border-radius: 16px; padding-left: 12px; padding-right: 12px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.device-action-active { background-color: #DBEAFE; }
+.device-action-text { font-size: 12px; color: #475569; font-weight: 700; }
+.device-action-text-active { color: #1D4ED8; }
+.log-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 12px; margin-bottom: 20px; }
+.log-text { font-size: 11px; color: #334155; line-height: 17px; background-color: #F8FAFC; border-radius: 10px; padding: 10px; }
+</style>
