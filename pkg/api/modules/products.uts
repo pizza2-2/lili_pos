@@ -196,6 +196,57 @@ export type ProductPricingFormulaPreviewResponse = {
 	result: string
 }
 
+export type PrintTemplateItem = {
+	id: number
+	company: number
+	name: string
+	template_type: string
+	template_type_display: string
+	printer_language: string
+	paper_width_mm: string
+	paper_height_mm: string
+	dots_per_mm: number
+	copies_default: number
+	elements: UTSJSONObject[]
+	is_default: boolean
+	is_active: boolean
+	description: string
+	created_at: string
+	updated_at: string
+}
+
+export type PrintTemplateListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	template_type: string | null
+	is_active: string | null
+	is_default: string | null
+}
+
+export type PrintTemplateListResponse = {
+	results: PrintTemplateItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type PrintTemplateMutationData = {
+	name: string
+	template_type: string
+	printer_language: string
+	paper_width_mm: string
+	paper_height_mm: string
+	dots_per_mm: number
+	copies_default: number
+	elements: UTSJSONObject[]
+	is_default: boolean
+	is_active: boolean
+	description: string
+}
+
 const productsBasePath = '/api/products/products/'
 const productPricingFormulasBasePath = '/api/products/pricing-formulas/'
 const productDiscountsBasePath = '/api/products/discounts/'
@@ -232,6 +283,20 @@ function buildPricingFormulaListQuery(data: ProductPricingFormulaListQuery): UTS
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
 	}
+
+	return query
+}
+
+function buildPrintTemplateListQuery(data: PrintTemplateListQuery): UTSJSONObject {
+	const query = {
+		page: data.page,
+		page_size: data.page_size,
+	} as UTSJSONObject
+
+	if (data.search != null && data.search != '') query['search'] = data.search
+	if (data.template_type != null && data.template_type != '') query['template_type'] = data.template_type
+	if (data.is_active != null && data.is_active != '') query['is_active'] = data.is_active
+	if (data.is_default != null && data.is_default != '') query['is_default'] = data.is_default
 
 	return query
 }
@@ -1146,4 +1211,105 @@ export function attributeValuesPath(): string {
 
 export function barcodeSequencesPath(): string {
 	return barcodeSequencesBasePath
+}
+
+function parsePrintTemplateObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parsePrintTemplateArray(value: any | null): PrintTemplateItem[] {
+	if (value == null) return [] as PrintTemplateItem[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as PrintTemplateItem[]
+	const parsed = JSON.parseArray<PrintTemplateItem>(text)
+	if (parsed == null) return [] as PrintTemplateItem[]
+	return parsed!
+}
+
+function parsePrintTemplateItem(value: any | null): PrintTemplateItem {
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseObject<PrintTemplateItem>(text)
+	if (parsed == null) throw new Error('标签模板响应解析失败')
+	return parsed!
+}
+
+function printTemplateIntValue(value: any | null, fallback: number): number {
+	if (value == null) return fallback
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function buildPrintTemplateListResponse(raw: any, query: PrintTemplateListQuery): PrintTemplateListResponse {
+	const rawObject = parsePrintTemplateObject(raw)
+	if (rawObject == null) throw new Error('标签模板列表响应解析失败')
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject!['pagination']
+	if (rawPagination != null) paginationObject = parsePrintTemplateObject(rawPagination)
+	const results = parsePrintTemplateArray(rawObject!['results'])
+	let totalCount = printTemplateIntValue(rawObject!['count'], 0)
+	if (totalCount <= 0) totalCount = printTemplateIntValue(rawObject!['total_count'], 0)
+	if (totalCount <= 0 && paginationObject != null) totalCount = printTemplateIntValue(paginationObject!['total'], 0)
+	if (totalCount <= 0 && paginationObject != null) totalCount = printTemplateIntValue(paginationObject!['count'], 0)
+	if (totalCount <= 0) totalCount = results.length
+	let currentPage = printTemplateIntValue(rawObject!['current_page'], 0)
+	if (currentPage <= 0) currentPage = printTemplateIntValue(rawObject!['page'], 0)
+	if (currentPage <= 0 && paginationObject != null) currentPage = printTemplateIntValue(paginationObject!['page'], 0)
+	if (currentPage <= 0) currentPage = query.page
+	let pageSize = printTemplateIntValue(rawObject!['page_size'], 0)
+	if (pageSize <= 0 && paginationObject != null) pageSize = printTemplateIntValue(paginationObject!['page_size'], 0)
+	if (pageSize <= 0) pageSize = query.page_size
+	let totalPages = printTemplateIntValue(rawObject!['total_pages'], 0)
+	if (totalPages <= 0 && paginationObject != null) totalPages = printTemplateIntValue(paginationObject!['total_pages'], 0)
+	if (totalPages <= 0 && pageSize > 0) totalPages = Math.ceil(totalCount / pageSize)
+	if (totalPages <= 0) totalPages = 1
+	return {
+		results: results,
+		count: totalCount,
+		total_count: totalCount,
+		total_pages: totalPages,
+		current_page: currentPage,
+		page_size: pageSize,
+	} as PrintTemplateListResponse
+}
+
+export async function getPrintTemplateList(data: PrintTemplateListQuery): Promise<PrintTemplateListResponse> {
+	const raw = await request('/api/products/print-templates/', 'GET', buildPrintTemplateListQuery(data), true)
+	return buildPrintTemplateListResponse(raw, data)
+}
+
+export async function getPrintTemplateDetail(id: string): Promise<PrintTemplateItem> {
+	const raw = await request('/api/products/print-templates/' + id + '/', 'GET', {} as UTSJSONObject, true)
+	return parsePrintTemplateItem(raw)
+}
+
+function buildPrintTemplateMutationBody(data: PrintTemplateMutationData): UTSJSONObject {
+	const body = {} as UTSJSONObject
+	body['name'] = data.name
+	body['template_type'] = data.template_type
+	body['printer_language'] = data.printer_language
+	body['paper_width_mm'] = data.paper_width_mm
+	body['paper_height_mm'] = data.paper_height_mm
+	body['dots_per_mm'] = data.dots_per_mm
+	body['copies_default'] = data.copies_default
+	body['elements'] = data.elements
+	body['is_default'] = data.is_default
+	body['is_active'] = data.is_active
+	body['description'] = data.description
+	return body
+}
+
+export function createPrintTemplate(data: PrintTemplateMutationData): Promise<any> {
+	return request('/api/products/print-templates/', 'POST', buildPrintTemplateMutationBody(data), true)
+}
+
+export function updatePrintTemplate(id: string, data: PrintTemplateMutationData): Promise<any> {
+	return request('/api/products/print-templates/' + id + '/', 'PUT', buildPrintTemplateMutationBody(data), true)
+}
+
+export function setDefaultPrintTemplate(id: string): Promise<any> {
+	return request('/api/products/print-templates/' + id + '/set-default/', 'POST', {} as UTSJSONObject, true)
 }

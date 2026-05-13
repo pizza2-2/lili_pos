@@ -72,6 +72,7 @@ const groups = ref<MenuGroup[]>([
 			{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false },
 			{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false },
 			{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false },
+			{ label: '标签模板', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/label-templates/index', action: 'navigateTo', disabled: false },
 			{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
 		],
 	},

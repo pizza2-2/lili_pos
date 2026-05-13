@@ -37,7 +37,7 @@ export type ProfileResponse = {
 	permissions: string[]
 }
 
-const useMockLogin = true
+const useMockLogin = false
 
 // 登录接口外层返回格式示例：
 // {

@@ -1,0 +1,549 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="标签模板详情"
+			:showBack="true"
+			:showHome="true"
+			:showSearch="false"
+			homePath="/pages/label-templates/index"
+			backgroundColor="#EEF2F7"
+		/>
+
+		<scroll-view scroll-y="true" class="content">
+			<view v-if="loading" class="state-card">
+				<view class="loading-dot"></view>
+				<text class="state-title">正在加载模板</text>
+			</view>
+
+			<view v-else-if="errorMessage != ''" class="state-card error-card">
+				<text class="state-title error-title">加载失败</text>
+				<text class="state-text error-text">{{ errorMessage }}</text>
+				<view class="state-btn" @click="loadTemplate"><text class="state-btn-text">重新加载</text></view>
+			</view>
+
+			<view v-else-if="hasTemplate" class="detail-wrap">
+				<view class="hero-card">
+					<view class="hero-top">
+						<view class="hero-copy">
+							<text class="hero-title">{{ templateData.name }}</text>
+							<text class="hero-subtitle">{{ templateData.template_type }} · {{ templateData.printer_language }}</text>
+						</view>
+						<view v-if="templateData.is_default" class="default-badge"><text class="default-badge-text">默认</text></view>
+					</view>
+					<view class="spec-row">
+						<view class="spec-item">
+							<text class="spec-label">纸张</text>
+							<text class="spec-value">{{ templateData.paper_width_mm }} x {{ templateData.paper_height_mm }} mm</text>
+						</view>
+						<view class="spec-item">
+							<text class="spec-label">密度</text>
+							<text class="spec-value">{{ templateData.dots_per_mm }} dots/mm</text>
+						</view>
+						<view class="spec-item">
+							<text class="spec-label">份数</text>
+							<text class="spec-value">{{ templateData.copies_default }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="section-card preview-card">
+					<view class="section-head">
+						<text class="section-title">拖拽预览</text>
+						<text class="section-subtitle">Canvas 布局编辑器</text>
+					</view>
+					<lili-label-template-editor
+						:elements="templateData.elements"
+						:paperWidth="templateData.paper_width_mm"
+						:paperHeight="templateData.paper_height_mm"
+						:dotsPerMm="templateData.dots_per_mm"
+						@change="handleEditorChange($event)"
+					/>
+					<view class="preview-foot">
+						<text class="preview-tip">使用 canvas 编辑字段，可拖拽、放大、缩小、添加和删除。</text>
+						<view class="save-layout-btn" @click="saveLayout"><text class="save-layout-text">{{ saveLayoutText }}</text></view>
+					</view>
+				</view>
+
+				<view class="section-card">
+					<text class="section-title">模板信息</text>
+					<view class="info-line">
+						<text class="info-label">状态</text>
+						<text class="info-value">{{ templateData.is_active ? '启用' : '停用' }}</text>
+					</view>
+					<view class="info-line">
+						<text class="info-label">说明</text>
+						<text class="info-value multiline">{{ templateData.description == '' ? '-' : templateData.description }}</text>
+					</view>
+					<view class="info-line">
+						<text class="info-label">创建时间</text>
+						<text class="info-value">{{ formatDateText(templateData.created_at) }}</text>
+					</view>
+					<view class="info-line last-info-line">
+						<text class="info-label">更新时间</text>
+						<text class="info-value">{{ formatDateText(templateData.updated_at) }}</text>
+					</view>
+				</view>
+
+				<view class="section-card last-card">
+					<view class="section-head">
+						<text class="section-title">元素明细</text>
+						<text class="section-subtitle">共 {{ elementRows.length }} 个元素</text>
+					</view>
+					<view v-if="elementRows.length == 0" class="empty-elements">
+						<text class="empty-elements-text">暂无元素</text>
+					</view>
+					<view v-for="(item, index) in elementRows" :key="index" class="element-card">
+						<view class="element-head">
+							<text class="element-title">{{ elementText(item, 'label', '元素 ' + (index + 1)) }}</text>
+							<text class="element-type">{{ elementText(item, 'type', '-') }}</text>
+						</view>
+						<text class="element-desc">来源 {{ elementText(item, 'source', '-') }} · 内容 {{ elementText(item, 'content', '-') }}</text>
+						<text class="element-meta">x {{ elementText(item, 'x', '0') }} / y {{ elementText(item, 'y', '0') }} / w {{ elementText(item, 'width', '0') }} / h {{ elementText(item, 'height', '0') }}</text>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view v-if="hasTemplate" class="footer-bar">
+			<view class="ghost-btn" @click="runSetDefault"><text class="ghost-btn-text">设为默认</text></view>
+			<view class="primary-btn" @click="openEdit"><text class="primary-btn-text">编辑模板</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { PrintTemplateItem, PrintTemplateMutationData, getPrintTemplateDetail, setDefaultPrintTemplate, updatePrintTemplate } from '@/pkg/api/modules/products.uts'
+
+const templateId = ref('')
+const loading = ref(false)
+const settingDefault = ref(false)
+const savingLayout = ref(false)
+const errorMessage = ref('')
+const hasTemplate = ref(false)
+const previewScaleRpx = 18
+const rpxRatio = ref(0.5)
+const selectedElementIndex = ref(0)
+const dragging = ref(false)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const dragElementX = ref(0)
+const dragElementY = ref(0)
+const templateData = ref<PrintTemplateItem>({
+	id: 0,
+	company: 0,
+	name: '',
+	template_type: '',
+	template_type_display: '',
+	printer_language: '',
+	paper_width_mm: '',
+	paper_height_mm: '',
+	dots_per_mm: 0,
+	copies_default: 1,
+	is_default: false,
+	is_active: false,
+	description: '',
+	elements: [],
+	created_at: '',
+	updated_at: '',
+})
+
+const elementRows = computed((): UTSJSONObject[] => {
+	return templateData.value.elements
+})
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	return `${value}`
+}
+
+function numberValue(value: string, fallback: number = 0): number {
+	const parsed = parseFloat(value)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function formatRpx(value: number): string {
+	const rounded = Math.round(value * 10) / 10
+	return rounded.toString() + 'rpx'
+}
+
+function parseErrorMessage(error: any | null, fallback: string): string {
+	const latestMessage = takeLatestResponseMessage()
+	if (latestMessage != '') {
+		return latestMessage
+	}
+	const text = stringValue(error)
+	if (text != '') {
+		return text
+	}
+	return fallback
+}
+
+function formatDateText(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	return value.replace('T', ' ').replace('Z', '')
+}
+
+function elementText(item: UTSJSONObject, key: string, fallback: string): string {
+	const value = item[key]
+	const text = stringValue(value)
+	if (text == '') {
+		return fallback
+	}
+	return text
+}
+
+function elementNumber(item: UTSJSONObject, key: string, fallback: number): number {
+	return numberValue(stringValue(item[key]), fallback)
+}
+
+function roundLayoutValue(value: number): number {
+	return Math.round(value * 10) / 10
+}
+
+function setElementNumber(item: UTSJSONObject, key: string, value: number) {
+	item[key] = roundLayoutValue(value)
+}
+
+function paperWidthMm(): number {
+	return numberValue(templateData.value.paper_width_mm, 30)
+}
+
+function paperHeightMm(): number {
+	return numberValue(templateData.value.paper_height_mm, 20)
+}
+
+function scalePxPerMm(): number {
+	return previewScaleRpx * rpxRatio.value
+}
+
+function clampElement(item: UTSJSONObject) {
+	let width = elementNumber(item, 'width', 8)
+	let height = elementNumber(item, 'height', 4)
+	if (width < 1) width = 1
+	if (height < 1) height = 1
+	let x = elementNumber(item, 'x', 0)
+	let y = elementNumber(item, 'y', 0)
+	const maxWidth = paperWidthMm()
+	const maxHeight = paperHeightMm()
+	if (x < 0) x = 0
+	if (y < 0) y = 0
+	if (x + width > maxWidth) x = maxWidth - width
+	if (y + height > maxHeight) y = maxHeight - height
+	if (x < 0) x = 0
+	if (y < 0) y = 0
+	setElementNumber(item, 'x', x)
+	setElementNumber(item, 'y', y)
+	setElementNumber(item, 'width', width)
+	setElementNumber(item, 'height', height)
+}
+
+function refreshElementRows() {
+	const next: UTSJSONObject[] = []
+	for (let index = 0; index < templateData.value.elements.length; index += 1) {
+		next.push(templateData.value.elements[index])
+	}
+	templateData.value.elements = next
+}
+
+function normalizeLayoutElements() {
+	for (let index = 0; index < templateData.value.elements.length; index += 1) {
+		clampElement(templateData.value.elements[index])
+	}
+	if (selectedElementIndex.value >= templateData.value.elements.length) {
+		selectedElementIndex.value = 0
+	}
+	refreshElementRows()
+}
+
+function previewElementStyle(item: UTSJSONObject): string {
+	const x = elementNumber(item, 'x', 0) * previewScaleRpx
+	const y = elementNumber(item, 'y', 0) * previewScaleRpx
+	const width = elementNumber(item, 'width', 8) * previewScaleRpx
+	const height = elementNumber(item, 'height', 4) * previewScaleRpx
+	return 'left:' + formatRpx(x) + ';top:' + formatRpx(y) + ';width:' + formatRpx(width) + ';height:' + formatRpx(height) + ';'
+}
+
+function elementContentText(item: UTSJSONObject, index: number): string {
+	const content = elementText(item, 'content', '')
+	if (content != '') {
+		return content
+	}
+	const source = elementText(item, 'source', '')
+	if (source != '') {
+		return source
+	}
+	return elementText(item, 'label', '字段 ' + (index + 1).toString())
+}
+
+function touchPoint(event: any): UTSJSONObject {
+	const touchEvent = event as TouchEvent
+	if (touchEvent.touches.length > 0) {
+		const touch = touchEvent.touches[0]
+		return { x: touch.clientX, y: touch.clientY, pageX: touch.pageX, pageY: touch.pageY } as UTSJSONObject
+	}
+	if (touchEvent.changedTouches.length > 0) {
+		const touch = touchEvent.changedTouches[0]
+		return { x: touch.clientX, y: touch.clientY, pageX: touch.pageX, pageY: touch.pageY } as UTSJSONObject
+	}
+	const text = JSON.stringify(event)
+	if (text == null || text == '') return {} as UTSJSONObject
+	const object = JSON.parseObject<UTSJSONObject>(text)
+	if (object == null) return {} as UTSJSONObject
+	const currentObject = object as UTSJSONObject
+	let touches = JSON.parseArray<UTSJSONObject>(JSON.stringify(currentObject['touches']))
+	if (touches == null) touches = JSON.parseArray<UTSJSONObject>(JSON.stringify(currentObject['changedTouches']))
+	if (touches == null) return {} as UTSJSONObject
+	const touchList = touches as UTSJSONObject[]
+	if (touchList.length == 0) return {} as UTSJSONObject
+	return touchList[0]
+}
+
+function initRpxRatio() {
+	const info = uni.getSystemInfoSync()
+	const infoText = JSON.stringify(info)
+	const infoObject = JSON.parseObject<UTSJSONObject>(infoText)
+	if (infoObject == null) {
+		return
+	}
+	const windowWidth = numberValue(stringValue(infoObject!['windowWidth']), 375)
+	if (windowWidth > 0) {
+		rpxRatio.value = windowWidth / 750
+	}
+}
+
+function buildLayoutPayload(): PrintTemplateMutationData {
+	return {
+		name: templateData.value.name,
+		template_type: templateData.value.template_type,
+		printer_language: templateData.value.printer_language,
+		paper_width_mm: templateData.value.paper_width_mm,
+		paper_height_mm: templateData.value.paper_height_mm,
+		dots_per_mm: templateData.value.dots_per_mm,
+		copies_default: templateData.value.copies_default,
+		elements: templateData.value.elements,
+		is_default: templateData.value.is_default,
+		is_active: templateData.value.is_active,
+		description: templateData.value.description,
+	} as PrintTemplateMutationData
+}
+
+const previewBoardStyle = computed((): string => {
+	const width = paperWidthMm() * previewScaleRpx
+	const height = paperHeightMm() * previewScaleRpx
+	return 'width:' + formatRpx(width) + ';height:' + formatRpx(height) + ';'
+})
+
+const selectedElementLabel = computed((): string => {
+	if (elementRows.value.length == 0) {
+		return '暂无字段'
+	}
+	let index = selectedElementIndex.value
+	if (index < 0 || index >= elementRows.value.length) {
+		index = 0
+	}
+	return '当前字段：' + elementText(elementRows.value[index], 'label', '字段 ' + (index + 1).toString())
+})
+
+const saveLayoutText = computed((): string => {
+	if (savingLayout.value) {
+		return '保存中'
+	}
+	return '保存布局'
+})
+
+function markRefreshNeeded() {
+	uni.setStorageSync('refresh:pages:label-templates:index', '1')
+}
+
+async function loadTemplate() {
+	if (templateId.value == '') {
+		errorMessage.value = '缺少模板 ID'
+		return
+	}
+	loading.value = true
+	errorMessage.value = ''
+	try {
+		templateData.value = await getPrintTemplateDetail(templateId.value)
+		normalizeLayoutElements()
+		hasTemplate.value = true
+	} catch (error) {
+		hasTemplate.value = false
+		errorMessage.value = parseErrorMessage(error, '模板加载失败')
+	} finally {
+		loading.value = false
+	}
+}
+
+function handleElementTouchStart(index: number, event: any) {
+	if (index < 0 || index >= templateData.value.elements.length) {
+		return
+	}
+	selectedElementIndex.value = index
+	const current = templateData.value.elements[index]
+	const point = touchPoint(event)
+	dragging.value = true
+	dragStartX.value = numberValue(stringValue(point['x'], stringValue(point['clientX'])), 0)
+	dragStartY.value = numberValue(stringValue(point['y'], stringValue(point['clientY'])), 0)
+	dragElementX.value = elementNumber(current, 'x', 0)
+	dragElementY.value = elementNumber(current, 'y', 0)
+}
+
+function handleElementTouchMove(event: any) {
+	if (!dragging.value) {
+		return
+	}
+	const index = selectedElementIndex.value
+	if (index < 0 || index >= templateData.value.elements.length) {
+		return
+	}
+	const current = templateData.value.elements[index]
+	const point = touchPoint(event)
+	const currentX = numberValue(stringValue(point['x'], stringValue(point['clientX'])), dragStartX.value)
+	const currentY = numberValue(stringValue(point['y'], stringValue(point['clientY'])), dragStartY.value)
+	const scale = scalePxPerMm()
+	if (scale <= 0) {
+		return
+	}
+	setElementNumber(current, 'x', dragElementX.value + (currentX - dragStartX.value) / scale)
+	setElementNumber(current, 'y', dragElementY.value + (currentY - dragStartY.value) / scale)
+	clampElement(current)
+	refreshElementRows()
+}
+
+function handleElementTouchEnd(event: any) {
+	dragging.value = false
+}
+
+function handleEditorChange(payload: any) {
+	const text = JSON.stringify(payload)
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return
+	}
+	templateData.value.elements = parsed as UTSJSONObject[]
+}
+
+async function runSetDefault() {
+	if (templateId.value == '' || settingDefault.value) {
+		return
+	}
+	settingDefault.value = true
+	try {
+		await setDefaultPrintTemplate(templateId.value)
+		markRefreshNeeded()
+		uni.showToast({ title: '已设为默认', icon: 'success' })
+		loadTemplate()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '设置失败'), icon: 'none' })
+	} finally {
+		settingDefault.value = false
+	}
+}
+
+async function saveLayout() {
+	if (templateId.value == '' || savingLayout.value) {
+		return
+	}
+	savingLayout.value = true
+	try {
+		await updatePrintTemplate(templateId.value, buildLayoutPayload())
+		markRefreshNeeded()
+		uni.showToast({ title: '布局已保存', icon: 'success' })
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '保存布局失败'), icon: 'none' })
+	} finally {
+		savingLayout.value = false
+	}
+}
+
+function openEdit() {
+	if (templateId.value == '') {
+		return
+	}
+	uni.navigateTo({ url: '/pages/label-templates/from?id=' + templateId.value })
+}
+
+onLoad((options) => {
+	initRpxRatio()
+	const optionObject = options as UTSJSONObject
+	templateId.value = stringValue(optionObject['id'])
+	loadTemplate()
+})
+
+onShow(() => {
+	const refreshFlag = stringValue(uni.getStorageSync('refresh:pages:label-templates:detail'))
+	if (refreshFlag == '1') {
+		uni.removeStorageSync('refresh:pages:label-templates:detail')
+		loadTemplate()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.content { flex: 1; padding: 16rpx 20rpx 148rpx; box-sizing: border-box; }
+.detail-wrap { width: 100%; }
+.hero-card { background-color: #111827; border-radius: 28rpx; padding: 28rpx; margin-bottom: 18rpx; }
+.hero-top { flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.hero-copy { flex: 1; padding-right: 20rpx; }
+.hero-title { font-size: 36rpx; font-weight: 700; color: #FFFFFF; line-height: 48rpx; }
+.hero-subtitle { margin-top: 8rpx; font-size: 24rpx; color: #CBD5E1; line-height: 34rpx; }
+.default-badge { height: 48rpx; padding: 0 18rpx; border-radius: 24rpx; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.default-badge-text { font-size: 22rpx; color: #111827; font-weight: 700; }
+.spec-row { flex-direction: row; justify-content: space-between; margin-top: 28rpx; }
+.spec-item { width: 31%; background-color: rgba(255, 255, 255, 0.08); border-radius: 18rpx; padding: 16rpx 12rpx; }
+.spec-label { font-size: 21rpx; color: #94A3B8; line-height: 28rpx; }
+.spec-value { margin-top: 6rpx; font-size: 23rpx; color: #FFFFFF; font-weight: 700; line-height: 32rpx; }
+.section-card { background-color: #FFFFFF; border-radius: 24rpx; border-width: 1rpx; border-color: #DDE6F2; padding: 24rpx; margin-bottom: 18rpx; }
+.preview-card { padding-bottom: 20rpx; }
+.preview-board-shell { width: 100%; min-height: 400rpx; border-radius: 22rpx; background-color: #E8EEF7; align-items: center; justify-content: center; padding: 22rpx; box-sizing: border-box; }
+.preview-board { position: relative; background-color: #FFFFFF; border-radius: 12rpx; border-width: 1rpx; border-color: #CBD5E1; overflow: hidden; }
+.drag-element { position: absolute; border-width: 2rpx; border-color: #94A3B8; border-radius: 8rpx; background-color: rgba(248, 250, 252, 0.76); padding: 4rpx; box-sizing: border-box; align-items: flex-start; justify-content: flex-start; overflow: hidden; }
+.drag-element-active { border-color: #2563EB; background-color: rgba(37, 99, 235, 0.08); }
+.drag-content { font-size: 20rpx; line-height: 24rpx; color: #0F172A; text-align: left; }
+.preview-foot { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 16rpx; }
+.preview-tip { flex: 1; font-size: 22rpx; color: #64748B; line-height: 30rpx; padding-right: 18rpx; }
+.save-layout-btn { height: 58rpx; padding: 0 22rpx; border-radius: 18rpx; background-color: #111827; align-items: center; justify-content: center; }
+.save-layout-text { font-size: 24rpx; color: #FFFFFF; font-weight: 700; }
+.last-card { margin-bottom: 26rpx; }
+.section-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 16rpx; }
+.section-title { font-size: 31rpx; font-weight: 700; color: #0F172A; line-height: 42rpx; }
+.section-subtitle { font-size: 23rpx; color: #64748B; line-height: 32rpx; }
+.info-line { flex-direction: row; justify-content: space-between; padding: 18rpx 0; border-bottom-width: 1rpx; border-bottom-color: #EEF2F7; }
+.last-info-line { border-bottom-width: 0; }
+.info-label { width: 150rpx; font-size: 25rpx; color: #64748B; line-height: 36rpx; }
+.info-value { flex: 1; font-size: 25rpx; color: #0F172A; font-weight: 700; line-height: 36rpx; text-align: right; }
+.multiline { text-align: right; }
+.element-card { border-radius: 18rpx; border-width: 1rpx; border-color: #DDE6F2; background-color: #F8FAFC; padding: 18rpx; margin-bottom: 14rpx; }
+.element-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.element-title { font-size: 27rpx; font-weight: 700; color: #0F172A; line-height: 36rpx; }
+.element-type { font-size: 22rpx; color: #334155; background-color: #E2E8F0; border-radius: 18rpx; padding: 5rpx 14rpx; }
+.element-desc { margin-top: 10rpx; font-size: 23rpx; color: #475569; line-height: 32rpx; }
+.element-meta { margin-top: 6rpx; font-size: 22rpx; color: #64748B; line-height: 30rpx; }
+.empty-elements { min-height: 120rpx; border-radius: 18rpx; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.empty-elements-text { font-size: 25rpx; color: #64748B; }
+.footer-bar { position: fixed; left: 0; right: 0; bottom: 0; flex-direction: row; padding: 18rpx 24rpx 28rpx; background-color: rgba(238, 242, 247, 0.96); border-top-width: 1rpx; border-top-color: #DDE6F2; box-sizing: border-box; }
+.ghost-btn { flex: 1; height: 78rpx; border-radius: 22rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #FFFFFF; align-items: center; justify-content: center; margin-right: 16rpx; }
+.ghost-btn-text { font-size: 28rpx; color: #334155; font-weight: 700; }
+.primary-btn { flex: 1; height: 78rpx; border-radius: 22rpx; background-color: #111827; align-items: center; justify-content: center; }
+.primary-btn-text { font-size: 28rpx; color: #FFFFFF; font-weight: 700; }
+.state-card { margin: 22rpx 0; background-color: #FFFFFF; border-radius: 26rpx; border-width: 1rpx; border-color: #DDE6F2; min-height: 320rpx; align-items: center; justify-content: center; padding: 30rpx; }
+.loading-dot { width: 76rpx; height: 76rpx; border-radius: 38rpx; background-color: #E8EEF7; margin-bottom: 20rpx; }
+.state-title { font-size: 31rpx; font-weight: 700; color: #0F172A; }
+.state-text { margin-top: 12rpx; font-size: 25rpx; color: #64748B; text-align: center; line-height: 34rpx; }
+.error-card { border-color: #FECACA; }
+.error-title { color: #B91C1C; }
+.error-text { color: #991B1B; }
+.state-btn { margin-top: 24rpx; height: 72rpx; padding: 0 34rpx; border-radius: 18rpx; background-color: #111827; align-items: center; justify-content: center; }
+.state-btn-text { color: #FFFFFF; font-size: 26rpx; font-weight: 700; }
+</style>
+

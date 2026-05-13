@@ -1,0 +1,321 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="标签模板"
+			searchPlaceholder="模板名称、说明"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadTemplates()">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="statusText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载标签模板"
+					:keepContentOnLoading="true"
+					inlineLoadingText="标签模板刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="模板概览"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="true"
+					floatingAddText="新增"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="handleCreateTemplate"
+				/>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { PrintTemplateItem, PrintTemplateListResponse, getPrintTemplateList, setDefaultPrintTemplate } from '@/pkg/api/modules/products.uts'
+
+const templateListRefreshStorageKey = 'refresh:pages:label-templates:index'
+
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const templates = ref<PrintTemplateItem[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'typeText', label: '类型' } as UTSJSONObject,
+	{ key: 'sizeText', label: '纸张' } as UTSJSONObject,
+	{ key: 'densityText', label: '密度' } as UTSJSONObject,
+	{ key: 'elementText', label: '元素' } as UTSJSONObject,
+	{ key: 'updatedText', label: '更新' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'set-default', text: '设为默认' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	const text = stringValue(error)
+	if (text == '' || text == '[object Object]') return fallback
+	if (text.startsWith('Error: ')) return text.substring(7)
+	return text
+}
+
+function formatDateText(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function templateTypeText(item: PrintTemplateItem): string {
+	if (item.template_type_display != '') return item.template_type_display
+	if (item.template_type == 'product_label') return '商品标签'
+	if (item.template_type == 'price_label') return '价格标签'
+	if (item.template_type == 'barcode_label') return '条码标签'
+	return '自定义'
+}
+
+function sizeText(item: PrintTemplateItem): string {
+	return stringValue(item.paper_width_mm, '0') + ' x ' + stringValue(item.paper_height_mm, '0') + ' mm'
+}
+
+function elementCountText(item: PrintTemplateItem): string {
+	return item.elements.length.toString() + ' 个元素'
+}
+
+function templateToListItem(item: PrintTemplateItem): UTSJSONObject {
+	const tags: string[] = []
+	if (item.is_default) tags.push('默认')
+	if (item.is_active) tags.push('启用')
+	else tags.push('停用')
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		name: item.name,
+		subtitle: item.description == '' ? '无说明' : item.description,
+		statusText: item.is_default ? '默认模板' : (item.is_active ? '启用' : '停用'),
+		typeText: templateTypeText(item),
+		sizeText: sizeText(item),
+		densityText: item.dots_per_mm.toString() + ' dots/mm · ' + item.printer_language,
+		elementText: elementCountText(item),
+		updatedText: formatDateText(item.updated_at),
+		tags: tags,
+	} as UTSJSONObject
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let i = 0; i < templates.value.length; i += 1) {
+		result.push(templateToListItem(templates.value[i]))
+	}
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	let defaultCount = 0
+	let activeCount = 0
+	for (let i = 0; i < templates.value.length; i += 1) {
+		const item = templates.value[i]
+		if (item.is_default) defaultCount += 1
+		if (item.is_active) activeCount += 1
+	}
+	return [
+		{ key: 'total', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'active', label: '本页启用', value: activeCount.toString() } as UTSJSONObject,
+		{ key: 'default', label: '本页默认', value: defaultCount.toString() } as UTSJSONObject,
+	]
+})
+
+const emptyText = computed((): string => {
+	if (keyword.value != '') return '没有匹配的标签模板'
+	return '暂无标签模板'
+})
+
+function applyTemplateResponse(response: PrintTemplateListResponse) {
+	templates.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadTemplates() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getPrintTemplateList({
+			search: keyword.value == '' ? null : keyword.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+			template_type: null,
+			is_active: null,
+			is_default: null,
+		})
+		applyTemplateResponse(response)
+	} catch (error) {
+		templates.value = [] as PrintTemplateItem[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '标签模板列表加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function openTemplateForm(id: string) {
+	if (id == '') {
+		uni.navigateTo({ url: '/pages/label-templates/from' })
+		return
+	}
+	uni.navigateTo({ url: '/pages/label-templates/from?id=' + id })
+}
+
+function openTemplateDetail(id: string) {
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/label-templates/details/index?id=' + id })
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadTemplates()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadTemplates()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadTemplates()
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	const itemObject = item as UTSJSONObject
+	openTemplateDetail(stringValue(itemObject['rawId']))
+}
+
+async function runSetDefault(id: string) {
+	if (id == '') return
+	try {
+		await setDefaultPrintTemplate(id)
+		uni.showToast({ title: takeLatestResponseMessage('已设置默认模板'), icon: 'success' })
+		loadTemplates()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '设置默认模板失败'), icon: 'none' })
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionObject = action as UTSJSONObject
+	const itemObject = item as UTSJSONObject
+	const key = stringValue(actionObject['key'])
+	const templateId = stringValue(itemObject['rawId'])
+	if (key == 'detail') {
+		openTemplateDetail(templateId)
+		return
+	}
+	if (key == 'edit') {
+		openTemplateForm(templateId)
+		return
+	}
+	if (key == 'set-default') {
+		runSetDefault(templateId)
+		return
+	}
+	if (key == 'reload') {
+		loadTemplates()
+	}
+}
+
+function handleCreateTemplate() {
+	openTemplateForm('')
+}
+
+function consumeRefreshFlag() {
+	const value = uni.getStorageSync(templateListRefreshStorageKey)
+	if (value == '1') {
+		uni.removeStorageSync(templateListRefreshStorageKey)
+		loadTemplates()
+	}
+}
+
+onLoad(() => {
+	loadTemplates()
+})
+
+onShow(() => {
+	consumeRefreshFlag()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; }
+.page-content { padding: 12px; }
+.error-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #FCA5A5; padding: 16px; margin-bottom: 10px; align-items: center; }
+.error-title { font-size: 18px; color: #B91C1C; font-weight: 700; }
+.error-desc { font-size: 13px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 12px; height: 38px; padding-left: 18px; padding-right: 18px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
+.retry-btn-text { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+</style>
+

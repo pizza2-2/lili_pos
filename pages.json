@@ -193,6 +193,27 @@
 			}
 		},
 		{
+			"path": "pages/label-templates/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/label-templates/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/label-templates/details/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/products/config-model/index",
 			"style": {
 				"navigationStyle":"custom",

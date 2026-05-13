@@ -1,0 +1,445 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showHome="true"
+			:showSearch="false"
+			homePath="/pages/label-templates/index"
+			backgroundColor="#EEF2F7"
+		/>
+
+		<scroll-view scroll-y="true" class="content">
+			<view v-if="loading" class="state-card">
+				<view class="loading-dot"></view>
+				<text class="state-title">正在加载模板</text>
+			</view>
+
+			<view v-else-if="errorMessage != ''" class="state-card error-card">
+				<text class="state-title error-title">加载失败</text>
+				<text class="state-text error-text">{{ errorMessage }}</text>
+				<view class="state-btn" @click="loadTemplate"><text class="state-btn-text">重新加载</text></view>
+			</view>
+
+			<view v-else class="form-wrap">
+				<view class="section-card">
+					<view class="section-head">
+						<text class="section-title">基础信息</text>
+						<text class="section-subtitle">用于列表识别和默认模板选择</text>
+					</view>
+
+					<view class="field-block">
+						<text class="field-label">模板名称</text>
+						<input class="field-input" :value="name" placeholder="例如：商品价签 30x20" @input="onNameInput" />
+					</view>
+
+					<view class="field-block">
+						<text class="field-label">模板说明</text>
+						<textarea class="field-textarea small-textarea" :value="description" placeholder="可填写适用场景、纸张、打印机型号" @input="onDescriptionInput" />
+					</view>
+
+					<view class="switch-line">
+						<view class="switch-copy">
+							<text class="switch-title">启用模板</text>
+							<text class="switch-desc">关闭后不作为常用模板展示</text>
+						</view>
+						<switch :checked="isActive" color="#111827" @change="onActiveChange" />
+					</view>
+
+					<view class="switch-line">
+						<view class="switch-copy">
+							<text class="switch-title">设为默认</text>
+							<text class="switch-desc">新增标签时优先使用该模板</text>
+						</view>
+						<switch :checked="isDefault" color="#111827" @change="onDefaultChange" />
+					</view>
+				</view>
+
+				<view class="section-card">
+					<view class="section-head">
+						<text class="section-title">模板类型</text>
+						<text class="section-subtitle">后端使用类型区分模板用途</text>
+					</view>
+					<view class="choice-grid">
+						<view
+							v-for="item in templateTypeChoices"
+							:key="item.value"
+							:class="templateType == item.value ? 'choice active-choice' : 'choice'"
+							@click="selectTemplateType(item.value)"
+						>
+							<text :class="templateType == item.value ? 'choice-text active-choice-text' : 'choice-text'">{{ item.label }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="section-card">
+					<view class="section-head">
+						<text class="section-title">纸张与打印</text>
+						<text class="section-subtitle">单位使用毫米，密度对应打印头 DPI</text>
+					</view>
+
+					<view class="field-row">
+						<view class="field-block row-field">
+							<text class="field-label">宽度 mm</text>
+							<input class="field-input" type="digit" :value="paperWidth" placeholder="30" @input="onPaperWidthInput" />
+						</view>
+						<view class="field-block row-field">
+							<text class="field-label">高度 mm</text>
+							<input class="field-input" type="digit" :value="paperHeight" placeholder="20" @input="onPaperHeightInput" />
+						</view>
+					</view>
+
+					<view class="field-row">
+						<view class="field-block row-field">
+							<text class="field-label">默认份数</text>
+							<input class="field-input" type="number" :value="copiesDefault" placeholder="1" @input="onCopiesInput" />
+						</view>
+						<view class="field-block row-field">
+							<text class="field-label">打印语言</text>
+							<input class="field-input" :value="printerLanguage" placeholder="TSPL" @input="onPrinterLanguageInput" />
+						</view>
+					</view>
+
+					<view class="density-row">
+						<view :class="dotsPerMm == '8' ? 'density-pill active-choice' : 'density-pill'" @click="selectDots('8')">
+							<text :class="dotsPerMm == '8' ? 'density-text active-choice-text' : 'density-text'">203 DPI / 8 dots</text>
+						</view>
+						<view :class="dotsPerMm == '12' ? 'density-pill active-choice' : 'density-pill'" @click="selectDots('12')">
+							<text :class="dotsPerMm == '12' ? 'density-text active-choice-text' : 'density-text'">300 DPI / 12 dots</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="section-card last-card">
+					<view class="section-head">
+						<text class="section-title">元素明细</text>
+						<text class="section-subtitle">暂用 JSON 记录，后续可升级为拖拽编辑器</text>
+					</view>
+					<textarea class="field-textarea json-textarea" :value="elementsText" placeholder="请输入元素 JSON 数组" @input="onElementsInput" />
+				</view>
+			</view>
+		</scroll-view>
+
+		<view class="footer-bar">
+			<view class="ghost-btn" @click="handleCancel"><text class="ghost-btn-text">取消</text></view>
+			<view class="primary-btn" @click="handleSave"><text class="primary-btn-text">{{ submitText }}</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { PrintTemplateItem, PrintTemplateMutationData, createPrintTemplate, getPrintTemplateDetail, updatePrintTemplate } from '@/pkg/api/modules/products.uts'
+
+type TemplateChoice = {
+	value: string
+	label: string
+}
+
+const templateTypeChoices = ref<TemplateChoice[]>([
+	{ value: 'product_label', label: '商品价签' },
+	{ value: 'price_label', label: '价格标签' },
+	{ value: 'barcode_label', label: '条码标签' },
+	{ value: 'custom', label: '自定义' },
+])
+
+const defaultElementsText = `[
+  {"key":"name","label":"商品名称","type":"text","source":"name","content":"ITEM","x":2,"y":1.2,"width":28,"height":3.5,"fontSize":16},
+  {"key":"price","label":"价格","type":"text","source":"price","content":"0.00","x":2,"y":4.7,"width":28,"height":7,"fontSize":52},
+  {"key":"barcode","label":"条码","type":"barcode","source":"barcode","content":"5901234123457","x":2,"y":12.3,"width":28,"height":4.1,"fontSize":12},
+  {"key":"kod","label":"KOD","type":"text","source":"kod","content":"KOD","x":2,"y":16.6,"width":28,"height":2.3,"fontSize":14}
+]`
+
+const templateId = ref('')
+const formMode = ref('create')
+const loading = ref(false)
+const submitting = ref(false)
+const errorMessage = ref('')
+
+const name = ref('')
+const templateType = ref('product_label')
+const printerLanguage = ref('TSPL')
+const paperWidth = ref('30')
+const paperHeight = ref('20')
+const dotsPerMm = ref('8')
+const copiesDefault = ref('1')
+const isDefault = ref(false)
+const isActive = ref(true)
+const description = ref('')
+const elementsText = ref(defaultElementsText)
+
+const pageTitle = computed((): string => {
+	return formMode.value == 'edit' ? '编辑标签模板' : '新增标签模板'
+})
+
+const submitText = computed((): string => {
+	if (submitting.value) {
+		return '保存中'
+	}
+	return formMode.value == 'edit' ? '保存修改' : '创建模板'
+})
+
+function stringValue(value: any | null): string {
+	if (value == null) {
+		return ''
+	}
+	return `${value}`
+}
+
+function readInputValue(event: any): string {
+	const inputEvent = event as UniInputEvent
+	return inputEvent.detail.value
+}
+
+function readSwitchValue(event: any): boolean {
+	const switchEvent = event as UniSwitchChangeEvent
+	return switchEvent.detail.value
+}
+
+function parseErrorMessage(error: any | null, fallback: string): string {
+	const latestMessage = takeLatestResponseMessage()
+	if (latestMessage != '') {
+		return latestMessage
+	}
+	const text = stringValue(error)
+	if (text != '') {
+		return text
+	}
+	return fallback
+}
+
+function formatElementsText(value: any | null): string {
+	if (value == null) {
+		return defaultElementsText
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return defaultElementsText
+	}
+	return text
+}
+
+function applyTemplate(item: PrintTemplateItem) {
+	name.value = item.name
+	templateType.value = item.template_type
+	printerLanguage.value = item.printer_language
+	paperWidth.value = stringValue(item.paper_width_mm)
+	paperHeight.value = stringValue(item.paper_height_mm)
+	dotsPerMm.value = stringValue(item.dots_per_mm)
+	copiesDefault.value = stringValue(item.copies_default)
+	isDefault.value = item.is_default
+	isActive.value = item.is_active
+	description.value = item.description
+	elementsText.value = formatElementsText(item.elements)
+}
+
+function buildElements(): UTSJSONObject[] {
+	const parsed = JSON.parseArray<UTSJSONObject>(elementsText.value)
+	if (parsed == null) {
+		throw new Error('元素明细必须是 JSON 数组')
+	}
+	return parsed
+}
+
+function numberText(value: string, fallback: string): number {
+	const text = value.trim()
+	if (text == '') {
+		return parseFloat(fallback)
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return parseFloat(fallback)
+	}
+	return parsed
+}
+
+function intText(value: string, fallback: string): number {
+	const text = value.trim()
+	if (text == '') {
+		return parseInt(fallback)
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return parseInt(fallback)
+	}
+	return parsed
+}
+
+function buildPayload(): PrintTemplateMutationData {
+	const title = name.value.trim()
+	if (title == '') {
+		throw new Error('请填写模板名称')
+	}
+	return {
+		name: title,
+		template_type: templateType.value,
+		printer_language: printerLanguage.value.trim() == '' ? 'TSPL' : printerLanguage.value.trim(),
+		paper_width_mm: paperWidth.value.trim() == '' ? '30' : paperWidth.value.trim(),
+		paper_height_mm: paperHeight.value.trim() == '' ? '20' : paperHeight.value.trim(),
+		dots_per_mm: intText(dotsPerMm.value, '8'),
+		copies_default: intText(copiesDefault.value, '1'),
+		is_default: isDefault.value,
+		is_active: isActive.value,
+		description: description.value,
+		elements: buildElements(),
+	}
+}
+
+function markRefreshNeeded() {
+	uni.setStorageSync('refresh:pages:label-templates:index', '1')
+	uni.setStorageSync('refresh:pages:label-templates:detail', '1')
+}
+
+async function loadTemplate() {
+	if (templateId.value == '') {
+		return
+	}
+	loading.value = true
+	errorMessage.value = ''
+	try {
+		const detail = await getPrintTemplateDetail(templateId.value)
+		applyTemplate(detail)
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error, '模板加载失败')
+	} finally {
+		loading.value = false
+	}
+}
+
+function onNameInput(event: any) {
+	name.value = readInputValue(event)
+}
+
+function onDescriptionInput(event: any) {
+	description.value = readInputValue(event)
+}
+
+function onPaperWidthInput(event: any) {
+	paperWidth.value = readInputValue(event)
+}
+
+function onPaperHeightInput(event: any) {
+	paperHeight.value = readInputValue(event)
+}
+
+function onCopiesInput(event: any) {
+	copiesDefault.value = readInputValue(event)
+}
+
+function onPrinterLanguageInput(event: any) {
+	printerLanguage.value = readInputValue(event)
+}
+
+function onElementsInput(event: any) {
+	elementsText.value = readInputValue(event)
+}
+
+function onActiveChange(event: any) {
+	isActive.value = readSwitchValue(event)
+}
+
+function onDefaultChange(event: any) {
+	isDefault.value = readSwitchValue(event)
+}
+
+function selectTemplateType(value: string) {
+	templateType.value = value
+}
+
+function selectDots(value: string) {
+	dotsPerMm.value = value
+}
+
+function handleCancel() {
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.redirectTo({ url: '/pages/label-templates/index' })
+		},
+	})
+}
+
+async function handleSave() {
+	if (submitting.value) {
+		return
+	}
+	submitting.value = true
+	try {
+		const payload = buildPayload()
+		if (formMode.value == 'edit' && templateId.value != '') {
+			await updatePrintTemplate(templateId.value, payload)
+		} else {
+			await createPrintTemplate(payload)
+		}
+		markRefreshNeeded()
+		uni.showToast({ title: '保存成功', icon: 'success' })
+		setTimeout(() => {
+			handleCancel()
+		}, 450)
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '保存失败'),
+			icon: 'none',
+		})
+	} finally {
+		submitting.value = false
+	}
+}
+
+onLoad((options) => {
+	const optionObject = options as UTSJSONObject
+	const id = stringValue(optionObject['id'])
+	if (id != '') {
+		templateId.value = id
+		formMode.value = 'edit'
+		loadTemplate()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.content { flex: 1; padding: 16rpx 20rpx 148rpx; box-sizing: border-box; }
+.form-wrap { width: 100%; }
+.section-card { background-color: #FFFFFF; border-radius: 24rpx; border-width: 1rpx; border-color: #DDE6F2; padding: 24rpx; margin-bottom: 18rpx; }
+.last-card { margin-bottom: 24rpx; }
+.section-head { margin-bottom: 20rpx; }
+.section-title { font-size: 31rpx; font-weight: 700; color: #0F172A; line-height: 42rpx; }
+.section-subtitle { margin-top: 6rpx; font-size: 23rpx; color: #64748B; line-height: 32rpx; }
+.field-block { margin-bottom: 18rpx; }
+.field-label { font-size: 24rpx; font-weight: 700; color: #334155; margin-bottom: 10rpx; }
+.field-input { height: 72rpx; border-radius: 18rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; padding: 0 20rpx; font-size: 27rpx; color: #0F172A; }
+.field-textarea { width: 100%; border-radius: 18rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; padding: 18rpx 20rpx; font-size: 25rpx; color: #0F172A; line-height: 34rpx; box-sizing: border-box; }
+.small-textarea { height: 112rpx; }
+.json-textarea { height: 420rpx; font-size: 22rpx; line-height: 31rpx; }
+.field-row { flex-direction: row; justify-content: space-between; }
+.row-field { width: 48%; }
+.switch-line { flex-direction: row; align-items: center; justify-content: space-between; padding: 18rpx 0; border-top-width: 1rpx; border-top-color: #EEF2F7; }
+.switch-copy { flex: 1; padding-right: 20rpx; }
+.switch-title { font-size: 26rpx; font-weight: 700; color: #0F172A; line-height: 36rpx; }
+.switch-desc { margin-top: 4rpx; font-size: 22rpx; color: #64748B; line-height: 30rpx; }
+.choice-grid { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+.choice { width: 48%; height: 68rpx; border-radius: 18rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; align-items: center; justify-content: center; margin-bottom: 14rpx; }
+.choice-text { font-size: 25rpx; color: #334155; font-weight: 700; }
+.active-choice { background-color: #111827; border-color: #111827; }
+.active-choice-text { color: #FFFFFF; }
+.density-row { flex-direction: row; justify-content: space-between; margin-top: 4rpx; }
+.density-pill { width: 48%; height: 66rpx; border-radius: 18rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.density-text { font-size: 23rpx; color: #334155; font-weight: 700; }
+.footer-bar { position: fixed; left: 0; right: 0; bottom: 0; flex-direction: row; padding: 18rpx 24rpx 28rpx; background-color: rgba(238, 242, 247, 0.96); border-top-width: 1rpx; border-top-color: #DDE6F2; box-sizing: border-box; }
+.ghost-btn { flex: 1; height: 78rpx; border-radius: 22rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #FFFFFF; align-items: center; justify-content: center; margin-right: 16rpx; }
+.ghost-btn-text { font-size: 28rpx; color: #334155; font-weight: 700; }
+.primary-btn { flex: 1; height: 78rpx; border-radius: 22rpx; background-color: #111827; align-items: center; justify-content: center; }
+.primary-btn-text { font-size: 28rpx; color: #FFFFFF; font-weight: 700; }
+.state-card { margin: 22rpx 0; background-color: #FFFFFF; border-radius: 26rpx; border-width: 1rpx; border-color: #DDE6F2; min-height: 320rpx; align-items: center; justify-content: center; padding: 30rpx; }
+.loading-dot { width: 76rpx; height: 76rpx; border-radius: 38rpx; background-color: #E8EEF7; margin-bottom: 20rpx; }
+.state-title { font-size: 31rpx; font-weight: 700; color: #0F172A; }
+.state-text { margin-top: 12rpx; font-size: 25rpx; color: #64748B; text-align: center; line-height: 34rpx; }
+.error-card { border-color: #FECACA; }
+.error-title { color: #B91C1C; }
+.error-text { color: #991B1B; }
+.state-btn { margin-top: 24rpx; height: 72rpx; padding: 0 34rpx; border-radius: 18rpx; background-color: #111827; align-items: center; justify-content: center; }
+.state-btn-text { color: #FFFFFF; font-size: 26rpx; font-weight: 700; }
+</style>
+

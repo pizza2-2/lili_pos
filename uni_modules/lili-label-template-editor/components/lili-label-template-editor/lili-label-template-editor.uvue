@@ -1,0 +1,788 @@
+<template>
+	<view class="lte-root">
+		<view class="lte-toolbar">
+			<view class="lte-tool" @click="addTextElement"><text class="lte-tool-text">添加文本</text></view>
+			<view class="lte-tool" @click="addBarcodeElement"><text class="lte-tool-text">添加条码</text></view>
+			<view class="lte-tool" @click="resizeSelected(1)"><text class="lte-tool-text">放大</text></view>
+			<view class="lte-tool" @click="resizeSelected(-1)"><text class="lte-tool-text">缩小</text></view>
+			<view class="lte-tool lte-tool-primary" @click="printTestLabel"><text class="lte-tool-primary-text">测试打印</text></view>
+			<view class="lte-tool lte-tool-danger" @click="deleteSelectedElement"><text class="lte-tool-danger-text">删除</text></view>
+		</view>
+
+		<scroll-view scroll-x="true" class="lte-board-scroll">
+			<view
+				class="lte-board-shell"
+				@touchstart="handleCanvasTouchStart($event)"
+				@touchmove.stop.prevent="handleCanvasTouchMove($event)"
+				@touchend="handleCanvasTouchEnd($event)"
+				@touchcancel="handleCanvasTouchEnd($event)"
+			>
+				<view ref="canvasRef" class="lte-canvas" :style="boardStyle"></view>
+			</view>
+		</scroll-view>
+
+		<view class="lte-tabs">
+			<view v-for="item in elements" :key="item.key" :class="selectedKey == item.key ? 'lte-tab lte-tab-active' : 'lte-tab'" @click="selectElement(item.key)">
+				<text :class="selectedKey == item.key ? 'lte-tab-text lte-tab-text-active' : 'lte-tab-text'">{{ item.label }}</text>
+			</view>
+		</view>
+
+		<view class="lte-nudge-grid">
+			<view class="lte-nudge" @click="moveSelected(0, -0.5)"><text class="lte-nudge-text">上</text></view>
+			<view class="lte-nudge" @click="moveSelected(-0.5, 0)"><text class="lte-nudge-text">左</text></view>
+			<view class="lte-nudge" @click="moveSelected(0.5, 0)"><text class="lte-nudge-text">右</text></view>
+			<view class="lte-nudge" @click="moveSelected(0, 0.5)"><text class="lte-nudge-text">下</text></view>
+		</view>
+
+		<view class="lte-editor">
+			<view class="lte-editor-head">
+				<text class="lte-editor-title">当前字段</text>
+				<text class="lte-editor-subtitle">{{ selectedElementSummary }}</text>
+			</view>
+			<view v-if="selectedType == 'barcode'" class="lte-barcode-options">
+				<text class="lte-input-label">条码类型</text>
+				<view class="lte-type-row">
+					<view :class="selectedBarcodeType == 'CODE128' ? 'lte-type-chip lte-type-chip-active' : 'lte-type-chip'" @click="setBarcodeType('CODE128')">
+						<text :class="selectedBarcodeType == 'CODE128' ? 'lte-type-text lte-type-text-active' : 'lte-type-text'">CODE128</text>
+					</view>
+					<view :class="selectedBarcodeType == 'EAN13' ? 'lte-type-chip lte-type-chip-active' : 'lte-type-chip'" @click="setBarcodeType('EAN13')">
+						<text :class="selectedBarcodeType == 'EAN13' ? 'lte-type-text lte-type-text-active' : 'lte-type-text'">EAN13</text>
+					</view>
+				</view>
+				<view class="lte-switch-line">
+					<view class="lte-switch-copy">
+						<text class="lte-switch-title">显示底部数字</text>
+						<text class="lte-switch-desc">关闭后只显示条码图形</text>
+					</view>
+					<switch :checked="selectedShowText" color="#111827" @change="handleShowTextChange" />
+				</view>
+			</view>
+			<view class="lte-input-row">
+				<text class="lte-input-label">显示内容</text>
+				<input class="lte-input" :value="selectedContent" placeholder="请输入标签文字或条码" @input="handleContentInput" />
+			</view>
+			<view class="lte-input-row">
+				<text class="lte-input-label">字段名称</text>
+				<input class="lte-input" :value="selectedLabel" placeholder="字段名称" @input="handleLabelInput" />
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, nextTick, onMounted, watch } from 'vue'
+import { getConnectedPrinter, printTspl } from '@/uni_modules/lili-label-printer/index.uts'
+
+type Props = {
+	elements: UTSJSONObject[]
+	paperWidth: string
+	paperHeight: string
+	dotsPerMm?: number
+}
+
+type LabelElement = {
+	key: string
+	label: string
+	type: string
+	source: string
+	content: string
+	barcodeType: string
+	showText: boolean
+	x: number
+	y: number
+	width: number
+	height: number
+	fontSize: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	elements: () : UTSJSONObject[] => [],
+	paperWidth: '30',
+	paperHeight: '20',
+	dotsPerMm: 8,
+})
+
+const emit = defineEmits<{
+	(e: 'change', payload: UTSJSONObject[]): void
+}>()
+
+let labelCanvasContext: DrawableContext | null = null
+let canvasLeftPx = 0
+let canvasTopPx = 0
+const previewScale = ref(10)
+const canvasRef = ref<UniElement | null>(null)
+const elements = ref<LabelElement[]>([])
+const selectedKey = ref('')
+const internalChange = ref(false)
+const dragging = ref(false)
+const resizing = ref(false)
+const dragStartX = ref(0)
+const dragStartY = ref(0)
+const dragElementX = ref(0)
+const dragElementY = ref(0)
+const resizeStartWidth = ref(0)
+const resizeStartHeight = ref(0)
+const resizeStartFontSize = ref(0)
+const nextIndex = ref(1)
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	return '' + value
+}
+
+function numberValue(value: string, fallback: number = 0): number {
+	const parsed = parseFloat(value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function intValue(value: string, fallback: number = 0): number {
+	const parsed = parseInt(value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function safeText(value: string): string {
+	return value.replace(/"/g, "'")
+}
+
+function boolValue(value: any | null, fallback: boolean = false): boolean {
+	if (value == null) return fallback
+	const text = stringValue(value).toLowerCase()
+	if (text == 'true' || text == '1') return true
+	if (text == 'false' || text == '0') return false
+	return fallback
+}
+
+function labelWidthMm(): number {
+	return numberValue(props.paperWidth, 30)
+}
+
+function labelHeightMm(): number {
+	return numberValue(props.paperHeight, 20)
+}
+
+function canvasWidthPx(): number {
+	return labelWidthMm() * previewScale.value
+}
+
+function canvasHeightPx(): number {
+	return labelHeightMm() * previewScale.value
+}
+
+function dot(valueMm: number): number {
+	return Math.round(valueMm * props.dotsPerMm)
+}
+
+function tsplTextScale(fontSize: number): number {
+	if (fontSize >= 46) return 3
+	if (fontSize >= 28) return 2
+	return 1
+}
+
+function barcodeCommandType(item: LabelElement): string {
+	if (item.barcodeType == 'EAN13') return 'EAN13'
+	return '128'
+}
+
+function normalizeBarcodeText(item: LabelElement): string {
+	const raw = item.content.trim()
+	if (item.barcodeType != 'EAN13') return raw
+	let digits = ''
+	for (let index = 0; index < raw.length; index += 1) {
+		const char = raw.substring(index, index + 1)
+		if (char >= '0' && char <= '9') digits = digits + char
+	}
+	if (digits.length >= 13) return digits.substring(0, 13)
+	if (digits.length == 12) return digits
+	return '5901234123457'
+}
+
+function buildPrintTspl(): string {
+	let command = ''
+	command = command + 'SIZE ' + labelWidthMm().toString() + ' mm,' + labelHeightMm().toString() + ' mm\r\n'
+	command = command + 'GAP 2 mm,0\r\n'
+	command = command + 'DENSITY 8\r\n'
+	command = command + 'DIRECTION 1\r\n'
+	command = command + 'CLS\r\n'
+	for (let index = 0; index < elements.value.length; index += 1) {
+		const item = elements.value[index]
+		if (item.type == 'barcode') {
+			const humanReadable = item.showText ? 1 : 0
+			command = command + 'BARCODE ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',"' + barcodeCommandType(item) + '",' + dot(item.height).toString() + ',' + humanReadable.toString() + ',0,2,2,"' + safeText(normalizeBarcodeText(item)) + '"\r\n'
+		} else {
+			const scale = tsplTextScale(item.fontSize)
+			command = command + 'TEXT ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',"TSS24.BF2",0,' + scale.toString() + ',' + scale.toString() + ',"' + safeText(item.content) + '"\r\n'
+		}
+	}
+	command = command + 'PRINT 1\r\n'
+	return command
+}
+
+function connectedPrinterAddress(): string {
+	const connected = getConnectedPrinter()
+	if (!connected.success || connected.data == null) {
+		return ''
+	}
+	const data = connected.data as UTSJSONObject
+	return stringValue(data['address'])
+}
+
+function goPrinterSettings() {
+	uni.showToast({ title: '请先连接打印机', icon: 'none' })
+	setTimeout(() => {
+		uni.navigateTo({
+			url: '/pages/printer-settings/index',
+		})
+	}, 450)
+}
+
+function makeKey(): string {
+	const key = 'field-' + nextIndex.value.toString()
+	nextIndex.value = nextIndex.value + 1
+	return key
+}
+
+function elementFromObject(item: UTSJSONObject, index: number): LabelElement {
+	const key = stringValue(item['key'], 'field-' + (index + 1).toString())
+	const label = stringValue(item['label'], '字段 ' + (index + 1).toString())
+	const type = stringValue(item['type'], 'text') == 'barcode' ? 'barcode' : 'text'
+	const source = stringValue(item['source'], 'custom')
+	const content = stringValue(item['content'], label)
+	const barcodeType = stringValue(item['barcodeType'], stringValue(item['barcode_type'], 'CODE128')).toUpperCase() == 'EAN13' ? 'EAN13' : 'CODE128'
+	const showText = boolValue(item['showText'], boolValue(item['show_text'], true))
+	const x = numberValue(stringValue(item['x']), 2)
+	const y = numberValue(stringValue(item['y']), 2 + index * 3)
+	const width = numberValue(stringValue(item['width']), 18)
+	const height = numberValue(stringValue(item['height']), type == 'barcode' ? 5 : 4)
+	const fontSize = intValue(stringValue(item['fontSize']), type == 'barcode' ? 12 : 18)
+	return { key: key, label: label, type: type, source: source, content: content, barcodeType: barcodeType, showText: showText, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
+}
+
+function objectFromElement(item: LabelElement): UTSJSONObject {
+	const result = {} as UTSJSONObject
+	result['key'] = item.key
+	result['label'] = item.label
+	result['type'] = item.type
+	result['source'] = item.source
+	result['content'] = item.content
+	result['barcodeType'] = item.barcodeType
+	result['showText'] = item.showText
+	result['x'] = Math.round(item.x * 10) / 10
+	result['y'] = Math.round(item.y * 10) / 10
+	result['width'] = Math.round(item.width * 10) / 10
+	result['height'] = Math.round(item.height * 10) / 10
+	result['fontSize'] = item.fontSize
+	return result
+}
+
+function emitChange() {
+	const payload: UTSJSONObject[] = []
+	for (let index = 0; index < elements.value.length; index += 1) {
+		payload.push(objectFromElement(elements.value[index]))
+	}
+	internalChange.value = true
+	emit('change', payload)
+}
+
+function getElement(key: string): LabelElement | null {
+	for (let index = 0; index < elements.value.length; index += 1) {
+		if (elements.value[index].key == key) return elements.value[index]
+	}
+	return null
+}
+
+function getSelectedElement(): LabelElement | null {
+	return getElement(selectedKey.value)
+}
+
+function fitTextElement(item: LabelElement) {
+	const textLength = item.content.length > 0 ? item.content.length : item.label.length
+	const safeLength = textLength > 0 ? textLength : 1
+	const displayFontSize = Math.max(10, item.fontSize * previewScale.value / 8)
+	const widthPx = safeLength * displayFontSize * 0.62 + 6
+	const heightPx = displayFontSize + 4
+	item.width = Math.max(2, widthPx / previewScale.value)
+	item.height = Math.max(1.5, heightPx / previewScale.value)
+}
+
+function clampElement(item: LabelElement) {
+	if (item.type == 'text') {
+		fitTextElement(item)
+	}
+	if (item.width < 2) item.width = 2
+	if (item.height < 1.5) item.height = 1.5
+	if (item.type == 'barcode' && item.height < 3) item.height = 3
+	if (item.fontSize < 8) item.fontSize = 8
+	if (item.x < 0) item.x = 0
+	if (item.y < 0) item.y = 0
+	if (item.x + item.width > labelWidthMm()) item.x = labelWidthMm() - item.width
+	if (item.y + item.height > labelHeightMm()) item.y = labelHeightMm() - item.height
+	if (item.x < 0) item.x = 0
+	if (item.y < 0) item.y = 0
+}
+
+function drawCanvasText(context: DrawableContext, item: LabelElement) {
+	const x = item.x * previewScale.value
+	const y = item.y * previewScale.value
+	const displayFontSize = Math.max(10, item.fontSize * previewScale.value / 8)
+	context.fillStyle = '#111827'
+	context.strokeStyle = '#111827'
+	context.font = displayFontSize.toString() + 'px'
+	context.textAlign = 'left'
+	context.fillText(item.content, x + 3, y + displayFontSize * 0.78)
+}
+
+function drawCanvasBarcode(context: DrawableContext, item: LabelElement) {
+	const x = item.x * previewScale.value
+	const y = item.y * previewScale.value
+	const width = item.width * previewScale.value
+	const height = item.height * previewScale.value
+	context.fillStyle = '#111827'
+	const count = item.barcodeType == 'EAN13' ? 59 : 38
+	const barWidth = width / count
+	const bottomTextHeight = item.showText ? 14 : 0
+	for (let index = 0; index < count; index += 1) {
+		if (index % 3 != 1) context.fillRect(x + index * barWidth, y + 4, Math.max(1, barWidth * 0.65), Math.max(4, height - 6 - bottomTextHeight))
+	}
+	if (item.showText) {
+		context.font = '10px'
+		context.textAlign = 'left'
+		context.fillText(item.content, x + 4, y + height - 4)
+	}
+}
+
+function drawCanvasElement(context: DrawableContext, item: LabelElement) {
+	const x = item.x * previewScale.value
+	const y = item.y * previewScale.value
+	const width = item.width * previewScale.value
+	const height = item.height * previewScale.value
+	context.strokeStyle = selectedKey.value == item.key ? '#2563EB' : '#CBD5E1'
+	context.lineWidth = selectedKey.value == item.key ? 2 : 1
+	if (selectedKey.value == item.key) {
+		context.fillStyle = 'rgba(37,99,235,0.06)'
+		context.fillRect(x, y, width, height)
+	}
+	context.strokeRect(x + 0.5, y + 0.5, Math.max(1, width - 1), Math.max(1, height - 1))
+	if (selectedKey.value == item.key) {
+		const handleSize = 12
+		context.fillStyle = '#2563EB'
+		context.fillRect(x + width - handleSize, y + height - handleSize, handleSize, handleSize)
+		context.fillStyle = '#FFFFFF'
+		context.fillRect(x + width - 8, y + height - 8, 4, 4)
+	}
+	if (item.type == 'barcode') {
+		drawCanvasBarcode(context, item)
+	} else {
+		drawCanvasText(context, item)
+	}
+}
+
+function renderCanvas() {
+	if (labelCanvasContext == null) return
+	const context = labelCanvasContext as DrawableContext
+	const width = canvasWidthPx()
+	const height = canvasHeightPx()
+	context.reset()
+	context.fillStyle = '#FFFFFF'
+	context.fillRect(0, 0, width, height)
+	context.strokeStyle = '#CBD5E1'
+	context.lineWidth = 1
+	context.strokeRect(0.5, 0.5, width - 1, height - 1)
+	for (let index = 0; index < elements.value.length; index += 1) {
+		drawCanvasElement(context, elements.value[index])
+	}
+	context.update()
+}
+
+function renderSoon() {
+	nextTick(() => {
+		renderCanvas()
+	})
+}
+
+function initCanvas() {
+	if (canvasRef.value == null) return
+	const canvas = canvasRef.value as UniElement
+	const context = canvas.getDrawableContext()
+	if (context == null) return
+	labelCanvasContext = context as DrawableContext
+	canvas.getBoundingClientRectAsync()?.then((rect) => {
+		canvasLeftPx = rect.left
+		canvasTopPx = rect.top
+	})
+	renderCanvas()
+}
+
+function updatePreviewScale() {
+	const info = uni.getSystemInfoSync()
+	const text = JSON.stringify(info)
+	const object = JSON.parseObject<UTSJSONObject>(text)
+	if (object == null) return
+	const windowWidth = numberValue(stringValue(object!['windowWidth']), 375)
+	const available = windowWidth - 64
+	const widthMm = labelWidthMm()
+	if (available > 0 && widthMm > 0) {
+		const nextScale = Math.floor(available / widthMm)
+		if (nextScale >= 4) {
+			previewScale.value = nextScale
+		}
+	}
+}
+
+function initCanvasSoon() {
+	updatePreviewScale()
+	nextTick(() => {
+		initCanvas()
+	})
+	setTimeout(() => {
+		initCanvas()
+	}, 120)
+}
+
+function loadElements(value: UTSJSONObject[]) {
+	const next: LabelElement[] = []
+	const previousKey = selectedKey.value
+	for (let index = 0; index < value.length; index += 1) {
+		const item = elementFromObject(value[index], index)
+		clampElement(item)
+		next.push(item)
+	}
+	if (next.length == 0) {
+		next.push({ key: 'name', label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, x: 2, y: 2, width: 18, height: 4, fontSize: 18 } as LabelElement)
+	}
+	elements.value = next
+	let nextKey = next[0].key
+	for (let index = 0; index < next.length; index += 1) {
+		if (next[index].key == previousKey) nextKey = previousKey
+	}
+	selectedKey.value = nextKey
+	renderSoon()
+}
+
+const boardStyle = computed((): string => {
+	return 'width:' + canvasWidthPx().toString() + 'px;height:' + canvasHeightPx().toString() + 'px;'
+})
+
+const selectedElementSummary = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return '未选择字段'
+	const current = item as LabelElement
+	return current.type + ' · x ' + current.x.toString() + ' / y ' + current.y.toString()
+})
+
+const selectedContent = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return ''
+	return (item as LabelElement).content
+})
+
+const selectedLabel = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return ''
+	return (item as LabelElement).label
+})
+
+const selectedType = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return ''
+	return (item as LabelElement).type
+})
+
+const selectedBarcodeType = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return 'CODE128'
+	return (item as LabelElement).barcodeType
+})
+
+const selectedShowText = computed((): boolean => {
+	const item = getSelectedElement()
+	if (item == null) return true
+	return (item as LabelElement).showText
+})
+
+function selectElement(key: any) {
+	selectedKey.value = stringValue(key)
+	renderCanvas()
+}
+
+function moveSelected(dx: number, dy: number) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	current.x = current.x + dx
+	current.y = current.y + dy
+	clampElement(current)
+	emitChange()
+	renderCanvas()
+}
+
+function resizeSelected(delta: number) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	current.width = current.width + delta * 2
+	current.height = current.height + delta
+	if (current.type == 'text') current.fontSize = current.fontSize + delta * 3
+	clampElement(current)
+	emitChange()
+	renderCanvas()
+}
+
+function makeElement(type: string, label: string, content: string, x: number, y: number, width: number, height: number, fontSize: number): LabelElement {
+	return { key: makeKey(), label: label, type: type, source: 'custom', content: content, barcodeType: type == 'barcode' ? 'EAN13' : 'CODE128', showText: type == 'barcode' ? false : true, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
+}
+
+function addElement(item: LabelElement) {
+	clampElement(item)
+	elements.value.push(item)
+	selectedKey.value = item.key
+	emitChange()
+	renderSoon()
+}
+
+function addTextElement() {
+	addElement(makeElement('text', '文本', 'TEXT', 2, 2, 18, 4, 18))
+}
+
+function addBarcodeElement() {
+	addElement(makeElement('barcode', '条码', '5901234123457', 2, 10, 24, 5, 12))
+}
+
+function deleteSelectedElement() {
+	if (elements.value.length <= 1) {
+		uni.showToast({ title: '至少保留一个字段', icon: 'none' })
+		return
+	}
+	const next: LabelElement[] = []
+	for (let index = 0; index < elements.value.length; index += 1) {
+		if (elements.value[index].key != selectedKey.value) next.push(elements.value[index])
+	}
+	elements.value = next
+	selectedKey.value = next[0].key
+	emitChange()
+	renderSoon()
+}
+
+function handleContentInput(event: any) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const inputEvent = event as UniInputEvent
+	const current = item as LabelElement
+	current.content = inputEvent.detail.value
+	emitChange()
+	renderCanvas()
+}
+
+function handleLabelInput(event: any) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const inputEvent = event as UniInputEvent
+	const current = item as LabelElement
+	current.label = inputEvent.detail.value
+	emitChange()
+	renderCanvas()
+}
+
+function setBarcodeType(value: string) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	if (current.type != 'barcode') return
+	current.barcodeType = value == 'EAN13' ? 'EAN13' : 'CODE128'
+	emitChange()
+	renderCanvas()
+}
+
+function handleShowTextChange(event: any) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	if (current.type != 'barcode') return
+	const switchEvent = event as UniSwitchChangeEvent
+	current.showText = switchEvent.detail.value
+	emitChange()
+	renderCanvas()
+}
+
+function printTestLabel() {
+	const address = connectedPrinterAddress()
+	if (address == '') {
+		goPrinterSettings()
+		return
+	}
+	const response = printTspl({
+		address: address,
+		tspl: buildPrintTspl(),
+		charset: 'GB18030',
+		chunkSize: 1024,
+		delayMs: 20,
+	})
+	uni.showToast({
+		title: response.success ? '测试打印已发送' : response.message,
+		icon: response.success ? 'success' : 'none',
+	})
+}
+
+function touchPoint(event: any): UTSJSONObject {
+	const touchEvent = event as TouchEvent
+	if (touchEvent.touches.length > 0) {
+		const touch = touchEvent.touches[0]
+		return { x: touch.clientX, y: touch.clientY, pageX: touch.pageX, pageY: touch.pageY } as UTSJSONObject
+	}
+	if (touchEvent.changedTouches.length > 0) {
+		const touch = touchEvent.changedTouches[0]
+		return { x: touch.clientX, y: touch.clientY, pageX: touch.pageX, pageY: touch.pageY } as UTSJSONObject
+	}
+	const text = JSON.stringify(event)
+	if (text == null || text == '') return {} as UTSJSONObject
+	const object = JSON.parseObject<UTSJSONObject>(text)
+	if (object == null) return {} as UTSJSONObject
+	const currentObject = object as UTSJSONObject
+	let touches = JSON.parseArray<UTSJSONObject>(JSON.stringify(currentObject['touches']))
+	if (touches == null) touches = JSON.parseArray<UTSJSONObject>(JSON.stringify(currentObject['changedTouches']))
+	if (touches == null) return {} as UTSJSONObject
+	const touchList = touches as UTSJSONObject[]
+	if (touchList.length == 0) return {} as UTSJSONObject
+	return touchList[0]
+}
+
+function canvasTouchPx(event: any): UTSJSONObject {
+	const point = touchPoint(event)
+	let x = numberValue(stringValue(point['x'], stringValue(point['clientX'], stringValue(point['pageX'], stringValue(point['offsetX'])))), 0)
+	let y = numberValue(stringValue(point['y'], stringValue(point['clientY'], stringValue(point['pageY'], stringValue(point['offsetY'])))), 0)
+	if (canvasRef.value != null) {
+		const canvas = canvasRef.value as UniElement
+		canvas.getBoundingClientRectAsync()?.then((rect) => {
+			canvasLeftPx = rect.left
+			canvasTopPx = rect.top
+		})
+	}
+	if (x > canvasWidthPx() || y > canvasHeightPx() || canvasLeftPx > 0 || canvasTopPx > 0) {
+		x = x - canvasLeftPx
+		y = y - canvasTopPx
+	}
+	if (x > canvasWidthPx()) x = canvasWidthPx()
+	if (y > canvasHeightPx()) y = canvasHeightPx()
+	if (x < 0) x = 0
+	if (y < 0) y = 0
+	return { x: x, y: y } as UTSJSONObject
+}
+
+function hitElement(xMm: number, yMm: number): LabelElement | null {
+	for (let index = elements.value.length - 1; index >= 0; index -= 1) {
+		const item = elements.value[index]
+		if (xMm >= item.x && xMm <= item.x + item.width && yMm >= item.y && yMm <= item.y + item.height) return item
+	}
+	return null
+}
+
+function isResizeHandle(item: LabelElement, xMm: number, yMm: number): boolean {
+	const handleMm = 2
+	return xMm >= item.x + item.width - handleMm && xMm <= item.x + item.width + handleMm && yMm >= item.y + item.height - handleMm && yMm <= item.y + item.height + handleMm
+}
+
+function handleCanvasTouchStart(event: any) {
+	const point = canvasTouchPx(event)
+	const xMm = numberValue(stringValue(point['x']), 0) / previewScale.value
+	const yMm = numberValue(stringValue(point['y']), 0) / previewScale.value
+	const item = hitElement(xMm, yMm)
+	if (item == null) return
+	const current = item as LabelElement
+	selectedKey.value = current.key
+	resizing.value = isResizeHandle(current, xMm, yMm)
+	dragging.value = !resizing.value
+	dragStartX.value = numberValue(stringValue(point['x']), 0)
+	dragStartY.value = numberValue(stringValue(point['y']), 0)
+	dragElementX.value = current.x
+	dragElementY.value = current.y
+	resizeStartWidth.value = current.width
+	resizeStartHeight.value = current.height
+	resizeStartFontSize.value = current.fontSize
+	renderCanvas()
+}
+
+function handleCanvasTouchMove(event: any) {
+	if (!dragging.value && !resizing.value) return
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	const point = canvasTouchPx(event)
+	const x = numberValue(stringValue(point['x']), dragStartX.value)
+	const y = numberValue(stringValue(point['y']), dragStartY.value)
+	const dxMm = (x - dragStartX.value) / previewScale.value
+	const dyMm = (y - dragStartY.value) / previewScale.value
+	if (resizing.value) {
+		current.width = resizeStartWidth.value + dxMm
+		current.height = resizeStartHeight.value + dyMm
+		if (current.type == 'text') current.fontSize = resizeStartFontSize.value + Math.round(dyMm * 3)
+	} else {
+		current.x = dragElementX.value + dxMm
+		current.y = dragElementY.value + dyMm
+	}
+	clampElement(current)
+	emitChange()
+	renderCanvas()
+}
+
+function handleCanvasTouchEnd(event: any) {
+	dragging.value = false
+	resizing.value = false
+}
+
+loadElements(props.elements)
+
+watch(
+	() : UTSJSONObject[] => props.elements,
+	(newValue: UTSJSONObject[]) => {
+		if (internalChange.value) {
+			internalChange.value = false
+			return
+		}
+		loadElements(newValue)
+	}
+)
+
+onMounted(() => {
+	initCanvasSoon()
+})
+</script>
+
+<style>
+.lte-root { width: 100%; }
+.lte-toolbar { flex-direction: row; flex-wrap: wrap; margin-bottom: 16rpx; }
+.lte-tool { height: 58rpx; padding: 0 18rpx; border-radius: 16rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; align-items: center; justify-content: center; margin-right: 12rpx; margin-bottom: 12rpx; }
+.lte-tool-text { font-size: 23rpx; color: #0F172A; font-weight: 700; }
+.lte-tool-primary { border-color: #111827; background-color: #111827; }
+.lte-tool-primary-text { font-size: 23rpx; color: #FFFFFF; font-weight: 700; }
+.lte-tool-danger { border-color: #FECACA; background-color: #FFF1F2; }
+.lte-tool-danger-text { font-size: 23rpx; color: #B91C1C; font-weight: 700; }
+.lte-board-scroll { width: 100%; }
+.lte-board-shell { width: 100%; min-height: 300px; border-radius: 22rpx; background-color: #E8EEF7; align-items: center; justify-content: center; padding: 18rpx; box-sizing: border-box; }
+.lte-canvas { background-color: #FFFFFF; border-radius: 12rpx; }
+.lte-tabs { flex-direction: row; flex-wrap: wrap; margin-top: 16rpx; }
+.lte-tab { height: 54rpx; padding: 0 18rpx; border-radius: 16rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #F8FAFC; align-items: center; justify-content: center; margin-right: 10rpx; margin-bottom: 10rpx; }
+.lte-tab-active { background-color: #111827; border-color: #111827; }
+.lte-tab-text { font-size: 23rpx; color: #334155; }
+.lte-tab-text-active { color: #FFFFFF; font-weight: 700; }
+.lte-nudge-grid { flex-direction: row; justify-content: space-between; margin-top: 8rpx; }
+.lte-nudge { width: 23%; height: 56rpx; border-radius: 16rpx; background-color: #F8FAFC; border-width: 1rpx; border-color: #D8E2EF; align-items: center; justify-content: center; }
+.lte-nudge-text { font-size: 23rpx; color: #334155; font-weight: 700; }
+.lte-editor { margin-top: 16rpx; border-radius: 18rpx; background-color: #F8FAFC; border-width: 1rpx; border-color: #D8E2EF; padding: 18rpx; }
+.lte-editor-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 14rpx; }
+.lte-editor-title { font-size: 26rpx; font-weight: 700; color: #0F172A; }
+.lte-editor-subtitle { font-size: 21rpx; color: #64748B; }
+.lte-barcode-options { margin-bottom: 14rpx; }
+.lte-type-row { flex-direction: row; margin-top: 8rpx; margin-bottom: 12rpx; }
+.lte-type-chip { height: 54rpx; padding: 0 18rpx; border-radius: 16rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #FFFFFF; align-items: center; justify-content: center; margin-right: 12rpx; }
+.lte-type-chip-active { background-color: #111827; border-color: #111827; }
+.lte-type-text { font-size: 22rpx; color: #334155; font-weight: 700; }
+.lte-type-text-active { color: #FFFFFF; }
+.lte-switch-line { flex-direction: row; align-items: center; justify-content: space-between; border-radius: 16rpx; background-color: #FFFFFF; border-width: 1rpx; border-color: #D8E2EF; padding: 14rpx 16rpx; }
+.lte-switch-copy { flex: 1; padding-right: 14rpx; }
+.lte-switch-title { font-size: 23rpx; font-weight: 700; color: #0F172A; line-height: 32rpx; }
+.lte-switch-desc { font-size: 20rpx; color: #64748B; line-height: 28rpx; }
+.lte-input-row { margin-bottom: 14rpx; }
+.lte-input-label { font-size: 22rpx; color: #64748B; margin-bottom: 8rpx; }
+.lte-input { height: 62rpx; border-radius: 16rpx; background-color: #FFFFFF; border-width: 1rpx; border-color: #D8E2EF; padding: 0 18rpx; font-size: 24rpx; color: #0F172A; }
+</style>

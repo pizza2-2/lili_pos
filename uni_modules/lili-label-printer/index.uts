@@ -189,6 +189,7 @@ function addOrUpdateDevice(device: BluetoothDevice, rssi: number) {
 	}
 }
 
+@Suppress("DEPRECATION")
 function getBluetoothDeviceExtra(intent: Intent): BluetoothDevice | null {
 	return intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
 }
