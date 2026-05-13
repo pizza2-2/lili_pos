@@ -1,6 +1,6 @@
 import { authState, redirectToLogin } from '@/store/auth'
 
-export const baseUrl: string = 'http://192.168.43.173:8000'		//服务器请求接口地址
+export const baseUrl: string = 'http://127.0.0.1:8000'		//服务器请求接口地址
 export const timeOut: number = 10000							//网络请求超时时间
 const loginApiUrl = '/api/accounts/auth/login/'
 
@@ -45,6 +45,14 @@ export function takeLatestResponseMessage(fallback: string = ''): string {
 	const message = latestResponseMeta!.message != '' ? latestResponseMeta!.message : fallback
 	clearLatestResponseMeta()
 	return message
+}
+
+export function buildDownloadHeader(): UTSJSONObject {
+	const header = {} as UTSJSONObject
+	if (authState.token != '') {
+		header['Authorization'] = authState.token
+	}
+	return header
 }
 
 // 自定义方法请求拦截,可以在此方法中对header和data做处理。比如这里就把本地的token添加到header中

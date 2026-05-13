@@ -32,6 +32,7 @@ export type PurchaseItem = {
 	created_at: string
 	updated_at: string
 	items: UTSJSONObject[]
+	supplier_excel_import_status: UTSJSONObject
 }
 
 export type PurchaseListResponse = {
@@ -162,6 +163,38 @@ export type PurchaseImportResponse = {
 	results: UTSJSONObject[]
 	errors: UTSJSONObject[]
 	warnings: UTSJSONObject[]
+}
+
+export type SupplierExcelImportTask = {
+	task_id: string
+	status: string
+	message: string
+	percent: number
+	data: UTSJSONObject
+}
+
+export type QuickProcurementItem = {
+	name: string
+	price: string
+	quantity: number
+}
+
+export type QuickProcurementResultItem = {
+	product_id: number
+	product_name: string
+	product_sku: string
+	product_barcode: string
+	purchase_price: string
+	quantity: number
+	total: string
+}
+
+export type QuickProcurementResponse = {
+	procure_id: number
+	items: QuickProcurementResultItem[]
+	total_quantity: number
+	total_amount: string
+	message: string
 }
 
 function stringValue(value: any | null): string {
@@ -323,6 +356,7 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 	let supplierName = stringValue(rawObject['supplier_name'])
 	const supplierInfo = parseObject(rawObject['supplier_info'])
 	if (supplierName == '' && supplierInfo != null) supplierName = stringValue(supplierInfo!['name'])
+	const supplierExcelImportStatus = parseObject(rawObject['supplier_excel_import_status'])
 	return {
 		id: intValue(rawObject['id']),
 		purchase_number: stringValue(rawObject['purchase_number']),
@@ -342,6 +376,7 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
 		items: parseObjectArray(rawObject['items']),
+		supplier_excel_import_status: supplierExcelImportStatus == null ? ({} as UTSJSONObject) : supplierExcelImportStatus!,
 	} as PurchaseItem
 }
 
@@ -564,6 +599,30 @@ function buildPurchaseImportResponse(rawObject: UTSJSONObject): PurchaseImportRe
 	} as PurchaseImportResponse
 }
 
+function buildQuickProcurementResponse(rawObject: UTSJSONObject): QuickProcurementResponse {
+	const rows = parseObjectArray(rawObject['items'])
+	const items: QuickProcurementResultItem[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		items.push({
+			product_id: intValue(row['product_id']),
+			product_name: stringValue(row['product_name']),
+			product_sku: stringValue(row['product_sku']),
+			product_barcode: stringValue(row['product_barcode']),
+			purchase_price: stringValue(row['purchase_price']),
+			quantity: intValue(row['quantity']),
+			total: stringValue(row['total']),
+		} as QuickProcurementResultItem)
+	}
+	return {
+		procure_id: intValue(rawObject['procure_id']),
+		items: items,
+		total_quantity: intValue(rawObject['total_quantity']),
+		total_amount: stringValue(rawObject['total_amount']),
+		message: stringValue(rawObject['message']),
+	} as QuickProcurementResponse
+}
+
 function parseImportUploadResponse(text: string): PurchaseImportResponse {
 	const rootObject = text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
 	if (rootObject == null) throw new Error('导入响应解析失败')
@@ -778,6 +837,47 @@ export async function executeSupplierExcelImport(id: number | string, filePath: 
 	return buildSupplierExcelImportResponse(raw)
 }
 
+export async function startSupplierExcelImportTask(id: number | string, filePath: string, config: UTSJSONObject): Promise<SupplierExcelImportTask> {
+	const raw = await uploadSupplierExcelFile(id, filePath, 'supplier-excel-import-async', config)
+	const dataObject = parseObject(raw['data'])
+	return {
+		task_id: stringValue(raw['task_id']),
+		status: stringValue(raw['status']),
+		message: stringValue(raw['message']),
+		percent: intValue(raw['percent']),
+		data: dataObject == null ? ({} as UTSJSONObject) : dataObject!,
+	} as SupplierExcelImportTask
+}
+
+export async function getSupplierExcelImportTaskStatus(id: number | string, taskId: string): Promise<SupplierExcelImportTask> {
+	const raw = await request(detailPath(id) + 'supplier-excel-import-task/' + taskId + '/', 'GET', {} as UTSJSONObject, true)
+	const rawObject = rawDataObject(raw)
+	const dataObject = parseObject(rawObject['data'])
+	return {
+		task_id: stringValue(rawObject['task_id']),
+		status: stringValue(rawObject['status']),
+		message: stringValue(rawObject['message']),
+		percent: intValue(rawObject['percent']),
+		data: dataObject == null ? ({} as UTSJSONObject) : dataObject!,
+	} as SupplierExcelImportTask
+}
+
+export async function precheckSupplierExcelRowsImport(id: number | string, rows: UTSJSONObject[]): Promise<PurchaseImportResponse> {
+	const body = {
+		rows: rows,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'supplier-excel-rows-precheck/', 'POST', body, true)
+	return buildSupplierExcelImportResponse(rawDataObject(raw))
+}
+
+export async function executeSupplierExcelRowsImport(id: number | string, rows: UTSJSONObject[]): Promise<PurchaseImportResponse> {
+	const body = {
+		rows: rows,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'supplier-excel-rows-import/', 'POST', body, true)
+	return buildSupplierExcelImportResponse(rawDataObject(raw))
+}
+
 export async function getSupplierExcelProfiles(id: number | string): Promise<UTSJSONObject[]> {
 	const raw = await request(detailPath(id) + 'supplier-excel-profiles/', 'GET', {} as UTSJSONObject, true)
 	const rawObject = rawDataObject(raw)
@@ -815,6 +915,23 @@ export async function getPurchaseDetailItem(id: number | string): Promise<Purcha
 export async function createPurchase(data: PurchaseMutationData): Promise<PurchaseItem> {
 	const raw = await request('/api/purchases/purchases/', 'POST', mutationBody(data), true)
 	return buildPurchaseItem(rawDataObject(raw))
+}
+
+export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[]): Promise<QuickProcurementResponse> {
+	const requestItems: UTSJSONObject[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		requestItems.push({
+			name: item.name,
+			price: item.price,
+			quantity: item.quantity,
+		} as UTSJSONObject)
+	}
+	const raw = await request('/api/purchases/purchases/quick_procurement/', 'POST', {
+		procure_id: parseInt(stringValue(purchaseId)),
+		items: requestItems,
+	} as UTSJSONObject, true)
+	return buildQuickProcurementResponse(rawDataObject(raw))
 }
 
 export async function updatePurchase(id: number | string, data: PurchaseMutationData): Promise<PurchaseItem> {

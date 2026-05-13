@@ -277,6 +277,20 @@
 			}
 		},
 		{
+			"path": "pages/purchases/details/quick-input",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/details/excel-upload",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/orders/index",
 			"style": {
 				"navigationStyle":"custom",

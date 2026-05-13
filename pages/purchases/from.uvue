@@ -139,6 +139,19 @@ function goBackToList() {
 	setTimeout(() => { uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/purchases/index' }) } }) }, 16)
 }
 
+function goToCreatedPurchaseDetail(id: string) {
+	leaveSignal.value = leaveSignal.value + 1
+	initialData.value = initialCreateData()
+	setTimeout(() => {
+		uni.redirectTo({
+			url: '/pages/purchases/details/index?purchase=' + id,
+			fail: () => {
+				uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + id })
+			},
+		})
+	}, 16)
+}
+
 async function loadDetail(idText: string) {
 	if (idText == '') return
 	try {
@@ -188,7 +201,7 @@ async function persistForm(payload: UTSJSONObject) {
 		markRefresh()
 		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
 		if (formMode.value == 'edit') goBackToList()
-		else uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + savedPurchaseId })
+		else goToCreatedPurchaseDetail(savedPurchaseId)
 	} catch (error) {
 		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
 	} finally {

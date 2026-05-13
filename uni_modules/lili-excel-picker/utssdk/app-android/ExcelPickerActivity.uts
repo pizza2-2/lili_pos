@@ -1,0 +1,173 @@
+import Activity from 'android.app.Activity'
+import Bundle from 'android.os.Bundle'
+import Intent from 'android.content.Intent'
+import Uri from 'android.net.Uri'
+import OpenableColumns from 'android.provider.OpenableColumns'
+import Cursor from 'android.database.Cursor'
+import File from 'java.io.File'
+import FileOutputStream from 'java.io.FileOutputStream'
+import InputStream from 'java.io.InputStream'
+import { ExcelPickerResult } from '../interface.uts'
+import { dispatchExcelPickerResult } from './callbacks.uts'
+
+const REQUEST_PICK_EXCEL: Int = 19021
+
+function makeResult(success: boolean, code: string, message: string, filePath: string = '', fileName: string = '', uri: string = ''): ExcelPickerResult {
+	return {
+		success: success,
+		code: code,
+		message: message,
+		filePath: filePath,
+		fileName: fileName,
+		uri: uri,
+	} as ExcelPickerResult
+}
+
+function sanitizeFileName(name: string): string {
+	let nextName = name.trim()
+	if (nextName == '') {
+		nextName = 'purchase-import-' + new Date().getTime().toString() + '.xlsx'
+	}
+	nextName = nextName.replace(/[\\/:*?"<>|]/g, '_')
+	if (!isSupportedSpreadsheetName(nextName)) {
+		nextName = nextName + '.xlsx'
+	}
+	return nextName
+}
+
+function isSupportedSpreadsheetName(name: string): boolean {
+	const lower = name.toLowerCase()
+	return lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv') || lower.endsWith('.tsv') || lower.endsWith('.txt')
+}
+
+export class ExcelPickerActivity extends Activity {
+	constructor() {
+		super()
+	}
+
+	override onCreate(savedInstanceState: Bundle | null): void {
+		super.onCreate(savedInstanceState)
+		console.log('lili-excel-picker: activity onCreate')
+		this.openPicker()
+	}
+
+	private openPicker(): void {
+		try {
+			console.log('lili-excel-picker: open ACTION_OPEN_DOCUMENT')
+			const intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+			intent.addCategory(Intent.CATEGORY_OPENABLE)
+			intent.setType('*/*')
+			this.startActivityForResult(intent, REQUEST_PICK_EXCEL)
+		} catch (error) {
+			console.log('lili-excel-picker: ACTION_OPEN_DOCUMENT failed', error)
+			try {
+				console.log('lili-excel-picker: open ACTION_GET_CONTENT')
+				const fallbackIntent = new Intent(Intent.ACTION_GET_CONTENT)
+				fallbackIntent.addCategory(Intent.CATEGORY_OPENABLE)
+				fallbackIntent.setType('*/*')
+				this.startActivityForResult(fallbackIntent, REQUEST_PICK_EXCEL)
+			} catch (fallbackError) {
+				console.log('lili-excel-picker: ACTION_GET_CONTENT failed', fallbackError)
+				dispatchExcelPickerResult(makeResult(false, 'OPEN_FAILED', '打开系统文件选择器失败'))
+				this.finish()
+			}
+		}
+	}
+
+	@Suppress("DEPRECATION")
+	override onActivityResult(requestCode: Int, resultCode: Int, data: Intent | null): void {
+		super.onActivityResult(requestCode, resultCode, data)
+		console.log('lili-excel-picker: onActivityResult', requestCode, resultCode)
+		if (requestCode != REQUEST_PICK_EXCEL) {
+			this.finish()
+			return
+		}
+		if (resultCode != Activity.RESULT_OK || data == null || data!.getData() == null) {
+			dispatchExcelPickerResult(makeResult(false, 'CANCELLED', '已取消选择'))
+			this.finish()
+			return
+		}
+		const uri = data!.getData()!
+		const uriText = uri.toString()
+		const displayName = this.readDisplayName(uri)
+		if (!isSupportedSpreadsheetName(displayName)) {
+			console.log('lili-excel-picker: unsupported file', displayName)
+			dispatchExcelPickerResult(makeResult(false, 'UNSUPPORTED_FILE', '请选择 .xlsx、.xls、.csv 或 .tsv 文件', '', displayName, uriText))
+			this.finish()
+			return
+		}
+		const copiedPath = this.copyUriToCache(uri, displayName)
+		if (copiedPath == '') {
+			console.log('lili-excel-picker: copy failed', displayName)
+			dispatchExcelPickerResult(makeResult(false, 'COPY_FAILED', '复制Excel文件失败', '', displayName, uriText))
+			this.finish()
+			return
+		}
+		console.log('lili-excel-picker: pick success', copiedPath)
+		dispatchExcelPickerResult(makeResult(true, 'OK', '已选择Excel文件', copiedPath, displayName, uriText))
+		this.finish()
+	}
+
+	private readDisplayName(uri: Uri): string {
+		let result = ''
+		let cursor: Cursor | null = null
+		try {
+			cursor = this.getContentResolver().query(uri, null, null, null, null)
+			if (cursor != null && cursor!.moveToFirst()) {
+				const index = cursor!.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+				if (index >= 0) {
+					const nameValue = cursor!.getString(index)
+					if (nameValue != null) {
+						result = nameValue!
+					}
+				}
+			}
+		} catch (error) {
+			result = ''
+		} finally {
+			if (cursor != null) {
+				cursor!.close()
+			}
+		}
+		if (result == '') {
+			result = 'purchase-import-' + new Date().getTime().toString() + '.xlsx'
+		}
+		return sanitizeFileName(result)
+	}
+
+	private copyUriToCache(uri: Uri, displayName: string): string {
+		let input: InputStream | null = null
+		let output: FileOutputStream | null = null
+		try {
+			input = this.getContentResolver().openInputStream(uri)
+			if (input == null) return ''
+			const dir = new File(this.getCacheDir(), 'excel-picker')
+			if (!dir.exists()) {
+				dir.mkdirs()
+			}
+			const targetFile = new File(dir, new Date().getTime().toString() + '-' + sanitizeFileName(displayName))
+			output = new FileOutputStream(targetFile)
+			const buffer = new ByteArray(8192)
+			let length = input!.read(buffer)
+			while (length > 0) {
+				output!.write(buffer, 0, length)
+				length = input!.read(buffer)
+			}
+			output!.flush()
+			return targetFile.getAbsolutePath()
+		} catch (error) {
+			return ''
+		} finally {
+			if (output != null) {
+				try {
+					output!.close()
+				} catch (closeOutputError) {}
+			}
+			if (input != null) {
+				try {
+					input!.close()
+				} catch (closeInputError) {}
+			}
+		}
+	}
+}

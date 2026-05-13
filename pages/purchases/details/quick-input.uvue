@@ -1,0 +1,764 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" :homePath="homePath" backgroundColor="#EEF2F7" />
+
+		<scroll-view scroll-y="true" class="page-scroll">
+			<view class="content">
+				<view class="entry-panel">
+					<view class="summary-strip">
+						<view class="summary-item">
+							<text class="summary-value">{{ rows.length.toString() }}</text>
+							<text class="summary-label">行数</text>
+						</view>
+						<view class="summary-item">
+							<text class="summary-value">{{ totalQuantity.toString() }}</text>
+							<text class="summary-label">数量</text>
+						</view>
+						<view class="summary-item">
+							<text class="summary-value">¥ {{ totalAmountText }}</text>
+							<text class="summary-label">金额</text>
+						</view>
+					</view>
+
+					<view class="quick-input-box">
+						<input
+							class="quick-input"
+							:value="draftText"
+							:focus="draftFocus"
+							placeholder="商品名称 采购价 数量"
+							confirm-type="next"
+							@input="handleDraftInput"
+							@confirm="handleDraftConfirm"
+						/>
+						<view class="enter-btn" @click="handleDraftConfirm">
+							<text class="enter-btn-text">加入</text>
+						</view>
+					</view>
+
+					<view v-if="previewText != ''" class="preview-line">
+						<text class="preview-text">{{ previewText }}</text>
+					</view>
+
+					<view class="ai-entry" @click="openAIModal">
+						<view class="ai-entry-copy">
+							<text class="ai-entry-title">AI图片识别</text>
+							<text class="ai-entry-desc">复制规则给多模态AI，再粘贴返回文本</text>
+						</view>
+						<text class="ai-entry-action">打开</text>
+					</view>
+				</view>
+
+				<view class="rows-panel">
+					<view class="rows-head">
+						<text class="rows-title">待上传</text>
+						<view class="small-action" @click="clearRows">
+							<text class="small-action-text">清空</text>
+						</view>
+					</view>
+
+					<view v-if="rows.length == 0" class="empty-state">
+						<text class="empty-state-text">暂无条目</text>
+					</view>
+
+					<view v-if="rows.length > 0" class="table-head">
+						<text class="table-head-name">名称</text>
+						<view class="table-head-price table-head-select" @click="openColumnSelector('price')">
+							<text class="table-head-select-text">{{ priceColumnTitle }}</text>
+						</view>
+						<view class="table-head-qty table-head-select" @click="openColumnSelector('quantity')">
+							<text class="table-head-select-text">{{ quantityColumnTitle }}</text>
+						</view>
+						<text class="table-head-total">小计</text>
+					</view>
+
+					<view v-for="(row, index) in rows" :key="row.key" class="quick-row">
+						<input class="row-name" :value="row.name" placeholder="商品名称" @input="handleRowNameInput(index, $event)" />
+						<input class="row-price" type="digit" :value="row.price" placeholder="0.00" @input="handleRowPriceInput(index, $event)" />
+						<input class="row-qty" type="number" :value="row.quantity" placeholder="1" @input="handleRowQuantityInput(index, $event)" />
+						<text class="row-total">¥ {{ rowTotalText(row) }}</text>
+						<view class="row-remove" @click="removeRow(index)">
+							<text class="row-remove-text">删</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view class="footer-bar">
+			<view class="footer-secondary" @click="goBack">
+				<text class="footer-secondary-text">返回</text>
+			</view>
+			<view :class="canSubmit ? 'footer-primary' : 'footer-primary footer-primary-disabled'" @click="submitRows">
+				<text class="footer-primary-text">{{ submitText }}</text>
+			</view>
+		</view>
+
+		<view v-if="aiModalVisible" class="ai-mask">
+			<view class="ai-modal">
+				<view class="ai-modal-head">
+					<text class="ai-modal-title">AI图片识别规则</text>
+					<view class="ai-close" @click="closeAIModal"><text class="ai-close-text">关闭</text></view>
+				</view>
+
+				<scroll-view scroll-y="true" class="ai-modal-scroll">
+					<view class="ai-block">
+						<text class="ai-block-title">推荐流程</text>
+						<text class="ai-text">打开支持图片的AI，把手写采购单图片发给它，再粘贴下面规则。常见可用：ChatGPT、Gemini、Claude、豆包、通义千问。</text>
+					</view>
+
+					<view class="ai-rule-box">
+						<text class="ai-rule-text">{{ aiPromptText }}</text>
+					</view>
+
+					<view class="ai-copy-btn" @click="copyAIPrompt">
+						<text class="ai-copy-btn-text">复制规则</text>
+					</view>
+
+					<view class="ai-block">
+						<text class="ai-block-title">AI返回结果</text>
+						<textarea class="ai-textarea" :value="aiResultText" placeholder="例如：&#10;T恤 10 11&#10;裤子 11 23" @input="handleAIResultInput"></textarea>
+					</view>
+
+					<view v-if="aiParsedRows.length > 0" class="ai-preview">
+						<view class="ai-preview-head">
+							<text class="ai-preview-head-name">名称</text>
+							<text class="ai-preview-head-price">价格</text>
+							<text class="ai-preview-head-qty">数量</text>
+						</view>
+						<view v-for="(row, index) in aiParsedRows" :key="'ai-' + index.toString()" class="ai-preview-row">
+							<text class="ai-preview-name">{{ row.name }}</text>
+							<text class="ai-preview-price">{{ row.price }}</text>
+							<text class="ai-preview-qty">{{ row.quantity.toString() }}</text>
+						</view>
+					</view>
+
+					<view v-else-if="hasAIResultText" class="ai-empty">
+						<text class="ai-empty-text">未识别到有效行，请确认格式为：名称 价格 数量</text>
+					</view>
+				</scroll-view>
+
+				<view class="ai-modal-actions">
+					<view class="ai-modal-secondary" @click="clearAIResult"><text class="ai-modal-secondary-text">清空</text></view>
+					<view :class="aiParsedRows.length > 0 ? 'ai-modal-primary' : 'ai-modal-primary ai-modal-primary-disabled'" @click="applyAIResult">
+						<text class="ai-modal-primary-text">加入列表 {{ aiParsedRows.length.toString() }}</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { quickProcurement, QuickProcurementItem } from '@/pkg/api/modules/purchases.uts'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+
+type QuickDraftRow = {
+	key: string
+	name: string
+	price: string
+	quantity: string
+}
+
+type AIParsedRow = {
+	name: string
+	price: string
+	quantity: number
+}
+
+const refreshStorageKey = 'refresh:pages:purchases:details:index'
+const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
+const purchaseId = ref('')
+const draftText = ref('')
+const draftFocus = ref(false)
+const rows = ref<QuickDraftRow[]>([])
+const submitting = ref(false)
+const nextRowId = ref(1)
+const aiModalVisible = ref(false)
+const aiResultText = ref('')
+const aiPromptText = ref('请识别这张手写采购单，只输出商品行，不要解释，不要表格，不要序号。每行必须使用格式：商品名称 采购价 数量。采购价只写数字，数量只写整数。示例：\nT恤 10 11\n裤子 11 23\n不要猜商品名称；如果商品名称看不清，但价格和数量看得清，商品名称请固定写“无名称”，例如：无名称 10 11。完全看不清的行请跳过。')
+const aiParsedRows = ref<AIParsedRow[]>([])
+const columnsSwapped = ref(false)
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	return '' + value
+}
+
+function readInputValue(event: any): string {
+	const inputEvent = event as UniInputEvent
+	return inputEvent.detail.value
+}
+
+function parseErrorMessage(error: any | null, fallback: string): string {
+	const latestMessage = takeLatestResponseMessage()
+	if (latestMessage != '') return latestMessage
+	if (error == null) return fallback
+	const directMessage = (error as Error).message
+	if (directMessage != null && directMessage != '') return directMessage
+	const text = stringValue(error)
+	return text == '' || text == '[object Object]' ? fallback : text
+}
+
+function focusDraftSoon() {
+	draftFocus.value = false
+	setTimeout(() => {
+		draftFocus.value = true
+	}, 16)
+}
+
+function normalizeLine(value: string): string {
+	let text = value.trim()
+	text = text.split('　').join(' ')
+	text = text.split('\t').join(' ')
+	text = text.split('\n').join(' ')
+	text = text.split(';').join(' ')
+	text = text.split('；').join(' ')
+	text = text.split('*').join(' ')
+	text = text.split('×').join(' ')
+	text = text.split('X').join(' ')
+	text = text.split('x').join(' ')
+	return text
+}
+
+function trimToken(value: string): string {
+	let text = value.trim()
+	while (text.startsWith(',') || text.startsWith('，') || text.startsWith('¥')) {
+		text = text.substring(1).trim()
+	}
+	while (text.endsWith(',') || text.endsWith('，') || text.endsWith('元')) {
+		text = text.substring(0, text.length - 1).trim()
+	}
+	return text
+}
+
+function compactTokens(value: string): string[] {
+	const raw = normalizeLine(value).split(' ')
+	const result: string[] = []
+	for (let index = 0; index < raw.length; index += 1) {
+		const token = trimToken(raw[index])
+		if (token != '') result.push(token)
+	}
+	return result
+}
+
+function decimalText(value: string): string {
+	let text = trimToken(value)
+	text = text.split('￥').join('').split('¥').join('').split('元').join('').split(' ').join('')
+	const commaIndex = text.lastIndexOf(',')
+	const dotIndex = text.lastIndexOf('.')
+	if (commaIndex >= 0 && dotIndex >= 0) {
+		if (commaIndex > dotIndex) {
+			text = text.split('.').join('').split(',').join('.')
+		} else {
+			text = text.split(',').join('')
+		}
+	} else if (commaIndex >= 0) {
+		const parts = text.split(',')
+		if (parts.length == 2 && (parts[1].length == 1 || parts[1].length == 2)) {
+			text = parts[0] + '.' + parts[1]
+		} else {
+			text = parts.join('')
+		}
+	} else if (dotIndex >= 0) {
+		const parts = text.split('.')
+		if (parts.length > 2) {
+			let prefix = ''
+			for (let index = 0; index < parts.length - 1; index += 1) {
+				prefix = prefix + parts[index]
+			}
+			text = prefix + '.' + parts[parts.length - 1]
+		}
+	}
+	let result = ''
+	let dotCount = 0
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch == '.') {
+			dotCount += 1
+			if (dotCount <= 1) result = result + ch
+			continue
+		}
+		if (ch >= '0' && ch <= '9') result = result + ch
+	}
+	return result
+}
+
+function isDecimalToken(value: string): boolean {
+	const text = decimalText(value)
+	if (text == '') return false
+	let dotCount = 0
+	let digitCount = 0
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch == '.') {
+			dotCount += 1
+			if (dotCount > 1) return false
+			continue
+		}
+		if (ch < '0' || ch > '9') return false
+		digitCount += 1
+	}
+	return digitCount > 0
+}
+
+function isIntegerToken(value: string): boolean {
+	const text = trimToken(value)
+	if (text == '') return false
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch < '0' || ch > '9') return false
+	}
+	return true
+}
+
+function parsedDraft(value: string, fallbackName: string = ''): UTSJSONObject {
+	const tokens = compactTokens(value)
+	if (tokens.length < 2) return { valid: false, message: '请输入商品名称、采购价、数量' } as UTSJSONObject
+	let quantityIndex = -1
+	for (let index = tokens.length - 1; index >= 0; index -= 1) {
+		if (isIntegerToken(tokens[index])) {
+			quantityIndex = index
+			break
+		}
+	}
+	if (quantityIndex <= 0) return { valid: false, message: '数量必须是整数' } as UTSJSONObject
+	let priceIndex = -1
+	for (let index = quantityIndex - 1; index >= 0; index -= 1) {
+		if (isDecimalToken(tokens[index])) {
+			priceIndex = index
+			break
+		}
+	}
+	if (priceIndex <= 0) return { valid: false, message: '采购价必须大于 0' } as UTSJSONObject
+	const priceText = decimalText(tokens[priceIndex])
+	const price = parseFloat(priceText)
+	const quantity = parseInt(trimToken(tokens[quantityIndex]))
+	if (isNaN(price) || price <= 0) return { valid: false, message: '采购价必须大于 0' } as UTSJSONObject
+	if (isNaN(quantity) || quantity <= 0) return { valid: false, message: '数量必须大于 0' } as UTSJSONObject
+	const nameParts: string[] = []
+	for (let index = 0; index < priceIndex; index += 1) {
+		nameParts.push(tokens[index])
+	}
+	let name = nameParts.join(' ').trim()
+	if (name == '' && fallbackName != '') name = fallbackName
+	if (name == '') return { valid: false, message: '商品名称不能为空' } as UTSJSONObject
+	return {
+		valid: true,
+		name: name,
+		price: priceText,
+		quantity: quantity,
+	} as UTSJSONObject
+}
+
+function rowTotal(row: QuickDraftRow): number {
+	const price = parseFloat(row.price)
+	const quantity = parseInt(row.quantity)
+	if (isNaN(price) || isNaN(quantity)) return 0.0
+	return price * quantity
+}
+
+function rowTotalText(row: QuickDraftRow): string {
+	return rowTotal(row).toFixed(2)
+}
+
+function appendRow(name: string, price: string, quantity: number) {
+	for (let index = 0; index < rows.value.length; index += 1) {
+		const row = rows.value[index]
+		if (row.name == name && row.price == price) {
+			const currentQty = parseInt(row.quantity)
+			row.quantity = ((isNaN(currentQty) ? 0 : currentQty) + quantity).toString()
+			return
+		}
+	}
+	const key = nextRowId.value.toString()
+	nextRowId.value = nextRowId.value + 1
+	rows.value.unshift({
+		key: key,
+		name: name,
+		price: price,
+		quantity: quantity.toString(),
+	} as QuickDraftRow)
+}
+
+function handleDraftInput(event: any) {
+	draftText.value = readInputValue(event)
+}
+
+function handleDraftConfirm() {
+	const parsed = parsedDraft(draftText.value)
+	if (stringValue(parsed['valid']) != 'true') {
+		uni.showToast({ title: stringValue(parsed['message'], '格式不完整'), icon: 'none' })
+		focusDraftSoon()
+		return
+	}
+	appendRow(stringValue(parsed['name']), stringValue(parsed['price']), parseInt(stringValue(parsed['quantity'])))
+	draftText.value = ''
+	focusDraftSoon()
+}
+
+function splitAIText(value: string): string[] {
+	const normalized = value.split('\r').join('\n').split('；').join('\n').split(';').join('\n').split('，').join('\n')
+	const rawLines = normalized.split('\n')
+	const result: string[] = []
+	for (let index = 0; index < rawLines.length; index += 1) {
+		const line = rawLines[index].trim()
+		if (line != '') result.push(line)
+	}
+	return result
+}
+
+function parseAITextRows(value: string): AIParsedRow[] {
+	const lines = splitAIText(value)
+	const result: AIParsedRow[] = []
+	for (let index = 0; index < lines.length; index += 1) {
+		const parsed = parsedDraft(lines[index], '无名称')
+		if (stringValue(parsed['valid']) != 'true') continue
+		result.push({
+			name: stringValue(parsed['name']),
+			price: stringValue(parsed['price']),
+			quantity: parseInt(stringValue(parsed['quantity'])),
+		} as AIParsedRow)
+	}
+	return result
+}
+
+function openAIModal() {
+	aiModalVisible.value = true
+}
+
+function closeAIModal() {
+	aiModalVisible.value = false
+	focusDraftSoon()
+}
+
+function copyAIPrompt() {
+	uni.setClipboardData({
+		data: aiPromptText.value,
+		success: () => {
+			uni.showToast({ title: '规则已复制', icon: 'success' })
+		},
+	})
+}
+
+function handleAIResultInput(event: any) {
+	aiResultText.value = readInputValue(event)
+	aiParsedRows.value = parseAITextRows(aiResultText.value)
+}
+
+function clearAIResult() {
+	aiResultText.value = ''
+	aiParsedRows.value = [] as AIParsedRow[]
+}
+
+function applyAIResult() {
+	if (aiParsedRows.value.length == 0) {
+		uni.showToast({ title: '没有可加入的条目', icon: 'none' })
+		return
+	}
+	for (let index = 0; index < aiParsedRows.value.length; index += 1) {
+		const row = aiParsedRows.value[index]
+		appendRow(row.name, row.price, row.quantity)
+	}
+	aiResultText.value = ''
+	aiParsedRows.value = [] as AIParsedRow[]
+	aiModalVisible.value = false
+	focusDraftSoon()
+}
+
+function handleRowNameInput(index: number, event: any) {
+	if (index < 0 || index >= rows.value.length) return
+	rows.value[index].name = readInputValue(event)
+}
+
+function handleRowPriceInput(index: number, event: any) {
+	if (index < 0 || index >= rows.value.length) return
+	rows.value[index].price = decimalText(readInputValue(event))
+}
+
+function handleRowQuantityInput(index: number, event: any) {
+	if (index < 0 || index >= rows.value.length) return
+	rows.value[index].quantity = readInputValue(event)
+}
+
+function normalizedPriceText(value: string): string {
+	const text = decimalText(value)
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) return value
+	return text
+}
+
+function normalizedQuantityText(value: string): string {
+	const parsed = parseInt(decimalText(value))
+	if (isNaN(parsed)) return value
+	if (parsed <= 0) return value
+	return parsed.toString()
+}
+
+function swapPriceQuantityColumns() {
+	for (let index = 0; index < rows.value.length; index += 1) {
+		const row = rows.value[index]
+		const oldPrice = row.price
+		const oldQuantity = row.quantity
+		row.price = normalizedPriceText(oldQuantity)
+		row.quantity = normalizedQuantityText(oldPrice)
+	}
+	columnsSwapped.value = !columnsSwapped.value
+}
+
+function openColumnSelector(columnKey: string) {
+	if (rows.value.length == 0) {
+		uni.showToast({ title: '请先加入条目', icon: 'none' })
+		return
+	}
+	const itemList = columnKey == 'price' ? ['此列是价格', '此列是数量'] : ['此列是数量', '此列是价格']
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			if (res.tapIndex == 1) {
+				swapPriceQuantityColumns()
+				uni.showToast({ title: '已交换价格和数量', icon: 'success' })
+			}
+		},
+	})
+}
+
+function removeRow(index: number) {
+	if (index < 0 || index >= rows.value.length) return
+	rows.value.splice(index, 1)
+	focusDraftSoon()
+}
+
+function clearRows() {
+	if (rows.value.length == 0) {
+		focusDraftSoon()
+		return
+	}
+	uni.showModal({
+		title: '清空待上传',
+		content: '确定清空当前条目吗？',
+		success: (res) => {
+			if (!res.confirm) return
+			rows.value = [] as QuickDraftRow[]
+			focusDraftSoon()
+		},
+	})
+}
+
+function rowValid(row: QuickDraftRow): boolean {
+	const price = parseFloat(row.price)
+	const quantity = parseInt(row.quantity)
+	return row.name.trim() != '' && !isNaN(price) && price > 0 && !isNaN(quantity) && quantity > 0
+}
+
+function firstInvalidMessage(): string {
+	if (rows.value.length == 0) return '请先加入条目'
+	for (let index = 0; index < rows.value.length; index += 1) {
+		if (!rowValid(rows.value[index])) return '第 ' + (index + 1).toString() + ' 行不完整'
+	}
+	return ''
+}
+
+function markRefreshNeeded() {
+	uni.setStorageSync(refreshStorageKey + ':' + purchaseId.value, '1')
+	uni.setStorageSync(purchaseListRefreshStorageKey, '1')
+}
+
+function goBack() {
+	uni.navigateBack({ delta: 1 })
+}
+
+async function submitRows() {
+	if (submitting.value) return
+	if (purchaseId.value == '') {
+		uni.showToast({ title: '缺少采购单 ID', icon: 'none' })
+		return
+	}
+	const invalidMessage = firstInvalidMessage()
+	if (invalidMessage != '') {
+		uni.showToast({ title: invalidMessage, icon: 'none' })
+		focusDraftSoon()
+		return
+	}
+	const items: QuickProcurementItem[] = []
+	for (let index = rows.value.length - 1; index >= 0; index -= 1) {
+		const row = rows.value[index]
+		items.push({
+			name: row.name.trim(),
+			price: decimalText(row.price),
+			quantity: parseInt(row.quantity),
+		} as QuickProcurementItem)
+	}
+	submitting.value = true
+	uni.showLoading({ title: '上传中...', mask: true })
+	try {
+		await quickProcurement(purchaseId.value, items)
+		markRefreshNeeded()
+		uni.showToast({ title: takeLatestResponseMessage('上传成功'), icon: 'success' })
+		setTimeout(() => {
+			goBack()
+		}, 600)
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '上传失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+const homePath = computed((): string => {
+	return '/pages/purchases/details/index?purchase=' + purchaseId.value
+})
+
+const pageTitle = computed((): string => {
+	return '手写采购单'
+})
+
+const previewText = computed((): string => {
+	const parsed = parsedDraft(draftText.value)
+	if (stringValue(parsed['valid']) != 'true') return ''
+	return stringValue(parsed['name']) + ' / ¥ ' + stringValue(parsed['price']) + ' / x ' + stringValue(parsed['quantity'])
+})
+
+const hasAIResultText = computed((): boolean => {
+	return aiResultText.value.trim() != ''
+})
+
+const priceColumnTitle = computed((): string => {
+	return columnsSwapped.value ? '数量' : '价格'
+})
+
+const quantityColumnTitle = computed((): string => {
+	return columnsSwapped.value ? '价格' : '数量'
+})
+
+const totalQuantity = computed((): number => {
+	let total = 0
+	for (let index = 0; index < rows.value.length; index += 1) {
+		const quantity = parseInt(rows.value[index].quantity)
+		if (!isNaN(quantity)) total = total + quantity
+	}
+	return total
+})
+
+const totalAmountText = computed((): string => {
+	let total = 0.0
+	for (let index = 0; index < rows.value.length; index += 1) {
+		total = total + rowTotal(rows.value[index])
+	}
+	return total.toFixed(2)
+})
+
+const canSubmit = computed((): boolean => {
+	return !submitting.value && firstInvalidMessage() == ''
+})
+
+const submitText = computed((): string => {
+	if (submitting.value) return '上传中'
+	return '上传 ' + rows.value.length.toString() + ' 行'
+})
+
+onLoad((query: OnLoadOptions) => {
+	const purchaseValue = query['purchase']
+	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
+	focusDraftSoon()
+})
+
+onShow(() => {
+	focusDraftSoon()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; }
+.content { padding-top: 8px; padding-right: 8px; padding-bottom: 92px; padding-left: 8px; }
+.entry-panel,
+.rows-panel { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 10px; margin-bottom: 8px; }
+.summary-strip { flex-direction: row; margin-bottom: 10px; }
+.summary-item { flex: 1; min-height: 48px; border-radius: 8px; background-color: #F8FAFC; align-items: center; justify-content: center; margin-right: 6px; }
+.summary-item:last-child { margin-right: 0; }
+.summary-value { font-size: 17px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.summary-label { font-size: 11px; line-height: 15px; color: #64748B; margin-top: 2px; }
+.quick-input-box { min-height: 52px; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #CBD5E1; background-color: #FFFFFF; flex-direction: row; align-items: center; padding-left: 12px; }
+.quick-input { flex: 1; height: 50px; font-size: 17px; color: #0F172A; }
+.enter-btn { width: 68px; height: 42px; margin-right: 5px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.enter-btn-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+.preview-line { min-height: 28px; justify-content: center; padding-left: 2px; }
+.preview-text { font-size: 12px; line-height: 16px; color: #0F766E; }
+.ai-entry { min-height: 48px; flex-direction: row; align-items: center; border-radius: 8px; background-color: #F0FDFA; border-width: 1px; border-style: solid; border-color: #99F6E4; padding-left: 12px; padding-right: 12px; margin-top: 8px; }
+.ai-entry-copy { flex: 1; }
+.ai-entry-title { font-size: 14px; line-height: 19px; color: #134E4A; font-weight: bold; }
+.ai-entry-desc { font-size: 11px; line-height: 15px; color: #0F766E; margin-top: 2px; }
+.ai-entry-action { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.rows-head { height: 32px; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.rows-title { font-size: 15px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.small-action { height: 30px; min-width: 54px; padding-left: 12px; padding-right: 12px; border-radius: 8px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.small-action-text { font-size: 12px; color: #475569; }
+.empty-state { height: 96px; border-radius: 8px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.empty-state-text { font-size: 13px; color: #94A3B8; }
+.table-head { height: 30px; flex-direction: row; align-items: center; background-color: #F8FAFC; border-radius: 8px; padding-left: 10px; padding-right: 52px; margin-bottom: 4px; }
+.table-head-name,
+.table-head-total { font-size: 11px; line-height: 15px; color: #64748B; font-weight: bold; }
+.table-head-name { flex: 1; }
+.table-head-price { width: 82px; align-items: flex-end; justify-content: center; }
+.table-head-qty { width: 58px; align-items: flex-end; justify-content: center; }
+.table-head-total { width: 76px; text-align: right; }
+.table-head-select { min-height: 28px; border-radius: 8px; background-color: #ECFDF5; padding-right: 6px; }
+.table-head-select-text { font-size: 11px; line-height: 15px; color: #0F766E; font-weight: bold; }
+.quick-row { flex-direction: row; padding-top: 6px; padding-bottom: 6px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #EEF2F7; }
+.quick-row:last-child { border-bottom-width: 0; }
+.row-name { flex: 1; height: 36px; border-radius: 8px; background-color: #F8FAFC; padding-left: 10px; padding-right: 10px; font-size: 14px; color: #0F172A; }
+.row-price { width: 82px; height: 36px; border-radius: 8px; background-color: #F8FAFC; padding-left: 8px; padding-right: 8px; margin-left: 6px; font-size: 13px; color: #0F172A; text-align: right; }
+.row-qty { width: 58px; height: 36px; border-radius: 8px; background-color: #F8FAFC; padding-left: 8px; padding-right: 8px; margin-left: 6px; font-size: 13px; color: #0F172A; text-align: right; }
+.row-total { width: 76px; font-size: 13px; line-height: 36px; color: #0F766E; text-align: right; }
+.row-remove { width: 42px; margin-left: 8px; border-radius: 8px; background-color: #FEF2F2; align-items: center; justify-content: center; }
+.row-remove-text { font-size: 13px; color: #B42318; font-weight: bold; }
+.ai-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(15, 23, 42, 0.45); align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.ai-modal { width: 100%; max-height: 620px; border-radius: 8px; background-color: #FFFFFF; overflow: hidden; }
+.ai-modal-head { height: 52px; flex-direction: row; align-items: center; padding-left: 14px; padding-right: 10px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #E2E8F0; }
+.ai-modal-title { flex: 1; font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.ai-close { height: 34px; padding-left: 12px; padding-right: 12px; border-radius: 8px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.ai-close-text { font-size: 13px; color: #475569; }
+.ai-modal-scroll { height: 520px; padding-left: 12px; padding-right: 12px; }
+.ai-block { margin-top: 12px; }
+.ai-block-title { font-size: 14px; line-height: 19px; color: #0F172A; font-weight: bold; }
+.ai-text { font-size: 12px; line-height: 18px; color: #475569; margin-top: 6px; }
+.ai-rule-box { margin-top: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 10px; }
+.ai-rule-text { font-size: 12px; line-height: 18px; color: #0F172A; }
+.ai-copy-btn { height: 40px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; margin-top: 8px; }
+.ai-copy-btn-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+.ai-textarea { height: 118px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; padding: 10px; margin-top: 8px; font-size: 14px; color: #0F172A; }
+.ai-preview { margin-top: 10px; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; overflow: hidden; }
+.ai-preview-head,
+.ai-preview-row { min-height: 32px; flex-direction: row; align-items: center; padding-left: 10px; padding-right: 10px; }
+.ai-preview-head { background-color: #F8FAFC; }
+.ai-preview-row { border-top-width: 1px; border-top-style: solid; border-top-color: #EEF2F7; }
+.ai-preview-head-name,
+.ai-preview-name { flex: 1; font-size: 12px; line-height: 17px; color: #0F172A; }
+.ai-preview-head-price,
+.ai-preview-price { width: 72px; font-size: 12px; line-height: 17px; color: #0F172A; text-align: right; }
+.ai-preview-head-qty,
+.ai-preview-qty { width: 52px; font-size: 12px; line-height: 17px; color: #0F172A; text-align: right; }
+.ai-preview-head-name,
+.ai-preview-head-price,
+.ai-preview-head-qty { color: #64748B; font-weight: bold; }
+.ai-empty { height: 44px; border-radius: 8px; background-color: #FEF2F2; align-items: center; justify-content: center; margin-top: 10px; padding-left: 10px; padding-right: 10px; }
+.ai-empty-text { font-size: 12px; line-height: 17px; color: #B42318; text-align: center; }
+.ai-modal-actions { height: 62px; flex-direction: row; padding-top: 8px; padding-left: 12px; padding-right: 12px; border-top-width: 1px; border-top-style: solid; border-top-color: #E2E8F0; }
+.ai-modal-secondary,
+.ai-modal-primary { height: 44px; border-radius: 8px; align-items: center; justify-content: center; }
+.ai-modal-secondary { width: 82px; background-color: #F1F5F9; margin-right: 8px; }
+.ai-modal-primary { flex: 1; background-color: #0F172A; }
+.ai-modal-primary-disabled { background-color: #94A3B8; }
+.ai-modal-secondary-text { font-size: 14px; color: #475569; font-weight: bold; }
+.ai-modal-primary-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+.footer-bar { position: fixed; left: 0; right: 0; bottom: 0; height: 72px; flex-direction: row; padding-top: 8px; padding-left: 10px; padding-right: 10px; background-color: #FFFFFF; border-top-width: 1px; border-top-style: solid; border-top-color: #E2E8F0; }
+.footer-secondary,
+.footer-primary { height: 48px; border-radius: 8px; align-items: center; justify-content: center; }
+.footer-secondary { width: 92px; background-color: #F1F5F9; margin-right: 8px; }
+.footer-primary { flex: 1; background-color: #0F172A; }
+.footer-primary-disabled { background-color: #94A3B8; }
+.footer-secondary-text { font-size: 15px; color: #334155; font-weight: bold; }
+.footer-primary-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
+</style>

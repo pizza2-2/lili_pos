@@ -1,0 +1,33 @@
+export type ExcelPickerResult = {
+	success: boolean
+	code: string
+	message: string
+	filePath: string
+	fileName: string
+	uri: string
+}
+
+export type ExcelPickerCallback = (result: ExcelPickerResult) => void
+export type PickExcelFile = (callback: ExcelPickerCallback) => void
+
+export type ExcelParseCell = {
+	column: string
+	value: string
+}
+
+export type ExcelParseRow = {
+	row_number: number
+	cells: ExcelParseCell[]
+}
+
+export type ExcelParseResult = {
+	success: boolean
+	code: string
+	message: string
+	filePath: string
+	max_row: number
+	max_column: number
+	rows: ExcelParseRow[]
+}
+
+export type ParseExcelFile = (filePath: string) => ExcelParseResult

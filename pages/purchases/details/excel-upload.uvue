@@ -1,0 +1,1549 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" :homePath="homePath" backgroundColor="#EEF2F7" />
+
+		<scroll-view scroll-y="true" class="page-scroll">
+			<view class="content">
+				<view class="panel">
+					<text class="panel-title">Excel文件</text>
+					<view class="file-box" @click="chooseExcelFile">
+						<view class="file-copy">
+							<text class="file-title">{{ fileNameText }}</text>
+							<text class="file-desc">{{ filePathText }}</text>
+						</view>
+						<view class="file-action-wrap">
+							<text class="file-action">选择</text>
+						</view>
+					</view>
+					<view class="hint-row">
+						<text class="hint-text">选择供应商 .xlsx、.csv、.tsv 后，会自动读取行数和列数，再手动指定字段对应列。</text>
+					</view>
+					<view class="ai-entry" @click="openAIModal">
+						<view class="ai-entry-copy">
+							<text class="ai-entry-title">AI辅助配置</text>
+							<text class="ai-entry-desc">让AI判断开始行和字段列，再应用到当前Excel解析配置。</text>
+						</view>
+						<view class="ai-entry-action"><text class="ai-entry-action-text">打开</text></view>
+					</view>
+				</view>
+
+				<view v-if="columnOptions.length > 0" class="panel">
+					<view class="panel-head">
+						<text class="panel-title">文件列</text>
+						<text class="panel-meta">{{ detectedColumnText }}</text>
+					</view>
+					<scroll-view scroll-x="true" class="column-scroll">
+						<view class="column-list">
+							<view v-for="column in columnOptions" :key="column.column" class="column-chip">
+								<text class="column-chip-title">{{ column.column }}</text>
+								<text class="column-chip-text">{{ column.sample }}</text>
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+
+				<view class="panel">
+					<view class="panel-head">
+						<text class="panel-title">解析配置</text>
+						<view class="mini-btn" @click="resetConfig"><text class="mini-btn-text">默认</text></view>
+					</view>
+					<view class="config-grid">
+						<view class="field">
+							<text class="field-label">工作表</text>
+							<input class="field-input" :value="sheetName" placeholder="默认第一个" @input="handleSheetInput" />
+						</view>
+						<view class="field">
+							<text class="field-label">开始行</text>
+							<input class="field-input" type="number" :value="startRow" placeholder="2" @input="handleStartRowInput" />
+						</view>
+						<view class="field">
+							<text class="field-label">表头行</text>
+							<view class="field-select" @click="openHeaderRowSelector">
+								<text class="field-select-text">{{ headerRowText }}</text>
+							</view>
+						</view>
+						<view class="field">
+							<text class="field-label">结束行</text>
+							<input class="field-input" type="number" :value="endRow" placeholder="空=自动" @input="handleEndRowInput" />
+						</view>
+					</view>
+					<view class="mapping-list">
+						<view v-for="row in mappingRows" :key="row.key" class="mapping-row">
+							<view class="mapping-name">
+								<text class="mapping-label">{{ row.label }}</text>
+								<text class="mapping-key">{{ row.key }}</text>
+							</view>
+							<view class="mapping-select" @click="openColumnSelector(row.key)">
+								<text class="mapping-select-text">{{ row.columnText }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="panel">
+					<text class="panel-title">操作</text>
+					<view class="action-row">
+						<view :class="hasFile ? 'action-btn action-btn-light' : 'action-btn action-btn-disabled'" @click="runPreview">
+							<text class="action-btn-light-text">重新读取</text>
+						</view>
+						<view :class="hasFile ? 'action-btn action-btn-light' : 'action-btn action-btn-disabled'" @click="runPrecheck">
+							<text class="action-btn-light-text">预检</text>
+						</view>
+						<view :class="canImport ? 'action-btn action-btn-primary' : 'action-btn action-btn-disabled'" @click="runImport">
+							<text class="action-btn-primary-text">导入</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="summaryItems.length > 0" class="panel">
+					<text class="panel-title">结果统计</text>
+					<view class="summary-grid">
+						<view v-for="item in summaryItems" :key="item.key" class="summary-item">
+							<text class="summary-value">{{ item.value }}</text>
+							<text class="summary-label">{{ item.label }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="previewRows.length > 0" class="panel">
+					<text class="panel-title">文件预览</text>
+					<scroll-view scroll-x="true" class="preview-scroll">
+						<view class="preview-table">
+							<view class="preview-row preview-header">
+								<text class="preview-row-no">行</text>
+								<text v-for="column in columnOptions" :key="column.column" class="preview-cell preview-header-cell">{{ column.previewTitle }}</text>
+							</view>
+							<view v-for="row in previewRows" :key="row.key" class="preview-row">
+								<text class="preview-row-no">{{ row.rowNumber }}</text>
+								<text v-for="cell in row.cells" :key="cell.key" class="preview-cell">{{ cell.value }}</text>
+							</view>
+						</view>
+					</scroll-view>
+				</view>
+
+				<view v-if="messageText != ''" class="message-panel">
+					<text class="message-text">{{ messageText }}</text>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view v-if="aiModalVisible" class="ai-mask">
+			<view class="ai-modal">
+				<view class="ai-modal-head">
+					<text class="ai-modal-title">AI辅助配置</text>
+					<view class="ai-close" @click="closeAIModal"><text class="ai-close-text">关闭</text></view>
+				</view>
+				<scroll-view scroll-y="true" class="ai-modal-scroll">
+					<view class="ai-block">
+						<text class="ai-block-title">复制给AI的规则</text>
+						<view class="ai-rule-box">
+							<text class="ai-rule-text">{{ aiPromptText }}</text>
+						</view>
+						<view class="ai-copy-btn" @click="copyAIPrompt">
+							<text class="ai-copy-text">复制规则</text>
+						</view>
+					</view>
+					<view class="ai-block">
+						<text class="ai-block-title">粘贴AI返回结果</text>
+						<textarea class="ai-textarea" :value="aiResultText" placeholder="例如：开始行: 2&#10;中文名: B&#10;采购价: E&#10;数量: I&#10;条形码: J" @input="handleAIResultInput" />
+					</view>
+					<view v-if="aiParsedMappings.length > 0 || aiParsedStartRow != '' || aiParsedEndRow != ''" class="ai-preview">
+						<view class="ai-config-row">
+							<text class="ai-config-label">开始行</text>
+							<text class="ai-config-value">{{ aiParsedStartRow == '' ? '未识别' : aiParsedStartRow }}</text>
+							<text class="ai-config-label">结束行</text>
+							<text class="ai-config-value">{{ aiParsedEndRow == '' ? '自动' : aiParsedEndRow }}</text>
+						</view>
+						<view class="ai-preview-head">
+							<text class="ai-preview-cell ai-name-cell">字段</text>
+							<text class="ai-preview-cell">列</text>
+							<text class="ai-preview-cell ai-wide-cell">当前列样例</text>
+						</view>
+						<view v-for="(row, index) in aiParsedMappings" :key="'ai-' + index.toString()" class="ai-preview-row">
+							<text class="ai-preview-cell ai-name-cell">{{ row.label }}</text>
+							<text class="ai-preview-cell">{{ row.column == '' ? '不导入' : row.column }}</text>
+							<text class="ai-preview-cell ai-wide-cell">{{ row.columnText }}</text>
+						</view>
+					</view>
+					<view v-if="aiResultText != '' && aiParsedMappings.length == 0 && aiParsedStartRow == '' && aiParsedEndRow == ''" class="ai-empty">
+						<text class="ai-empty-text">没有解析到开始行或字段列，请检查AI是否按规则返回。</text>
+					</view>
+				</scroll-view>
+				<view class="ai-modal-actions">
+					<view class="ai-modal-secondary" @click="clearAIResult"><text class="ai-modal-secondary-text">清空</text></view>
+					<view :class="aiParsedMappings.length > 0 || aiParsedStartRow != '' || aiParsedEndRow != '' ? 'ai-modal-primary' : 'ai-modal-primary ai-modal-primary-disabled'" @click="applyAIResult">
+						<text class="ai-modal-primary-text">应用配置 {{ aiParsedMappings.length.toString() }}</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getSupplierExcelImportTaskStatus, precheckSupplierExcelImport, PurchaseImportResponse, startSupplierExcelImportTask } from '@/pkg/api/modules/purchases.uts'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { parseExcelFile, pickExcelFile } from '@/uni_modules/lili-excel-picker'
+import { type ExcelParseResult, type ExcelPickerResult } from '@/uni_modules/lili-excel-picker/utssdk/interface.uts'
+
+type PreviewCell = {
+	key: string
+	column: string
+	value: string
+}
+
+type PreviewRow = {
+	key: string
+	rowNumber: string
+	cells: PreviewCell[]
+}
+
+type SummaryItem = {
+	key: string
+	label: string
+	value: string
+}
+
+type ColumnOption = {
+	column: string
+	label: string
+	sample: string
+	previewTitle: string
+}
+
+type FieldDefinition = {
+	key: string
+	label: string
+	required: boolean
+}
+
+type FieldMappingRow = {
+	key: string
+	label: string
+	required: boolean
+	column: string
+	columnText: string
+}
+
+type AIParsedMapping = {
+	key: string
+	label: string
+	column: string
+	columnText: string
+}
+
+const FIELD_DEFINITIONS: FieldDefinition[] = [
+	{ key: 'image', label: '图片', required: false } as FieldDefinition,
+	{ key: 'name_cn', label: '中文名', required: false } as FieldDefinition,
+	{ key: 'name_en', label: '外文名', required: false } as FieldDefinition,
+	{ key: 'name_other', label: '其他名', required: false } as FieldDefinition,
+	{ key: 'purchase_price', label: '采购价', required: false } as FieldDefinition,
+	{ key: 'net_purchase_price', label: '不含税采购价', required: false } as FieldDefinition,
+	{ key: 'cost_price', label: '成本价', required: false } as FieldDefinition,
+	{ key: 'base_sales_price', label: '销售价', required: false } as FieldDefinition,
+	{ key: 'quantity', label: '数量', required: true } as FieldDefinition,
+	{ key: 'barcode', label: '条形码', required: false } as FieldDefinition,
+	{ key: 'sku', label: 'SKU', required: false } as FieldDefinition,
+]
+
+const purchaseId = ref('')
+const filePath = ref('')
+const fileName = ref('')
+const sheetName = ref('')
+const startRow = ref('2')
+const headerRow = ref('1')
+const endRow = ref('')
+const allRows = ref<PreviewRow[]>([])
+const previewRows = ref<PreviewRow[]>([])
+const columnOptions = ref<ColumnOption[]>([])
+const mappingRows = ref<FieldMappingRow[]>([])
+const summaryItems = ref<SummaryItem[]>([])
+const messageText = ref('')
+const autoDetectMessage = ref('')
+const precheckPassed = ref(false)
+const running = ref(false)
+const choosingFile = ref(false)
+const maxRow = ref(0)
+const maxColumn = ref(0)
+const aiModalVisible = ref(false)
+const aiResultText = ref('')
+const aiParsedMappings = ref<AIParsedMapping[]>([])
+const aiParsedStartRow = ref('')
+const aiParsedEndRow = ref('')
+const aiPromptText = ref('你是Excel字段映射助手，只做字段配置识别，不要识别商品明细，不要输出商品行，不要解释，不要Markdown表格。\n任务：从截图或预览中找到真正的商品表头行，忽略顶部单据信息，例如客户、供应商、地址、电话、税号、单号、日期、备注、付款、物流。\n判断规则：\n1. 开始行=第一行商品数据，不是表头行。通常是表头下一行。\n2. 结束行=最后一行商品数据。遇到合计、总计、小计、备注、金额汇总、签名、制单人之前停止。\n3. 只返回列字母，例如 A、B、AA；不确定写空。\n4. 数量优先选择实际采购数量/订货数量/出库数量；不要把箱数、包数、装箱数、件数、单位、规格当数量，除非没有更明确的数量列。\n5. 采购价优先选择实际成交价/折后价/含税采购价/单价；原价/吊牌价/零售价通常属于销售价，不要当采购价。\n6. 条形码优先识别 EAN/UPC/Barcode/条码；SKU 优先识别货号/商品码/款号/编码。\n7. 中文名优先识别中文品名/商品名称；外文名优先识别英文名/本地品名/波兰名。\n请严格按下面键值逐行返回，缺失就留空：\n开始行:\n结束行:\n图片:\n中文名:\n外文名:\n其他名:\n采购价:\n不含税采购价:\n成本价:\n销售价:\n数量:\n条形码:\nSKU:\n示例：\n开始行: 8\n结束行: 109\n图片: F\n中文名: D\n外文名: E\n其他名:\n采购价: P\n不含税采购价:\n成本价:\n销售价: J\n数量: H\n条形码: C\nSKU: B')
+
+const homePath = computed((): string => '/pages/purchases/index')
+const pageTitle = computed((): string => 'Excel上传')
+const hasFile = computed((): boolean => filePath.value != '')
+const canImport = computed((): boolean => hasFile.value && precheckPassed.value)
+const fileNameText = computed((): string => fileName.value == '' ? '请选择Excel文件' : fileName.value)
+const filePathText = computed((): string => filePath.value == '' ? '未选择文件' : filePath.value)
+const detectedColumnText = computed((): string => maxRow.value.toString() + '行 / ' + maxColumn.value.toString() + '列')
+const headerRowText = computed((): string => headerRow.value == '' ? '未选择' : '第' + headerRow.value + '行')
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function readInputValue(event: any): string {
+	const inputEvent = event as UniInputEvent
+	return inputEvent.detail.value
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) return [] as UTSJSONObject[]
+		return parsed!
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function parseErrorMessage(error: any | null, fallback: string): string {
+	const latestMessage = takeLatestResponseMessage()
+	if (latestMessage != '') return latestMessage
+	if (error == null) return fallback
+	const directMessage = (error as Error).message
+	if (directMessage != null && directMessage != '') return directMessage
+	const text = stringValue(error)
+	return text == '' || text == '[object Object]' ? fallback : text
+}
+
+function fileNameFromPath(path: string): string {
+	if (path == '') return ''
+	const parts = path.split('/')
+	const last = parts.length > 0 ? parts[parts.length - 1] : path
+	if (last.indexOf('\\') >= 0) {
+		const winParts = last.split('\\')
+		return winParts.length > 0 ? winParts[winParts.length - 1] : last
+	}
+	return last
+}
+
+function columnLetter(index: number): string {
+	let value = index
+	let result = ''
+	const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	while (value > 0) {
+		const remainder = (value - 1) % 26
+		result = letters.substring(remainder, remainder + 1) + result
+		value = Math.floor((value - 1) / 26)
+	}
+	return result
+}
+
+function defaultMappingValue(fieldKey: string): string {
+	if (fieldKey == 'image') return 'A'
+	if (fieldKey == 'name_cn') return 'B'
+	if (fieldKey == 'name_en') return 'C'
+	if (fieldKey == 'name_other') return 'D'
+	if (fieldKey == 'purchase_price') return 'E'
+	if (fieldKey == 'net_purchase_price') return 'F'
+	if (fieldKey == 'cost_price') return 'G'
+	if (fieldKey == 'base_sales_price') return 'H'
+	if (fieldKey == 'quantity') return 'I'
+	if (fieldKey == 'barcode') return 'J'
+	if (fieldKey == 'sku') return 'K'
+	return ''
+}
+
+function selectedColumnText(column: string): string {
+	if (column == '') return '不导入'
+	for (let index = 0; index < columnOptions.value.length; index += 1) {
+		const option = columnOptions.value[index]
+		if (option.column == column) return option.label
+	}
+	return column
+}
+
+function buildDefaultMappingRows(): FieldMappingRow[] {
+	const rows: FieldMappingRow[] = []
+	for (let index = 0; index < FIELD_DEFINITIONS.length; index += 1) {
+		const item = FIELD_DEFINITIONS[index]
+		const column = defaultMappingValue(item.key)
+		rows.push({
+			key: item.key,
+			label: item.label,
+			required: item.required,
+			column: column,
+			columnText: selectedColumnText(column),
+		} as FieldMappingRow)
+	}
+	return rows
+}
+
+function mappingColumn(fieldKey: string): string {
+	for (let index = 0; index < mappingRows.value.length; index += 1) {
+		const item = mappingRows.value[index]
+		if (item.key == fieldKey) return item.column
+	}
+	return ''
+}
+
+function applyMappingFrom(mapping: UTSJSONObject | null) {
+	const nextRows: FieldMappingRow[] = []
+	for (let index = 0; index < FIELD_DEFINITIONS.length; index += 1) {
+		const item = FIELD_DEFINITIONS[index]
+		let column = ''
+		if (mapping != null) {
+			column = stringValue(mapping![item.key]).toUpperCase()
+			if (item.key == 'name_other' && column == '') column = stringValue(mapping!['name_pl']).toUpperCase()
+			if (item.key == 'purchase_price' && column == '') column = stringValue(mapping!['unit_price']).toUpperCase()
+		}
+		if (column == '') column = defaultMappingValue(item.key)
+		nextRows.push({
+			key: item.key,
+			label: item.label,
+			required: item.required,
+			column: column,
+			columnText: selectedColumnText(column),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = nextRows
+}
+
+function refreshMappingText() {
+	const rows = mappingRows.value
+	const nextRows: FieldMappingRow[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const item = rows[index]
+		nextRows.push({
+			key: item.key,
+			label: item.label,
+			required: item.required,
+			column: item.column,
+			columnText: selectedColumnText(item.column),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = nextRows
+}
+
+function findPreviewRow(rowNumber: number): PreviewRow | null {
+	for (let index = 0; index < allRows.value.length; index += 1) {
+		const row = allRows.value[index]
+		if (intValue(row.rowNumber, index + 1) == rowNumber) return row
+	}
+	return null
+}
+
+function selectedHeaderRow(): PreviewRow | null {
+	const number = intValue(headerRow.value, 0)
+	if (number <= 0) return null
+	return findPreviewRow(number)
+}
+
+function previewRowSummary(row: PreviewRow): string {
+	let result = ''
+	let count = 0
+	for (let index = 0; index < row.cells.length && count < 4; index += 1) {
+		const value = row.cells[index].value
+		if (value == '') continue
+		if (result != '') result = result + ' / '
+		result = result + value
+		count = count + 1
+	}
+	return result == '' ? '空行' : result
+}
+
+function syncHeaderRowFromStart() {
+	const start = intValue(startRow.value, 2)
+	headerRow.value = start > 1 ? (start - 1).toString() : ''
+}
+
+function refreshPreviewRows() {
+	const visibleRows: PreviewRow[] = []
+	const headerNumber = intValue(headerRow.value, 0)
+	const start = intValue(startRow.value, 2)
+	let firstVisible = headerNumber > 0 ? headerNumber : start
+	if (firstVisible <= 0) firstVisible = 1
+	for (let index = 0; index < allRows.value.length && visibleRows.length < 20; index += 1) {
+		const row = allRows.value[index]
+		const rowNumber = intValue(row.rowNumber, index + 1)
+		if (rowNumber < firstVisible) continue
+		visibleRows.push(row)
+	}
+	previewRows.value = visibleRows
+}
+
+function previewRowCellValue(row: PreviewRow, column: string): string {
+	for (let index = 0; index < row.cells.length; index += 1) {
+		const cell = row.cells[index]
+		if (cell.column == column) return cell.value
+	}
+	return ''
+}
+
+function previewCellSample(column: string): string {
+	const header = selectedHeaderRow()
+	if (header != null) {
+		const headerValue = previewRowCellValue(header!, column)
+		if (headerValue != '') return headerValue
+	}
+	const start = intValue(startRow.value, 2)
+	for (let rowIndex = 0; rowIndex < allRows.value.length; rowIndex += 1) {
+		const row = allRows.value[rowIndex]
+		const rowNumber = intValue(row.rowNumber, rowIndex + 1)
+		if (rowNumber < start) continue
+		const value = previewRowCellValue(row, column)
+		if (value != '') return value
+	}
+	for (let rowIndex = 0; rowIndex < previewRows.value.length; rowIndex += 1) {
+		const row = previewRows.value[rowIndex]
+		for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+			const cell = row.cells[cellIndex]
+			if (cell.column == column && cell.value != '') return cell.value
+		}
+	}
+	return '空'
+}
+
+function buildColumnOptions() {
+	const options: ColumnOption[] = []
+	for (let index = 1; index <= maxColumn.value; index += 1) {
+		const column = columnLetter(index)
+		const sample = previewCellSample(column)
+		const previewTitle = sample == '空' ? column : column + ' ' + sample
+		options.push({
+			column: column,
+			label: column + '列：' + sample,
+			sample: sample,
+			previewTitle: previewTitle,
+		} as ColumnOption)
+	}
+	columnOptions.value = options
+	refreshMappingText()
+}
+
+function normalizeHeaderText(value: string): string {
+	return value.trim().toLowerCase().split(' ').join('').split('_').join('').split('-').join('')
+}
+
+function isWeakQuantityHeader(text: string): boolean {
+	if (text.indexOf('箱') >= 0) return true
+	if (text.indexOf('包') >= 0) return true
+	if (text.indexOf('装箱') >= 0) return true
+	if (text.indexOf('大包') >= 0) return true
+	if (text.indexOf('中包') >= 0) return true
+	if (text.indexOf('小包') >= 0) return true
+	if (text.indexOf('单位') >= 0) return true
+	if (text.indexOf('规格') >= 0) return true
+	if (text.indexOf('ctn') >= 0) return true
+	if (text.indexOf('pack') >= 0) return true
+	return false
+}
+
+function isSalesPriceHeader(text: string): boolean {
+	if (text.indexOf('原价') >= 0) return true
+	if (text.indexOf('销售价') >= 0) return true
+	if (text.indexOf('售价') >= 0) return true
+	if (text.indexOf('零售价') >= 0) return true
+	if (text.indexOf('吊牌价') >= 0) return true
+	if (text.indexOf('retail') >= 0) return true
+	return false
+}
+
+function headerFieldScore(fieldKey: string, headerValue: string): number {
+	const text = normalizeHeaderText(headerValue)
+	if (text == '') return 0
+	if (fieldKey == 'image') {
+		if (text.indexOf('商品图片') >= 0 || text == 'image' || text == 'photo' || text == 'picture') return 100
+		if (text.indexOf('图片') >= 0 || text.indexOf('照片') >= 0 || text.indexOf('图') >= 0) return 80
+	}
+	if (fieldKey == 'name_cn') {
+		if (text.indexOf('本地品名') >= 0 || text.indexOf('外文') >= 0 || text.indexOf('英文') >= 0) return 0
+		if (text == '品名' || text.indexOf('中文名') >= 0 || text.indexOf('中文品名') >= 0 || text.indexOf('商品名称') >= 0 || text.indexOf('商品名') >= 0 || text.indexOf('产品名称') >= 0 || text.indexOf('货品名称') >= 0) return 100
+		if (text.indexOf('名称') >= 0 || text.indexOf('描述') >= 0 || text == 'description') return 70
+	}
+	if (fieldKey == 'name_en') {
+		if (text.indexOf('本地品名') >= 0 || text.indexOf('当地品名') >= 0 || text.indexOf('当地名称') >= 0) return 100
+		if (text.indexOf('外文名') >= 0 || text.indexOf('英文名') >= 0 || text.indexOf('英文品名') >= 0 || text.indexOf('波兰名') >= 0 || text.indexOf('nameen') >= 0 || text == 'name' || text == 'descriptionen') return 90
+	}
+	if (fieldKey == 'name_other') {
+		if (text.indexOf('其他名') >= 0 || text.indexOf('别名') >= 0 || text.indexOf('备注名') >= 0 || text.indexOf('副标题') >= 0) return 100
+	}
+	if (fieldKey == 'purchase_price') {
+		if (text.indexOf('折后价') >= 0 || text.indexOf('折扣价') >= 0 || text.indexOf('优惠价') >= 0 || text.indexOf('实价') >= 0) return 120
+		if (text.indexOf('采购价') >= 0 || text.indexOf('进价') >= 0 || text.indexOf('成交价') >= 0 || text.indexOf('含税价') >= 0 || text.indexOf('批发价') >= 0 || text.indexOf('wholesale') >= 0) return 105
+		if (isSalesPriceHeader(text)) return 0
+		if (text == '单价') return 70
+		if (text == 'price' || text.indexOf('unitprice') >= 0) return 65
+	}
+	if (fieldKey == 'net_purchase_price') {
+		if (text.indexOf('不含税') >= 0 || text.indexOf('未税') >= 0 || text.indexOf('净采购') >= 0 || text.indexOf('net') >= 0) return 100
+	}
+	if (fieldKey == 'cost_price') {
+		if (text.indexOf('成本价') >= 0 || text == '成本' || text.indexOf('cost') >= 0) return 100
+	}
+	if (fieldKey == 'base_sales_price') {
+		if (text.indexOf('销售价') >= 0 || text.indexOf('售价') >= 0 || text.indexOf('零售价') >= 0 || text.indexOf('吊牌价') >= 0 || text.indexOf('retail') >= 0) return 100
+		if (text == '原价' || text.indexOf('市场价') >= 0 || text.indexOf('建议价') >= 0) return 85
+	}
+	if (fieldKey == 'quantity') {
+		if (isWeakQuantityHeader(text)) return 0
+		if (text == '数量' || text.indexOf('采购数量') >= 0 || text.indexOf('订货数量') >= 0 || text.indexOf('出库数量') >= 0 || text.indexOf('发货数量') >= 0 || text.indexOf('qty') >= 0 || text.indexOf('quantity') >= 0) return 120
+		if (text == '件数' || text.indexOf('pcs') >= 0) return 50
+	}
+	if (fieldKey == 'barcode') {
+		if (text.indexOf('条形码') >= 0 || text.indexOf('条码') >= 0 || text == 'ean' || text == 'ean13' || text == 'upc' || text == 'barcode' || text.indexOf('barcode') >= 0) return 100
+	}
+	if (fieldKey == 'sku') {
+		if (text == 'sku' || text.indexOf('商品码') >= 0 || text.indexOf('货号') >= 0 || text.indexOf('款号') >= 0 || text.indexOf('产品编码') >= 0 || text.indexOf('商品编码') >= 0 || text.indexOf('编号') >= 0 || text == 'code' || text.indexOf('itemno') >= 0 || text.indexOf('art') >= 0) return 100
+	}
+	return 0
+}
+
+function bestHeaderColumn(row: PreviewRow, fieldKey: string): string {
+	let bestColumn = ''
+	let bestScore = 0
+	for (let index = 0; index < row.cells.length; index += 1) {
+		const cell = row.cells[index]
+		const score = headerFieldScore(fieldKey, cell.value)
+		if (score > bestScore) {
+			bestScore = score
+			bestColumn = cell.column
+		}
+	}
+	return bestScore > 0 ? bestColumn : ''
+}
+
+function headerRowScore(row: PreviewRow): number {
+	let score = 0
+	let textLength = 0
+	for (let fieldIndex = 0; fieldIndex < FIELD_DEFINITIONS.length; fieldIndex += 1) {
+		const field = FIELD_DEFINITIONS[fieldIndex]
+		if (bestHeaderColumn(row, field.key) != '') score = score + 1
+	}
+	for (let index = 0; index < row.cells.length; index += 1) {
+		if (row.cells[index].value != '') textLength = textLength + 1
+	}
+	if (textLength <= 2) score = score - 2
+	return score
+}
+
+function detectHeaderRow(): PreviewRow | null {
+	let bestRow: PreviewRow | null = null
+	let bestScore = 0
+	for (let rowIndex = 0; rowIndex < allRows.value.length; rowIndex += 1) {
+		const row = allRows.value[rowIndex]
+		const score = headerRowScore(row)
+		if (score > bestScore) {
+			bestScore = score
+			bestRow = row
+		}
+	}
+	return bestScore >= 4 ? bestRow : null
+}
+
+function footerMarkerText(row: PreviewRow): string {
+	let text = ''
+	for (let index = 0; index < row.cells.length && index < 8; index += 1) {
+		text = text + previewRowCellValue(row, row.cells[index].column)
+	}
+	return text.trim()
+}
+
+function detectEndRow(startNumber: number): string {
+	for (let rowIndex = 0; rowIndex < allRows.value.length; rowIndex += 1) {
+		const row = allRows.value[rowIndex]
+		const rowNumber = intValue(row.rowNumber, rowIndex + 1)
+		if (rowNumber < startNumber) continue
+		const marker = footerMarkerText(row)
+		if (marker.indexOf('合计') >= 0 || marker.indexOf('总计') >= 0 || marker.indexOf('小计') >= 0 || marker.indexOf('汇总') >= 0 || marker.indexOf('备注') >= 0 || marker.toLowerCase().indexOf('total') >= 0 || marker.toLowerCase().indexOf('remark') >= 0) {
+			const endNumber = rowNumber - 1
+			return endNumber >= startNumber ? endNumber.toString() : ''
+		}
+	}
+	return ''
+}
+
+function uniqueFieldMappingRows(rows: FieldMappingRow[]): FieldMappingRow[] {
+	const result: FieldMappingRow[] = []
+	const usedColumns: string[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		let column = row.column
+		if (column != '') {
+			let used = false
+			for (let usedIndex = 0; usedIndex < usedColumns.length; usedIndex += 1) {
+				if (usedColumns[usedIndex] == column) used = true
+			}
+			if (used) {
+				column = ''
+			} else {
+				usedColumns.push(column)
+			}
+		}
+		result.push({
+			key: row.key,
+			label: row.label,
+			required: row.required,
+			column: column,
+			columnText: selectedColumnText(column),
+		} as FieldMappingRow)
+	}
+	return result
+}
+
+function applyMappingFromHeaderRow(row: PreviewRow) {
+	const nextRows: FieldMappingRow[] = []
+	for (let fieldIndex = 0; fieldIndex < FIELD_DEFINITIONS.length; fieldIndex += 1) {
+		const field = FIELD_DEFINITIONS[fieldIndex]
+		const column = bestHeaderColumn(row, field.key)
+		nextRows.push({
+			key: field.key,
+			label: field.label,
+			required: field.required,
+			column: column,
+			columnText: selectedColumnText(column),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = uniqueFieldMappingRows(nextRows)
+}
+
+function refreshHeaderConfig(updateMapping: boolean) {
+	refreshPreviewRows()
+	buildColumnOptions()
+	if (updateMapping) {
+		const row = selectedHeaderRow()
+		if (row != null) applyMappingFromHeaderRow(row!)
+	}
+	precheckPassed.value = false
+}
+
+function openHeaderRowSelector() {
+	if (allRows.value.length == 0) {
+		uni.showToast({ title: '请先选择Excel文件', icon: 'none' })
+		return
+	}
+	const itemList: string[] = []
+	const rowNumbers: string[] = []
+	for (let index = 0; index < allRows.value.length && index < 30; index += 1) {
+		const row = allRows.value[index]
+		const rowNumber = stringValue(row.rowNumber, (index + 1).toString())
+		rowNumbers.push(rowNumber)
+		itemList.push('第' + rowNumber + '行：' + previewRowSummary(row))
+	}
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const tapIndex = res.tapIndex
+			if (tapIndex >= 0 && tapIndex < rowNumbers.length) {
+				headerRow.value = rowNumbers[tapIndex]
+				startRow.value = (intValue(headerRow.value, 0) + 1).toString()
+				refreshHeaderConfig(true)
+				messageText.value = '已使用第' + headerRow.value + '行作为表头'
+			}
+		},
+	})
+}
+
+function handleSheetInput(event: any) { sheetName.value = readInputValue(event) }
+function handleStartRowInput(event: any) {
+	startRow.value = readInputValue(event)
+	syncHeaderRowFromStart()
+	refreshHeaderConfig(true)
+}
+function handleEndRowInput(event: any) { endRow.value = readInputValue(event) }
+
+function resetConfig() {
+	startRow.value = '2'
+	headerRow.value = '1'
+	endRow.value = ''
+	refreshHeaderConfig(false)
+	applyMappingFrom(null)
+}
+
+function applyAutoDetectedConfig() {
+	autoDetectMessage.value = ''
+	const detectedHeaderRow = detectHeaderRow()
+	if (detectedHeaderRow == null) return
+	const headerNumber = intValue(detectedHeaderRow!.rowNumber, 0)
+	if (headerNumber <= 0) return
+	headerRow.value = headerNumber.toString()
+	const detectedStart = headerNumber + 1
+	startRow.value = detectedStart.toString()
+	endRow.value = detectEndRow(detectedStart)
+	refreshPreviewRows()
+	buildColumnOptions()
+	const nextRows: FieldMappingRow[] = []
+	for (let fieldIndex = 0; fieldIndex < FIELD_DEFINITIONS.length; fieldIndex += 1) {
+		const field = FIELD_DEFINITIONS[fieldIndex]
+		const column = bestHeaderColumn(detectedHeaderRow!, field.key)
+		nextRows.push({
+			key: field.key,
+			label: field.label,
+			required: field.required,
+			column: column,
+			columnText: selectedColumnText(column),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = uniqueFieldMappingRows(nextRows)
+	autoDetectMessage.value = endRow.value == '' ? '已自动识别表头第' + headerNumber.toString() + '行，商品从第' + startRow.value + '行开始' : '已自动识别表头第' + headerNumber.toString() + '行，商品范围第' + startRow.value + '-' + endRow.value + '行'
+}
+
+function applyPreview(raw: UTSJSONObject) {
+	const rows = parseObjectArray(raw['rows'])
+	const nextRows: PreviewRow[] = []
+	for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+		const rowObject = rows[rowIndex]
+		const cells = parseObjectArray(rowObject['cells'])
+		const nextCells: PreviewCell[] = []
+		for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+			const cellObject = cells[cellIndex]
+			const column = stringValue(cellObject['column'], columnLetter(cellIndex + 1))
+			nextCells.push({
+				key: rowIndex.toString() + '-' + column,
+				column: column,
+				value: stringValue(cellObject['value']),
+			} as PreviewCell)
+		}
+		nextRows.push({
+			key: rowIndex.toString(),
+			rowNumber: stringValue(rowObject['row_number'], (rowIndex + 1).toString()),
+			cells: nextCells,
+		} as PreviewRow)
+	}
+	allRows.value = nextRows
+	maxRow.value = intValue(raw['max_row'], rows.length)
+	maxColumn.value = intValue(raw['max_column'], nextRows.length > 0 ? nextRows[0].cells.length : 0)
+	const activeSheet = stringValue(raw['active_sheet'])
+	if (sheetName.value == '' && activeSheet != '') sheetName.value = activeSheet
+	columnOptions.value = [] as ColumnOption[]
+	applyAutoDetectedConfig()
+	if (columnOptions.value.length == 0) {
+		syncHeaderRowFromStart()
+		refreshHeaderConfig(false)
+	}
+}
+
+function mappedImageHasText(): boolean {
+	const imageColumn = mappingColumn('image')
+	if (imageColumn == '') return false
+	const start = intValue(startRow.value, 2)
+	const end = endRow.value == '' ? 0 : intValue(endRow.value, 0)
+	for (let rowIndex = 0; rowIndex < allRows.value.length; rowIndex += 1) {
+		const row = allRows.value[rowIndex]
+		const rowNumber = intValue(row.rowNumber, rowIndex + 1)
+		if (rowNumber < start) continue
+		if (end > 0 && rowNumber > end) continue
+		if (previewRowCellValue(row, imageColumn) != '') return true
+	}
+	return false
+}
+
+function applySummary(response: PurchaseImportResponse) {
+	const summary = response.summary
+	const items: SummaryItem[] = []
+	const keys = ['received_count', 'product_count', 'valid_count', 'invalid_count', 'created_count', 'updated_count', 'skipped_count', 'error_count']
+	const labels = ['读取行', '商品行', '有效', '无效', '新增', '更新', '跳过', '错误']
+	for (let index = 0; index < keys.length; index += 1) {
+		const value = summary[keys[index]]
+		if (value == null) continue
+		items.push({
+			key: keys[index],
+			label: labels[index],
+			value: stringValue(value, '0'),
+		} as SummaryItem)
+	}
+	const imageValid = stringValue(summary['image_valid_count'], '0')
+	const imageInvalid = stringValue(summary['image_invalid_count'], '0')
+	const imageImported = stringValue(summary['image_imported_count'], '0')
+	if (imageValid != '0' || imageInvalid != '0' || mappedImageHasText()) {
+		items.push({
+			key: 'image_valid_count',
+			label: '图片有效',
+			value: imageValid,
+		} as SummaryItem)
+		items.push({
+			key: 'image_invalid_count',
+			label: '图片异常',
+			value: imageInvalid,
+		} as SummaryItem)
+		if (imageImported != '0') {
+			items.push({
+				key: 'image_imported_count',
+				label: '图片导入',
+				value: imageImported,
+			} as SummaryItem)
+		}
+	} else if (mappingColumn('image') != '') {
+		items.push({
+			key: 'image_check_status',
+			label: '图片',
+			value: '未校验',
+		} as SummaryItem)
+	}
+	const pricePrecisionWarningCount = stringValue(summary['price_precision_warning_count'], '0')
+	if (pricePrecisionWarningCount != '0') {
+		items.push({
+			key: 'price_precision_warning_count',
+			label: '多位小数',
+			value: pricePrecisionWarningCount,
+		} as SummaryItem)
+	}
+	summaryItems.value = items
+	precheckPassed.value = stringValue(summary['error_count'], '0') == '0' && stringValue(summary['invalid_count'], '0') == '0'
+}
+
+function responseIssueLine(row: UTSJSONObject): string {
+	const rowNumber = stringValue(row['row_number'])
+	const fieldName = stringValue(row['field_name'])
+	const message = stringValue(row['message'])
+	const value = stringValue(row['value'])
+	let prefix = ''
+	if (rowNumber != '' && rowNumber != '0') prefix = '第' + rowNumber + '行'
+	if (fieldName != '') {
+		if (prefix != '') prefix = prefix + ' '
+		prefix = prefix + fieldName
+	}
+	let result = prefix == '' ? message : prefix + '：' + message
+	if (value != '') result = result + '（' + value + '）'
+	return result
+}
+
+function appendIssueLines(title: string, rows: UTSJSONObject[], limit: number): string {
+	if (rows.length == 0) return ''
+	let result = title + '：'
+	const max = rows.length < limit ? rows.length : limit
+	for (let index = 0; index < max; index += 1) {
+		result = result + '\n' + responseIssueLine(rows[index])
+	}
+	if (rows.length > limit) result = result + '\n还有' + (rows.length - limit).toString() + '条未显示'
+	return result
+}
+
+function buildPrecheckMessage(response: PurchaseImportResponse): string {
+	const summary = response.summary
+	const diagnostics = response.diagnostics
+	const errors = response.errors
+	const warnings = response.warnings
+	const valid = stringValue(summary['valid_count'], '0')
+	const invalid = stringValue(summary['invalid_count'], '0')
+	const errorCount = stringValue(summary['error_count'], '0')
+	const productCount = stringValue(summary['product_count'], '0')
+	let result = precheckPassed.value ? '预检通过，可以导入。' : '预检未通过，请先处理问题。'
+	result = result + '\n商品行' + productCount + '，有效' + valid + '，无效' + invalid + '，错误' + errorCount
+
+	const imageReport = parseObject(diagnostics['image_report'])
+	if (imageReport != null) {
+		const imageMessage = stringValue(imageReport!['message'])
+		const imageValid = stringValue(summary['image_valid_count'], '0')
+		const imageInvalid = stringValue(summary['image_invalid_count'], '0')
+		const imageMissing = stringValue(summary['image_missing_count'], '0')
+		const imageEmbedded = stringValue(imageReport!['embedded_count'], '0')
+		result = result + '\n图片：有效' + imageValid + '，异常' + imageInvalid + '，缺失' + imageMissing + '，嵌入' + imageEmbedded
+		if (imageMessage != '') result = result + '。' + imageMessage
+	}
+
+	const pricePrecisionCount = stringValue(summary['price_precision_warning_count'], '0')
+	if (pricePrecisionCount != '0') result = result + '\n价格：发现' + pricePrecisionCount + '个多位小数价格，请确认金额。'
+
+	const errorText = appendIssueLines('错误明细', errors, 5)
+	if (errorText != '') result = result + '\n' + errorText
+	const warningText = appendIssueLines('提醒明细', warnings, 5)
+	if (warningText != '') result = result + '\n' + warningText
+	return result
+}
+
+function splitAIText(value: string): string[] {
+	const normalized = value.split('\r').join('\n').split('；').join('\n').split(';').join('\n')
+	const rawLines = normalized.split('\n')
+	const result: string[] = []
+	for (let index = 0; index < rawLines.length; index += 1) {
+		const line = rawLines[index].trim()
+		if (line != '') result.push(line)
+	}
+	return result
+}
+
+function normalizeAIColumn(value: string): string {
+	const text = value.trim().split('列').join('').split('：').join('').split(':').join('').split(' ').join('').toUpperCase()
+	if (text == '' || text == '无' || text == '无导入' || text == '不导入' || text == 'NONE' || text == 'NULL') return ''
+	const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	let result = ''
+	for (let index = 0; index < text.length; index += 1) {
+		const charText = text.substring(index, index + 1)
+		if (letters.indexOf(charText) >= 0) result = result + charText
+	}
+	return result
+}
+
+function firstIntegerText(value: string): string {
+	const numbers = '0123456789'
+	let result = ''
+	let started = false
+	for (let index = 0; index < value.length; index += 1) {
+		const charText = value.substring(index, index + 1)
+		if (numbers.indexOf(charText) >= 0) {
+			result = result + charText
+			started = true
+		} else if (started) {
+			break
+		}
+	}
+	return result
+}
+
+function fieldKeyFromAIText(value: string): string {
+	const text = value.trim().toLowerCase().split(' ').join('').split('_').join('').split('-').join('')
+	if (text == 'image' || text.indexOf('图片') >= 0 || text.indexOf('照片') >= 0) return 'image'
+	if (text == 'namecn' || text.indexOf('中文名') >= 0 || text.indexOf('中文名称') >= 0 || text.indexOf('中文品名') >= 0 || text == '名称' || text == '品名' || text == '商品名' || text.indexOf('产品名称') >= 0) return 'name_cn'
+	if (text == 'nameen' || text.indexOf('外文名') >= 0 || text.indexOf('英文名') >= 0 || text.indexOf('英文名称') >= 0 || text.indexOf('本地品名') >= 0 || text.indexOf('波兰名') >= 0) return 'name_en'
+	if (text == 'nameother' || text.indexOf('其他名') >= 0 || text.indexOf('别名') >= 0 || text.indexOf('波兰名') >= 0) return 'name_other'
+	if (text == 'netpurchaseprice' || text.indexOf('不含税') >= 0 || text.indexOf('净采购') >= 0) return 'net_purchase_price'
+	if (text == 'purchaseprice' || text.indexOf('采购价') >= 0 || text.indexOf('进价') >= 0 || text.indexOf('折后价') >= 0 || text.indexOf('成交价') >= 0 || text.indexOf('单价') >= 0) return 'purchase_price'
+	if (text == 'costprice' || text.indexOf('成本价') >= 0 || text == '成本') return 'cost_price'
+	if (text == 'basesalesprice' || text.indexOf('销售价') >= 0 || text.indexOf('售价') >= 0 || text.indexOf('原价') >= 0 || text.indexOf('零售价') >= 0) return 'base_sales_price'
+	if (text == 'quantity' || text.indexOf('数量') >= 0 || text.indexOf('件数') >= 0 || text.indexOf('qty') >= 0) return 'quantity'
+	if (text == 'barcode' || text.indexOf('条形码') >= 0 || text.indexOf('条码') >= 0 || text == 'ean' || text == 'upc') return 'barcode'
+	if (text == 'sku' || text.indexOf('货号') >= 0 || text.indexOf('商品码') >= 0 || text.indexOf('款号') >= 0 || text.indexOf('编码') >= 0) return 'sku'
+	return ''
+}
+
+function aiMappingText(column: string): string {
+	if (column == '') return '不导入'
+	return selectedColumnText(column)
+}
+
+function fieldLabel(fieldKey: string): string {
+	for (let index = 0; index < FIELD_DEFINITIONS.length; index += 1) {
+		const item = FIELD_DEFINITIONS[index]
+		if (item.key == fieldKey) return item.label
+	}
+	return fieldKey
+}
+
+function dedupeAIMappings(rows: AIParsedMapping[]): AIParsedMapping[] {
+	const result: AIParsedMapping[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		let exists = false
+		for (let resultIndex = 0; resultIndex < result.length; resultIndex += 1) {
+			if (result[resultIndex].key == row.key) {
+				result[resultIndex] = row
+				exists = true
+			}
+		}
+		if (!exists) result.push(row)
+	}
+	return result
+}
+
+function parseAIConfig(value: string) {
+	aiParsedStartRow.value = ''
+	aiParsedEndRow.value = ''
+	const lines = splitAIText(value)
+	const nextMappings: AIParsedMapping[] = []
+	for (let index = 0; index < lines.length; index += 1) {
+		const rawLine = lines[index].split('：').join(':')
+		if (rawLine.indexOf('---') >= 0) continue
+		let label = ''
+		let rawValue = ''
+		if (rawLine.indexOf(':') >= 0) {
+			const parts = rawLine.split(':')
+			label = parts[0].trim()
+			if (parts.length > 1) rawValue = parts[1].trim()
+		} else if (rawLine.indexOf('|') >= 0) {
+			const parts = rawLine.split('|')
+			label = parts.length > 0 ? parts[0].trim() : ''
+			rawValue = parts.length > 1 ? parts[1].trim() : ''
+		} else {
+			continue
+		}
+		if (label == '') continue
+		const labelKey = label.toLowerCase().split(' ').join('').split('_').join('')
+		if (label.indexOf('开始行') >= 0 || label.indexOf('数据行') >= 0 || labelKey == 'startrow') {
+			aiParsedStartRow.value = firstIntegerText(rawValue)
+			continue
+		}
+		if (label.indexOf('结束行') >= 0 || labelKey == 'endrow') {
+			aiParsedEndRow.value = firstIntegerText(rawValue)
+			continue
+		}
+		const fieldKey = fieldKeyFromAIText(label)
+		if (fieldKey == '') continue
+		const column = normalizeAIColumn(rawValue)
+		nextMappings.push({
+			key: fieldKey,
+			label: fieldLabel(fieldKey),
+			column: column,
+			columnText: aiMappingText(column),
+		} as AIParsedMapping)
+	}
+	aiParsedMappings.value = dedupeAIMappings(nextMappings)
+}
+
+function openAIModal() {
+	aiModalVisible.value = true
+}
+
+function closeAIModal() {
+	aiModalVisible.value = false
+}
+
+function copyAIPrompt() {
+	uni.setClipboardData({
+		data: aiPromptText.value,
+		success: () => {
+			uni.showToast({ title: '规则已复制', icon: 'success' })
+		},
+	})
+}
+
+function handleAIResultInput(event: any) {
+	aiResultText.value = readInputValue(event)
+	parseAIConfig(aiResultText.value)
+}
+
+function clearAIResult() {
+	aiResultText.value = ''
+	aiParsedMappings.value = [] as AIParsedMapping[]
+	aiParsedStartRow.value = ''
+	aiParsedEndRow.value = ''
+}
+
+function applyAIResult() {
+	if (allRows.value.length == 0) {
+		uni.showToast({ title: '请先选择并读取Excel', icon: 'none' })
+		return
+	}
+	if (aiParsedMappings.value.length == 0 && aiParsedStartRow.value == '' && aiParsedEndRow.value == '') {
+		uni.showToast({ title: '没有可应用配置', icon: 'none' })
+		return
+	}
+	if (aiParsedStartRow.value != '') {
+		startRow.value = aiParsedStartRow.value
+		syncHeaderRowFromStart()
+		refreshHeaderConfig(false)
+	}
+	if (aiParsedEndRow.value != '') endRow.value = aiParsedEndRow.value
+	const nextRows: FieldMappingRow[] = []
+	for (let index = 0; index < mappingRows.value.length; index += 1) {
+		const current = mappingRows.value[index]
+		let nextColumn = current.column
+		for (let aiIndex = 0; aiIndex < aiParsedMappings.value.length; aiIndex += 1) {
+			const aiRow = aiParsedMappings.value[aiIndex]
+			if (aiRow.key == current.key) nextColumn = aiRow.column
+		}
+		nextRows.push({
+			key: current.key,
+			label: current.label,
+			required: current.required,
+			column: nextColumn,
+			columnText: selectedColumnText(nextColumn),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = uniqueFieldMappingRows(nextRows)
+	precheckPassed.value = false
+	summaryItems.value = [] as SummaryItem[]
+	messageText.value = 'AI配置已应用，请检查字段列后预检导入'
+	aiModalVisible.value = false
+}
+
+function selectColumn(fieldKey: string, column: string) {
+	const rows = mappingRows.value
+	const nextRows: FieldMappingRow[] = []
+	let replacedLabel = ''
+	for (let index = 0; index < rows.length; index += 1) {
+		const item = rows[index]
+		let nextColumn = item.column
+		if (item.key == fieldKey) {
+			nextColumn = column
+		} else if (column != '' && item.column == column) {
+			nextColumn = ''
+			replacedLabel = item.label
+		}
+		nextRows.push({
+			key: item.key,
+			label: item.label,
+			required: item.required,
+			column: nextColumn,
+			columnText: selectedColumnText(nextColumn),
+		} as FieldMappingRow)
+	}
+	mappingRows.value = nextRows
+	precheckPassed.value = false
+	if (replacedLabel != '') uni.showToast({ title: '已从' + replacedLabel + '移除该列', icon: 'none' })
+}
+
+function openColumnSelector(fieldKey: string) {
+	if (columnOptions.value.length == 0) {
+		uni.showToast({ title: '请先选择Excel并读取列', icon: 'none' })
+		return
+	}
+	const itemList: string[] = ['不导入']
+	for (let index = 0; index < columnOptions.value.length; index += 1) {
+		itemList.push(columnOptions.value[index].label)
+	}
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			const tapIndex = res.tapIndex
+			if (tapIndex == 0) {
+				selectColumn(fieldKey, '')
+				return
+			}
+			const optionIndex = tapIndex - 1
+			if (optionIndex >= 0 && optionIndex < columnOptions.value.length) {
+				selectColumn(fieldKey, columnOptions.value[optionIndex].column)
+			}
+		},
+	})
+}
+
+function validateMappingBeforeRun(): boolean {
+	if (allRows.value.length == 0) {
+		uni.showToast({ title: '请先选择并读取Excel', icon: 'none' })
+		return false
+	}
+	const start = intValue(startRow.value, 2)
+	const header = intValue(headerRow.value, 0)
+	const end = endRow.value == '' ? 0 : intValue(endRow.value, 0)
+	if (start <= 0) {
+		uni.showToast({ title: '开始行必须大于0', icon: 'none' })
+		return false
+	}
+	if (header > 0 && header >= start) {
+		uni.showToast({ title: '表头行必须小于开始行', icon: 'none' })
+		return false
+	}
+	if (end > 0 && end < start) {
+		uni.showToast({ title: '结束行不能小于开始行', icon: 'none' })
+		return false
+	}
+	if (mappingColumn('quantity') == '') {
+		uni.showToast({ title: '必须选择数量列', icon: 'none' })
+		return false
+	}
+	if (mappingColumn('name_cn') == '' && mappingColumn('barcode') == '' && mappingColumn('sku') == '') {
+		uni.showToast({ title: '中文名、条形码、SKU 至少选择一个', icon: 'none' })
+		return false
+	}
+	return true
+}
+
+function rowCellValue(row: PreviewRow, column: string): string {
+	for (let index = 0; index < row.cells.length; index += 1) {
+		const cell = row.cells[index]
+		if (cell.column == column) return cell.value
+	}
+	return ''
+}
+
+function mappedRowsPayload(): UTSJSONObject[] {
+	const rows: UTSJSONObject[] = []
+	const start = intValue(startRow.value, 2)
+	const end = endRow.value == '' ? 0 : intValue(endRow.value, 0)
+	for (let rowIndex = 0; rowIndex < allRows.value.length; rowIndex += 1) {
+		const row = allRows.value[rowIndex]
+		const rowNumber = intValue(row.rowNumber, rowIndex + 1)
+		if (rowNumber < start) continue
+		if (end > 0 && rowNumber > end) continue
+		const data = {} as UTSJSONObject
+		for (let mappingIndex = 0; mappingIndex < mappingRows.value.length; mappingIndex += 1) {
+			const mapping = mappingRows.value[mappingIndex]
+			if (mapping.column == '') continue
+			data[mapping.key] = rowCellValue(row, mapping.column)
+		}
+		rows.push({
+			row_number: rowNumber,
+			data: data,
+		} as UTSJSONObject)
+	}
+	return rows
+}
+
+function importConfigPayload(): UTSJSONObject {
+	const columnMapping = {} as UTSJSONObject
+	for (let index = 0; index < mappingRows.value.length; index += 1) {
+		const mapping = mappingRows.value[index]
+		columnMapping[mapping.key] = mapping.column
+	}
+	const imageMapping = {} as UTSJSONObject
+	const imageColumn = mappingColumn('image')
+	if (imageColumn != '') {
+		imageMapping['column'] = imageColumn
+		imageMapping['start_row'] = intValue(startRow.value, 2)
+		if (endRow.value != '') imageMapping['end_row'] = intValue(endRow.value, 0)
+	}
+	const payload = {
+		sheet_name: sheetName.value,
+		header_row: intValue(headerRow.value, intValue(startRow.value, 2) - 1),
+		start_row: intValue(startRow.value, 2),
+		column_mapping: columnMapping,
+		image_mapping: imageMapping,
+	} as UTSJSONObject
+	if (endRow.value != '') payload['end_row'] = intValue(endRow.value, 0)
+	return payload
+}
+
+function clearImportState() {
+	precheckPassed.value = false
+	summaryItems.value = [] as SummaryItem[]
+	allRows.value = [] as PreviewRow[]
+	previewRows.value = [] as PreviewRow[]
+	columnOptions.value = [] as ColumnOption[]
+	startRow.value = '2'
+	headerRow.value = '1'
+	endRow.value = ''
+	maxRow.value = 0
+	maxColumn.value = 0
+	messageText.value = ''
+	autoDetectMessage.value = ''
+	console.log('Excel上传: 已选择文件，准备读取', fileName.value, filePath.value)
+}
+
+async function runPreview() {
+	if (!hasFile.value || running.value) return
+	running.value = true
+	console.log('Excel上传: 开始解析', filePath.value)
+	uni.showLoading({ title: '读取中...', mask: true })
+	try {
+		const parsed = parseExcelFile(filePath.value)
+		if (!parsed.success) {
+			console.log('Excel上传: 解析失败', parsed.code, parsed.message)
+			uni.showToast({ title: parsed.message == '' ? 'Excel解析失败' : parsed.message, icon: 'none' })
+			return
+		}
+		const raw = parsed as ExcelParseResult
+		const rawObject = parseObject(raw)
+		if (rawObject != null) applyPreview(rawObject!)
+		messageText.value = autoDetectMessage.value == '' ? '读取完成' : autoDetectMessage.value
+		console.log('Excel上传: 解析成功', maxRow.value, maxColumn.value)
+	} catch (error) {
+		console.log('Excel上传: 解析异常', parseErrorMessage(error, '读取失败'))
+		uni.showToast({ title: parseErrorMessage(error, '读取失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		running.value = false
+	}
+}
+
+function chooseExcelFile() {
+	console.log('Excel上传: 点击选择区域')
+	if (running.value || choosingFile.value) {
+		console.log('Excel上传: 当前正在处理，忽略点击')
+		return
+	}
+	choosingFile.value = true
+	uni.showToast({ title: '正在打开文件选择器', icon: 'none' })
+	console.log('Excel上传: 正在调用Android文件选择器')
+	pickExcelFile((result: ExcelPickerResult) => {
+		choosingFile.value = false
+		console.log('Excel上传: 文件选择器返回', result.code, result.message, result.filePath)
+		if (!result.success) {
+			if (result.code != 'CANCELLED') {
+				uni.showToast({ title: result.message == '' ? '选择文件失败' : result.message, icon: 'none' })
+			}
+			return
+		}
+		filePath.value = result.filePath
+		fileName.value = result.fileName == '' ? fileNameFromPath(filePath.value) : result.fileName
+		clearImportState()
+		runPreview()
+	})
+}
+
+async function runPrecheck() {
+	if (!hasFile.value || running.value) return
+	if (!validateMappingBeforeRun()) return
+	running.value = true
+	uni.showLoading({ title: '预检中...', mask: true })
+	try {
+		const response = await precheckSupplierExcelImport(purchaseId.value, filePath.value, importConfigPayload())
+		applySummary(response)
+		messageText.value = buildPrecheckMessage(response)
+	} catch (error) {
+		precheckPassed.value = false
+		uni.showToast({ title: parseErrorMessage(error, '预检失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		running.value = false
+	}
+}
+
+function waitImportPoll(): Promise<void> {
+	return new Promise((resolve) => {
+		setTimeout(() => {
+			resolve()
+		}, 2000)
+	})
+}
+
+async function waitSupplierExcelImportTask(taskId: string): Promise<PurchaseImportResponse> {
+	for (let index = 0; index < 300; index += 1) {
+		await waitImportPoll()
+		const status = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId)
+		if (status.message != '') messageText.value = status.message
+		if (status.status == 'success') {
+			return {
+				resource: stringValue(status.data['resource']),
+				mode: stringValue(status.data['mode']),
+				summary: parseObject(status.data['summary']) == null ? ({} as UTSJSONObject) : parseObject(status.data['summary'])!,
+				diagnostics: parseObject(status.data['diagnostics']) == null ? ({} as UTSJSONObject) : parseObject(status.data['diagnostics'])!,
+				results: parseObjectArray(status.data['results']),
+				errors: parseObjectArray(status.data['errors']),
+				warnings: parseObjectArray(status.data['warnings']),
+			} as PurchaseImportResponse
+		}
+		if (status.status == 'failed' || status.status == 'missing') {
+			throw new Error(status.message == '' ? '后台导入失败' : status.message)
+		}
+	}
+	throw new Error('后台导入仍在处理中，请稍后查看采购单')
+}
+
+async function runImport() {
+	if (!canImport.value || running.value) return
+	if (!validateMappingBeforeRun()) return
+	running.value = true
+	uni.showLoading({ title: '上传中...', mask: true })
+	try {
+		const task = await startSupplierExcelImportTask(purchaseId.value, filePath.value, importConfigPayload())
+		messageText.value = task.message == '' ? '文件已上传，后台导入中' : task.message
+		uni.setStorageSync('refresh:pages:purchases:details:index:' + purchaseId.value, '1')
+		uni.setStorageSync('refresh:pages:purchases:index', '1')
+		uni.hideLoading()
+		uni.showLoading({ title: '后台导入中...', mask: true })
+		const response = await waitSupplierExcelImportTask(task.task_id)
+		applySummary(response)
+		messageText.value = takeLatestResponseMessage('导入完成')
+		uni.setStorageSync('refresh:pages:purchases:details:index:' + purchaseId.value, '1')
+		uni.setStorageSync('refresh:pages:purchases:index', '1')
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '导入失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		running.value = false
+	}
+}
+
+onLoad((query: OnLoadOptions) => {
+	const purchaseValue = query['purchase']
+	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
+	mappingRows.value = buildDefaultMappingRows()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; }
+.content { padding-top: 8px; padding-right: 8px; padding-bottom: 28px; padding-left: 8px; }
+.panel { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 12px; margin-bottom: 8px; }
+.panel-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.panel-title { font-size: 15px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.panel-meta { font-size: 12px; line-height: 17px; color: #64748B; }
+.file-box { min-height: 62px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; flex-direction: row; align-items: center; padding-left: 12px; padding-right: 8px; margin-top: 10px; }
+.file-copy { flex: 1; }
+.file-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.file-desc { font-size: 11px; line-height: 16px; color: #64748B; margin-top: 2px; }
+.file-action-wrap { height: 38px; min-width: 64px; border-radius: 8px; background-color: #E0F2FE; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.file-action { font-size: 14px; line-height: 20px; color: #0369A1; font-weight: bold; }
+.hint-row { margin-top: 8px; }
+.hint-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.ai-entry { min-height: 58px; border-radius: 8px; background-color: #F0FDF4; border-width: 1px; border-style: solid; border-color: #BBF7D0; flex-direction: row; align-items: center; padding-left: 12px; padding-right: 8px; margin-top: 10px; }
+.ai-entry-copy { flex: 1; }
+.ai-entry-title { font-size: 14px; line-height: 20px; color: #14532D; font-weight: bold; }
+.ai-entry-desc { font-size: 11px; line-height: 16px; color: #166534; margin-top: 2px; }
+.ai-entry-action { height: 34px; min-width: 58px; border-radius: 8px; background-color: #DCFCE7; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.ai-entry-action-text { font-size: 13px; color: #166534; font-weight: bold; }
+.mini-btn { height: 30px; min-width: 52px; border-radius: 8px; background-color: #F1F5F9; align-items: center; justify-content: center; padding-left: 10px; padding-right: 10px; }
+.mini-btn-text { font-size: 12px; color: #475569; }
+.column-scroll { height: 54px; margin-top: 8px; }
+.column-list { flex-direction: row; }
+.column-chip { width: 112px; height: 50px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 6px; margin-right: 6px; }
+.column-chip-title { font-size: 12px; line-height: 16px; color: #0F172A; font-weight: bold; }
+.column-chip-text { font-size: 11px; line-height: 15px; color: #64748B; margin-top: 2px; }
+.config-grid { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.field { width: 33%; padding-right: 6px; margin-bottom: 8px; }
+.field-label { font-size: 12px; line-height: 17px; color: #475569; margin-bottom: 4px; }
+.field-input { height: 38px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; color: #0F172A; }
+.field-select { height: 38px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; justify-content: center; padding-left: 10px; padding-right: 10px; }
+.field-select-text { font-size: 14px; line-height: 20px; color: #0F172A; }
+.mapping-list { margin-top: 4px; }
+.mapping-row { min-height: 48px; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #EEF2F7; }
+.mapping-name { flex: 1; }
+.mapping-label { font-size: 14px; line-height: 19px; color: #0F172A; font-weight: bold; }
+.mapping-key { font-size: 11px; line-height: 15px; color: #94A3B8; margin-top: 1px; }
+.mapping-select { width: 168px; min-height: 36px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; justify-content: center; padding-left: 10px; padding-right: 10px; }
+.mapping-select-text { font-size: 12px; line-height: 17px; color: #334155; }
+.action-row { flex-direction: row; margin-top: 10px; }
+.action-btn { flex: 1; height: 42px; border-radius: 8px; align-items: center; justify-content: center; margin-right: 8px; }
+.action-btn-light { background-color: #F1F5F9; border-width: 1px; border-style: solid; border-color: #CBD5E1; }
+.action-btn-primary { background-color: #0F172A; }
+.action-btn-disabled { background-color: #CBD5E1; }
+.action-btn-light-text { font-size: 14px; color: #334155; font-weight: bold; }
+.action-btn-primary-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+.summary-grid { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.summary-item { width: 25%; min-height: 54px; align-items: center; justify-content: center; }
+.summary-value { font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.summary-label { font-size: 11px; line-height: 15px; color: #64748B; margin-top: 2px; }
+.preview-scroll { height: 260px; margin-top: 8px; }
+.preview-table { min-width: 1200px; }
+.preview-row { flex-direction: row; min-height: 34px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #EEF2F7; align-items: center; }
+.preview-header { background-color: #F8FAFC; }
+.preview-row-no { width: 44px; font-size: 12px; line-height: 17px; color: #64748B; text-align: center; }
+.preview-cell { width: 96px; font-size: 12px; line-height: 17px; color: #0F172A; padding-left: 8px; padding-right: 8px; }
+.preview-header-cell { color: #475569; font-weight: bold; }
+.message-panel { border-radius: 8px; background-color: #ECFDF5; border-width: 1px; border-style: solid; border-color: #99F6E4; padding: 10px; }
+.message-text { font-size: 13px; line-height: 18px; color: #0F766E; }
+.ai-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(15, 23, 42, 0.45); align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.ai-modal { width: 100%; height: 680px; border-radius: 8px; background-color: #FFFFFF; overflow: hidden; }
+.ai-modal-head { height: 52px; flex-direction: row; align-items: center; padding-left: 14px; padding-right: 10px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #E2E8F0; }
+.ai-modal-title { flex: 1; font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.ai-close { height: 34px; min-width: 58px; border-radius: 8px; background-color: #F1F5F9; align-items: center; justify-content: center; padding-left: 10px; padding-right: 10px; }
+.ai-close-text { font-size: 13px; color: #475569; }
+.ai-modal-scroll { height: 566px; padding-left: 12px; padding-right: 12px; }
+.ai-block { margin-top: 12px; }
+.ai-block-title { font-size: 13px; line-height: 18px; color: #334155; font-weight: bold; margin-bottom: 6px; }
+.ai-rule-box { background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; padding: 10px; }
+.ai-rule-text { font-size: 12px; line-height: 18px; color: #0F172A; }
+.ai-copy-btn { height: 38px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; margin-top: 8px; }
+.ai-copy-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+.ai-textarea { height: 126px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; padding: 10px; font-size: 13px; color: #0F172A; }
+.ai-preview { border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; overflow: hidden; margin-top: 12px; margin-bottom: 12px; }
+.ai-config-row { min-height: 38px; flex-direction: row; align-items: center; background-color: #F8FAFC; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #E2E8F0; padding-left: 8px; padding-right: 8px; }
+.ai-config-label { font-size: 12px; line-height: 17px; color: #64748B; margin-right: 6px; }
+.ai-config-value { flex: 1; font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.ai-preview-head,
+.ai-preview-row { min-height: 36px; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #EEF2F7; }
+.ai-preview-head { background-color: #F8FAFC; }
+.ai-preview-cell { flex: 1; font-size: 12px; line-height: 17px; color: #0F172A; padding-left: 8px; padding-right: 8px; }
+.ai-name-cell { flex: 2; }
+.ai-wide-cell { flex: 3; }
+.ai-empty { border-radius: 8px; background-color: #FFF7ED; border-width: 1px; border-style: solid; border-color: #FED7AA; padding: 10px; margin-top: 12px; }
+.ai-empty-text { font-size: 12px; line-height: 17px; color: #9A3412; }
+.ai-modal-actions { height: 62px; flex-direction: row; padding-top: 8px; padding-left: 12px; padding-right: 12px; border-top-width: 1px; border-top-style: solid; border-top-color: #E2E8F0; }
+.ai-modal-secondary,
+.ai-modal-primary { height: 44px; border-radius: 8px; align-items: center; justify-content: center; }
+.ai-modal-secondary { width: 82px; background-color: #F1F5F9; margin-right: 8px; }
+.ai-modal-primary { flex: 1; background-color: #0F172A; }
+.ai-modal-primary-disabled { background-color: #94A3B8; }
+.ai-modal-secondary-text { font-size: 14px; color: #475569; font-weight: bold; }
+.ai-modal-primary-text { font-size: 14px; color: #FFFFFF; font-weight: bold; }
+</style>

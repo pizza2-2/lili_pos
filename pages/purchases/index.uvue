@@ -157,6 +157,8 @@ const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
 const filterPanelHeight = ref(420)
 const filterContentHeight = ref(356)
+let importRefreshTimer = 0
+let importRefreshCount = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'supplierText', label: '供应商:' } as UTSJSONObject,
@@ -167,6 +169,8 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'details', text: '明细' } as UTSJSONObject,
+	{ key: 'quick_input', text: '手写录入' } as UTSJSONObject,
+	{ key: 'excel_upload', text: 'Excel上传' } as UTSJSONObject,
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'approve', text: '审核' } as UTSJSONObject,
 	{ key: 'complete', text: '完成' } as UTSJSONObject,
@@ -200,6 +204,45 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 	}
 	return message
+}
+
+function purchaseImportStatusValue(status: UTSJSONObject): string {
+	return stringValue(status['status']).toLowerCase()
+}
+
+function isActiveImportStatusValue(statusValue: string): boolean {
+	return statusValue == 'queued' || statusValue == 'running'
+}
+
+function purchaseImportStatusText(status: UTSJSONObject): string {
+	const statusValue = purchaseImportStatusValue(status)
+	if (statusValue == 'queued') return '上传中'
+	if (statusValue == 'running') {
+		const percentText = stringValue(status['percent'])
+		if (percentText != '' && percentText != '0') return '导入中' + percentText + '%'
+		return '导入中'
+	}
+	if (statusValue == 'failed') return '导入失败'
+	return ''
+}
+
+function purchaseImportMessage(status: UTSJSONObject): string {
+	const message = stringValue(status['message'])
+	if (message != '') return message
+	return '该采购单正在后台导入'
+}
+
+function hasActivePurchaseImport(): boolean {
+	for (let index = 0; index < purchases.value.length; index += 1) {
+		if (isActiveImportStatusValue(purchaseImportStatusValue(purchases.value[index].supplier_excel_import_status))) return true
+	}
+	return false
+}
+
+function stopImportRefreshTimer() {
+	if (importRefreshTimer == 0) return
+	clearTimeout(importRefreshTimer)
+	importRefreshTimer = 0
 }
 
 function updateFilterPanelLayout() {
@@ -393,15 +436,34 @@ async function loadPurchases() {
 		errorMessage.value = parseErrorMessage(error, '采购单加载失败')
 	} finally {
 		isLoading.value = false
+		if (!hasActivePurchaseImport()) {
+			stopImportRefreshTimer()
+			importRefreshCount = 0
+		} else if (importRefreshTimer == 0) {
+			if (importRefreshCount >= 24) return
+			importRefreshCount = importRefreshCount + 1
+			importRefreshTimer = setTimeout(() => {
+				importRefreshTimer = 0
+				loadPurchases()
+			}, 10000)
+		}
 	}
 }
 
 function purchaseToListItem(item: PurchaseItem): UTSJSONObject {
 	const numberText = stringValue(item.purchase_number, '采购单')
 	const statusText = stringValue(item.status_display, item.status)
+	const importStatus = item.supplier_excel_import_status
+	const importStatusValue = purchaseImportStatusValue(importStatus)
+	const importStatusText = purchaseImportStatusText(importStatus)
+	const tags = [statusText, item.is_fully_received ? '已收齐' : '未收齐'] as string[]
+	if (importStatusText != '') tags.push(importStatusText)
 	return {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
+		statusValue: item.status,
+		importStatusValue: importStatusValue,
+		importStatusMessage: purchaseImportMessage(importStatus),
 		title: numberText,
 		subtitle: '日期：' + stringValue(item.purchase_date, '-'),
 		amountText: '¥ ' + stringValue(item.total_amount, '0.00'),
@@ -409,7 +471,7 @@ function purchaseToListItem(item: PurchaseItem): UTSJSONObject {
 		quantityText: item.received_quantity.toString() + '/' + item.total_quantity.toString(),
 		progressText: stringValue(item.receive_progress, '0') + '%',
 		remarkText: stringValue(item.remark, '-'),
-		tags: [statusText, item.is_fully_received ? '已收齐' : '未收齐'] as string[],
+		tags: tags,
 	} as UTSJSONObject
 }
 
@@ -530,10 +592,34 @@ function handleMenu(payload: UTSJSONObject) {
 	const item = payload['item']
 	if (action == null || item == null) return
 	const actionKey = stringValue((action as UTSJSONObject)['key'])
-	const id = stringValue((item as UTSJSONObject)['rawId'])
+	const itemObject = item as UTSJSONObject
+	const id = stringValue(itemObject['rawId'])
 	if (id == '') return
 	if (actionKey == 'details') {
 		uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + id })
+		return
+	}
+	if (actionKey == 'quick_input') {
+		const statusValue = stringValue(itemObject['statusValue'])
+		if (statusValue != 'DRAFT' && statusValue != 'draft') {
+			uni.showToast({ title: '只能在草稿采购单录入', icon: 'none' })
+			return
+		}
+		uni.navigateTo({ url: '/pages/purchases/details/quick-input?purchase=' + id })
+		return
+	}
+	if (actionKey == 'excel_upload') {
+		const statusValue = stringValue(itemObject['statusValue'])
+		if (statusValue != 'DRAFT' && statusValue != 'draft') {
+			uni.showToast({ title: '只能向草稿采购单上传', icon: 'none' })
+			return
+		}
+		const importStatusValue = stringValue(itemObject['importStatusValue']).toLowerCase()
+		if (isActiveImportStatusValue(importStatusValue)) {
+			uni.showToast({ title: stringValue(itemObject['importStatusMessage'], '该采购单正在后台导入'), icon: 'none' })
+			return
+		}
+		uni.navigateTo({ url: '/pages/purchases/details/excel-upload?purchase=' + id })
 		return
 	}
 	if (actionKey == 'edit') {
@@ -588,6 +674,8 @@ onShow(() => {
 	updateFilterPanelLayout()
 	if (consumeRefresh()) loadPurchases()
 })
+onHide(() => { stopImportRefreshTimer() })
+onUnload(() => { stopImportRefreshTimer() })
 </script>
 
 <style>

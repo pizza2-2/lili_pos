@@ -1,0 +1,653 @@
+import Activity from 'android.app.Activity'
+import Intent from 'android.content.Intent'
+import Uri from 'android.net.Uri'
+import OpenableColumns from 'android.provider.OpenableColumns'
+import Cursor from 'android.database.Cursor'
+import File from 'java.io.File'
+import FileInputStream from 'java.io.FileInputStream'
+import FileOutputStream from 'java.io.FileOutputStream'
+import InputStream from 'java.io.InputStream'
+import BufferedReader from 'java.io.BufferedReader'
+import InputStreamReader from 'java.io.InputStreamReader'
+import ZipFile from 'java.util.zip.ZipFile'
+import { ExcelParseCell, ExcelParseResult, ExcelParseRow, ExcelPickerCallback, ExcelPickerResult } from '../interface.uts'
+import { dispatchExcelPickerResult, setExcelPickerCallback } from './callbacks.uts'
+
+export { ExcelPickerActivity } from './ExcelPickerActivity.uts'
+
+const REQUEST_PICK_EXCEL: Int = 19021
+let excelActivityResultListener: ((requestCode: Int, resultCode: Int, data: Intent | null) => void) | null = null
+
+function makeResult(success: boolean, code: string, message: string, filePath: string = '', fileName: string = '', uri: string = ''): ExcelPickerResult {
+	return {
+		success: success,
+		code: code,
+		message: message,
+		filePath: filePath,
+		fileName: fileName,
+		uri: uri,
+	} as ExcelPickerResult
+}
+
+function sanitizeFileName(name: string): string {
+	let nextName = name.trim()
+	if (nextName == '') {
+		nextName = 'purchase-import-' + new Date().getTime().toString() + '.xlsx'
+	}
+	nextName = nextName.replace(/[\\/:*?"<>|]/g, '_')
+	if (!isSupportedSpreadsheetName(nextName)) {
+		nextName = nextName + '.xlsx'
+	}
+	return nextName
+}
+
+function isSupportedSpreadsheetName(name: string): boolean {
+	const lower = name.toLowerCase()
+	return lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv') || lower.endsWith('.tsv') || lower.endsWith('.txt')
+}
+
+function readDisplayName(activity: Activity, uri: Uri): string {
+	let result = ''
+	let cursor: Cursor | null = null
+	try {
+		cursor = activity.getContentResolver().query(uri, null, null, null, null)
+		if (cursor != null && cursor!.moveToFirst()) {
+			const index = cursor!.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+			if (index >= 0) {
+				const nameValue = cursor!.getString(index)
+				if (nameValue != null) {
+					result = nameValue!
+				}
+			}
+		}
+	} catch (error) {
+		result = ''
+	} finally {
+		if (cursor != null) {
+			cursor!.close()
+		}
+	}
+	if (result == '') {
+		result = 'purchase-import-' + new Date().getTime().toString() + '.xlsx'
+	}
+	return sanitizeFileName(result)
+}
+
+function copyUriToCache(activity: Activity, uri: Uri, displayName: string): string {
+	let input: InputStream | null = null
+	let output: FileOutputStream | null = null
+	try {
+		input = activity.getContentResolver().openInputStream(uri)
+		if (input == null) return ''
+		const dir = new File(activity.getCacheDir(), 'excel-picker')
+		if (!dir.exists()) {
+			dir.mkdirs()
+		}
+		const targetFile = new File(dir, new Date().getTime().toString() + '-' + sanitizeFileName(displayName))
+		output = new FileOutputStream(targetFile)
+		const buffer = new ByteArray(8192)
+		let length = input!.read(buffer)
+		while (length > 0) {
+			output!.write(buffer, 0, length)
+			length = input!.read(buffer)
+		}
+		output!.flush()
+		return targetFile.getAbsolutePath()
+	} catch (error) {
+		return ''
+	} finally {
+		if (output != null) {
+			try {
+				output!.close()
+			} catch (closeOutputError) {}
+		}
+		if (input != null) {
+			try {
+				input!.close()
+			} catch (closeInputError) {}
+		}
+	}
+}
+
+function clearActivityResultListener() {
+	if (excelActivityResultListener != null) {
+		UTSAndroid.offAppActivityResult(excelActivityResultListener!)
+		excelActivityResultListener = null
+	}
+}
+
+function dispatchPickerFromResult(activity: Activity, resultCode: Int, data: Intent | null): void {
+	clearActivityResultListener()
+	if (resultCode != Activity.RESULT_OK || data == null || data!.getData() == null) {
+		dispatchExcelPickerResult(makeResult(false, 'CANCELLED', '已取消选择'))
+		return
+	}
+	const uri = data!.getData()!
+	const uriText = uri.toString()
+	const displayName = readDisplayName(activity, uri)
+	if (!isSupportedSpreadsheetName(displayName)) {
+		dispatchExcelPickerResult(makeResult(false, 'UNSUPPORTED_FILE', '请选择 .xlsx、.xls、.csv 或 .tsv 文件', '', displayName, uriText))
+		return
+	}
+	const copiedPath = copyUriToCache(activity, uri, displayName)
+	if (copiedPath == '') {
+		dispatchExcelPickerResult(makeResult(false, 'COPY_FAILED', '复制Excel文件失败', '', displayName, uriText))
+		return
+	}
+	dispatchExcelPickerResult(makeResult(true, 'OK', '已选择Excel文件', copiedPath, displayName, uriText))
+}
+
+function openSystemPicker(activity: Activity, action: string): void {
+	const intent = new Intent(action)
+	intent.addCategory(Intent.CATEGORY_OPENABLE)
+	intent.setType('*/*')
+	activity.startActivityForResult(intent, REQUEST_PICK_EXCEL)
+}
+
+export function pickExcelFile(callback: ExcelPickerCallback): void {
+	console.log('lili-excel-picker: pickExcelFile called')
+	const activity = UTSAndroid.getUniActivity() as Activity
+	if (activity == null) {
+		console.log('lili-excel-picker: no activity')
+		callback(makeResult(false, 'NO_ACTIVITY', '当前页面无法打开文件选择器'))
+		return
+	}
+	try {
+		clearActivityResultListener()
+		setExcelPickerCallback(callback)
+		excelActivityResultListener = (requestCode: Int, resultCode: Int, data: Intent | null) => {
+			console.log('lili-excel-picker: onAppActivityResult', requestCode, resultCode)
+			if (requestCode != REQUEST_PICK_EXCEL) return
+			dispatchPickerFromResult(activity, resultCode, data)
+		}
+		UTSAndroid.onAppActivityResult(excelActivityResultListener!)
+		console.log('lili-excel-picker: open ACTION_OPEN_DOCUMENT')
+		openSystemPicker(activity, Intent.ACTION_OPEN_DOCUMENT)
+	} catch (error) {
+		console.log('lili-excel-picker: ACTION_OPEN_DOCUMENT failed', error)
+		try {
+			console.log('lili-excel-picker: open ACTION_GET_CONTENT')
+			openSystemPicker(activity, Intent.ACTION_GET_CONTENT)
+		} catch (fallbackError) {
+			console.log('lili-excel-picker: ACTION_GET_CONTENT failed', fallbackError)
+			clearActivityResultListener()
+			setExcelPickerCallback(null)
+			dispatchExcelPickerResult(makeResult(false, 'OPEN_FAILED', '打开文件选择器失败'))
+		}
+	}
+}
+
+function makeParseResult(success: boolean, code: string, message: string, filePath: string, rows: ExcelParseRow[] = [] as ExcelParseRow[], maxRow: number = 0, maxColumn: number = 0): ExcelParseResult {
+	return {
+		success: success,
+		code: code,
+		message: message,
+		filePath: filePath,
+		max_row: maxRow,
+		max_column: maxColumn,
+		rows: rows,
+	} as ExcelParseResult
+}
+
+function readZipText(zip: ZipFile, name: string): string {
+	const entry = zip.getEntry(name)
+	if (entry == null) return ''
+	const input = zip.getInputStream(entry)
+	const reader = new BufferedReader(new InputStreamReader(input, 'UTF-8'))
+	let text = ''
+	let line = reader.readLine()
+	while (line != null) {
+		text = text + line
+		line = reader.readLine()
+	}
+	reader.close()
+	input.close()
+	return text
+}
+
+function xmlUnescape(value: string): string {
+	let result = value.replace(/&lt;/g, '<')
+	result = result.replace(/&gt;/g, '>')
+	result = result.replace(/&amp;/g, '&')
+	result = result.replace(/&quot;/g, '"')
+	result = result.replace(/&apos;/g, "'")
+	return result
+}
+
+function attrValue(tag: string, name: string): string {
+	let needle = ' ' + name + '="'
+	let start = tag.indexOf(needle)
+	if (start >= 0) {
+		start = start + needle.length
+		const end = tag.indexOf('"', start)
+		return end > start ? tag.substring(start, end) : ''
+	}
+	needle = ' ' + name + "='"
+	start = tag.indexOf(needle)
+	if (start >= 0) {
+		start = start + needle.length
+		const end = tag.indexOf("'", start)
+		return end > start ? tag.substring(start, end) : ''
+	}
+	return ''
+}
+
+function textBetween(source: string, startToken: string, endToken: string): string {
+	const start = source.indexOf(startToken)
+	if (start < 0) return ''
+	const valueStart = start + startToken.length
+	const end = source.indexOf(endToken, valueStart)
+	if (end < valueStart) return ''
+	return source.substring(valueStart, end)
+}
+
+function collectTextTags(source: string): string {
+	let result = ''
+	let cursor = 0
+	while (true) {
+		const tagStart = source.indexOf('<t', cursor)
+		if (tagStart < 0) break
+		const valueStart = source.indexOf('>', tagStart)
+		if (valueStart < 0) break
+		const valueEnd = source.indexOf('</t>', valueStart + 1)
+		if (valueEnd < 0) break
+		result = result + xmlUnescape(source.substring(valueStart + 1, valueEnd))
+		cursor = valueEnd + 4
+	}
+	return result
+}
+
+function parseSharedStrings(xml: string): string[] {
+	const values: string[] = []
+	let cursor = 0
+	while (true) {
+		const start = xml.indexOf('<si', cursor)
+		if (start < 0) break
+		const startEnd = xml.indexOf('>', start)
+		if (startEnd < 0) break
+		const end = xml.indexOf('</si>', startEnd + 1)
+		if (end < 0) break
+		const block = xml.substring(startEnd + 1, end)
+		values.push(collectTextTags(block))
+		cursor = end + 5
+	}
+	return values
+}
+
+function columnFromRef(ref: string): string {
+	const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	let result = ''
+	for (let index = 0; index < ref.length; index += 1) {
+		const ch = ref.substring(index, index + 1).toUpperCase()
+		if (letters.indexOf(ch) >= 0) {
+			result = result + ch
+		} else {
+			break
+		}
+	}
+	return result
+}
+
+function rowFromRef(ref: string, fallback: number): number {
+	let digits = ''
+	for (let index = 0; index < ref.length; index += 1) {
+		const ch = ref.substring(index, index + 1)
+		if ('0123456789'.indexOf(ch) >= 0) digits = digits + ch
+	}
+	const value = parseInt(digits)
+	return isNaN(value) ? fallback : value
+}
+
+function columnIndex(column: string): number {
+	const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	let result = 0
+	for (let index = 0; index < column.length; index += 1) {
+		const ch = column.substring(index, index + 1).toUpperCase()
+		const offset = letters.indexOf(ch)
+		if (offset < 0) return result
+		result = result * 26 + offset + 1
+	}
+	return result
+}
+
+function parseDimensionMax(xml: string): UTSJSONObject {
+	let maxRow = 0
+	let maxColumn = 0
+	const dimensionStart = xml.indexOf('<dimension')
+	if (dimensionStart >= 0) {
+		const dimensionEnd = xml.indexOf('>', dimensionStart)
+		if (dimensionEnd > dimensionStart) {
+			const ref = attrValue(xml.substring(dimensionStart, dimensionEnd + 1), 'ref')
+			const parts = ref.split(':')
+			const lastRef = parts.length > 1 ? parts[parts.length - 1] : ref
+			maxRow = rowFromRef(lastRef, 0)
+			maxColumn = columnIndex(columnFromRef(lastRef))
+		}
+	}
+	return {
+		max_row: maxRow,
+		max_column: maxColumn,
+	} as UTSJSONObject
+}
+
+function parseWorksheetRows(xml: string, sharedStrings: string[]): ExcelParseRow[] {
+	const rows: ExcelParseRow[] = []
+	let cursor = 0
+	while (true) {
+		const rowStart = xml.indexOf('<row', cursor)
+		if (rowStart < 0) break
+		const rowOpenEnd = xml.indexOf('>', rowStart)
+		if (rowOpenEnd < 0) break
+		const rowEnd = xml.indexOf('</row>', rowOpenEnd + 1)
+		if (rowEnd < 0) break
+		const rowTag = xml.substring(rowStart, rowOpenEnd + 1)
+		const rowBlock = xml.substring(rowOpenEnd + 1, rowEnd)
+		const rowNumber = rowFromRef(attrValue(rowTag, 'r'), rows.length + 1)
+		const cells: ExcelParseCell[] = []
+		let cellCursor = 0
+		while (true) {
+			const cellStart = rowBlock.indexOf('<c', cellCursor)
+			if (cellStart < 0) break
+			const cellOpenEnd = rowBlock.indexOf('>', cellStart)
+			if (cellOpenEnd < 0) break
+			const cellEnd = rowBlock.indexOf('</c>', cellOpenEnd + 1)
+			if (cellEnd < 0) {
+				cellCursor = cellOpenEnd + 1
+				continue
+			}
+			const cellTag = rowBlock.substring(cellStart, cellOpenEnd + 1)
+			const cellBlock = rowBlock.substring(cellOpenEnd + 1, cellEnd)
+			const ref = attrValue(cellTag, 'r')
+			const column = columnFromRef(ref)
+			const valueType = attrValue(cellTag, 't')
+			let value = ''
+			if (valueType == 'inlineStr') {
+				value = collectTextTags(cellBlock)
+			} else {
+				value = xmlUnescape(textBetween(cellBlock, '<v>', '</v>'))
+				if (valueType == 's') {
+					const sharedIndex = parseInt(value)
+					if (!isNaN(sharedIndex) && sharedIndex >= 0 && sharedIndex < sharedStrings.length) {
+						value = sharedStrings[sharedIndex]
+					}
+				}
+			}
+			if (column != '') {
+				cells.push({
+					column: column,
+					value: value,
+				} as ExcelParseCell)
+			}
+			cellCursor = cellEnd + 4
+		}
+		rows.push({
+			row_number: rowNumber,
+			cells: cells,
+		} as ExcelParseRow)
+		cursor = rowEnd + 6
+	}
+	return rows
+}
+
+function readLocalTextFile(filePath: string): string {
+	let input: FileInputStream | null = null
+	let reader: BufferedReader | null = null
+	try {
+		input = new FileInputStream(new File(filePath))
+		reader = new BufferedReader(new InputStreamReader(input!, 'UTF-8'))
+		let text = ''
+		let line = reader!.readLine()
+		while (line != null) {
+			text = text + line + '\n'
+			line = reader!.readLine()
+		}
+		return text
+	} catch (error) {
+		return ''
+	} finally {
+		if (reader != null) {
+			try {
+				reader!.close()
+			} catch (closeReaderError) {}
+		}
+		if (input != null) {
+			try {
+				input!.close()
+			} catch (closeInputError) {}
+		}
+	}
+}
+
+function isBinaryXlsFile(filePath: string): boolean {
+	let input: FileInputStream | null = null
+	try {
+		input = new FileInputStream(new File(filePath))
+		const buffer = new ByteArray(4)
+		const length = input!.read(buffer)
+		if (length < 4) return false
+		return (buffer[0].toInt() & 255) == 208 && (buffer[1].toInt() & 255) == 207 && (buffer[2].toInt() & 255) == 17 && (buffer[3].toInt() & 255) == 224
+	} catch (error) {
+		return false
+	} finally {
+		if (input != null) {
+			try {
+				input!.close()
+			} catch (closeInputError) {}
+		}
+	}
+}
+
+function parseDelimitedLine(line: string, delimiter: string): string[] {
+	const values: string[] = []
+	let current = ''
+	let inQuotes = false
+	let index = 0
+	while (index < line.length) {
+		const charText = line.substring(index, index + 1)
+		if (charText == '"') {
+			if (inQuotes && index + 1 < line.length && line.substring(index + 1, index + 2) == '"') {
+				current = current + '"'
+				index = index + 2
+				continue
+			}
+			inQuotes = !inQuotes
+		} else if (charText == delimiter && !inQuotes) {
+			values.push(current.trim())
+			current = ''
+		} else {
+			current = current + charText
+		}
+		index = index + 1
+	}
+	values.push(current.trim())
+	return values
+}
+
+function detectDelimiter(text: string, fallback: string): string {
+	const firstLines = text.split('\n')
+	let commaCount = 0
+	let semicolonCount = 0
+	let tabCount = 0
+	for (let lineIndex = 0; lineIndex < firstLines.length && lineIndex < 5; lineIndex += 1) {
+		const line = firstLines[lineIndex]
+		for (let index = 0; index < line.length; index += 1) {
+			const charText = line.substring(index, index + 1)
+			if (charText == ',') commaCount = commaCount + 1
+			if (charText == ';') semicolonCount = semicolonCount + 1
+			if (charText == '\t') tabCount = tabCount + 1
+		}
+	}
+	if (tabCount >= commaCount && tabCount >= semicolonCount && tabCount > 0) return '\t'
+	if (semicolonCount >= commaCount && semicolonCount > 0) return ';'
+	if (commaCount > 0) return ','
+	return fallback
+}
+
+function columnLetterFromIndex(index: number): string {
+	let value = index
+	let result = ''
+	const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	while (value > 0) {
+		const remainder = (value - 1) % 26
+		result = letters.substring(remainder, remainder + 1) + result
+		value = Math.floor((value - 1) / 26)
+	}
+	return result
+}
+
+function rowsFromDelimitedText(text: string, delimiter: string): ExcelParseRow[] {
+	const rawLines = text.split('\n')
+	const rows: ExcelParseRow[] = []
+	for (let rowIndex = 0; rowIndex < rawLines.length; rowIndex += 1) {
+		const line = rawLines[rowIndex].split('\r').join('')
+		if (line.trim() == '') continue
+		const values = parseDelimitedLine(line, delimiter)
+		const cells: ExcelParseCell[] = []
+		for (let cellIndex = 0; cellIndex < values.length; cellIndex += 1) {
+			cells.push({
+				column: columnLetterFromIndex(cellIndex + 1),
+				value: values[cellIndex],
+			} as ExcelParseCell)
+		}
+		rows.push({
+			row_number: rows.length + 1,
+			cells: cells,
+		} as ExcelParseRow)
+	}
+	return rows
+}
+
+function stripHtmlTags(value: string): string {
+	let result = ''
+	let inTag = false
+	for (let index = 0; index < value.length; index += 1) {
+		const charText = value.substring(index, index + 1)
+		if (charText == '<') {
+			inTag = true
+		} else if (charText == '>') {
+			inTag = false
+		} else if (!inTag) {
+			result = result + charText
+		}
+	}
+	return xmlUnescape(result).trim()
+}
+
+function rowsFromHtmlTable(text: string): ExcelParseRow[] {
+	const rows: ExcelParseRow[] = []
+	let cursor = 0
+	const lower = text.toLowerCase()
+	while (true) {
+		const rowStart = lower.indexOf('<tr', cursor)
+		if (rowStart < 0) break
+		const rowOpenEnd = lower.indexOf('>', rowStart)
+		if (rowOpenEnd < 0) break
+		const rowEnd = lower.indexOf('</tr>', rowOpenEnd + 1)
+		if (rowEnd < 0) break
+		const rowBlock = text.substring(rowOpenEnd + 1, rowEnd)
+		const rowBlockLower = rowBlock.toLowerCase()
+		const cells: ExcelParseCell[] = []
+		let cellCursor = 0
+		while (true) {
+			let cellStart = rowBlockLower.indexOf('<td', cellCursor)
+			let tagName = 'td'
+			if (cellStart < 0) {
+				cellStart = rowBlockLower.indexOf('<th', cellCursor)
+				tagName = 'th'
+			}
+			if (cellStart < 0) break
+			const cellOpenEnd = rowBlockLower.indexOf('>', cellStart)
+			if (cellOpenEnd < 0) break
+			const cellEnd = rowBlockLower.indexOf('</' + tagName + '>', cellOpenEnd + 1)
+			if (cellEnd < 0) break
+			const value = stripHtmlTags(rowBlock.substring(cellOpenEnd + 1, cellEnd))
+			cells.push({
+				column: columnLetterFromIndex(cells.length + 1),
+				value: value,
+			} as ExcelParseCell)
+			cellCursor = cellEnd + 5
+		}
+		if (cells.length > 0) {
+			rows.push({
+				row_number: rows.length + 1,
+				cells: cells,
+			} as ExcelParseRow)
+		}
+		cursor = rowEnd + 5
+	}
+	return rows
+}
+
+function resultFromRows(filePath: string, rows: ExcelParseRow[], message: string): ExcelParseResult {
+	let maxColumn = 0
+	for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+		const row = rows[rowIndex]
+		for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+			const nextColumn = columnIndex(row.cells[cellIndex].column)
+			if (nextColumn > maxColumn) maxColumn = nextColumn
+		}
+	}
+	return makeParseResult(true, 'OK', message, filePath, rows, rows.length, maxColumn)
+}
+
+function parseTextSpreadsheetFile(filePath: string, fallbackDelimiter: string): ExcelParseResult {
+	const text = readLocalTextFile(filePath)
+	if (text == '') return makeParseResult(false, 'TEXT_READ_FAILED', '文本表格读取失败', filePath)
+	const lower = text.toLowerCase()
+	if (lower.indexOf('<table') >= 0 && lower.indexOf('<tr') >= 0) {
+		const htmlRows = rowsFromHtmlTable(text)
+		if (htmlRows.length > 0) return resultFromRows(filePath, htmlRows, 'HTML表格解析完成')
+	}
+	const delimiter = detectDelimiter(text, fallbackDelimiter)
+	const rows = rowsFromDelimitedText(text, delimiter)
+	if (rows.length == 0) return makeParseResult(false, 'NO_ROWS', '没有读取到表格行', filePath)
+	return resultFromRows(filePath, rows, '文本表格解析完成')
+}
+
+export function parseExcelFile(filePath: string): ExcelParseResult {
+	if (filePath == '') return makeParseResult(false, 'EMPTY_PATH', '未选择Excel文件', filePath)
+	const lowerPath = filePath.toLowerCase()
+	if (lowerPath.endsWith('.csv')) {
+		return parseTextSpreadsheetFile(filePath, ',')
+	}
+	if (lowerPath.endsWith('.tsv') || lowerPath.endsWith('.txt')) {
+		return parseTextSpreadsheetFile(filePath, '\t')
+	}
+	if (lowerPath.endsWith('.xls')) {
+		if (isBinaryXlsFile(filePath)) {
+			return makeParseResult(false, 'UNSUPPORTED_BINARY_XLS', '这是旧版二进制 .xls，手机端需要另存为 .xlsx、.csv 或使用原生Excel库解析', filePath)
+		}
+		return parseTextSpreadsheetFile(filePath, '\t')
+	}
+	let zip: ZipFile | null = null
+	try {
+		zip = new ZipFile(filePath)
+		const sharedXml = readZipText(zip!, 'xl/sharedStrings.xml')
+		const sheetXml = readZipText(zip!, 'xl/worksheets/sheet1.xml')
+		if (sheetXml == '') return makeParseResult(false, 'NO_SHEET', 'Excel工作表读取失败', filePath)
+		const sharedStrings = parseSharedStrings(sharedXml)
+		const rows = parseWorksheetRows(sheetXml, sharedStrings)
+		const dimension = parseDimensionMax(sheetXml)
+		let maxRow = parseInt('' + dimension['max_row'])
+		let maxColumn = parseInt('' + dimension['max_column'])
+		if (isNaN(maxRow)) maxRow = 0
+		if (isNaN(maxColumn)) maxColumn = 0
+		for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+			const row = rows[rowIndex]
+			if (row.row_number > maxRow) maxRow = row.row_number
+			for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+				const nextColumn = columnIndex(row.cells[cellIndex].column)
+				if (nextColumn > maxColumn) maxColumn = nextColumn
+			}
+		}
+		return makeParseResult(true, 'OK', 'Excel解析完成', filePath, rows, maxRow, maxColumn)
+	} catch (error) {
+		return makeParseResult(false, 'PARSE_FAILED', 'Excel解析失败', filePath)
+	} finally {
+		if (zip != null) {
+			try {
+				zip!.close()
+			} catch (closeError) {}
+		}
+	}
+}

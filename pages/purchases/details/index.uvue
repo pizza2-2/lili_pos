@@ -118,6 +118,7 @@ import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-volume-key/index.uts'
 
 type PurchaseDetailSelectedFilter = {
 	param: string
@@ -144,6 +145,7 @@ const filterOptions = ref<PurchaseDetailFilterOptionsResponse | null>(null)
 const selectedFilters = ref<PurchaseDetailSelectedFilter[]>([])
 const filterPanelHeight = ref(420)
 const filterContentHeight = ref(356)
+const volumeScanLocked = ref(false)
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'skuText', label: 'SKU:' } as UTSJSONObject,
@@ -400,6 +402,36 @@ function handleScanSearch() {
 		},
 	} as ScanCodeOption)
 }
+
+function unlockVolumeScanSoon() {
+	setTimeout(() => {
+		volumeScanLocked.value = false
+	}, 1200)
+}
+
+function handleVolumeKeyEvent(event: VolumeKeyEvent) {
+	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
+		return
+	}
+	if (volumeScanLocked.value) {
+		return
+	}
+	volumeScanLocked.value = true
+	closeFilterDrawer()
+	handleScanSearch()
+	unlockVolumeScanSoon()
+}
+
+function startPurchaseDetailVolumeKeyListener() {
+	startVolumeKeyListener((event: VolumeKeyEvent) => {
+		handleVolumeKeyEvent(event)
+	})
+}
+
+function stopPurchaseDetailVolumeKeyListener() {
+	stopVolumeKeyListener()
+	volumeScanLocked.value = false
+}
 function handleCreate() { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }) }
 
 function handleItemClick(payload: UTSJSONObject) {
@@ -541,8 +573,17 @@ onLoad((query: OnLoadOptions) => {
 })
 
 onShow(() => {
+	startPurchaseDetailVolumeKeyListener()
 	updateFilterPanelLayout()
 	if (consumeRefreshNeeded()) loadDetails()
+})
+
+onHide(() => {
+	stopPurchaseDetailVolumeKeyListener()
+})
+
+onUnload(() => {
+	stopPurchaseDetailVolumeKeyListener()
 })
 </script>
 

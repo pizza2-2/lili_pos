@@ -1,0 +1,79 @@
+{
+	"id": "lili-excel-picker",
+	"displayName": "lili-excel-picker",
+	"version": "1.0.0",
+	"description": "Android Excel file picker for uni-app x",
+	"keywords": [
+		"excel",
+		"picker",
+		"android"
+	],
+	"repository": "",
+	"engines": {
+		"HBuilderX": "^4.31",
+		"uni-app-x": "^3.1.0"
+	},
+	"dcloudext": {
+		"type": "uts",
+		"sale": {
+			"regular": {
+				"price": "0.00"
+			},
+			"sourcecode": {
+				"price": "0.00"
+			}
+		},
+		"contact": {
+			"qq": ""
+		},
+		"declaration": {
+			"ads": "无",
+			"data": "只读取用户主动选择的Excel文件，并复制到应用缓存目录",
+			"permissions": "无需额外权限"
+		},
+		"npmurl": ""
+	},
+	"uni_modules": {
+		"dependencies": [],
+		"encrypt": [],
+		"platforms": {
+			"client": {
+				"Vue": {
+					"vue2": "n",
+					"vue3": "y"
+				},
+				"App": {
+					"app-android": {
+						"minVersion": "19"
+					},
+					"app-ios": "n",
+					"app-harmony": "n"
+				},
+				"H5-mobile": {
+					"Safari": "n",
+					"Android Browser": "n",
+					"微信浏览器(Android)": "n",
+					"QQ浏览器(Android)": "n"
+				},
+				"H5-pc": {
+					"Chrome": "n",
+					"IE": "n",
+					"Edge": "n",
+					"Firefox": "n",
+					"Safari": "n"
+				},
+				"小程序": {
+					"微信": "n",
+					"阿里": "n",
+					"百度": "n",
+					"字节跳动": "n",
+					"QQ": "n",
+					"钉钉": "n",
+					"快手": "n",
+					"飞书": "n",
+					"京东": "n"
+				}
+			}
+		}
+	}
+}

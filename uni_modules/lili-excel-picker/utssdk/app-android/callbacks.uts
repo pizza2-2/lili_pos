@@ -1,0 +1,15 @@
+import { ExcelPickerCallback, ExcelPickerResult } from '../interface.uts'
+
+let currentCallback: ExcelPickerCallback | null = null
+
+export function setExcelPickerCallback(callback: ExcelPickerCallback | null): void {
+	currentCallback = callback
+}
+
+export function dispatchExcelPickerResult(result: ExcelPickerResult): void {
+	const callback = currentCallback
+	currentCallback = null
+	if (callback != null) {
+		callback!(result)
+	}
+}
