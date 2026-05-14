@@ -1391,29 +1391,33 @@ function waitImportPoll(): Promise<void> {
 	return new Promise((resolve) => {
 		setTimeout(() => {
 			resolve()
-		}, 2000)
+		}, 15000)
 	})
 }
 
 async function waitSupplierExcelImportTask(taskId: string): Promise<PurchaseImportResponse> {
 	for (let index = 0; index < 300; index += 1) {
 		await waitImportPoll()
-		const status = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId)
+		const status = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId, false)
+		const statusValue = status.status.toLowerCase()
 		if (status.message != '') messageText.value = status.message
-		if (status.status == 'success') {
+		if (statusValue == 'success') {
+			const finalStatus = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId, true)
 			return {
-				resource: stringValue(status.data['resource']),
-				mode: stringValue(status.data['mode']),
-				summary: parseObject(status.data['summary']) == null ? ({} as UTSJSONObject) : parseObject(status.data['summary'])!,
-				diagnostics: parseObject(status.data['diagnostics']) == null ? ({} as UTSJSONObject) : parseObject(status.data['diagnostics'])!,
-				results: parseObjectArray(status.data['results']),
-				errors: parseObjectArray(status.data['errors']),
-				warnings: parseObjectArray(status.data['warnings']),
+				resource: stringValue(finalStatus.data['resource']),
+				mode: stringValue(finalStatus.data['mode']),
+				summary: parseObject(finalStatus.data['summary']) == null ? ({} as UTSJSONObject) : parseObject(finalStatus.data['summary'])!,
+				diagnostics: parseObject(finalStatus.data['diagnostics']) == null ? ({} as UTSJSONObject) : parseObject(finalStatus.data['diagnostics'])!,
+				results: parseObjectArray(finalStatus.data['results']),
+				errors: parseObjectArray(finalStatus.data['errors']),
+				warnings: parseObjectArray(finalStatus.data['warnings']),
 			} as PurchaseImportResponse
 		}
-		if (status.status == 'failed' || status.status == 'missing') {
+		if (statusValue == 'queued' || statusValue == 'running') continue
+		if (statusValue == 'failed' || statusValue == 'missing') {
 			throw new Error(status.message == '' ? '后台导入失败' : status.message)
 		}
+		throw new Error(status.message == '' ? '后台导入状态异常' : status.message)
 	}
 	throw new Error('后台导入仍在处理中，请稍后查看采购单')
 }

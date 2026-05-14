@@ -1,0 +1,55 @@
+{
+	"id": "lili-print-copies-stepper",
+	"displayName": "lili-print-copies-stepper",
+	"version": "1.0.0",
+	"description": "Print copies numeric stepper for uni-app x",
+	"keywords": [
+		"print",
+		"copies",
+		"stepper"
+	],
+	"repository": "",
+	"engines": {
+		"HBuilderX": "^4.31",
+		"uni-app-x": "^3.1.0"
+	},
+	"dcloudext": {
+		"type": "uts-vue-component",
+		"sale": {
+			"regular": {
+				"price": "0.00"
+			},
+			"sourcecode": {
+				"price": "0.00"
+			}
+		},
+		"contact": {
+			"qq": ""
+		},
+		"declaration": {
+			"ads": "",
+			"data": "",
+			"permissions": ""
+		},
+		"npmurl": ""
+	},
+	"uni_modules": {
+		"dependencies": [],
+		"encrypt": [],
+		"platforms": {
+			"client": {
+				"Vue": {
+					"vue2": "n",
+					"vue3": "y"
+				},
+				"App": {
+					"app-android": {
+						"minVersion": "21"
+					},
+					"app-ios": "n",
+					"app-harmony": "n"
+				}
+			}
+		}
+	}
+}

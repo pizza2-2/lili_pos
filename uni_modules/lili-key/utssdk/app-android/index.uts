@@ -1,0 +1,415 @@
+import Activity from 'android.app.Activity'
+import Context from 'android.content.Context'
+import Intent from 'android.content.Intent'
+import IntentFilter from 'android.content.IntentFilter'
+import BroadcastReceiver from 'android.content.BroadcastReceiver'
+import AudioManager from 'android.media.AudioManager'
+import KeyEvent from 'android.view.KeyEvent'
+import View from 'android.view.View'
+import Runnable from 'java.lang.Runnable'
+
+export type VolumeKeyEvent = {
+	key: string
+	action: string
+	streamType: number
+	volume: number
+	previousVolume: number
+	maxVolume: number
+	timestamp: number
+}
+
+export type VolumeKeyResult = {
+	success: boolean
+	code: string
+	message: string
+	data: UTSJSONObject | null
+}
+
+const volumeChangedAction = 'android.media.VOLUME_CHANGED_ACTION'
+const extraStreamType = 'android.media.EXTRA_VOLUME_STREAM_TYPE'
+const extraStreamValue = 'android.media.EXTRA_VOLUME_STREAM_VALUE'
+const extraPreviousStreamValue = 'android.media.EXTRA_PREV_VOLUME_STREAM_VALUE'
+const nativeKeyEventAction = 'lili.volume.KEY_EVENT'
+const nativeExtraKeyCode = 'lili.volume.EXTRA_KEY_CODE'
+const nativeExtraActionCode = 'lili.volume.EXTRA_ACTION_CODE'
+const debugEnabled = false
+
+let volumeReceiver: VolumeKeyReceiver | null = null
+let volumeCallback: ((event: VolumeKeyEvent) => void) | null = null
+let latestEvent: VolumeKeyEvent | null = null
+let listening = false
+let restoringVolume = false
+let volumeKeyView: View | null = null
+let volumeKeyListener: VolumeKeyViewListener | null = null
+let volumeActivityWindowCallback: VolumeActivityWindowCallback | null = null
+let volumeActivityKeyCallback: VolumeActivityKeyCallback | null = null
+let lastNativeKeyCode = -1
+let lastNativeActionCode = -1
+let lastNativeEventAt = 0
+let lastNativeConsumedAt = 0
+
+function volumeLog(message: string) {
+	if (!debugEnabled) {
+		return
+	}
+	console.log('lili-key:', message)
+}
+
+function keyActionText(actionCode: Int): string {
+	if (actionCode == KeyEvent.ACTION_DOWN) return 'ACTION_DOWN'
+	if (actionCode == KeyEvent.ACTION_UP) return 'ACTION_UP'
+	if (actionCode == KeyEvent.ACTION_MULTIPLE) return 'ACTION_MULTIPLE'
+	return 'ACTION_' + actionCode.toString()
+}
+
+function keyCodeText(keyCode: Int): string {
+	if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) return 'KEYCODE_VOLUME_UP'
+	if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) return 'KEYCODE_VOLUME_DOWN'
+	return 'KEYCODE_' + keyCode.toString()
+}
+
+function getActivity(): Activity {
+	return UTSAndroid.getUniActivity() as Activity
+}
+
+function getAudioManager(context: Context): AudioManager | null {
+	const manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+	return manager
+}
+
+function makeResult(success: boolean, code: string, message: string, data: UTSJSONObject | null = null): VolumeKeyResult {
+	return {
+		success: success,
+		code: code,
+		message: message,
+		data: data,
+	} as VolumeKeyResult
+}
+
+function eventToData(event: VolumeKeyEvent): UTSJSONObject {
+	const data = {} as UTSJSONObject
+	data['key'] = event.key
+	data['action'] = event.action
+	data['streamType'] = event.streamType
+	data['volume'] = event.volume
+	data['previousVolume'] = event.previousVolume
+	data['maxVolume'] = event.maxVolume
+	data['timestamp'] = event.timestamp
+	return data
+}
+
+function detectKey(volume: number, previousVolume: number): string {
+	if (volume > previousVolume) {
+		return 'VOLUME_UP'
+	}
+	if (volume < previousVolume) {
+		return 'VOLUME_DOWN'
+	}
+	return 'VOLUME_CHANGED'
+}
+
+function dispatchNativeKeyEvent(keyCode: Int, actionCode: Int): boolean {
+	if (!listening) {
+		volumeLog('native ignored because listener is stopped key=' + keyCodeText(keyCode) + ' action=' + keyActionText(actionCode))
+		return false
+	}
+	if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+		return false
+	}
+	const actionText = actionCode == KeyEvent.ACTION_UP ? 'UP' : 'PRESS'
+	const streamType = AudioManager.STREAM_MUSIC
+	let volume = 0
+	let maxVolume = 0
+	const manager = getAudioManager(getActivity())
+	if (manager != null) {
+		volume = manager!.getStreamVolume(streamType)
+		maxVolume = manager!.getStreamMaxVolume(streamType)
+	}
+	const now = new Date().getTime()
+	const duplicateEvent = lastNativeKeyCode == keyCode && lastNativeActionCode == actionCode && now - lastNativeEventAt < 120
+	volumeLog('native key event key=' + keyCodeText(keyCode) + ' action=' + keyActionText(actionCode) + ' duplicate=' + duplicateEvent.toString() + ' volume=' + volume.toString() + '/' + maxVolume.toString())
+	lastNativeKeyCode = keyCode
+	lastNativeActionCode = actionCode
+	lastNativeEventAt = now
+	lastNativeConsumedAt = now
+	const event = {
+		key: keyCode == KeyEvent.KEYCODE_VOLUME_UP ? 'VOLUME_UP' : 'VOLUME_DOWN',
+		action: actionText,
+		streamType: streamType,
+		volume: volume,
+		previousVolume: volume,
+		maxVolume: maxVolume,
+		timestamp: now,
+	} as VolumeKeyEvent
+	latestEvent = event
+	if (!duplicateEvent && actionCode == KeyEvent.ACTION_UP && volumeCallback != null) {
+		volumeLog('native callback dispatch key=' + event.key)
+		volumeCallback!(event)
+	}
+	volumeLog('native consumed key=' + keyCodeText(keyCode) + ' action=' + keyActionText(actionCode))
+	return true
+}
+
+class VolumeKeyViewListener implements View.OnKeyListener {
+	override onKey(view: View, keyCode: Int, event: KeyEvent): boolean {
+		volumeLog('view onKey key=' + keyCodeText(keyCode) + ' action=' + keyActionText(event.getAction()))
+		return dispatchNativeKeyEvent(keyCode, event.getAction())
+	}
+}
+
+class InstallKeyListenerRunnable implements Runnable {
+	override run() {
+		const activity = getActivity()
+		const decorView = activity.getWindow().getDecorView()
+		volumeLog('install view listener activity=' + activity.toString() + ' decor=' + decorView.toString())
+		volumeKeyView = decorView
+		volumeKeyListener = new VolumeKeyViewListener()
+		decorView.setFocusable(true)
+		decorView.setFocusableInTouchMode(true)
+		decorView.requestFocus()
+		decorView.setOnKeyListener(volumeKeyListener)
+		volumeLog('install view listener done focus=' + decorView.hasFocus().toString())
+	}
+}
+
+class RemoveKeyListenerRunnable implements Runnable {
+	override run() {
+		if (volumeKeyView != null) {
+			volumeLog('remove view listener')
+			volumeKeyView!.setOnKeyListener(null)
+		}
+		volumeKeyView = null
+		volumeKeyListener = null
+	}
+}
+
+function consumeActivityVolumeEvent(params: UniActivityParams, event: KeyEvent | null): boolean {
+	if (event == null) {
+		volumeLog('activity callback event=null')
+		return false
+	}
+	const keyCode = event!.getKeyCode()
+	volumeLog('activity callback key=' + keyCodeText(keyCode) + ' action=' + keyActionText(event!.getAction()))
+	if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+		return false
+	}
+	const consumed = dispatchNativeKeyEvent(keyCode, event!.getAction())
+	if (consumed) {
+		params.result = true
+		volumeLog('activity callback consumed result=true key=' + keyCodeText(keyCode))
+	} else {
+		volumeLog('activity callback not consumed key=' + keyCodeText(keyCode))
+	}
+	return consumed
+}
+
+class VolumeActivityWindowCallback extends UniActivityWindowCallback {
+	constructor() {
+		super()
+	}
+
+	override dispatchPreKeyEvent(params: UniActivityParams, event: KeyEvent | null) {
+		volumeLog('dispatchPreKeyEvent enter')
+		consumeActivityVolumeEvent(params, event)
+	}
+
+	override dispatchKeyEvent(params: UniActivityParams, event: KeyEvent | null) {
+		volumeLog('dispatchKeyEvent enter')
+		consumeActivityVolumeEvent(params, event)
+	}
+}
+
+function consumeActivityKeyEvent(params: UniActivityParams, keyCode: Int, event: KeyEvent | null, source: string): boolean {
+	const actionCode = event == null ? KeyEvent.ACTION_DOWN : event!.getAction()
+	volumeLog(source + ' key=' + keyCodeText(keyCode) + ' action=' + keyActionText(actionCode))
+	if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+		return false
+	}
+	const consumed = dispatchNativeKeyEvent(keyCode, actionCode)
+	if (consumed) {
+		params.result = true
+		volumeLog(source + ' consumed result=true key=' + keyCodeText(keyCode))
+	}
+	return consumed
+}
+
+class VolumeActivityKeyCallback extends UniActivityKeyEventCallback {
+	constructor() {
+		super()
+	}
+
+	override onPreKeyDown(params: UniActivityParams, keyCode: Int, event: KeyEvent | null) {
+		consumeActivityKeyEvent(params, keyCode, event, 'onPreKeyDown')
+	}
+
+	override onKeyDown(params: UniActivityParams, keyCode: Int, event: KeyEvent | null) {
+		consumeActivityKeyEvent(params, keyCode, event, 'onKeyDown')
+	}
+
+	override onPreKeyUp(params: UniActivityParams, keyCode: Int, event: KeyEvent | null) {
+		consumeActivityKeyEvent(params, keyCode, event, 'onPreKeyUp')
+	}
+
+	override onKeyUp(params: UniActivityParams, keyCode: Int, event: KeyEvent | null) {
+		consumeActivityKeyEvent(params, keyCode, event, 'onKeyUp')
+	}
+}
+
+function dispatchVolumeEvent(context: Context, intent: Intent) {
+	volumeLog('broadcast volume changed received restoring=' + restoringVolume.toString())
+	if (restoringVolume) {
+		return
+	}
+	const streamType = intent.getIntExtra(extraStreamType, AudioManager.STREAM_MUSIC)
+	const volume = intent.getIntExtra(extraStreamValue, -1)
+	const previousVolume = intent.getIntExtra(extraPreviousStreamValue, volume)
+	let maxVolume = 0
+	const manager = getAudioManager(context)
+	if (manager != null) {
+		maxVolume = manager!.getStreamMaxVolume(streamType)
+	}
+	volumeLog('broadcast volume=' + volume.toString() + ' previous=' + previousVolume.toString() + ' stream=' + streamType.toString())
+	const event = {
+		key: detectKey(volume, previousVolume),
+		action: 'PRESS',
+		streamType: streamType,
+		volume: volume,
+		previousVolume: previousVolume,
+		maxVolume: maxVolume,
+		timestamp: new Date().getTime(),
+	} as VolumeKeyEvent
+	latestEvent = event
+	const nativeRecentlyConsumed = new Date().getTime() - lastNativeConsumedAt < 1500
+	if (volumeCallback != null && !nativeRecentlyConsumed) {
+		volumeLog('broadcast callback dispatch key=' + event.key)
+		volumeCallback!(event)
+	} else if (nativeRecentlyConsumed) {
+		volumeLog('broadcast callback skipped because native event was consumed recently')
+	}
+	if (manager != null && previousVolume >= 0 && volume != previousVolume) {
+		volumeLog('broadcast restore volume from=' + volume.toString() + ' to=' + previousVolume.toString())
+		restoringVolume = true
+		manager!.setStreamVolume(streamType, previousVolume, 0)
+		setTimeout(() => {
+			restoringVolume = false
+		}, 120)
+	}
+}
+
+class VolumeKeyReceiver extends BroadcastReceiver() {
+	override onReceive(context: Context, intent: Intent): void {
+		const action = intent.getAction()
+		volumeLog('receiver onReceive action=' + (action == null ? '' : action!))
+		if (action == nativeKeyEventAction) {
+			const keyCode = intent.getIntExtra(nativeExtraKeyCode, -1)
+			const actionCode = intent.getIntExtra(nativeExtraActionCode, -1)
+			volumeLog('receiver native event key=' + keyCodeText(keyCode) + ' action=' + keyActionText(actionCode))
+			dispatchNativeKeyEvent(keyCode, actionCode)
+			return
+		}
+		if (action != volumeChangedAction) {
+			return
+		}
+		dispatchVolumeEvent(context, intent)
+	}
+}
+
+export function startVolumeKeyListener(callback: (event: VolumeKeyEvent) => void): VolumeKeyResult {
+	volumeLog('start requested listening=' + listening.toString())
+	volumeCallback = callback
+	if (listening) {
+		try {
+			const activity = getActivity()
+			VolumeKeyNative.install(activity, nativeKeyEventAction, nativeExtraKeyCode, nativeExtraActionCode)
+			activity.runOnUiThread(new InstallKeyListenerRunnable())
+		} catch (error) {}
+		return makeResult(true, 'ALREADY_LISTENING', '音量键监听已启动', null)
+	}
+	try {
+		const activity = getActivity()
+		const nativeInstalled = VolumeKeyNative.install(activity, nativeKeyEventAction, nativeExtraKeyCode, nativeExtraActionCode)
+		volumeLog('native kt interceptor install=' + nativeInstalled.toString())
+		activity.runOnUiThread(new InstallKeyListenerRunnable())
+		volumeActivityWindowCallback = new VolumeActivityWindowCallback()
+		UTSAndroid.onActivityCallback(volumeActivityWindowCallback!)
+		volumeLog('activity callback registered')
+		volumeActivityKeyCallback = new VolumeActivityKeyCallback()
+		UTSAndroid.onActivityCallback(volumeActivityKeyCallback!)
+		volumeLog('activity key callback registered')
+		const filter = new IntentFilter()
+		filter.addAction(volumeChangedAction)
+		filter.addAction(nativeKeyEventAction)
+		volumeReceiver = new VolumeKeyReceiver()
+		activity.registerReceiver(volumeReceiver, filter)
+		listening = true
+		volumeLog('broadcast receiver registered')
+		return makeResult(true, 'LISTENING', '音量键监听已启动', null)
+	} catch (error) {
+		volumeLog('start failed ' + JSON.stringify(error))
+		volumeReceiver = null
+		try {
+			VolumeKeyNative.uninstall(getActivity())
+		} catch (error) {}
+		if (volumeActivityWindowCallback != null) {
+			UTSAndroid.offActivityCallback(volumeActivityWindowCallback!)
+		}
+		volumeActivityWindowCallback = null
+		if (volumeActivityKeyCallback != null) {
+			UTSAndroid.offActivityCallback(volumeActivityKeyCallback!)
+		}
+		volumeActivityKeyCallback = null
+		listening = false
+		return makeResult(false, 'START_FAILED', '音量键监听启动失败', null)
+	}
+}
+
+export function stopVolumeKeyListener(): VolumeKeyResult {
+	volumeLog('stop requested listening=' + listening.toString())
+	if (!listening) {
+		volumeCallback = null
+		return makeResult(true, 'NOT_LISTENING', '音量键监听未启动', null)
+	}
+	if (volumeReceiver != null) {
+		try {
+			getActivity().unregisterReceiver(volumeReceiver)
+			volumeLog('broadcast receiver unregistered')
+		} catch (error) {}
+	}
+	volumeReceiver = null
+	try {
+		const nativeUninstalled = VolumeKeyNative.uninstall(getActivity())
+		volumeLog('native kt interceptor uninstall=' + nativeUninstalled.toString())
+	} catch (error) {}
+	if (volumeActivityWindowCallback != null) {
+		UTSAndroid.offActivityCallback(volumeActivityWindowCallback!)
+		volumeLog('activity callback unregistered')
+	}
+	volumeActivityWindowCallback = null
+	if (volumeActivityKeyCallback != null) {
+		UTSAndroid.offActivityCallback(volumeActivityKeyCallback!)
+		volumeLog('activity key callback unregistered')
+	}
+	volumeActivityKeyCallback = null
+	volumeCallback = null
+	listening = false
+	try {
+		getActivity().runOnUiThread(new RemoveKeyListenerRunnable())
+	} catch (error) {
+		volumeKeyView = null
+		volumeKeyListener = null
+	}
+	return makeResult(true, 'STOPPED', '音量键监听已停止', null)
+}
+
+export function isVolumeKeyListening(): VolumeKeyResult {
+	const data = {} as UTSJSONObject
+	data['listening'] = listening
+	return makeResult(true, listening ? 'LISTENING' : 'NOT_LISTENING', listening ? '音量键监听中' : '音量键监听未启动', data)
+}
+
+export function getLatestVolumeKeyEvent(): VolumeKeyResult {
+	if (latestEvent == null) {
+		return makeResult(false, 'NO_EVENT', '暂无音量键事件', null)
+	}
+	return makeResult(true, 'LATEST_EVENT', '已获取最近一次音量键事件', eventToData(latestEvent!))
+}

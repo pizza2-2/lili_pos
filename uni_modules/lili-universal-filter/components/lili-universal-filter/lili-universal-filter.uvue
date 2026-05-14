@@ -33,13 +33,16 @@
 				<text class="uf-title">{{ title }}</text>
 			</view>
 
-			<view v-if="showFilter || showMenu" class="uf-segment-group uf-segment-group-right">
+			<view v-if="showFilter || showMenu || showRightText" class="uf-segment-group uf-segment-group-right">
 				<view v-if="showFilter" :class="showFilter && showMenu ? 'uf-segment uf-segment-split uf-segment-light' : 'uf-segment uf-segment-light'" @click="handleFilter">
 					<image class="uf-icon-image" src="/static/icon/_筛选.png" mode="aspectFit"></image>
 					<view v-if="filterActive" class="uf-dot"></view>
 				</view>
 				<view v-if="showMenu" class="uf-segment uf-segment-dark" @click="handleMenu">
 					<text class="uf-segment-icon-light">≡</text>
+				</view>
+				<view v-if="showRightText" class="uf-segment uf-segment-dark uf-text-segment" @click="handleRight">
+					<text class="uf-right-text">{{ rightText }}</text>
 				</view>
 			</view>
 		</view>
@@ -85,6 +88,8 @@ type Props = {
 	showFilter?: boolean
 	showHome?: boolean
 	showMenu?: boolean
+	showRightText?: boolean
+	rightText?: string
 	showScan?: boolean
 	filterActive?: boolean
 	filterText?: string
@@ -103,6 +108,8 @@ const props = withDefaults(defineProps<Props>(), {
 	showFilter: false,
 	showHome: false,
 	showMenu: false,
+	showRightText: false,
+	rightText: '',
 	showScan: false,
 	filterActive: false,
 	filterText: '筛选',
@@ -115,6 +122,7 @@ const emit = defineEmits<{
 	(e: 'back'): void
 	(e: 'home'): void
 	(e: 'menu'): void
+	(e: 'right'): void
 	(e: 'filter'): void
 	(e: 'filter-open'): void
 	(e: 'filter-close'): void
@@ -190,6 +198,10 @@ function closeFilterPanel() {
 
 function handleMenu() {
 	emit('menu')
+}
+
+function handleRight() {
+	emit('right')
 }
 
 function handleScan() {
@@ -457,4 +469,6 @@ onMounted(() => {
 	line-height: 18px;
 	color: #64748B;
 }
+.uf-text-segment { width: 58px; }
+.uf-right-text { color: #FFFFFF; font-size: 14px; font-weight: 700; }
 </style>

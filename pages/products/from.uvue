@@ -5,8 +5,11 @@
 			:showBack="true"
 			:showSearch="false"
 			:showHome="true"
+			:showRightText="formMode == 'edit' && productId != ''"
+			rightText="打印"
 			homePath="/pages/tabbar/products"
 			backgroundColor="#EEF2F7"
+			@right="openProductPrintPage"
 		/>
 
 		<view class="page-content">
@@ -184,6 +187,15 @@ function intValue(value: any | null, fallback: number = 0): number {
 		return fallback
 	}
 	return parsed
+}
+
+function openProductPrintPage() {
+	if (productId.value == '') {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/label-templates/index?mode=print&product=' + productId.value,
+	})
 }
 
 function floatValue(value: any | null, fallback: number = 0): number {

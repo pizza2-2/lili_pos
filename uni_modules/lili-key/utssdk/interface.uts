@@ -1,0 +1,21 @@
+export type VolumeKeyEvent = {
+	key: string
+	action: string
+	streamType: number
+	volume: number
+	previousVolume: number
+	maxVolume: number
+	timestamp: number
+}
+
+export type VolumeKeyResult = {
+	success: boolean
+	code: string
+	message: string
+	data: UTSJSONObject | null
+}
+
+export type StartVolumeKeyListener = (callback: (event: VolumeKeyEvent) => void) => VolumeKeyResult
+export type StopVolumeKeyListener = () => VolumeKeyResult
+export type IsVolumeKeyListening = () => VolumeKeyResult
+export type GetLatestVolumeKeyEvent = () => VolumeKeyResult

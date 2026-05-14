@@ -1,0 +1,157 @@
+<template>
+	<view class="pcs-root">
+		<view class="pcs-head">
+			<view class="pcs-copy">
+				<text class="pcs-title">{{ title }}</text>
+				<text class="pcs-desc">{{ desc }}</text>
+			</view>
+			<view class="pcs-stepper">
+				<view :class="canDecrease ? 'pcs-step-btn' : 'pcs-step-btn pcs-step-btn-disabled'" @click="decrease">
+					<text class="pcs-step-text">-</text>
+				</view>
+				<input class="pcs-input" type="number" :value="displayValue" @input="handleInput" @blur="handleBlur" />
+				<view :class="canIncrease ? 'pcs-step-btn' : 'pcs-step-btn pcs-step-btn-disabled'" @click="increase">
+					<text class="pcs-step-text">+</text>
+				</view>
+			</view>
+		</view>
+		<view class="pcs-quick-row">
+			<view :class="quickActive(1) ? 'pcs-quick pcs-quick-active' : 'pcs-quick'" @click="setQuick(1)">
+				<text :class="quickActive(1) ? 'pcs-quick-text pcs-quick-text-active' : 'pcs-quick-text'">X1</text>
+			</view>
+			<view class="pcs-quick" @click="multiplyQuick(2)">
+				<text class="pcs-quick-text">X2</text>
+			</view>
+			<view class="pcs-quick" @click="multiplyQuick(3)">
+				<text class="pcs-quick-text">X3</text>
+			</view>
+			<view class="pcs-quick" @click="multiplyQuick(5)">
+				<text class="pcs-quick-text">X5</text>
+			</view>
+			<view class="pcs-quick" @click="multiplyQuick(10)">
+				<text class="pcs-quick-text">X10</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type Props = {
+	value?: string
+	title?: string
+	desc?: string
+	min?: number
+	max?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	value: '1',
+	title: '打印数量',
+	desc: '一个商品可一次打印多张价签',
+	min: 1,
+	max: 999,
+})
+
+const emit = defineEmits<{
+	(e: 'update:value', value: string): void
+	(e: 'change', value: string): void
+}>()
+
+const displayValue = ref(props.value)
+
+function intValue(value: any | null, fallback: number): number {
+	if (value == null) return fallback
+	const text = ('' + value).trim()
+	if (text == '') return fallback
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function normalized(value: any | null): number {
+	let next = intValue(value, props.min)
+	if (next < props.min) next = props.min
+	if (next > props.max) next = props.max
+	return next
+}
+
+function currentValue(): number {
+	return normalized(displayValue.value)
+}
+
+const canDecrease = computed((): boolean => {
+	return currentValue() > props.min
+})
+
+const canIncrease = computed((): boolean => {
+	return currentValue() < props.max
+})
+
+function commitValue(value: number) {
+	let next = value
+	if (next < props.min) next = props.min
+	if (next > props.max) next = props.max
+	const text = next.toString()
+	displayValue.value = text
+	emit('update:value', text)
+	emit('change', text)
+}
+
+function decrease() {
+	if (!canDecrease.value) return
+	commitValue(currentValue() - 1)
+}
+
+function increase() {
+	if (!canIncrease.value) return
+	commitValue(currentValue() + 1)
+}
+
+function setQuick(value: number) {
+	commitValue(value)
+}
+
+function multiplyQuick(multiplier: number) {
+	commitValue(currentValue() * multiplier)
+}
+
+function quickActive(value: number): boolean {
+	return currentValue() == value
+}
+
+function handleInput(event: any) {
+	const inputEvent = event as UniInputEvent
+	displayValue.value = inputEvent.detail.value
+	emit('update:value', displayValue.value)
+	emit('change', displayValue.value)
+}
+
+function handleBlur() {
+	commitValue(currentValue())
+}
+
+watch(
+	(): string => props.value,
+	(newValue: string) => {
+		displayValue.value = newValue
+	}
+)
+</script>
+
+<style>
+.pcs-root { border-radius: 8px; border-width: 1px; border-color: #DDE6F2; background-color: #FFFFFF; padding: 12px; }
+.pcs-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.pcs-copy { flex: 1; padding-right: 12px; }
+.pcs-title { font-size: 14px; color: #0F172A; font-weight: bold; line-height: 20px; }
+.pcs-desc { font-size: 12px; color: #64748B; line-height: 17px; margin-top: 2px; }
+.pcs-stepper { flex-direction: row; align-items: center; height: 40px; }
+.pcs-step-btn { width: 40px; height: 40px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.pcs-step-btn-disabled { background-color: #CBD5E1; }
+.pcs-step-text { font-size: 22px; color: #FFFFFF; font-weight: bold; line-height: 28px; }
+.pcs-input { width: 70px; height: 40px; margin-left: 6px; margin-right: 6px; border-radius: 8px; border-width: 1px; border-color: #CBD5E1; background-color: #F8FAFC; text-align: center; font-size: 16px; color: #0F172A; font-weight: bold; }
+.pcs-quick-row { flex-direction: row; margin-top: 10px; }
+.pcs-quick { flex: 1; height: 34px; border-radius: 8px; border-width: 1px; border-color: #CBD5E1; background-color: #F8FAFC; align-items: center; justify-content: center; margin-right: 6px; }
+.pcs-quick-active { border-color: #0F766E; background-color: #CCFBF1; }
+.pcs-quick-text { font-size: 13px; color: #334155; font-weight: bold; }
+.pcs-quick-text-active { color: #0F766E; }
+</style>

@@ -197,6 +197,19 @@ export type QuickProcurementResponse = {
 	message: string
 }
 
+export type PurchaseProductCheckResult = {
+	exists: boolean
+	purchase_detail_id: number
+	product_id: number
+	product_name: string
+	product_sku: string
+	product_barcode: string
+	quantity: number
+	received_quantity: number
+	remaining_quantity: number
+	unit_price: string
+}
+
 function stringValue(value: any | null): string {
 	if (value == null) return ''
 	return '' + value
@@ -700,6 +713,21 @@ function purchaseDetailPath(id: number | string): string {
 	return '/api/purchases/purchase-details/' + stringValue(id) + '/'
 }
 
+function buildPurchaseProductCheckResult(rawObject: UTSJSONObject): PurchaseProductCheckResult {
+	return {
+		exists: boolValue(rawObject['exists']),
+		purchase_detail_id: intValue(rawObject['purchase_detail_id']),
+		product_id: intValue(rawObject['product_id']),
+		product_name: stringValue(rawObject['product_name']),
+		product_sku: stringValue(rawObject['product_sku']),
+		product_barcode: stringValue(rawObject['product_barcode']),
+		quantity: intValue(rawObject['quantity']),
+		received_quantity: intValue(rawObject['received_quantity']),
+		remaining_quantity: intValue(rawObject['remaining_quantity']),
+		unit_price: stringValue(rawObject['unit_price']),
+	} as PurchaseProductCheckResult
+}
+
 export function purchaseProductTemplateDownloadUrl(id: number | string): string {
 	return baseUrl + detailPath(id) + 'product-template-download/'
 }
@@ -717,6 +745,15 @@ export async function getPurchaseFilterOptions(): Promise<PurchaseFilterOptionsR
 export async function getPurchaseDetail(id: number | string): Promise<PurchaseItem> {
 	const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true)
 	return buildPurchaseItem(rawDataObject(raw))
+}
+
+export async function checkPurchaseProduct(id: number | string, barcode: string, sku: string = ''): Promise<PurchaseProductCheckResult> {
+	const body = {
+		barcode: barcode,
+		sku: sku,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'check-product/', 'POST', body, true)
+	return buildPurchaseProductCheckResult(rawDataObject(raw))
 }
 
 export async function downloadPurchaseProductTemplate(id: number | string): Promise<PurchaseTemplateDownloadResult> {
@@ -849,8 +886,10 @@ export async function startSupplierExcelImportTask(id: number | string, filePath
 	} as SupplierExcelImportTask
 }
 
-export async function getSupplierExcelImportTaskStatus(id: number | string, taskId: string): Promise<SupplierExcelImportTask> {
-	const raw = await request(detailPath(id) + 'supplier-excel-import-task/' + taskId + '/', 'GET', {} as UTSJSONObject, true)
+export async function getSupplierExcelImportTaskStatus(id: number | string, taskId: string, includeData: boolean): Promise<SupplierExcelImportTask> {
+	const raw = await request(detailPath(id) + 'supplier-excel-import-task/' + taskId + '/', 'GET', {
+		include_data: includeData ? '1' : '0',
+	} as UTSJSONObject, true)
 	const rawObject = rawDataObject(raw)
 	const dataObject = parseObject(rawObject['data'])
 	return {

@@ -116,9 +116,9 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+import { checkPurchaseProduct, deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
-import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-volume-key/index.uts'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
 
 type PurchaseDetailSelectedFilter = {
 	param: string
@@ -146,6 +146,8 @@ const selectedFilters = ref<PurchaseDetailSelectedFilter[]>([])
 const filterPanelHeight = ref(420)
 const filterContentHeight = ref(356)
 const volumeScanLocked = ref(false)
+const scanLookupRunning = ref(false)
+let volumeKeyStartTimer = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'skuText', label: 'SKU:' } as UTSJSONObject,
@@ -334,6 +336,13 @@ function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadDetails() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadDetails() }
+
+function searchByScannedBarcode(barcode: string) {
+	keyword.value = barcode
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadDetails()
+}
 async function handleFilterOpen() {
 	if (filterOptions.value != null || filterOptionsLoading.value) return
 	filterOptionsLoading.value = true
@@ -385,16 +394,36 @@ function applySelectedFilters() {
 	loadDetails()
 }
 
+async function handleScannedBarcode(scanResult: string) {
+	const barcode = scanResult.trim()
+	if (barcode == '' || scanLookupRunning.value) return
+	if (purchaseId.value == '') {
+		searchByScannedBarcode(barcode)
+		return
+	}
+	scanLookupRunning.value = true
+	try {
+		const result = await checkPurchaseProduct(purchaseId.value, barcode, '')
+		if (result.exists && result.purchase_detail_id > 0) {
+			closeFilterDrawer()
+			uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + result.purchase_detail_id.toString() })
+			return
+		}
+		searchByScannedBarcode(barcode)
+	} catch (error) {
+		searchByScannedBarcode(barcode)
+	} finally {
+		scanLookupRunning.value = false
+	}
+}
+
 function handleScanSearch() {
 	scanCode({
 		onlyFromCamera: true,
 		success: (res: ScanCodeSuccessCallbackResult) => {
 			const scanResult = res.result
 			if (scanResult == '') return
-			keyword.value = scanResult
-			currentPage.value = 1
-			closeFilterDrawer()
-			loadDetails()
+			handleScannedBarcode(scanResult)
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
@@ -428,7 +457,21 @@ function startPurchaseDetailVolumeKeyListener() {
 	})
 }
 
+function schedulePurchaseDetailVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) {
+		clearTimeout(volumeKeyStartTimer)
+	}
+	volumeKeyStartTimer = setTimeout(() => {
+		volumeKeyStartTimer = 0
+		startPurchaseDetailVolumeKeyListener()
+	}, 260)
+}
+
 function stopPurchaseDetailVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) {
+		clearTimeout(volumeKeyStartTimer)
+		volumeKeyStartTimer = 0
+	}
 	stopVolumeKeyListener()
 	volumeScanLocked.value = false
 }
@@ -573,7 +616,7 @@ onLoad((query: OnLoadOptions) => {
 })
 
 onShow(() => {
-	startPurchaseDetailVolumeKeyListener()
+	schedulePurchaseDetailVolumeKeyListener()
 	updateFilterPanelLayout()
 	if (consumeRefreshNeeded()) loadDetails()
 })

@@ -11,6 +11,10 @@ import BluetoothManager from 'android.bluetooth.BluetoothManager'
 import BluetoothSocket from 'android.bluetooth.BluetoothSocket'
 import BroadcastReceiver from 'android.content.BroadcastReceiver'
 import IntentFilter from 'android.content.IntentFilter'
+import Bitmap from 'android.graphics.Bitmap'
+import Canvas from 'android.graphics.Canvas'
+import Color from 'android.graphics.Color'
+import Paint from 'android.graphics.Paint'
 import UUID from 'java.util.UUID'
 import Charset from 'java.nio.charset.Charset'
 import Thread from 'java.lang.Thread'
@@ -35,6 +39,16 @@ export type PrintTsplOptions = {
 	address: string
 	tspl: string
 	charset?: string
+	chunkSize?: number
+	delayMs?: number
+}
+
+export type LabelBitmapPrintOptions = {
+	address: string
+	paperWidthMm: number
+	paperHeightMm: number
+	dotsPerMm: number
+	elements: UTSJSONObject[]
 	chunkSize?: number
 	delayMs?: number
 }
@@ -437,6 +451,365 @@ export function getConnectedPrinter(): LabelPrinterResult {
 		bondState: deviceBondState(activeDevice!)
 	} as UTSJSONObject
 	return makeResult(true, 'CONNECTED', '已连接蓝牙打印机', data)
+}
+
+function labelString(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function labelNumber(value: any | null, fallback: number): number {
+	const parsed = parseFloat(labelString(value))
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function labelInt(value: any | null, fallback: number): number {
+	const parsed = parseInt(labelString(value))
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function labelBool(value: any | null, fallback: boolean): boolean {
+	if (value == null) return fallback
+	const text = labelString(value).toLowerCase()
+	if (text == 'true' || text == '1') return true
+	if (text == 'false' || text == '0') return false
+	return fallback
+}
+
+function onlyDigits(value: string): string {
+	let result = ''
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value.substring(index, index + 1)
+		if (char >= '0' && char <= '9') result = result + char
+	}
+	return result
+}
+
+function ean13Checksum(first12: string): string {
+	let sum = 0
+	for (let index = 0; index < 12; index += 1) {
+		const digit = parseInt(first12.substring(index, index + 1))
+		sum += index % 2 == 0 ? digit : digit * 3
+	}
+	const check = (10 - (sum % 10)) % 10
+	return check.toString()
+}
+
+function normalizeEan13(value: string): string {
+	let digits = onlyDigits(value)
+	if (digits.length >= 13) return digits.substring(0, 13)
+	if (digits.length == 12) return digits + ean13Checksum(digits)
+	return '5901234123457'
+}
+
+function ean13LeftPattern(digit: string, parity: string): string {
+	if (digit == '0') return parity == 'G' ? '0100111' : '0001101'
+	if (digit == '1') return parity == 'G' ? '0110011' : '0011001'
+	if (digit == '2') return parity == 'G' ? '0011011' : '0010011'
+	if (digit == '3') return parity == 'G' ? '0100001' : '0111101'
+	if (digit == '4') return parity == 'G' ? '0011101' : '0100011'
+	if (digit == '5') return parity == 'G' ? '0111001' : '0110001'
+	if (digit == '6') return parity == 'G' ? '0000101' : '0101111'
+	if (digit == '7') return parity == 'G' ? '0010001' : '0111011'
+	if (digit == '8') return parity == 'G' ? '0001001' : '0110111'
+	return parity == 'G' ? '0010111' : '0001011'
+}
+
+function ean13RightPattern(digit: string): string {
+	if (digit == '0') return '1110010'
+	if (digit == '1') return '1100110'
+	if (digit == '2') return '1101100'
+	if (digit == '3') return '1000010'
+	if (digit == '4') return '1011100'
+	if (digit == '5') return '1001110'
+	if (digit == '6') return '1010000'
+	if (digit == '7') return '1000100'
+	if (digit == '8') return '1001000'
+	return '1110100'
+}
+
+function ean13Parity(first: string): string {
+	if (first == '0') return 'LLLLLL'
+	if (first == '1') return 'LLGLGG'
+	if (first == '2') return 'LLGGLG'
+	if (first == '3') return 'LLGGGL'
+	if (first == '4') return 'LGLLGG'
+	if (first == '5') return 'LGGLLG'
+	if (first == '6') return 'LGGGLL'
+	if (first == '7') return 'LGLGLG'
+	if (first == '8') return 'LGLGGL'
+	return 'LGGLGL'
+}
+
+function ean13Pattern(value: string): string {
+	const digits = normalizeEan13(value)
+	const parity = ean13Parity(digits.substring(0, 1))
+	let result = '101'
+	for (let index = 1; index <= 6; index += 1) {
+		result = result + ean13LeftPattern(digits.substring(index, index + 1), parity.substring(index - 1, index))
+	}
+	result = result + '01010'
+	for (let index = 7; index <= 12; index += 1) {
+		result = result + ean13RightPattern(digits.substring(index, index + 1))
+	}
+	return result + '101'
+}
+
+function drawBitmapText(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
+	const content = labelString(element['content'], labelString(element['label'], 'TEXT'))
+	const x = Math.round(labelNumber(element['x'], 0) * dotsPerMm)
+	const y = Math.round(labelNumber(element['y'], 0) * dotsPerMm)
+	const fontSize = labelNumber(element['fontSize'], 18)
+	paint.setColor(Color.BLACK)
+	paint.setAntiAlias(true)
+	paint.setTextSize(fontSize.toFloat())
+	canvas.drawText(content, x.toFloat(), (y + fontSize * 0.82).toFloat(), paint)
+}
+
+function drawPseudoBarcode(canvas: Canvas, paint: Paint, content: string, x: number, y: number, width: number, height: number) {
+	const count = 38
+	const barWidth = width / count
+	for (let index = 0; index < count; index += 1) {
+		if (index % 3 != 1) {
+			const left = x + index * barWidth
+			canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, barWidth * 0.65)).toFloat(), (y + height).toFloat(), paint)
+		}
+	}
+}
+
+function drawEan13Barcode(canvas: Canvas, paint: Paint, content: string, x: number, y: number, width: number, height: number) {
+	const pattern = ean13Pattern(content)
+	const moduleWidth = width / pattern.length
+	for (let index = 0; index < pattern.length; index += 1) {
+		if (pattern.substring(index, index + 1) == '1') {
+			const left = x + index * moduleWidth
+			canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, moduleWidth)).toFloat(), (y + height).toFloat(), paint)
+		}
+	}
+}
+
+function drawBitmapBarcode(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
+	const content = labelString(element['content'], '5901234123457')
+	const barcodeType = labelString(element['barcodeType'], labelString(element['barcode_type'], 'CODE128')).toUpperCase()
+	const showText = labelBool(element['showText'], labelBool(element['show_text'], false))
+	const x = Math.round(labelNumber(element['x'], 0) * dotsPerMm)
+	const y = Math.round(labelNumber(element['y'], 0) * dotsPerMm)
+	const width = Math.round(labelNumber(element['width'], 20) * dotsPerMm)
+	const height = Math.round(labelNumber(element['height'], 5) * dotsPerMm)
+	const textHeight = showText ? 14 : 0
+	const barHeight = Math.max(8, height - textHeight)
+	paint.setColor(Color.BLACK)
+	paint.setAntiAlias(false)
+	if (barcodeType == 'EAN13') {
+		drawEan13Barcode(canvas, paint, content, x, y, width, barHeight)
+	} else {
+		drawPseudoBarcode(canvas, paint, content, x, y, width, barHeight)
+	}
+	if (showText) {
+		paint.setAntiAlias(true)
+		const textSize = (height / 3).toFloat()
+		paint.setTextSize(textSize)
+		canvas.drawText(content, (x + 2).toFloat(), (y + height - 2).toFloat(), paint)
+	}
+}
+
+function drawBitmapGraphic(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
+	const type = labelString(element['type'], 'text')
+	const x = Math.round(labelNumber(element['x'], 0) * dotsPerMm)
+	const y = Math.round(labelNumber(element['y'], 0) * dotsPerMm)
+	const width = Math.round(labelNumber(element['width'], 10) * dotsPerMm)
+	const height = Math.round(labelNumber(element['height'], 5) * dotsPerMm)
+	const lineWidth = Math.max(1, Math.round(labelNumber(element['lineWidth'], labelNumber(element['line_width'], 0.4)) * dotsPerMm))
+	paint.setColor(Color.BLACK)
+	paint.setAntiAlias(false)
+	if (type == 'hline') {
+		canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
+		return
+	}
+	if (type == 'vline') {
+		canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
+		return
+	}
+	if (type == 'rect') {
+		canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
+		canvas.drawRect(x.toFloat(), (y + height - lineWidth).toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
+		canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
+		canvas.drawRect((x + width - lineWidth).toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
+	}
+}
+
+function drawBitmapElement(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
+	const type = labelString(element['type'], 'text')
+	if (type == 'barcode') {
+		drawBitmapBarcode(canvas, paint, element, dotsPerMm)
+	} else if (type == 'hline' || type == 'vline' || type == 'rect') {
+		drawBitmapGraphic(canvas, paint, element, dotsPerMm)
+	} else {
+		drawBitmapText(canvas, paint, element, dotsPerMm)
+	}
+}
+
+function renderLabelBitmap(paperWidthMm: number, paperHeightMm: number, dotsPerMm: number, elements: UTSJSONObject[]): Bitmap {
+	const width = Math.max(8, Math.round(paperWidthMm * dotsPerMm))
+	const height = Math.max(8, Math.round(paperHeightMm * dotsPerMm))
+	const bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+	const canvas = new Canvas(bitmap)
+	const paint = new Paint()
+	canvas.drawColor(Color.WHITE)
+	for (let index = 0; index < elements.length; index += 1) {
+		drawBitmapElement(canvas, paint, elements[index], dotsPerMm)
+	}
+	return bitmap
+}
+
+function bitmapToTsplBytes(bitmap: Bitmap): ByteArray {
+	const width = bitmap.getWidth()
+	const height = bitmap.getHeight()
+	const widthBytes = ((width + 7) / 8).toInt()
+	const result = new ByteArray((widthBytes * height).toInt())
+	let y: Int = 0
+	while (y < height) {
+		let xByte: Int = 0
+		while (xByte < widthBytes) {
+			let value: Int = 0
+			let bit: Int = 0
+			while (bit < 8) {
+				const x = (xByte * 8 + bit).toInt()
+				if (x < width) {
+					const pixel = bitmap.getPixel(x.toInt(), y.toInt())
+					const gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3
+					if (gray >= 160) {
+						value = value | (0x80 >> bit)
+					}
+				}
+				bit += 1
+			}
+			result[(y * widthBytes + xByte).toInt()] = value.toByte()
+			xByte += 1
+		}
+		y += 1
+	}
+	return result
+}
+
+function writePrinterBytes(bytes: ByteArray, chunkSize: Int, delayMs: Long) {
+	const output = activeSocket!.getOutputStream()
+	let offset: Int = 0
+	while (offset < bytes.size) {
+		let count = chunkSize
+		if (offset + count > bytes.size) {
+			count = (bytes.size - offset).toInt()
+		}
+		output.write(bytes, offset.toInt(), count.toInt())
+		output.flush()
+		if (delayMs > 0) {
+			Thread.sleep(delayMs)
+		}
+		offset += count
+	}
+}
+
+function extraOptionInt(options: any, key: string, fallback: number): number {
+	try {
+		const text = JSON.stringify(options)
+		const object = JSON.parseObject<UTSJSONObject>(text)
+		if (object == null) return fallback
+		const value = object![key]
+		if (value == null) return fallback
+		const parsed = parseInt('' + value)
+		if (isNaN(parsed)) return fallback
+		return parsed
+	} catch (error) {
+		return fallback
+	}
+}
+
+function bitmapOptionObject(options: any): UTSJSONObject {
+	try {
+		const text = JSON.stringify(options)
+		if (text == null || text == '') return {} as UTSJSONObject
+		const object = JSON.parseObject<UTSJSONObject>(text)
+		if (object == null) return {} as UTSJSONObject
+		return object!
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function bitmapOptionString(options: UTSJSONObject, key: string, fallback: string): string {
+	const value = options[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function bitmapOptionNumber(options: UTSJSONObject, key: string, fallback: number): number {
+	const value = options[key]
+	if (value == null) return fallback
+	const parsed = parseFloat('' + value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function bitmapOptionElements(options: UTSJSONObject): UTSJSONObject[] {
+	const value = options['elements']
+	if (value == null) return [] as UTSJSONObject[]
+	try {
+		const text = JSON.stringify(value)
+		if (text == null || text == '') return [] as UTSJSONObject[]
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) return [] as UTSJSONObject[]
+		return parsed!
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+export function printLabelBitmap(options: any): LabelPrinterResult {
+	const bitmapOptions = bitmapOptionObject(options)
+	const address = bitmapOptionString(bitmapOptions, 'address', '')
+	const paperWidthMm = bitmapOptionNumber(bitmapOptions, 'paperWidthMm', 30)
+	const paperHeightMm = bitmapOptionNumber(bitmapOptions, 'paperHeightMm', 20)
+	const dotsPerMm = bitmapOptionNumber(bitmapOptions, 'dotsPerMm', 8)
+	const elements = bitmapOptionElements(bitmapOptions)
+	if (address == '') {
+		return makeResult(false, 'ADDRESS_EMPTY', '请先选择蓝牙打印机', null)
+	}
+	if (elements.length == 0) {
+		return makeResult(false, 'ELEMENTS_EMPTY', '标签内容不能为空', null)
+	}
+	if (activeDevice == null || activeSocket == null || !activeSocket!.isConnected() || activeDevice!.getAddress() != address) {
+		const connectResult = connectPrinter(address)
+		if (!connectResult.success) {
+			return connectResult
+		}
+	}
+	try {
+		let chunkSizeValue = extraOptionInt(bitmapOptions, 'chunkSize', 1024)
+		if (chunkSizeValue <= 0) chunkSizeValue = 1024
+		let delayMsValue = extraOptionInt(bitmapOptions, 'delayMs', 20)
+		if (delayMsValue < 0) delayMsValue = 20
+		const chunkSize = chunkSizeValue.toInt()
+		const delayMs = delayMsValue.toLong()
+		const bitmap = renderLabelBitmap(paperWidthMm, paperHeightMm, dotsPerMm, elements)
+		const bitmapBytes = bitmapToTsplBytes(bitmap)
+		const widthBytes = ((bitmap.getWidth() + 7) / 8).toInt()
+		let copies = extraOptionInt(options, 'copies', 1)
+		if (copies <= 0) copies = 1
+		const prefix = 'SIZE ' + paperWidthMm.toString() + ' mm,' + paperHeightMm.toString() + ' mm\r\nGAP 2 mm,0\r\nDENSITY 8\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0,' + widthBytes.toString() + ',' + bitmap.getHeight().toString() + ',0,'
+		const suffix = '\r\nPRINT ' + copies.toString() + '\r\n'
+		writePrinterBytes(prefix.toByteArray(Charset.forName('GBK')), chunkSize, delayMs)
+		writePrinterBytes(bitmapBytes, chunkSize, delayMs)
+		writePrinterBytes(suffix.toByteArray(Charset.forName('GBK')), chunkSize, delayMs)
+		bitmap.recycle()
+		return makeResult(true, 'PRINTED', '图片标签已发送', null)
+	} catch (error) {
+		return makeResult(false, 'BITMAP_PRINT_FAILED', '图片打印失败，请检查打印机连接', null)
+	}
 }
 
 export function printTspl(options: PrintTsplOptions): LabelPrinterResult {

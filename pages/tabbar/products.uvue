@@ -165,6 +165,7 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { request } from '@/pkg/api/index.uts'
 import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
 
 type ProductSelectOption = {
 	value: string
@@ -189,6 +190,7 @@ const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
+const volumeScanLocked = ref(false)
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'supplierText', label: '供应商：' } as UTSJSONObject,
@@ -805,6 +807,36 @@ function handleScanSearch() {
 	} as ScanCodeOption)
 }
 
+function unlockVolumeScanSoon() {
+	setTimeout(() => {
+		volumeScanLocked.value = false
+	}, 1200)
+}
+
+function handleVolumeKeyEvent(event: VolumeKeyEvent) {
+	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
+		return
+	}
+	if (volumeScanLocked.value) {
+		return
+	}
+	volumeScanLocked.value = true
+	closeFilterDrawer()
+	handleScanSearch()
+	unlockVolumeScanSoon()
+}
+
+function startProductVolumeKeyListener() {
+	startVolumeKeyListener((event: VolumeKeyEvent) => {
+		handleVolumeKeyEvent(event)
+	})
+}
+
+function stopProductVolumeKeyListener() {
+	stopVolumeKeyListener()
+	volumeScanLocked.value = false
+}
+
 async function handleFilterOpen() {
 	if (filterOptions.value != null || filterOptionsLoading.value) {
 		return
@@ -1116,6 +1148,7 @@ onLoad(() => {
 })
 
 onShow(() => {
+	startProductVolumeKeyListener()
 	updateFilterPanelLayout()
 	if (consumeProductListRefreshFlag()) {
 		loadProducts()
@@ -1124,6 +1157,14 @@ onShow(() => {
 	if (products.value.length == 0 && !isLoading.value) {
 		loadProducts()
 	}
+})
+
+onHide(() => {
+	stopProductVolumeKeyListener()
+})
+
+onUnload(() => {
+	stopProductVolumeKeyListener()
 })
 </script>
 

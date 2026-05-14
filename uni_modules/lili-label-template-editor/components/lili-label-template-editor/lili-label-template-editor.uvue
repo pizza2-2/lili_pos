@@ -1,8 +1,16 @@
 <template>
 	<view class="lte-root">
 		<view class="lte-toolbar">
-			<view class="lte-tool" @click="addTextElement"><text class="lte-tool-text">添加文本</text></view>
-			<view class="lte-tool" @click="addBarcodeElement"><text class="lte-tool-text">添加条码</text></view>
+			<view class="lte-tool" @click="addNameField"><text class="lte-tool-text">名称</text></view>
+			<view class="lte-tool" @click="addOriginalPriceField"><text class="lte-tool-text">原价</text></view>
+			<view class="lte-tool" @click="addDiscountPriceField"><text class="lte-tool-text">折扣价</text></view>
+			<view class="lte-tool" @click="addBarcodeField"><text class="lte-tool-text">条码</text></view>
+			<view class="lte-tool" @click="addSkuField"><text class="lte-tool-text">SKU</text></view>
+			<view class="lte-tool" @click="addKodField"><text class="lte-tool-text">KOD</text></view>
+			<view class="lte-tool" @click="addHorizontalLine"><text class="lte-tool-text">横线</text></view>
+			<view class="lte-tool" @click="addVerticalLine"><text class="lte-tool-text">竖线</text></view>
+			<view class="lte-tool" @click="addRectFrame"><text class="lte-tool-text">边框</text></view>
+			<view class="lte-tool" @click="addTextElement"><text class="lte-tool-text">自定义</text></view>
 			<view class="lte-tool" @click="resizeSelected(1)"><text class="lte-tool-text">放大</text></view>
 			<view class="lte-tool" @click="resizeSelected(-1)"><text class="lte-tool-text">缩小</text></view>
 			<view class="lte-tool lte-tool-primary" @click="printTestLabel"><text class="lte-tool-primary-text">测试打印</text></view>
@@ -39,6 +47,10 @@
 				<text class="lte-editor-title">当前字段</text>
 				<text class="lte-editor-subtitle">{{ selectedElementSummary }}</text>
 			</view>
+			<view class="lte-source-row">
+				<text class="lte-source-label">数据库映射</text>
+				<text class="lte-source-value">{{ selectedSourceText }}</text>
+			</view>
 			<view v-if="selectedType == 'barcode'" class="lte-barcode-options">
 				<text class="lte-input-label">条码类型</text>
 				<view class="lte-type-row">
@@ -57,7 +69,11 @@
 					<switch :checked="selectedShowText" color="#111827" @change="handleShowTextChange" />
 				</view>
 			</view>
-			<view class="lte-input-row">
+			<view v-if="selectedType == 'hline' || selectedType == 'vline' || selectedType == 'rect'" class="lte-input-row">
+				<text class="lte-input-label">线宽(mm)</text>
+				<input class="lte-input" :value="selectedLineWidth" type="digit" placeholder="0.4" @input="handleLineWidthInput" />
+			</view>
+			<view v-if="selectedType != 'hline' && selectedType != 'vline' && selectedType != 'rect'" class="lte-input-row">
 				<text class="lte-input-label">显示内容</text>
 				<input class="lte-input" :value="selectedContent" placeholder="请输入标签文字或条码" @input="handleContentInput" />
 			</view>
@@ -71,7 +87,7 @@
 
 <script setup lang="uts">
 import { computed, nextTick, onMounted, watch } from 'vue'
-import { getConnectedPrinter, printTspl } from '@/uni_modules/lili-label-printer/index.uts'
+import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
 
 type Props = {
 	elements: UTSJSONObject[]
@@ -88,6 +104,7 @@ type LabelElement = {
 	content: string
 	barcodeType: string
 	showText: boolean
+	lineWidth: number
 	x: number
 	y: number
 	width: number
@@ -175,8 +192,11 @@ function dot(valueMm: number): number {
 }
 
 function tsplTextScale(fontSize: number): number {
-	if (fontSize >= 46) return 3
-	if (fontSize >= 28) return 2
+	if (fontSize >= 96) return 6
+	if (fontSize >= 76) return 5
+	if (fontSize >= 56) return 4
+	if (fontSize >= 36) return 3
+	if (fontSize >= 24) return 2
 	return 1
 }
 
@@ -243,10 +263,18 @@ function makeKey(): string {
 	return key
 }
 
+function normalizeElementType(value: string): string {
+	if (value == 'barcode') return 'barcode'
+	if (value == 'hline') return 'hline'
+	if (value == 'vline') return 'vline'
+	if (value == 'rect') return 'rect'
+	return 'text'
+}
+
 function elementFromObject(item: UTSJSONObject, index: number): LabelElement {
 	const key = stringValue(item['key'], 'field-' + (index + 1).toString())
 	const label = stringValue(item['label'], '字段 ' + (index + 1).toString())
-	const type = stringValue(item['type'], 'text') == 'barcode' ? 'barcode' : 'text'
+	const type = normalizeElementType(stringValue(item['type'], 'text'))
 	const source = stringValue(item['source'], 'custom')
 	const content = stringValue(item['content'], label)
 	const barcodeType = stringValue(item['barcodeType'], stringValue(item['barcode_type'], 'CODE128')).toUpperCase() == 'EAN13' ? 'EAN13' : 'CODE128'
@@ -256,7 +284,8 @@ function elementFromObject(item: UTSJSONObject, index: number): LabelElement {
 	const width = numberValue(stringValue(item['width']), 18)
 	const height = numberValue(stringValue(item['height']), type == 'barcode' ? 5 : 4)
 	const fontSize = intValue(stringValue(item['fontSize']), type == 'barcode' ? 12 : 18)
-	return { key: key, label: label, type: type, source: source, content: content, barcodeType: barcodeType, showText: showText, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
+	const lineWidth = numberValue(stringValue(item['lineWidth'], stringValue(item['line_width'])), 1)
+	return { key: key, label: label, type: type, source: source, content: content, barcodeType: barcodeType, showText: showText, lineWidth: lineWidth, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
 }
 
 function objectFromElement(item: LabelElement): UTSJSONObject {
@@ -268,6 +297,7 @@ function objectFromElement(item: LabelElement): UTSJSONObject {
 	result['content'] = item.content
 	result['barcodeType'] = item.barcodeType
 	result['showText'] = item.showText
+	result['lineWidth'] = item.lineWidth
 	result['x'] = Math.round(item.x * 10) / 10
 	result['y'] = Math.round(item.y * 10) / 10
 	result['width'] = Math.round(item.width * 10) / 10
@@ -310,8 +340,16 @@ function clampElement(item: LabelElement) {
 	if (item.type == 'text') {
 		fitTextElement(item)
 	}
-	if (item.width < 2) item.width = 2
-	if (item.height < 1.5) item.height = 1.5
+	if (item.type == 'hline') {
+		if (item.lineWidth < 0.2) item.lineWidth = 0.2
+		item.height = item.lineWidth
+	}
+	if (item.type == 'vline') {
+		if (item.lineWidth < 0.2) item.lineWidth = 0.2
+		item.width = item.lineWidth
+	}
+	if (item.type != 'vline' && item.width < 2) item.width = 2
+	if (item.type != 'hline' && item.height < 1.5) item.height = 1.5
 	if (item.type == 'barcode' && item.height < 3) item.height = 3
 	if (item.fontSize < 8) item.fontSize = 8
 	if (item.x < 0) item.x = 0
@@ -352,6 +390,28 @@ function drawCanvasBarcode(context: DrawableContext, item: LabelElement) {
 	}
 }
 
+function drawCanvasGraphic(context: DrawableContext, item: LabelElement) {
+	const x = item.x * previewScale.value
+	const y = item.y * previewScale.value
+	const width = item.width * previewScale.value
+	const height = item.height * previewScale.value
+	const linePx = Math.max(1, item.lineWidth * previewScale.value)
+	context.fillStyle = '#111827'
+	context.strokeStyle = '#111827'
+	context.lineWidth = linePx
+	if (item.type == 'hline') {
+		context.fillRect(x, y, Math.max(1, width), Math.max(1, linePx))
+		return
+	}
+	if (item.type == 'vline') {
+		context.fillRect(x, y, Math.max(1, linePx), Math.max(1, height))
+		return
+	}
+	if (item.type == 'rect') {
+		context.strokeRect(x + linePx / 2, y + linePx / 2, Math.max(1, width - linePx), Math.max(1, height - linePx))
+	}
+}
+
 function drawCanvasElement(context: DrawableContext, item: LabelElement) {
 	const x = item.x * previewScale.value
 	const y = item.y * previewScale.value
@@ -373,6 +433,8 @@ function drawCanvasElement(context: DrawableContext, item: LabelElement) {
 	}
 	if (item.type == 'barcode') {
 		drawCanvasBarcode(context, item)
+	} else if (item.type == 'hline' || item.type == 'vline' || item.type == 'rect') {
+		drawCanvasGraphic(context, item)
 	} else {
 		drawCanvasText(context, item)
 	}
@@ -449,7 +511,7 @@ function loadElements(value: UTSJSONObject[]) {
 		next.push(item)
 	}
 	if (next.length == 0) {
-		next.push({ key: 'name', label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, x: 2, y: 2, width: 18, height: 4, fontSize: 18 } as LabelElement)
+		next.push({ key: 'name', label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, lineWidth: 1, x: 2, y: 2, width: 18, height: 4, fontSize: 18 } as LabelElement)
 	}
 	elements.value = next
 	let nextKey = next[0].key
@@ -483,6 +545,24 @@ const selectedLabel = computed((): string => {
 	return (item as LabelElement).label
 })
 
+const selectedSourceText = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return '未选择字段'
+	const current = item as LabelElement
+	if (current.type == 'hline') return '图形：横线'
+	if (current.type == 'vline') return '图形：竖线'
+	if (current.type == 'rect') return '图形：边框'
+	if (current.source == 'custom') return '自定义字段'
+	if (current.source == 'name') return '商品名称 name'
+	if (current.source == 'base_sales_price') return '原价 base_sales_price'
+	if (current.source == 'discount_price') return '折扣价 discount_price'
+	if (current.source == 'barcode') return '条码 barcode'
+	if (current.source == 'sku') return 'SKU sku'
+	if (current.source == 'kod') return 'KOD kod'
+	if (current.source == 'specification') return '规格 specification'
+	return current.source
+})
+
 const selectedType = computed((): string => {
 	const item = getSelectedElement()
 	if (item == null) return ''
@@ -499,6 +579,12 @@ const selectedShowText = computed((): boolean => {
 	const item = getSelectedElement()
 	if (item == null) return true
 	return (item as LabelElement).showText
+})
+
+const selectedLineWidth = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return '0.4'
+	return (item as LabelElement).lineWidth.toString()
 })
 
 function selectElement(key: any) {
@@ -529,8 +615,12 @@ function resizeSelected(delta: number) {
 	renderCanvas()
 }
 
+function makeMappedElement(type: string, label: string, source: string, content: string, x: number, y: number, width: number, height: number, fontSize: number): LabelElement {
+	return { key: makeKey(), label: label, type: type, source: source, content: content, barcodeType: type == 'barcode' ? 'EAN13' : 'CODE128', showText: type == 'barcode' ? false : true, lineWidth: 0.4, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
+}
+
 function makeElement(type: string, label: string, content: string, x: number, y: number, width: number, height: number, fontSize: number): LabelElement {
-	return { key: makeKey(), label: label, type: type, source: 'custom', content: content, barcodeType: type == 'barcode' ? 'EAN13' : 'CODE128', showText: type == 'barcode' ? false : true, x: x, y: y, width: width, height: height, fontSize: fontSize } as LabelElement
+	return makeMappedElement(type, label, 'custom', content, x, y, width, height, fontSize)
 }
 
 function addElement(item: LabelElement) {
@@ -546,7 +636,43 @@ function addTextElement() {
 }
 
 function addBarcodeElement() {
-	addElement(makeElement('barcode', '条码', '5901234123457', 2, 10, 24, 5, 12))
+	addElement(makeMappedElement('barcode', '条码', 'barcode', '5901234123457', 2, 14, 24, 5, 12))
+}
+
+function addNameField() {
+	addElement(makeMappedElement('text', '商品名称', 'name', '商品名称', 2, 2, 24, 4, 18))
+}
+
+function addOriginalPriceField() {
+	addElement(makeMappedElement('text', '原价', 'base_sales_price', '原价 100.00', 2, 6, 18, 5, 24))
+}
+
+function addDiscountPriceField() {
+	addElement(makeMappedElement('text', '折扣价', 'discount_price', '折扣价 89.90', 2, 10, 22, 6, 32))
+}
+
+function addBarcodeField() {
+	addElement(makeMappedElement('barcode', '条码', 'barcode', '5901234123457', 2, 14, 24, 5, 12))
+}
+
+function addSkuField() {
+	addElement(makeMappedElement('text', 'SKU', 'sku', 'SKU001', 2, 17, 12, 3, 14))
+}
+
+function addKodField() {
+	addElement(makeMappedElement('text', 'KOD', 'kod', 'KOD', 16, 17, 10, 3, 14))
+}
+
+function addHorizontalLine() {
+	addElement(makeMappedElement('hline', '横线', 'custom', '', 2, 8, 24, 0.4, 12))
+}
+
+function addVerticalLine() {
+	addElement(makeMappedElement('vline', '竖线', 'custom', '', 15, 2, 0.4, 14, 12))
+}
+
+function addRectFrame() {
+	addElement(makeMappedElement('rect', '边框', 'custom', '', 1, 1, labelWidthMm() - 2, labelHeightMm() - 2, 12))
 }
 
 function deleteSelectedElement() {
@@ -584,6 +710,17 @@ function handleLabelInput(event: any) {
 	renderCanvas()
 }
 
+function handleLineWidthInput(event: any) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const inputEvent = event as UniInputEvent
+	const current = item as LabelElement
+	current.lineWidth = numberValue(inputEvent.detail.value, current.lineWidth)
+	clampElement(current)
+	emitChange()
+	renderCanvas()
+}
+
 function setBarcodeType(value: string) {
 	const item = getSelectedElement()
 	if (item == null) return
@@ -605,16 +742,26 @@ function handleShowTextChange(event: any) {
 	renderCanvas()
 }
 
+function currentElementsPayload(): UTSJSONObject[] {
+	const payload: UTSJSONObject[] = []
+	for (let index = 0; index < elements.value.length; index += 1) {
+		payload.push(objectFromElement(elements.value[index]))
+	}
+	return payload
+}
+
 function printTestLabel() {
 	const address = connectedPrinterAddress()
 	if (address == '') {
 		goPrinterSettings()
 		return
 	}
-	const response = printTspl({
+	const response = printLabelBitmap({
 		address: address,
-		tspl: buildPrintTspl(),
-		charset: 'GB18030',
+		paperWidthMm: labelWidthMm(),
+		paperHeightMm: labelHeightMm(),
+		dotsPerMm: props.dotsPerMm,
+		elements: currentElementsPayload(),
 		chunkSize: 1024,
 		delayMs: 20,
 	})
@@ -772,6 +919,9 @@ onMounted(() => {
 .lte-editor-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 14rpx; }
 .lte-editor-title { font-size: 26rpx; font-weight: 700; color: #0F172A; }
 .lte-editor-subtitle { font-size: 21rpx; color: #64748B; }
+.lte-source-row { flex-direction: row; align-items: center; justify-content: space-between; min-height: 52rpx; border-radius: 14rpx; background-color: #FFFFFF; border-width: 1rpx; border-color: #D8E2EF; padding: 0 16rpx; margin-bottom: 14rpx; }
+.lte-source-label { font-size: 22rpx; color: #64748B; }
+.lte-source-value { font-size: 22rpx; color: #0F172A; font-weight: 700; }
 .lte-barcode-options { margin-bottom: 14rpx; }
 .lte-type-row { flex-direction: row; margin-top: 8rpx; margin-bottom: 12rpx; }
 .lte-type-chip { height: 54rpx; padding: 0 18rpx; border-radius: 16rpx; border-width: 1rpx; border-color: #D8E2EF; background-color: #FFFFFF; align-items: center; justify-content: center; margin-right: 12rpx; }
