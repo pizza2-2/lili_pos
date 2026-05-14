@@ -1,0 +1,65 @@
+{
+  "id": "lili-volume-key",
+  "displayName": "lili-volume-key",
+  "version": "1.0.0",
+  "description": "Volume key listener for Android",
+  "keywords": [
+    "volume",
+    "key",
+    "android"
+  ],
+  "dcloudext": {
+    "type": "uts",
+    "sale": {
+      "regular": {
+        "price": "0.00"
+      }
+    },
+    "contact": {
+      "qq": ""
+    },
+    "declaration": {
+      "ads": "无",
+      "data": "无",
+      "permissions": "无"
+    },
+    "npmurl": ""
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": {
+        "tcb": "u",
+        "aliyun": "u"
+      },
+      "client": {
+        "Vue": {
+          "vue2": "u",
+          "vue3": "y"
+        },
+        "App": {
+          "app-vue": "u",
+          "app-nvue": "u",
+          "app-uvue": "y"
+        },
+        "H5-mobile": {
+          "Safari": "u",
+          "Android Browser": "u",
+          "微信浏览器(Android)": "u",
+          "QQ浏览器(Android)": "u"
+        },
+        "H5-pc": {
+          "Chrome": "u",
+          "IE": "u",
+          "Edge": "u",
+          "Firefox": "u",
+          "Safari": "u"
+        },
+        "小程序": {
+          "微信": "u"
+        }
+      }
+    }
+  }
+}

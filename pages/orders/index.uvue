@@ -4,45 +4,77 @@
 			title="订单管理"
 			searchPlaceholder="订单号、收银员、收银台"
 			:searchValue="keyword"
-			:filterVisible="false"
+			:filterVisible="filterVisible"
 			:showBack="true"
 			:showSearch="true"
-			:showFilter="false"
+			:showFilter="true"
+			:filterActive="hasActiveFilter"
+			filterText="筛选"
 			:showHome="true"
 			homePath="/pages/tabbar/settings"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
-		/>
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="order-filter-panel">
+					<view class="order-filter-groups">
+						<view class="order-filter-group">
+							<text class="order-filter-title">日期范围</text>
+							<view class="order-filter-options">
+								<view
+									v-for="option in datePresetOptions"
+									:key="'date-' + option.key"
+									:class="datePresetValue == option.key ? 'order-filter-option order-filter-option-active' : 'order-filter-option'"
+									@click="selectDatePreset(option.key)"
+								>
+									<text :class="datePresetValue == option.key ? 'order-filter-option-text order-filter-option-text-active' : 'order-filter-option-text'">{{ option.text }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view v-if="filterOptionsLoading" class="order-filter-state">
+						<text class="order-filter-state-text">筛选选项加载中...</text>
+					</view>
+					<view v-else-if="filterOptionsError != ''" class="order-filter-state">
+						<text class="order-filter-state-text">{{ filterOptionsError }}</text>
+					</view>
+					<view v-else-if="filterDefinitions.length == 0" class="order-filter-state order-filter-state-small">
+						<text class="order-filter-state-text">暂无更多筛选项</text>
+					</view>
+					<view v-else class="order-filter-groups">
+						<view v-for="filter in filterDefinitions" :key="filter.key" class="order-filter-group">
+							<text class="order-filter-title">{{ filter.label }}</text>
+							<view class="order-filter-options">
+								<view
+									v-for="option in filter.options"
+									:key="filter.key + '-' + option.value"
+									:class="isFilterOptionSelected(filter.param, option.value) ? 'order-filter-option order-filter-option-active' : 'order-filter-option'"
+									@click="toggleFilterOption(filter.param, option.value, filter.multiple)"
+								>
+									<text :class="isFilterOptionSelected(filter.param, option.value) ? 'order-filter-option-text order-filter-option-text-active' : 'order-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view class="order-filter-actions">
+						<view class="order-filter-btn order-filter-btn-light" @click="handleFilterReset">
+							<text class="order-filter-btn-light-text">重置</text>
+						</view>
+						<view class="order-filter-btn order-filter-btn-primary" @click="applySelectedFilters">
+							<text class="order-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
 
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
 			<view class="page-content">
-				<view class="filter-section">
-					<scroll-view scroll-x="true" class="filter-scroll">
-						<view class="filter-row">
-							<view v-for="item in statusFilters" :key="item.key" :class="statusValue == item.key ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectStatus(item.key)">
-								<text :class="statusValue == item.key ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">{{ item.text }}</text>
-							</view>
-						</view>
-					</scroll-view>
-					<scroll-view scroll-x="true" class="filter-scroll">
-						<view class="filter-row">
-							<view v-for="item in paymentFilters" :key="item.key" :class="paymentValue == item.key ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPayment(item.key)">
-								<text :class="paymentValue == item.key ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">{{ item.text }}</text>
-							</view>
-						</view>
-					</scroll-view>
-					<scroll-view scroll-x="true" class="filter-scroll">
-						<view class="filter-row">
-							<view v-for="item in inventoryFilters" :key="item.key" :class="inventoryValue == item.key ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectInventory(item.key)">
-								<text :class="inventoryValue == item.key ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">{{ item.text }}</text>
-							</view>
-						</view>
-					</scroll-view>
-				</view>
-
 				<view v-if="errorMessage != '' && !isLoading" class="error-card">
 					<text class="error-title">加载失败</text>
 					<text class="error-desc">{{ errorMessage }}</text>
@@ -90,17 +122,15 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { getOrderList, getOrderStatistics, OrderItem, OrderListQuery, OrderListResponse, OrderStatistics } from '@/pkg/api/modules/orders.uts'
+import { getOrderFilterOptions, getOrderList, getOrderStatistics, OrderFilterDefinition, OrderFilterOptionsResponse, OrderItem, OrderListQuery, OrderListResponse, OrderSelectedFilter, OrderStatistics } from '@/pkg/api/modules/orders.uts'
 
-type FilterItem = {
+type DatePresetOption = {
 	key: string
 	text: string
 }
 
 const keyword = ref('')
-const statusValue = ref('')
-const paymentValue = ref('')
-const inventoryValue = ref('')
+const filterVisible = ref(false)
 const orders = ref<OrderItem[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -109,6 +139,18 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const pageTotalAmount = ref('0.00')
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<OrderFilterOptionsResponse | null>(null)
+const selectedFilters = ref<OrderSelectedFilter[]>([])
+const datePresetValue = ref('today')
+const datePresetOptions = ref<DatePresetOption[]>([
+	{ key: 'today', text: '今天' } as DatePresetOption,
+	{ key: 'week', text: '本周' } as DatePresetOption,
+	{ key: 'month', text: '本月' } as DatePresetOption,
+	{ key: 'year', text: '本年' } as DatePresetOption,
+	{ key: 'all', text: '全部' } as DatePresetOption,
+])
 const statistics = ref<OrderStatistics>({
 	total_count: 0,
 	inventory_deducted_count: 0,
@@ -118,31 +160,11 @@ const statistics = ref<OrderStatistics>({
 	failed_count: 0,
 } as OrderStatistics)
 
-const statusFilters = ref<FilterItem[]>([
-	{ key: '', text: '全部状态' } as FilterItem,
-	{ key: 'received', text: '已接收' } as FilterItem,
-	{ key: 'processed', text: '已处理' } as FilterItem,
-	{ key: 'failed', text: '处理失败' } as FilterItem,
-])
-
-const paymentFilters = ref<FilterItem[]>([
-	{ key: '', text: '全部支付' } as FilterItem,
-	{ key: 'cash', text: '现金' } as FilterItem,
-	{ key: 'card', text: '银行卡' } as FilterItem,
-	{ key: 'mixed', text: '混合支付' } as FilterItem,
-	{ key: 'other', text: '其他' } as FilterItem,
-])
-
-const inventoryFilters = ref<FilterItem[]>([
-	{ key: '', text: '全部库存' } as FilterItem,
-	{ key: 'false', text: '待扣减' } as FilterItem,
-	{ key: 'true', text: '已扣减' } as FilterItem,
-])
-
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'shopText', label: '店铺:' } as UTSJSONObject,
 	{ key: 'cashierText', label: '收银员:' } as UTSJSONObject,
 	{ key: 'itemsText', label: '商品:' } as UTSJSONObject,
+	{ key: 'amountDetailText', label: '金额:' } as UTSJSONObject,
 	{ key: 'inventoryText', label: '库存:' } as UTSJSONObject,
 ])
 
@@ -206,16 +228,117 @@ function paymentText(item: OrderItem): string {
 	return '-'
 }
 
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: OrderSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as OrderSelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as OrderSelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return selectedFilterValue(param) == value
+}
+
+function toggleFilterOption(param: string, value: string, multiple: boolean = false) {
+	if (!multiple) {
+		const currentValue = selectedFilterValue(param)
+		setSelectedFilterValue(param, currentValue == value ? '' : value)
+		return
+	}
+	const currentValue = selectedFilterValue(param)
+	const parts = currentValue == '' ? [] as string[] : currentValue.split(',')
+	const nextParts: string[] = []
+	let removed = false
+	for (let index = 0; index < parts.length; index += 1) {
+		if (parts[index] == value) {
+			removed = true
+			continue
+		}
+		nextParts.push(parts[index])
+	}
+	if (!removed) nextParts.push(value)
+	setSelectedFilterValue(param, nextParts.join(','))
+}
+
+function pad2(value: number): string {
+	return value < 10 ? '0' + value.toString() : value.toString()
+}
+
+function dateValue(date: Date): string {
+	return date.getFullYear().toString() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate())
+}
+
+function addDays(date: Date, days: number): Date {
+	return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function todayDate(): Date {
+	const now = new Date()
+	return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function datePresetLabel(): string {
+	if (datePresetValue.value == 'week') return '本周'
+	if (datePresetValue.value == 'month') return '本月'
+	if (datePresetValue.value == 'year') return '本年'
+	if (datePresetValue.value == 'all') return '全部'
+	return '今天'
+}
+
+function dateRangeFrom(): string | null {
+	if (datePresetValue.value == 'all') return null
+	const today = todayDate()
+	if (datePresetValue.value == 'week') {
+		const weekday = today.getDay()
+		const diff = weekday == 0 ? 6 : weekday - 1
+		return dateValue(addDays(today, 0 - diff))
+	}
+	if (datePresetValue.value == 'month') return dateValue(new Date(today.getFullYear(), today.getMonth(), 1))
+	if (datePresetValue.value == 'year') return dateValue(new Date(today.getFullYear(), 0, 1))
+	return dateValue(today)
+}
+
+function dateRangeTo(): string | null {
+	if (datePresetValue.value == 'all') return null
+	return dateValue(todayDate())
+}
+
+function selectDatePreset(value: string) {
+	datePresetValue.value = value
+}
+
 function buildQuery(page: number): OrderListQuery {
 	const query: OrderListQuery = {
 		search: keyword.value == '' ? null : keyword.value,
 		page: page,
 		page_size: pageSize.value,
-		status: statusValue.value == '' ? null : statusValue.value,
-		payment_method: paymentValue.value == '' ? null : paymentValue.value,
-		inventory_deducted: inventoryValue.value == '' ? null : inventoryValue.value,
-		date_from: null,
-		date_to: null,
+		status: selectedFilterValue('status') == '' ? null : selectedFilterValue('status'),
+		payment_method: selectedFilterValue('payment_method') == '' ? null : selectedFilterValue('payment_method'),
+		cashier_id: selectedFilterValue('cashier_id') == '' ? null : selectedFilterValue('cashier_id'),
+		inventory_deducted: selectedFilterValue('inventory_deducted') == '' ? null : selectedFilterValue('inventory_deducted'),
+		date_from: dateRangeFrom(),
+		date_to: dateRangeTo(),
 	}
 	return query
 }
@@ -265,6 +388,7 @@ function orderToListItem(item: OrderItem): UTSJSONObject {
 	const shopText = stringValue(item.shop_name, item.shop > 0 ? '店铺 #' + item.shop.toString() : '-')
 	const timeText = stringValue(item.order_time, stringValue(item.created_at, '-'))
 	const itemCountText = item.item_count.toString() + '项 / ' + item.quantity_count.toString() + '件'
+	const amountDetailText = '小计 ' + stringValue(item.subtotal, '0.00') + ' / 税 ' + stringValue(item.tax_amount, '0.00') + ' / 折扣 ' + stringValue(item.discount_amount, '0.00')
 	return {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
@@ -275,6 +399,7 @@ function orderToListItem(item: OrderItem): UTSJSONObject {
 		shopText: shopText,
 		cashierText: stringValue(item.cashier_id, '-') + ' / ' + stringValue(item.kasa_number, '-'),
 		itemsText: itemCountText,
+		amountDetailText: amountDetailText,
 		inventoryText: item.inventory_deducted ? '已扣减' : '未扣减',
 		tags: [statusText(item), paymentText(item)] as string[],
 	} as UTSJSONObject
@@ -285,30 +410,40 @@ function reloadFirstPage() {
 	loadOrders()
 }
 
-function selectStatus(value: any) {
-	const next = stringValue(value)
-	if (statusValue.value == next) return
-	statusValue.value = next
-	reloadFirstPage()
-}
-
-function selectPayment(value: any) {
-	const next = stringValue(value)
-	if (paymentValue.value == next) return
-	paymentValue.value = next
-	reloadFirstPage()
-}
-
-function selectInventory(value: any) {
-	const next = stringValue(value)
-	if (inventoryValue.value == next) return
-	inventoryValue.value = next
-	reloadFirstPage()
-}
-
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; reloadFirstPage() }
 function handleSearchClear() { keyword.value = ''; reloadFirstPage() }
+
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+
+async function loadFilterOptions() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getOrderFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleFilterOpen() {
+	loadFilterOptions()
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as OrderSelectedFilter[]
+	datePresetValue.value = 'today'
+	filterVisible.value = false
+	reloadFirstPage()
+}
+
+function applySelectedFilters() {
+	filterVisible.value = false
+	reloadFirstPage()
+}
 
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
@@ -364,16 +499,28 @@ const listItems = computed((): UTSJSONObject[] => {
 
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
-	if (keyword.value != '' || statusValue.value != '' || paymentValue.value != '' || inventoryValue.value != '') return '没有匹配的订单'
+	if (keyword.value != '' || selectedFilters.value.length > 0) return datePresetLabel() + '没有匹配的订单'
+	if (datePresetValue.value != 'all') return datePresetLabel() + '暂无订单'
 	return '暂无订单'
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return selectedFilters.value.length > 0 || datePresetValue.value != 'today'
+})
+
+const filterDefinitions = computed((): OrderFilterDefinition[] => {
+	if (filterOptions.value == null) return [] as OrderFilterDefinition[]
+	return filterOptions.value!.filters
 })
 
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
+		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
 		{ key: 'total', label: '订单数', value: totalCount.value.toString() } as UTSJSONObject,
 		{ key: 'pageAmount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
 		{ key: 'processed', label: '已处理', value: statistics.value.processed_count.toString() } as UTSJSONObject,
 		{ key: 'pendingStock', label: '待扣库存', value: statistics.value.inventory_pending_count.toString() } as UTSJSONObject,
+		{ key: 'failed', label: '异常', value: statistics.value.failed_count.toString() } as UTSJSONObject,
 	]
 })
 
@@ -384,13 +531,24 @@ onLoad(() => { loadOrders() })
 .page { flex: 1; background-color: #F6F7FB; }
 .page-scroll { flex: 1; background-color: #F6F7FB; }
 .page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
-.filter-section { background-color: #FFFFFF; border-radius: 8px; padding-top: 8px; padding-bottom: 8px; margin-bottom: 8px; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
-.filter-scroll { height: 42px; }
-.filter-row { flex-direction: row; align-items: center; padding-left: 8px; padding-right: 8px; }
-.filter-chip { height: 32px; padding-left: 12px; padding-right: 12px; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #D7DEE8; background-color: #FFFFFF; align-items: center; justify-content: center; margin-right: 8px; }
-.filter-chip-active { background-color: #0F172A; border-color: #0F172A; }
-.filter-chip-text { font-size: 13px; line-height: 18px; color: #334155; }
-.filter-chip-text-active { color: #FFFFFF; font-weight: bold; }
+.order-filter-panel { position: relative; padding-top: 2px; padding-bottom: 52px; background-color: #FFFFFF; }
+.order-filter-state { height: 112px; border-radius: 8px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.order-filter-state-small { height: 58px; }
+.order-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.order-filter-groups { margin-bottom: 6px; }
+.order-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 8px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.order-filter-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.order-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.order-filter-option { min-width: 58px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.order-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.order-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.order-filter-option-text-active { color: #FFFFFF; font-weight: bold; }
+.order-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.order-filter-btn { flex: 1; height: 38px; border-radius: 8px; align-items: center; justify-content: center; }
+.order-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.order-filter-btn-primary { background-color: #0F172A; }
+.order-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.order-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
 .error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
 .error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }

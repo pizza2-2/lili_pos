@@ -1,0 +1,8 @@
+export {
+	startVolumeKeyListener,
+	stopVolumeKeyListener,
+	isVolumeKeyListening,
+	getLatestVolumeKeyEvent,
+	type VolumeKeyEvent,
+	type VolumeKeyResult,
+} from './utssdk/app-android/index.uts'
