@@ -163,7 +163,7 @@
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
-import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
 
@@ -201,6 +201,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
 
@@ -286,6 +287,7 @@ async function loadProducts() {
 			filters: selectedFilters.value,
 		})
 		applyProductResponse(response)
+		console.log("输出打印",response)
 	} catch (error) {
 		products.value = []
 		currentPage.value = 1
@@ -354,24 +356,58 @@ function getDisplayText(value: string | null, fallback: string = '-'): string {
 	return value
 }
 
+function productThumbnailUrl(mediaFile: ProductMediaFile): string {
+	if (mediaFile.signed_thumbnail_url != '') {
+		return mediaFile.signed_thumbnail_url
+	}
+	if (mediaFile.thumbnail_url != '') {
+		return mediaFile.thumbnail_url
+	}
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	return mediaFile.file_url
+}
+
+function productFullUrl(mediaFile: ProductMediaFile): string {
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	if (mediaFile.file_url != '') {
+		return mediaFile.file_url
+	}
+	return productThumbnailUrl(mediaFile)
+}
+
 function buildImages(item: ProductItem): string[] {
 	const result: string[] = []
 	for (let index = 0; index < item.media_files.length; index += 1) {
 		const mediaFile = item.media_files[index]
-		if (mediaFile.signed_thumbnail_url != '') {
-			result.push(mediaFile.signed_thumbnail_url)
-			continue
+		const imageUrl = productThumbnailUrl(mediaFile)
+		if (imageUrl != '') {
+			result.push(imageUrl)
 		}
-		if (mediaFile.thumbnail_url != '') {
-			result.push(mediaFile.thumbnail_url)
-			continue
+	}
+	return result
+}
+
+function buildPreviewImages(item: ProductItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = productFullUrl(item.media_files[index])
+		if (imageUrl != '') {
+			result.push(imageUrl)
 		}
-		if (mediaFile.signed_url != '') {
-			result.push(mediaFile.signed_url)
-			continue
-		}
-		if (mediaFile.file_url != '') {
-			result.push(mediaFile.file_url)
+	}
+	return result
+}
+
+function buildMediaIds(item: ProductItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaId = item.media_files[index].id
+		if (mediaId != '') {
+			result.push(mediaId)
 		}
 	}
 	return result
@@ -559,19 +595,12 @@ function buildSelectOptions(value: any | null): ProductSelectOption[] {
 }
 
 function buildBottomSelectResponse(source: ProductSelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keywordValue = stringValue(params['keyword']).toLowerCase()
 	const idValue = stringValue(params['id'])
 	const result: UTSJSONObject[] = []
 
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (idValue != '' && option.value != idValue) {
-			continue
-		}
-
-		const optionTextLowerCase = option.text.toLowerCase()
-		const optionValueLowerCase = option.value.toLowerCase()
-		if (keywordValue != '' && optionTextLowerCase.indexOf(keywordValue) < 0 && optionValueLowerCase.indexOf(keywordValue) < 0) {
 			continue
 		}
 
@@ -641,13 +670,22 @@ function buildCategoryTreeResponse(raw: any): UTSJSONObject {
 }
 
 async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keywordValue = stringValue(params['keyword'])
+	const query: UTSJSONObject = {
+		key: 'supplier',
+		limit: 50,
+	} as UTSJSONObject
+	if (keywordValue != '') {
+		query['search'] = keywordValue
+		query['keyword'] = keywordValue
+	}
 	const raw = await request(
 		'/api/procurement/suppliers/options/',
 		'GET',
-		{} as UTSJSONObject,
+		query,
 		true
 	)
-	return buildBottomSelectResponse(buildSelectOptions(raw), params)
+	return buildBottomSelectResponse(buildSelectOptions(raw), { keyword: '', id: stringValue(params['id']) } as UTSJSONObject)
 }
 
 async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
@@ -676,24 +714,6 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 		true
 	)
 	return buildCategoryTreeResponse(raw)
-}
-
-function getProductImage(item: ProductItem): string {
-	if (item.media_files.length == 0) {
-		return ''
-	}
-
-	const mediaFile = item.media_files[0]
-	if (mediaFile.signed_thumbnail_url != '') {
-		return mediaFile.signed_thumbnail_url
-	}
-	if (mediaFile.thumbnail_url != '') {
-		return mediaFile.thumbnail_url
-	}
-	if (mediaFile.signed_url != '') {
-		return mediaFile.signed_url
-	}
-	return mediaFile.file_url
 }
 
 function buildProductTags(item: ProductItem): string[] {
@@ -727,6 +747,8 @@ function productDisplayName(item: ProductItem): string {
 }
 
 function productToListItem(item: ProductItem): UTSJSONObject {
+	const images = buildImages(item)
+	const previewImages = buildPreviewImages(item)
 	return {
 		id: item.id.toString(),
 		name: productDisplayName(item),
@@ -746,8 +768,11 @@ function productToListItem(item: ProductItem): UTSJSONObject {
 		salesCountText: item.total_sales_quantity.toString(),
 		variantCountText: item.variant_count.toString(),
 		updatedText: getDisplayText(item.updated_at),
-		cover: getProductImage(item),
-		images: buildImages(item),
+		cover: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item),
 		tags: buildProductTags(item),
 		rawId: item.id.toString(),
 	} as UTSJSONObject
@@ -1012,6 +1037,20 @@ function handleFieldClick(payload: UTSJSONObject) {
 	}
 }
 
+function navigateToProductInventory(item: UTSJSONObject) {
+	const rawId = stringValue(item['rawId'], stringValue(item['id']))
+	if (rawId == '') {
+		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		return
+	}
+	const productName = stringValue(item['name'])
+	let url = '/pages/inventory-management/from?product=' + rawId
+	if (productName != '') url = url + '&productName=' + encodeURIComponent(productName)
+	uni.navigateTo({
+		url: url,
+	})
+}
+
 function handleMenu(payload: UTSJSONObject) {
 	const actionValue = payload['action']
 	const itemValue = payload['item']
@@ -1038,6 +1077,10 @@ function handleMenu(payload: UTSJSONObject) {
 		uni.navigateTo({
 			url: '/pages/products/from?id=' + rawId,
 		})
+		return
+	}
+	if (key == 'inventory') {
+		navigateToProductInventory(item)
 		return
 	}
 	if (key == 'reload') {

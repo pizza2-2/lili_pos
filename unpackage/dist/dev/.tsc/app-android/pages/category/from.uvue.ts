@@ -2,10 +2,10 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { createCategory, getCategoryDetail, getCategoryList, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
+import { createCategory, getCategoryDetail, getCategoryList, translateCategoryName, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
 import { getKasaCategoryOptions } from '@/pkg/api/modules/kasa_category'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/category/from.uvue", 42, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/category/from.uvue", 44, 6>;
 	value: string
 	text: string
 }
@@ -26,10 +26,25 @@ const operationMode = ref('create')
 const categoryId = ref('')
 const leaveSignal = ref(0)
 const submitting = ref(false)
+const translating = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
 
 const initialData = ref<UTSJSONObject>({
+	name: '',
+	name_en: '',
+	code: '',
+	parent_id: '',
+	parent_text: '',
+	description: '',
+	kasa_category_id: '',
+	kasa_category_text: '',
+	tax_rate: '0.23',
+	tax_rate_text: '标准税率 23%',
+	sort_order: '0',
+	is_active: true,
+} as UTSJSONObject)
+const currentFormData = ref<UTSJSONObject>({
 	name: '',
 	name_en: '',
 	code: '',
@@ -101,7 +116,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:130")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:147")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -135,15 +150,11 @@ function findTaxRateText(value: string): string {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = stringValue(params['keyword']).toLowerCase()
 	const id = stringValue(params['id'])
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -292,7 +303,107 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (text == null || text == '') {
 		return null
 	}
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:321")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:334")
+}
+
+function cloneFormData(source: UTSJSONObject): UTSJSONObject {
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "pages/category/from.uvue", 338, 8), } as UTSJSONObject
+	for (const key in source) {
+		target[key] = source[key]
+	}
+	return target
+}
+
+function setInitialData(data: UTSJSONObject) {
+	initialData.value = data
+	currentFormData.value = cloneFormData(data)
+}
+
+function getCurrentFormData(): UTSJSONObject {
+	return currentFormData.value
+}
+
+function setCurrentFormField(key: string, value: any) {
+	const nextData = cloneFormData(currentFormData.value)
+	nextData[key] = value
+	setInitialData(nextData)
+}
+
+function buildAiTranslationPrompt(sourceName: string): string {
+	return '请把下面的商品分类中文名称翻译成简洁、自然的波兰语分类名称。只输出波兰语名称，不要解释，不要加引号：\n' + sourceName
+}
+
+function copyAiTranslationPrompt() {
+	const sourceName = stringValue(getCurrentFormData()['name']).trim()
+	if (sourceName == '') {
+		uni.showToast({
+			title: '请先填写分类名称',
+			icon: 'none',
+		})
+		return
+	}
+	uni.setClipboardData({
+		data: buildAiTranslationPrompt(sourceName),
+		success: () => {
+			uni.showToast({
+				title: 'AI提示词已复制',
+				icon: 'success',
+			})
+		},
+	})
+}
+
+function extractTranslatedName(response: UTSJSONObject): string {
+	let translated = stringValue(response['translated'])
+	if (translated != '') return translated
+	translated = stringValue(response['name_en'])
+	if (translated != '') return translated
+	translated = stringValue(response['translation'])
+	if (translated != '') return translated
+	return stringValue(response['target'])
+}
+
+async function fillServerTranslation() {
+	if (translating.value) {
+		return
+	}
+	const sourceName = stringValue(getCurrentFormData()['name']).trim()
+	if (sourceName == '') {
+		uni.showToast({
+			title: '请先填写分类名称',
+			icon: 'none',
+		})
+		return
+	}
+	translating.value = true
+	uni.showLoading({
+		title: '翻译中...',
+		mask: true,
+	})
+	try {
+		const response = await translateCategoryName(sourceName)
+		const translated = extractTranslatedName(response).trim()
+		if (translated == '') {
+			uni.showToast({
+				title: '服务器未返回译文',
+				icon: 'none',
+			})
+			return
+		}
+		setCurrentFormField('name_en', translated)
+		uni.showToast({
+			title: '波兰语名称已填充',
+			icon: 'success',
+		})
+	} catch (error) {
+		uni.showToast({
+			title: parseErrorMessage(error, '服务器翻译失败'),
+			icon: 'none',
+		})
+	} finally {
+		uni.hideLoading()
+		translating.value = false
+	}
 }
 
 function buildKasaCategoryTextFromInfo(info: UTSJSONObject | null): string {
@@ -359,7 +470,7 @@ async function loadDetailData(idText: string): Promise<void> {
 		if (kasaCategoryIdText != '') {
 			detailData['kasa_category_text'] = await resolveKasaCategoryTextByValue(kasaCategoryIdText, currentKasaCategoryText)
 		}
-		initialData.value = detailData
+		setInitialData(detailData)
 		parentInfo.value = {
 			id: detail.parent_id > 0 ? detail.parent_id.toString() : '',
 			text: parentText,
@@ -528,6 +639,23 @@ function handleDiscardLeave(payload: UTSJSONObject) {
 function handleDirtyChange(value: boolean) {
 }
 
+function handleFormChange(payload: UTSJSONObject) {
+	const rawData = payload['formData']
+	if (rawData == null) return
+	currentFormData.value = cloneFormData(rawData as UTSJSONObject)
+}
+
+async function handleInputAction(payload: UTSJSONObject) {
+	const action = stringValue(payload['action'])
+	if (action == 'copy-ai-translation-prompt') {
+		copyAiTranslationPrompt()
+		return
+	}
+	if (action == 'server-translate-name') {
+		await fillServerTranslation()
+	}
+}
+
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
@@ -558,9 +686,13 @@ const formSections = ref<UTSJSONObject[]>([
 			} as UTSJSONObject,
 			{
 				key: 'name_en',
-				label: '英文名称',
+				label: '波兰语名称',
 				type: 'input',
-				placeholder: '请输入英文名称',
+				placeholder: '请输入波兰语名称',
+				leftActionKey: 'copy-ai-translation-prompt',
+				leftActionIcon: '/static/icon/ai.svg',
+				rightActionKey: 'server-translate-name',
+				rightActionIcon: '/static/icon/search.svg',
 			} as UTSJSONObject,
 			{
 				key: 'code',
@@ -684,12 +816,12 @@ onLoad((event: OnLoadOptions) => {
 		operationMode.value = 'add'
 		formMode.value = 'create'
 		const parentIdText = '' + parentIdValue
-		const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent('' + parentNameValue), " at pages/category/from.uvue:713")
+		const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent('' + parentNameValue), " at pages/category/from.uvue:847")
 		parentInfo.value = {
 			id: parentIdText,
 			text: parentNameText == '' ? parentIdText : parentNameText,
 		} as UTSJSONObject
-		initialData.value = {
+		setInitialData({
 			name: '',
 			name_en: '',
 			code: '',
@@ -702,7 +834,7 @@ onLoad((event: OnLoadOptions) => {
 			tax_rate_text: '标准税率 23%',
 			sort_order: '0',
 			is_active: true,
-		} as UTSJSONObject
+		} as UTSJSONObject)
 		return
 	}
 
@@ -712,7 +844,7 @@ onLoad((event: OnLoadOptions) => {
 		id: '',
 		text: '根分类（无父分类）',
 	} as UTSJSONObject
-	initialData.value = {
+	setInitialData({
 		name: '',
 		name_en: '',
 		code: '',
@@ -725,7 +857,7 @@ onLoad((event: OnLoadOptions) => {
 		tax_rate_text: '标准税率 23%',
 		sort_order: '0',
 		is_active: true,
-	} as UTSJSONObject
+	} as UTSJSONObject)
 })
 
 return (): any | null => {
@@ -753,6 +885,8 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
         onDiscardLeave: handleDiscardLeave,
         onSaveRequest: handleSaveRequest,
         onDirtyChange: handleDirtyChange,
+        onFormChange: handleFormChange,
+        onInputAction: handleInputAction,
         onBottomSelectAdd: handleBottomSelectAdd,
         onBottomSelectEdit: handleBottomSelectEdit
       }), null, 8 /* PROPS */, ["mode", "formSections", "initialData", "leaveSignal"])

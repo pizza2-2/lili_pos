@@ -46,7 +46,7 @@ open class GenPagesSuppliersIndex : BasePage {
             val selectionMode = ref(false)
             val selectedSupplierIds = ref(_uA<String>())
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "phone", "label" to "电话"), _uO("key" to "address", "label" to "地址"), _uO("key" to "arrears_amount", "label" to "欠款")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "详情"), _uO("key" to "add", "text" to "增加"), _uO("key" to "delete", "text" to "删除")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "Detail", "text" to "采购记录"), _uO("key" to "add", "text" to "新增记录"), _uO("key" to "delete", "text" to "删除")))
             val batchToolbarActions = ref(_uA<UTSJSONObject>(_uO("key" to "more", "text" to "操作")))
             val defaultBatchActionMap = ref(_uA<UTSJSONObject>(_uO("key" to "activate", "text" to "批量启用"), _uO("key" to "deactivate", "text" to "批量停用"), _uO("key" to "delete", "text" to "批量删除")))
             fun gen_applySupplierResponse_fn(response: SupplierListResponse) {
@@ -393,41 +393,7 @@ open class GenPagesSuppliersIndex : BasePage {
                 return value
             }
             val getDisplayText = ::gen_getDisplayText_fn
-            fun gen_buildImages_fn(item: SupplierItem): UTSArray<String> {
-                val result: UTSArray<String> = _uA()
-                run {
-                    var index: Number = 0
-                    while(index < item.media_files.length){
-                        val mediaFile = item.media_files[index]
-                        if (mediaFile.signed_thumbnail_url != "") {
-                            result.push(mediaFile.signed_thumbnail_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.thumbnail_url != "") {
-                            result.push(mediaFile.thumbnail_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.signed_url != "") {
-                            result.push(mediaFile.signed_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.file_url != "") {
-                            result.push(mediaFile.file_url)
-                        }
-                        index += 1
-                    }
-                }
-                return result
-            }
-            val buildImages = ::gen_buildImages_fn
-            fun gen_getSupplierImage_fn(item: SupplierItem): String {
-                if (item.media_files.length == 0) {
-                    return ""
-                }
-                val mediaFile = item.media_files[0]
+            fun gen_supplierThumbnailUrl_fn(mediaFile: SupplierMediaFile): String {
                 if (mediaFile.signed_thumbnail_url != "") {
                     return mediaFile.signed_thumbnail_url
                 }
@@ -439,7 +405,63 @@ open class GenPagesSuppliersIndex : BasePage {
                 }
                 return mediaFile.file_url
             }
-            val getSupplierImage = ::gen_getSupplierImage_fn
+            val supplierThumbnailUrl = ::gen_supplierThumbnailUrl_fn
+            fun gen_supplierFullUrl_fn(mediaFile: SupplierMediaFile): String {
+                if (mediaFile.signed_url != "") {
+                    return mediaFile.signed_url
+                }
+                if (mediaFile.file_url != "") {
+                    return mediaFile.file_url
+                }
+                return supplierThumbnailUrl(mediaFile)
+            }
+            val supplierFullUrl = ::gen_supplierFullUrl_fn
+            fun gen_buildImages_fn(item: SupplierItem): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < item.media_files.length){
+                        val mediaFile = item.media_files[index]
+                        val imageUrl = supplierThumbnailUrl(mediaFile)
+                        if (imageUrl != "") {
+                            result.push(imageUrl)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildImages = ::gen_buildImages_fn
+            fun gen_buildPreviewImages_fn(item: SupplierItem): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < item.media_files.length){
+                        val imageUrl = supplierFullUrl(item.media_files[index])
+                        if (imageUrl != "") {
+                            result.push(imageUrl)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildPreviewImages = ::gen_buildPreviewImages_fn
+            fun gen_buildMediaIds_fn(item: SupplierItem): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < item.media_files.length){
+                        val mediaId = item.media_files[index].id
+                        if (mediaId != "") {
+                            result.push(mediaId)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildMediaIds = ::gen_buildMediaIds_fn
             fun gen_formatPaidAmount_fn(value: Number): String {
                 return value.toFixed(2)
             }
@@ -455,14 +477,24 @@ open class GenPagesSuppliersIndex : BasePage {
             }
             val formatDateText = ::gen_formatDateText_fn
             fun gen_supplierToListItem_fn(item: SupplierItem): UTSJSONObject {
-                val cover = getSupplierImage(item)
                 val images = buildImages(item)
+                val previewImages = buildPreviewImages(item)
                 return _uO("id" to item.id.toString(10), "name" to item.name, "code" to getDisplayText(item.code), "codeText" to ("编码：" + getDisplayText(item.code)), "contactText" to ("联系人：" + getDisplayText(item.contact)), "contact" to getDisplayText(item.contact), "phone" to getDisplayText(item.phone), "address" to getDisplayText(item.address), "description" to if (item.description == null) {
                     ""
                 } else {
                     item.description
                 }
-                , "is_active" to item.is_active, "total_amount" to item.total_amount, "paid_amount_text" to formatPaidAmount(item.paid_amount), "arrears_amount" to item.arrears_amount, "updatedText" to formatDateText(item.updated_at), "filesText" to (item.files_count.toString(10) + " 个"), "cover" to cover, "images" to images, "rawId" to item.id.toString(10))
+                , "is_active" to item.is_active, "total_amount" to item.total_amount, "paid_amount_text" to formatPaidAmount(item.paid_amount), "arrears_amount" to item.arrears_amount, "updatedText" to formatDateText(item.updated_at), "filesText" to (item.files_count.toString(10) + " 个"), "cover" to if (images.length > 0) {
+                    images[0]
+                } else {
+                    ""
+                }
+                , "images" to images, "previewCover" to if (previewImages.length > 0) {
+                    previewImages[0]
+                } else {
+                    ""
+                }
+                , "previewImages" to previewImages, "mediaIds" to buildMediaIds(item), "rawId" to item.id.toString(10))
             }
             val supplierToListItem = ::gen_supplierToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
@@ -676,14 +708,17 @@ open class GenPagesSuppliersIndex : BasePage {
                 })
             }
             val confirmDeleteSupplier = ::gen_confirmDeleteSupplier_fn
-            fun gen_navigateToTransactionsPage_fn(pagePath: String, supplierId: String) {
+            fun navigateToTransactionsPage(pagePath: String, supplierId: String, supplierName: String = "") {
                 if (supplierId == "") {
                     uni_showToast(ShowToastOptions(title = "供应商ID缺失", icon = "none"))
                     return
                 }
-                uni_navigateTo(NavigateToOptions(url = pagePath + "?supplier_id=" + supplierId))
+                var url = pagePath + "?supplier_id=" + supplierId
+                if (supplierName != "" && pagePath.indexOf("/pages/transactions/index") >= 0) {
+                    url = url + "&supplier_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(supplierName), " at pages/suppliers/index.uvue:806")
+                }
+                uni_navigateTo(NavigateToOptions(url = url))
             }
-            val navigateToTransactionsPage = ::gen_navigateToTransactionsPage_fn
             fun gen_handleMenu_fn(payload: UTSJSONObject) {
                 val action = payload["action"]
                 val item = payload["item"]
@@ -703,12 +738,18 @@ open class GenPagesSuppliersIndex : BasePage {
                 } else {
                     (supplierIdValue as String)
                 }
+                val supplierNameValue = itemObject["name"]
+                val supplierName = if (supplierNameValue == null) {
+                    ""
+                } else {
+                    (supplierNameValue as String)
+                }
                 if (key == "edit") {
                     uni_navigateTo(NavigateToOptions(url = "/pages/suppliers/from?id=" + supplierId))
                     return
                 }
                 if (key == "Detail") {
-                    navigateToTransactionsPage("/pages/transactions/index", supplierId)
+                    navigateToTransactionsPage("/pages/transactions/index", supplierId, supplierName)
                     return
                 }
                 if (key == "add") {
@@ -919,7 +960,7 @@ open class GenPagesSuppliersIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "supplier-filter-panel" to _pS(_uM("paddingBottom" to 8)), "supplier-filter-actions" to _pS(_uM("flexDirection" to "row", "marginBottom" to 12)), "supplier-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "supplier-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "supplier-filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#475569")), "supplier-filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "supplier-filter-state" to _pS(_uM("height" to 140, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-state-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "supplier-filter-scroll" to _pS(_uM("height" to 360)), "supplier-filter-group" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 8)), "supplier-filter-group-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold")), "supplier-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "supplier-filter-option" to _pS(_uM("minWidth" to 56, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "supplier-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "supplier-filter-option-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "supplier-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18)), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "supplier-filter-panel" to _pS(_uM("paddingBottom" to 8)), "supplier-filter-actions" to _pS(_uM("flexDirection" to "row", "marginBottom" to 12)), "supplier-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "supplier-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "supplier-filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#475569")), "supplier-filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF")), "supplier-filter-state" to _pS(_uM("height" to 140, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "supplier-filter-state-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#64748B")), "supplier-filter-scroll" to _pS(_uM("height" to 360)), "supplier-filter-group" to _pS(_uM("paddingLeft" to 12, "paddingRight" to 12, "paddingTop" to 12, "paddingBottom" to 12, "borderTopLeftRadius" to 14, "borderTopRightRadius" to 14, "borderBottomRightRadius" to 14, "borderBottomLeftRadius" to 14, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 8)), "supplier-filter-group-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "22px", "color" to "#0F172A", "fontWeight" to "bold")), "supplier-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "supplier-filter-option" to _pS(_uM("minWidth" to 56, "height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 17, "borderTopRightRadius" to 17, "borderBottomRightRadius" to 17, "borderBottomLeftRadius" to 17, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "supplier-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "supplier-filter-option-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "supplier-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

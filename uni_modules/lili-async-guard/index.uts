@@ -1,0 +1,32 @@
+export class LiliAsyncGuard {
+	alive: boolean = true
+	leaving: boolean = false
+	currentToken: number = 0
+
+	begin(): number {
+		this.currentToken = this.currentToken + 1
+		this.alive = true
+		this.leaving = false
+		return this.currentToken
+	}
+
+	canApply(token: number): boolean {
+		return this.alive && !this.leaving && this.currentToken == token
+	}
+
+	leave() {
+		this.alive = false
+		this.leaving = true
+		this.currentToken = this.currentToken + 1
+	}
+
+	reset() {
+		this.alive = true
+		this.leaving = false
+		this.currentToken = this.currentToken + 1
+	}
+}
+
+export function createAsyncGuard(): LiliAsyncGuard {
+	return new LiliAsyncGuard()
+}

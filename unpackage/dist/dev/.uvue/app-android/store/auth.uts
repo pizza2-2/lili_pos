@@ -63,17 +63,25 @@ export function redirectToLogin(message: string = '登录已过期，请重新�
             icon: 'none'
         });
     }
-    uni.reLaunch({
-        url: loginPageUrl,
-        fail: () => {
-            uni.navigateTo({
-                url: loginPageUrl
-            });
-        },
-        complete: () => {
-            resetRedirectFlagWithDelay();
-        }
-    });
+    uni.hideLoading();
+    setTimeout(() => {
+        uni.reLaunch({
+            url: loginPageUrl,
+            fail: () => {
+                uni.redirectTo({
+                    url: loginPageUrl,
+                    fail: () => {
+                        uni.navigateTo({
+                            url: loginPageUrl
+                        });
+                    }
+                });
+            },
+            complete: () => {
+                resetRedirectFlagWithDelay();
+            }
+        });
+    }, 30);
 }
 // 设置token,本地存储token
 export const setAuthToken = (value: string) => {

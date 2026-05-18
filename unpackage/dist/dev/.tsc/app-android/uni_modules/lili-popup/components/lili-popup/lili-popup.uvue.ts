@@ -57,7 +57,7 @@ const confirmDangerValue = ref<boolean>(props.confirmDanger)
 const autoCloseValue = ref<boolean>(props.autoClose)
 
 function syncStyle() {
-	panelStyle.value = `width:${props.width};max-width:100%;`
+	panelStyle.value = `width:${props.width};`
 	rootStyle.value = `z-index:${props.zIndex};`
 }
 

@@ -340,6 +340,7 @@ async function loadData() {
 			search: null,
 			page: 1,
 			page_size: 100,
+			is_active: null,
 		} as ProductPricingFormulaListQuery)
 		const activeFormulas: ProductPricingFormulaItem[] = []
 		for (let i = 0; i < formulaList.results.length; i++) {

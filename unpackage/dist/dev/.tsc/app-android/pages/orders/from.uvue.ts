@@ -1,13 +1,13 @@
-import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
-import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { computed } from 'vue'
 import { getOrderDetail, OrderItem } from '@/pkg/api/modules/orders.uts'
 
-type PayloadRow = { __$originalPosition?: UTSSourceMapPosition<"PayloadRow", "pages/orders/from.uvue", 68, 6>;
+type PayloadRow = { __$originalPosition?: UTSSourceMapPosition<"PayloadRow", "pages/orders/from.uvue", 159, 6>;
 	key: string
 	title: string
 	desc: string
+	code: string
 	quantity: string
+	amount: string
 }
 
 
@@ -22,13 +22,18 @@ const orderId = ref('')
 const orderDetail = ref<OrderItem | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
-const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
+const navShellStyle = ref('')
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
 	const text = '' + value
 	if (text == '') return fallback
 	return text
+}
+
+function displayText(value: string): string {
+	if (value == '') return '-'
+	return value
 }
 
 function parseErrorMessage(error: any, fallback: string): string {
@@ -38,7 +43,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:95")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:193")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -56,9 +61,16 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (value == null) return [] as UTSJSONObject[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as UTSJSONObject[]
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:113")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:211")
 	if (parsed == null) return [] as UTSJSONObject[]
 	return parsed!
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/orders/from.uvue:220")
 }
 
 function boolText(value: boolean): string {
@@ -84,14 +96,39 @@ function paymentText(item: OrderItem): string {
 	return '-'
 }
 
+function compactDate(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function currencyText(value: string): string {
+	return stringValue(value, '0.00')
+}
+
 function payloadTextValue(payload: UTSJSONObject): string {
 	const text = JSON.stringify(payload)
 	if (text == null || text == '') return '{}'
 	return text
 }
 
+function payloadOrderData(payload: UTSJSONObject): UTSJSONObject {
+	const snake = parseObject(payload['order_data'])
+	if (snake != null) return snake!
+	const camel = parseObject(payload['orderData'])
+	if (camel != null) return camel!
+	return payload
+}
+
 function getPayloadItems(payload: UTSJSONObject): UTSJSONObject[] {
-	let rows = parseObjectArray(payload['items'])
+	const orderData = payloadOrderData(payload)
+	let rows = parseObjectArray(orderData['items'])
+	if (rows.length > 0) return rows
+	rows = parseObjectArray(orderData['products'])
+	if (rows.length > 0) return rows
+	rows = parseObjectArray(orderData['cart'])
+	if (rows.length > 0) return rows
+	rows = parseObjectArray(payload['items'])
 	if (rows.length > 0) return rows
 	rows = parseObjectArray(payload['products'])
 	if (rows.length > 0) return rows
@@ -107,31 +144,76 @@ function buildRowTitle(row: UTSJSONObject, index: number): string {
 }
 
 function buildRowDesc(row: UTSJSONObject): string {
-	const barcode = stringValue(row['barcode'], '-')
 	const price = stringValue(row['price'], stringValue(row['unit_price'], '-'))
-	const amount = stringValue(row['amount'], stringValue(row['total'], '-'))
-	return '条码 ' + barcode + ' / 单价 ' + price + ' / 金额 ' + amount
+	const tax = stringValue(row['taxRate'], stringValue(row['tax_rate'], stringValue(row['vat_rate'], '-')))
+	const discount = stringValue(row['discountAmount'], stringValue(row['discount'], stringValue(row['discount_amount'], '-')))
+	return '单价 ' + price + ' / 税率 ' + tax + ' / 折扣 ' + discount
 }
 
-function buildInitialData(item: OrderItem): UTSJSONObject {
-	return {
-		order_number: item.order_number,
-		shop_name: stringValue(item.shop_name, item.shop > 0 ? '店铺 #' + item.shop.toString() : '-'),
-		order_time: stringValue(item.order_time, '-'),
-		created_at: stringValue(item.created_at, '-'),
-		cashier_id: stringValue(item.cashier_id, '-'),
-		kasa_number: stringValue(item.kasa_number, '-'),
-		payment_method_text: paymentText(item),
-		subtotal: stringValue(item.subtotal, '0.00'),
-		discount_amount: stringValue(item.discount_amount, '0.00'),
-		tax_amount: stringValue(item.tax_amount, '0.00'),
-		total_amount: stringValue(item.total_amount, '0.00'),
-		status_text: statusText(item),
-		error_message: stringValue(item.error_message, '-'),
-		inventory_deducted_text: boolText(item.inventory_deducted),
-		inventory_deduct_time: stringValue(item.inventory_deduct_time, '-'),
-		inventory_deduct_error: stringValue(item.inventory_deduct_error, '-'),
-	} as UTSJSONObject
+function addSummaryRow(rows: UTSJSONObject[], key: string, label: string, value: string) {
+	if (value == '') return
+	rows.push({ key: key, label: label, value: value } as UTSJSONObject)
+}
+
+function buildPayloadSummary(payload: UTSJSONObject): UTSJSONObject[] {
+	const rows: UTSJSONObject[] = []
+	const orderData = payloadOrderData(payload)
+	const payment = parseObject(orderData['payment'])
+	addSummaryRow(rows, 'order_number', '订单号', stringValue(payload['order_number'], stringValue(orderData['order_number'], stringValue(orderData['orderNumber']))))
+	addSummaryRow(rows, 'cashier_id', '收银员', stringValue(payload['cashier_id'], stringValue(orderData['cashier_id'])))
+	addSummaryRow(rows, 'cashier_name', '收银员姓名', stringValue(payload['cashier_name'], stringValue(orderData['cashier_name'])))
+	addSummaryRow(rows, 'kasa_number', '收银台', stringValue(payload['kasa_number'], stringValue(orderData['kasa_number'])))
+	addSummaryRow(rows, 'payment_method', '支付方式', payment == null ? stringValue(payload['payment_method'], stringValue(orderData['payment_method'])) : stringValue(payment!['method']))
+	addSummaryRow(rows, 'subtotal', 'Payload 小计', stringValue(orderData['subtotal'], stringValue(payload['subtotal'])))
+	addSummaryRow(rows, 'discount_total', 'Payload 折扣', stringValue(orderData['discountTotal'], stringValue(orderData['discount_total'], stringValue(payload['discountTotal']))))
+	addSummaryRow(rows, 'tax_total', 'Payload 税额', stringValue(orderData['taxTotal'], stringValue(orderData['tax_total'], stringValue(payload['taxTotal']))))
+	addSummaryRow(rows, 'total_amount', 'Payload 总额', stringValue(orderData['total'], stringValue(orderData['total_amount'], stringValue(payload['total_amount']))))
+	if (rows.length == 0) {
+		rows.push({ key: 'empty', label: '摘要', value: 'payload 未提供常用摘要字段' } as UTSJSONObject)
+	}
+	return rows
+}
+
+function numberValue(value: any | null): number {
+	const parsed = parseFloat(stringValue(value, '0'))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function quantityText(value: number): string {
+	if (value == Math.floor(value)) return value.toString()
+	return value.toFixed(2)
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+function goBack() {
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.redirectTo({ url: '/pages/orders/index' })
+		},
+	})
+}
+
+function goHome() {
+	uni.redirectTo({ url: '/pages/orders/index' })
+}
+
+function updateNavShellStyle() {
+	const info = uni.getWindowInfo()
+	navShellStyle.value = 'padding-top:' + info.statusBarHeight.toString() + 'px;'
 }
 
 async function loadDetail() {
@@ -145,32 +227,160 @@ async function loadDetail() {
 	try {
 		const detail = await getOrderDetail(orderId.value)
 		orderDetail.value = detail
-		initialData.value = buildInitialData(detail)
 	} catch (error) {
 		orderDetail.value = null
-		initialData.value = {} as UTSJSONObject
 		errorMessage.value = parseErrorMessage(error, '订单详情加载失败')
 	} finally {
 		isLoading.value = false
 	}
 }
 
-function handleNoop(payload: UTSJSONObject) {
+function copyOrderNumber() {
+	if (orderDetail.value == null) {
+		copyText('', '订单号已复制', '暂无订单号')
+		return
+	}
+	const detail = orderDetail.value as OrderItem
+	copyText(stringValue(detail.order_number, '订单 #' + detail.id.toString()), '订单号已复制', '暂无订单号')
 }
 
-function handleDirtyChange(value: boolean) {
+function copyPayload() {
+	if (orderDetail.value == null) {
+		copyText('', 'Payload 已复制', '暂无 Payload')
+		return
+	}
+	const detail = orderDetail.value as OrderItem
+	copyText(payloadTextValue(detail.payload), 'Payload 已复制', '暂无 Payload')
+}
+
+function copyRowValue(row: UTSJSONObject) {
+	copyText(stringValue(row['value']), '内容已复制', '暂无内容')
 }
 
 const pageTitle = computed((): string => {
 	if (orderDetail.value == null) return '订单详情'
 	const detail = orderDetail.value as OrderItem
-	return '订单 ' + detail.order_number
+	return stringValue(detail.order_number, '订单 #' + detail.id.toString())
+})
+
+const pageSubtitle = computed((): string => {
+	if (orderDetail.value == null) return orderId.value == '' ? '订单详情' : 'ID ' + orderId.value
+	const detail = orderDetail.value as OrderItem
+	return displayText(compactDate(stringValue(detail.order_time, detail.created_at)))
+})
+
+const orderNumberText = computed((): string => {
+	if (orderDetail.value == null) return '-'
+	const detail = orderDetail.value as OrderItem
+	return stringValue(detail.order_number, '订单 #' + detail.id.toString())
+})
+
+const orderTimeText = computed((): string => {
+	if (orderDetail.value == null) return '-'
+	const detail = orderDetail.value as OrderItem
+	return compactDate(stringValue(detail.order_time, detail.created_at))
+})
+
+const statusDisplayText = computed((): string => {
+	if (orderDetail.value == null) return '-'
+	return statusText(orderDetail.value as OrderItem)
+})
+
+const paymentDisplayText = computed((): string => {
+	if (orderDetail.value == null) return '-'
+	return paymentText(orderDetail.value as OrderItem)
+})
+
+const inventoryStatusText = computed((): string => {
+	if (orderDetail.value == null) return '-'
+	const detail = orderDetail.value as OrderItem
+	return detail.inventory_deducted ? '已扣减' : '未扣减'
+})
+
+const totalAmountText = computed((): string => {
+	if (orderDetail.value == null) return '0.00'
+	return currencyText((orderDetail.value as OrderItem).total_amount)
+})
+
+const itemCountText = computed((): string => {
+	if (orderDetail.value == null) return '0'
+	const detail = orderDetail.value as OrderItem
+	return getPayloadItems(detail.payload).length.toString()
+})
+
+const quantityCountText = computed((): string => {
+	if (orderDetail.value == null) return '0'
+	const detail = orderDetail.value as OrderItem
+	const rows = getPayloadItems(detail.payload)
+	let total = 0.0
+	for (let index = 0; index < rows.length; index += 1) {
+		total = total + numberValue(rows[index]['quantity'])
+	}
+	return quantityText(total)
 })
 
 const payloadText = computed((): string => {
 	if (orderDetail.value == null) return '{}'
 	const detail = orderDetail.value as OrderItem
 	return payloadTextValue(detail.payload)
+})
+
+const payloadSizeText = computed((): string => {
+	return payloadText.value.length.toString() + ' 字符'
+})
+
+const statusPillClass = computed((): string => {
+	if (orderDetail.value == null) return 'status-pill'
+	const status = (orderDetail.value as OrderItem).status
+	if (status == 'processed') return 'status-pill status-pill-ok'
+	if (status == 'failed') return 'status-pill status-pill-error'
+	return 'status-pill status-pill-warn'
+})
+
+const statusTextClass = computed((): string => {
+	if (orderDetail.value == null) return 'status-pill-text'
+	const status = (orderDetail.value as OrderItem).status
+	if (status == 'processed') return 'status-pill-text status-pill-text-ok'
+	if (status == 'failed') return 'status-pill-text status-pill-text-error'
+	return 'status-pill-text status-pill-text-warn'
+})
+
+const baseRows = computed((): UTSJSONObject[] => {
+	if (orderDetail.value == null) return [] as UTSJSONObject[]
+	const detail = orderDetail.value as OrderItem
+	return [
+		{ key: 'order_number', label: '订单号', value: orderNumberText.value } as UTSJSONObject,
+		{ key: 'shop', label: '店铺', value: stringValue(detail.shop_name, detail.shop > 0 ? '店铺 #' + detail.shop.toString() : '-') } as UTSJSONObject,
+		{ key: 'order_time', label: '订单时间', value: compactDate(detail.order_time) } as UTSJSONObject,
+		{ key: 'created_at', label: '接收时间', value: compactDate(detail.created_at) } as UTSJSONObject,
+		{ key: 'updated_at', label: '更新时间', value: compactDate(detail.updated_at) } as UTSJSONObject,
+		{ key: 'cashier_id', label: '收银员', value: stringValue(detail.cashier_id, '-') } as UTSJSONObject,
+		{ key: 'kasa_number', label: '收银台', value: stringValue(detail.kasa_number, '-') } as UTSJSONObject,
+	]
+})
+
+const amountRows = computed((): UTSJSONObject[] => {
+	if (orderDetail.value == null) return [] as UTSJSONObject[]
+	const detail = orderDetail.value as OrderItem
+	return [
+		{ key: 'subtotal', label: '小计', value: currencyText(detail.subtotal) } as UTSJSONObject,
+		{ key: 'discount_amount', label: '折扣', value: currencyText(detail.discount_amount) } as UTSJSONObject,
+		{ key: 'tax_amount', label: '税额', value: currencyText(detail.tax_amount) } as UTSJSONObject,
+		{ key: 'total_amount', label: '总金额', value: currencyText(detail.total_amount) } as UTSJSONObject,
+	]
+})
+
+const statusRows = computed((): UTSJSONObject[] => {
+	if (orderDetail.value == null) return [] as UTSJSONObject[]
+	const detail = orderDetail.value as OrderItem
+	return [
+		{ key: 'payment_method', label: '支付方式', value: paymentText(detail) } as UTSJSONObject,
+		{ key: 'status', label: '订单状态', value: statusText(detail) } as UTSJSONObject,
+		{ key: 'error_message', label: '订单错误', value: stringValue(detail.error_message, '-') } as UTSJSONObject,
+		{ key: 'inventory_deducted', label: '库存已扣减', value: boolText(detail.inventory_deducted) } as UTSJSONObject,
+		{ key: 'inventory_deduct_time', label: '扣减时间', value: compactDate(detail.inventory_deduct_time) } as UTSJSONObject,
+		{ key: 'inventory_deduct_error', label: '扣减错误', value: stringValue(detail.inventory_deduct_error, '-') } as UTSJSONObject,
+	]
 })
 
 const itemRows = computed((): PayloadRow[] => {
@@ -180,64 +390,27 @@ const itemRows = computed((): PayloadRow[] => {
 	const rows = getPayloadItems(detail.payload)
 	for (let index = 0; index < rows.length; index += 1) {
 		const row = rows[index]
+		const amount = stringValue(row['lineTotal'], stringValue(row['amount'], stringValue(row['total'], stringValue(row['total_amount'], '-'))))
 		result.push({
 			key: index.toString(),
 			title: buildRowTitle(row, index),
 			desc: buildRowDesc(row),
+			code: '条码 ' + stringValue(row['barcode'], '-'),
 			quantity: 'x ' + stringValue(row['quantity'], '0'),
+			amount: amount == '-' ? '-' : '¥ ' + amount,
 		} as PayloadRow)
 	}
 	return result
 })
 
-function copyPayload() {
-	uni.setClipboardData({
-		data: payloadText.value,
-		success: () => { uni.showToast({ title: 'Payload 已复制', icon: 'success' }) },
-	})
-}
-
-const formSections = ref<UTSJSONObject[]>([
-	{
-		key: 'base',
-		title: '订单信息',
-		defaultOpen: true,
-		fields: [
-			{ key: 'order_number', label: '订单号', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'shop_name', label: '店铺', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'order_time', label: '订单时间', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'created_at', label: '接收时间', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'cashier_id', label: '收银员', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'kasa_number', label: '收银台', type: 'input', readonly: true } as UTSJSONObject,
-		] as UTSJSONObject[],
-	} as UTSJSONObject,
-	{
-		key: 'amount',
-		title: '金额信息',
-		defaultOpen: true,
-		fields: [
-			{ key: 'payment_method_text', label: '支付方式', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'subtotal', label: '小计', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'discount_amount', label: '折扣', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'tax_amount', label: '税额', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'total_amount', label: '总金额', type: 'input', readonly: true } as UTSJSONObject,
-		] as UTSJSONObject[],
-	} as UTSJSONObject,
-	{
-		key: 'status',
-		title: '处理状态',
-		defaultOpen: true,
-		fields: [
-			{ key: 'status_text', label: '订单状态', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'error_message', label: '订单错误', type: 'textarea', readonly: true } as UTSJSONObject,
-			{ key: 'inventory_deducted_text', label: '库存已扣减', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'inventory_deduct_time', label: '扣减时间', type: 'input', readonly: true } as UTSJSONObject,
-			{ key: 'inventory_deduct_error', label: '扣减错误', type: 'textarea', readonly: true } as UTSJSONObject,
-		] as UTSJSONObject[],
-	} as UTSJSONObject,
-])
+const payloadSummaryRows = computed((): UTSJSONObject[] => {
+	if (orderDetail.value == null) return [] as UTSJSONObject[]
+	const detail = orderDetail.value as OrderItem
+	return buildPayloadSummary(detail.payload)
+})
 
 onLoad((event: OnLoadOptions) => {
+	updateNavShellStyle()
 	const idValue = event['id']
 	orderId.value = idValue == null ? '' : ('' + idValue)
 	loadDetail()
@@ -245,26 +418,47 @@ onLoad((event: OnLoadOptions) => {
 
 return (): any | null => {
 
-const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
-const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_easycom_lili_UniversaForm)
-
   return _cE("view", _uM({ class: "page" }), [
-    _cV(_component_lili_universal_filter, _uM({
-      title: pageTitle.value,
-      showBack: true,
-      showSearch: false,
-      showHome: true,
-      homePath: "/pages/orders/index",
-      backgroundColor: "#EEF2F7"
-    }), null, 8 /* PROPS */, ["title"]),
+    _cE("view", _uM({
+      class: "nav-shell",
+      style: _nS(unref(navShellStyle))
+    }), [
+      _cE("view", _uM({ class: "detail-nav" }), [
+        _cE("view", _uM({
+          class: "nav-btn",
+          onClick: goBack
+        }), [
+          _cE("text", _uM({ class: "nav-btn-text" }), "<")
+        ]),
+        _cE("view", _uM({ class: "nav-main" }), [
+          _cE("text", _uM({ class: "nav-title" }), _tD(pageTitle.value), 1 /* TEXT */),
+          _cE("text", _uM({ class: "nav-subtitle" }), _tD(pageSubtitle.value), 1 /* TEXT */)
+        ]),
+        _cE("view", _uM({
+          class: "nav-home",
+          onClick: goHome
+        }), [
+          _cE("text", _uM({ class: "nav-home-text" }), "列表")
+        ])
+      ])
+    ], 4 /* STYLE */),
     _cE("scroll-view", _uM({
       style: _nS(_uM({"flex":"1"})),
       class: "page-scroll"
     }), [
       _cE("view", _uM({ class: "page-content" }), [
-        isTrue(unref(errorMessage) != '' && !unref(isLoading))
+        isTrue(unref(isLoading))
           ? _cE("view", _uM({
               key: 0,
+              class: "state-card"
+            }), [
+              _cE("text", _uM({ class: "state-title" }), "正在加载订单详情"),
+              _cE("text", _uM({ class: "state-desc" }), "订单 ID：" + _tD(displayText(unref(orderId))), 1 /* TEXT */)
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(errorMessage) != '' && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 1,
               class: "error-card"
             }), [
               _cE("text", _uM({ class: "error-title" }), "加载失败"),
@@ -277,44 +471,145 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
               ])
             ])
           : _cC("v-if", true),
-        isTrue(unref(isLoading))
+        isTrue(unref(orderDetail) == null && !unref(isLoading) && unref(errorMessage) == '')
           ? _cE("view", _uM({
-              key: 1,
-              class: "loading-card"
+              key: 2,
+              class: "state-card"
             }), [
-              _cE("text", _uM({ class: "loading-text" }), "正在加载订单详情")
+              _cE("text", _uM({ class: "state-title" }), "暂无订单数据"),
+              _cE("text", _uM({ class: "state-desc" }), "没有读取到当前订单详情")
             ])
           : _cC("v-if", true),
-        isTrue(!unref(isLoading))
-          ? _cV(_component_lili_UniversaForm, _uM({
-              key: 2,
-              mode: "edit",
-              formSections: unref(formSections),
-              initialData: unref(initialData),
-              showFooter: false,
-              enableBackConfirm: false,
-              onSubmit: handleNoop,
-              onCancel: handleNoop,
-              onDiscardLeave: handleNoop,
-              onSaveRequest: handleNoop,
-              onDirtyChange: handleDirtyChange
-            }), null, 8 /* PROPS */, ["formSections", "initialData"])
-          : _cC("v-if", true),
-        isTrue(!unref(isLoading))
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
           ? _cE("view", _uM({
               key: 3,
+              class: "summary-card"
+            }), [
+              _cE("view", _uM({ class: "summary-head" }), [
+                _cE("view", _uM({ class: "summary-main" }), [
+                  _cE("text", _uM({ class: "summary-title" }), _tD(orderNumberText.value), 1 /* TEXT */),
+                  _cE("text", _uM({ class: "summary-subtitle" }), _tD(orderTimeText.value), 1 /* TEXT */)
+                ]),
+                _cE("view", _uM({
+                  class: _nC(statusPillClass.value)
+                }), [
+                  _cE("text", _uM({
+                    class: _nC(statusTextClass.value)
+                  }), _tD(statusDisplayText.value), 3 /* TEXT, CLASS */)
+                ], 2 /* CLASS */)
+              ]),
+              _cE("view", _uM({ class: "amount-line" }), [
+                _cE("text", _uM({ class: "amount-label" }), "订单金额"),
+                _cE("text", _uM({ class: "amount-value" }), "¥ " + _tD(totalAmountText.value), 1 /* TEXT */)
+              ]),
+              _cE("view", _uM({ class: "action-row" }), [
+                _cE("view", _uM({
+                  class: "action-btn action-btn-primary",
+                  onClick: copyOrderNumber
+                }), [
+                  _cE("text", _uM({ class: "action-btn-primary-text" }), "复制订单号")
+                ]),
+                _cE("view", _uM({
+                  class: "action-btn action-btn-light",
+                  onClick: copyPayload
+                }), [
+                  _cE("text", _uM({ class: "action-btn-light-text" }), "复制 Payload")
+                ])
+              ])
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 4,
+              class: "metric-grid"
+            }), [
+              _cE("view", _uM({ class: "metric-cell" }), [
+                _cE("text", _uM({ class: "metric-label" }), "支付方式"),
+                _cE("text", _uM({ class: "metric-value" }), _tD(paymentDisplayText.value), 1 /* TEXT */)
+              ]),
+              _cE("view", _uM({ class: "metric-cell" }), [
+                _cE("text", _uM({ class: "metric-label" }), "库存状态"),
+                _cE("text", _uM({ class: "metric-value" }), _tD(inventoryStatusText.value), 1 /* TEXT */)
+              ]),
+              _cE("view", _uM({ class: "metric-cell" }), [
+                _cE("text", _uM({ class: "metric-label" }), "商品项"),
+                _cE("text", _uM({ class: "metric-value" }), _tD(itemCountText.value), 1 /* TEXT */)
+              ]),
+              _cE("view", _uM({ class: "metric-cell" }), [
+                _cE("text", _uM({ class: "metric-label" }), "商品件数"),
+                _cE("text", _uM({ class: "metric-value" }), _tD(quantityCountText.value), 1 /* TEXT */)
+              ])
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 5,
               class: "section-card"
             }), [
-              _cE("view", _uM({ class: "section-header" }), [
-                _cE("text", _uM({ class: "section-title" }), "商品行"),
-                _cE("text", _uM({ class: "section-subtitle" }), _tD(itemRows.value.length.toString()) + " 项", 1 /* TEXT */)
+              _cE("text", _uM({ class: "section-title" }), "订单基础信息"),
+              _cE(Fragment, null, RenderHelpers.renderList(baseRows.value, (row, __key, __index, _cached): any => {
+                return _cE("view", _uM({
+                  key: row['key'],
+                  class: "info-row",
+                  onClick: () => {copyRowValue(row)}
+                }), [
+                  _cE("text", _uM({ class: "info-label" }), _tD(row['label']), 1 /* TEXT */),
+                  _cE("text", _uM({ class: "info-value" }), _tD(row['value']), 1 /* TEXT */)
+                ], 8 /* PROPS */, ["onClick"])
+              }), 128 /* KEYED_FRAGMENT */)
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 6,
+              class: "section-card"
+            }), [
+              _cE("text", _uM({ class: "section-title" }), "金额信息"),
+              _cE(Fragment, null, RenderHelpers.renderList(amountRows.value, (row, __key, __index, _cached): any => {
+                return _cE("view", _uM({
+                  key: row['key'],
+                  class: "info-row",
+                  onClick: () => {copyRowValue(row)}
+                }), [
+                  _cE("text", _uM({ class: "info-label" }), _tD(row['label']), 1 /* TEXT */),
+                  _cE("text", _uM({ class: "info-value" }), _tD(row['value']), 1 /* TEXT */)
+                ], 8 /* PROPS */, ["onClick"])
+              }), 128 /* KEYED_FRAGMENT */)
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 7,
+              class: "section-card"
+            }), [
+              _cE("text", _uM({ class: "section-title" }), "支付与库存状态"),
+              _cE(Fragment, null, RenderHelpers.renderList(statusRows.value, (row, __key, __index, _cached): any => {
+                return _cE("view", _uM({
+                  key: row['key'],
+                  class: "info-row",
+                  onClick: () => {copyRowValue(row)}
+                }), [
+                  _cE("text", _uM({ class: "info-label" }), _tD(row['label']), 1 /* TEXT */),
+                  _cE("text", _uM({ class: "info-value" }), _tD(row['value']), 1 /* TEXT */)
+                ], 8 /* PROPS */, ["onClick"])
+              }), 128 /* KEYED_FRAGMENT */)
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 8,
+              class: "section-card"
+            }), [
+              _cE("view", _uM({ class: "section-head" }), [
+                _cE("text", _uM({ class: "section-title" }), "商品明细"),
+                _cE("text", _uM({ class: "section-note" }), _tD(itemRows.value.length.toString()) + " 项", 1 /* TEXT */)
               ]),
               itemRows.value.length == 0
                 ? _cE("view", _uM({
                     key: 0,
-                    class: "empty-line"
+                    class: "empty-box"
                   }), [
-                    _cE("text", _uM({ class: "empty-line-text" }), "payload 中没有 items / products / cart 商品行")
+                    _cE("text", _uM({ class: "empty-text" }), "payload 中没有 items / products / cart 商品行")
                   ])
                 : _cC("v-if", true),
               _cE(Fragment, null, RenderHelpers.renderList(itemRows.value, (row, __key, __index, _cached): any => {
@@ -322,27 +617,52 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
                   key: row.key,
                   class: "item-row"
                 }), [
-                  _cE("view", _uM({ class: "item-row-main" }), [
+                  _cE("view", _uM({ class: "item-main" }), [
                     _cE("text", _uM({ class: "item-title" }), _tD(row.title), 1 /* TEXT */),
-                    _cE("text", _uM({ class: "item-desc" }), _tD(row.desc), 1 /* TEXT */)
+                    _cE("text", _uM({ class: "item-desc" }), _tD(row.desc), 1 /* TEXT */),
+                    _cE("text", _uM({ class: "item-code" }), _tD(row.code), 1 /* TEXT */)
                   ]),
-                  _cE("text", _uM({ class: "item-qty" }), _tD(row.quantity), 1 /* TEXT */)
+                  _cE("view", _uM({ class: "item-side" }), [
+                    _cE("text", _uM({ class: "item-qty" }), _tD(row.quantity), 1 /* TEXT */),
+                    _cE("text", _uM({ class: "item-amount" }), _tD(row.amount), 1 /* TEXT */)
+                  ])
                 ])
               }), 128 /* KEYED_FRAGMENT */)
             ])
           : _cC("v-if", true),
-        isTrue(!unref(isLoading))
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
           ? _cE("view", _uM({
-              key: 4,
+              key: 9,
               class: "section-card"
             }), [
-              _cE("view", _uM({ class: "section-header" }), [
+              _cE("view", _uM({ class: "section-head" }), [
+                _cE("text", _uM({ class: "section-title" }), "Payload 摘要"),
+                _cE("text", _uM({ class: "section-note" }), _tD(payloadSizeText.value), 1 /* TEXT */)
+              ]),
+              _cE(Fragment, null, RenderHelpers.renderList(payloadSummaryRows.value, (row, __key, __index, _cached): any => {
+                return _cE("view", _uM({
+                  key: row['key'],
+                  class: "info-row",
+                  onClick: () => {copyRowValue(row)}
+                }), [
+                  _cE("text", _uM({ class: "info-label" }), _tD(row['label']), 1 /* TEXT */),
+                  _cE("text", _uM({ class: "info-value" }), _tD(row['value']), 1 /* TEXT */)
+                ], 8 /* PROPS */, ["onClick"])
+              }), 128 /* KEYED_FRAGMENT */)
+            ])
+          : _cC("v-if", true),
+        isTrue(unref(orderDetail) != null && !unref(isLoading))
+          ? _cE("view", _uM({
+              key: 10,
+              class: "section-card"
+            }), [
+              _cE("view", _uM({ class: "section-head" }), [
                 _cE("text", _uM({ class: "section-title" }), "原始 Payload"),
                 _cE("view", _uM({
-                  class: "copy-btn",
+                  class: "small-copy-btn",
                   onClick: copyPayload
                 }), [
-                  _cE("text", _uM({ class: "copy-btn-text" }), "复制")
+                  _cE("text", _uM({ class: "small-copy-text" }), "复制")
                 ])
               ]),
               _cE("text", _uM({ class: "payload-text" }), _tD(payloadText.value), 1 /* TEXT */)
@@ -356,4 +676,4 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
 
 })
 export default __sfc__
-const GenPagesOrdersFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#EEF2F7"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#EEF2F7"]]))], ["page-content", _pS(_uM([["paddingTop", 6], ["paddingRight", 6], ["paddingBottom", 96], ["paddingLeft", 6]]))], ["loading-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 20], ["paddingRight", 20], ["paddingBottom", 20], ["paddingLeft", 20], ["marginBottom", 8], ["alignItems", "center"], ["justifyContent", "center"]]))], ["loading-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#64748B"]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["section-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginTop", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5E7EB"], ["borderRightColor", "#E5E7EB"], ["borderBottomColor", "#E5E7EB"], ["borderLeftColor", "#E5E7EB"]]))], ["section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["marginBottom", 10]]))], ["section-title", _pS(_uM([["fontSize", 16], ["lineHeight", "22px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["section-subtitle", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["empty-line", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["alignItems", "center"]]))], ["empty-line-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#94A3B8"]]))], ["item-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#EEF2F7"]]))], ["item-row-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 10]]))], ["item-title", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#111827"], ["fontWeight", "bold"]]))], ["item-desc", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 2]]))], ["item-qty", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["copy-btn", _pS(_uM([["height", 30], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["copy-btn-text", _pS(_uM([["fontSize", 13], ["color", "#FFFFFF"]]))], ["payload-text", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#334155"]]))]])]
+const GenPagesOrdersFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["nav-shell", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderBottomWidth", 1], ["borderBottomStyle", "solid"], ["borderBottomColor", "#E5EAF1"]]))], ["detail-nav", _pS(_uM([["height", 58], ["paddingLeft", 8], ["paddingRight", 8], ["flexDirection", "row"], ["alignItems", "center"]]))], ["nav-btn", _pS(_uM([["width", 46], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#F3F6FA"]]))], ["nav-home", _pS(_uM([["width", 46], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"]]))], ["nav-btn-text", _pS(_uM([["fontSize", 28], ["lineHeight", "28px"], ["color", "#0F172A"]]))], ["nav-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingLeft", 10], ["paddingRight", 10]]))], ["nav-title", _pS(_uM([["fontSize", 17], ["lineHeight", "22px"], ["fontWeight", "bold"], ["color", "#0F172A"]]))], ["nav-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"], ["marginTop", 1]]))], ["nav-home-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["page-content", _pS(_uM([["paddingTop", 10], ["paddingRight", 10], ["paddingBottom", 96], ["paddingLeft", 10]]))], ["summary-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginBottom", 10]]))], ["section-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginBottom", 10]]))], ["state-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginBottom", 10], ["alignItems", "center"]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginBottom", 10], ["alignItems", "center"]]))], ["summary-head", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["amount-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["marginTop", 14], ["backgroundColor", "#F8FAFC"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["justifyContent", "space-between"]]))], ["action-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["marginTop", 12]]))], ["metric-grid", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["flexWrap", "wrap"], ["marginLeft", -4], ["marginRight", -4], ["marginBottom", 2]]))], ["section-head", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["info-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 10], ["paddingBottom", 10], ["borderBottomWidth", 1], ["borderBottomStyle", "solid"], ["borderBottomColor", "#EEF2F7"]]))], ["item-row", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"], ["paddingTop", 12], ["paddingBottom", 12], ["borderBottomWidth", 1], ["borderBottomStyle", "solid"], ["borderBottomColor", "#EEF2F7"]]))], ["summary-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 10]]))], ["summary-title", _pS(_uM([["fontSize", 20], ["lineHeight", "26px"], ["fontWeight", "bold"], ["color", "#0F172A"]]))], ["summary-subtitle", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 4]]))], ["status-pill", _pS(_uM([["minWidth", 62], ["height", 30], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingLeft", 10], ["paddingRight", 10], ["alignItems", "center"], ["justifyContent", "center"]]))], ["status-pill-ok", _pS(_uM([["backgroundColor", "#DCFCE7"]]))], ["status-pill-warn", _pS(_uM([["backgroundColor", "#FEF3C7"]]))], ["status-pill-error", _pS(_uM([["backgroundColor", "#FEE2E2"]]))], ["status-pill-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["fontWeight", "bold"]]))], ["status-pill-text-ok", _pS(_uM([["color", "#166534"]]))], ["status-pill-text-warn", _pS(_uM([["color", "#92400E"]]))], ["status-pill-text-error", _pS(_uM([["color", "#991B1B"]]))], ["amount-label", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["metric-label", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"], ["backgroundColor", "#FFFFFF"]]))], ["info-label", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"], ["width", 96]]))], ["section-note", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["state-desc", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"], ["marginTop", 6]]))], ["amount-value", _pS(_uM([["fontSize", 22], ["lineHeight", "28px"], ["fontWeight", "bold"], ["color", "#0F172A"]]))], ["action-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"]]))], ["action-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"], ["marginRight", 8]]))], ["action-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"]]))], ["action-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#FFFFFF"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#FFFFFF"]]))], ["small-copy-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#FFFFFF"]]))], ["action-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#334155"]]))], ["metric-cell", _pS(_uM([["width", "50%"], ["paddingLeft", 4], ["paddingRight", 4], ["marginBottom", 8], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["paddingTop", 10], ["paddingBottom", 10]]))], ["metric-value", _pS(_uM([["backgroundColor", "#FFFFFF"], ["fontSize", 15], ["lineHeight", "21px"], ["color", "#0F172A"], ["fontWeight", "bold"], ["marginTop", 4]]))], ["section-title", _pS(_uM([["fontSize", 16], ["lineHeight", "22px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["info-value", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 13], ["lineHeight", "19px"], ["color", "#0F172A"], ["textAlign", "right"]]))], ["empty-box", _pS(_uM([["marginTop", 10], ["backgroundColor", "#F8FAFC"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 16], ["paddingRight", 16], ["paddingBottom", 16], ["paddingLeft", 16], ["alignItems", "center"]]))], ["empty-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#64748B"], ["textAlign", "center"]]))], ["state-title", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#0F172A"], ["textAlign", "center"], ["fontWeight", "bold"]]))], ["item-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 10]]))], ["item-title", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#111827"], ["fontWeight", "bold"]]))], ["item-desc", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 2]]))], ["item-code", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 2]]))], ["item-side", _pS(_uM([["width", 82], ["alignItems", "flex-end"]]))], ["item-qty", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["item-amount", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#475569"], ["marginTop", 2]]))], ["small-copy-btn", _pS(_uM([["height", 34], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 14], ["paddingRight", 14], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn", _pS(_uM([["height", 34], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 14], ["paddingRight", 14], ["alignItems", "center"], ["justifyContent", "center"], ["marginTop", 14]]))], ["payload-text", _pS(_uM([["marginTop", 10], ["fontSize", 12], ["lineHeight", "18px"], ["color", "#334155"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))]])]

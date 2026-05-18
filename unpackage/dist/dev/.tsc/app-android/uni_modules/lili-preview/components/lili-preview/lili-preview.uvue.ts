@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue'
 
 type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-preview/components/lili-preview/lili-preview.uvue", 25, 6>;
 	images?: string[]
+	previewImages?: string[]
 	initialIndex?: number
 	visible?: boolean
 	thumbSize?: number
@@ -16,6 +17,7 @@ const __sfc__ = defineComponent({
   __name: 'lili-preview',
   props: {
     images: { type: Array as PropType<string[]>, required: false, default: () : string[] => [] },
+    previewImages: { type: Array as PropType<string[]>, required: false, default: () : string[] => [] },
     initialIndex: { type: Number, required: false, default: 0 },
     visible: { type: Boolean, required: false, default: false },
     thumbSize: { type: Number, required: false, default: 72 },
@@ -37,6 +39,7 @@ __ins.emit(event, ...do_not_transform_spread)
 }
 
 const imageList = ref<string[]>([])
+const previewImageList = ref<string[]>([])
 const currentIndex = ref<number>(0)
 
 const itemStyle = computed<string>(() : string => {
@@ -73,23 +76,40 @@ function syncImages(list: string[]) {
 	currentIndex.value = clampIndex(currentIndex.value, imageList.value.length)
 }
 
+function syncPreviewImages(list: string[]) {
+	if (list.length == 0) {
+		previewImageList.value = cloneStringArray(imageList.value)
+		return
+	}
+	const result: string[] = []
+	for (let index = 0; index < imageList.value.length; index++) {
+		if (index < list.length && list[index] != '') {
+			result.push(list[index])
+		} else {
+			result.push(imageList.value[index])
+		}
+	}
+	previewImageList.value = result
+}
+
 function buildPayload(action: string, path: string) : UTSJSONObject {
 	return {
 		action: action,
 		index: currentIndex.value,
 		path: path,
 		list: cloneStringArray(imageList.value),
+		previewList: cloneStringArray(previewImageList.value),
 	} as UTSJSONObject
 }
 
 function getCurrentImagePath() : string {
-	if (imageList.value.length == 0) {
+	if (previewImageList.value.length == 0) {
 		return ''
 	}
-	if (currentIndex.value < 0 || currentIndex.value >= imageList.value.length) {
+	if (currentIndex.value < 0 || currentIndex.value >= previewImageList.value.length) {
 		return ''
 	}
-	return imageList.value[currentIndex.value]
+	return previewImageList.value[currentIndex.value]
 }
 
 function openPreview(index: number) {
@@ -103,7 +123,7 @@ function openPreview(index: number) {
 	emit('preview', buildPayload('preview', currentPath))
 	uni.previewImage({
 		current: currentPath,
-		urls: cloneStringArray(imageList.value),
+		urls: cloneStringArray(previewImageList.value),
 		complete: () => {
 			emit('update:visible', false)
 			emit('close', buildPayload('close', getCurrentImagePath()))
@@ -121,6 +141,17 @@ watch(
 	() : string[] => props.images,
 	(newVal: string[]) => {
 		syncImages(newVal)
+		syncPreviewImages(props.previewImages)
+	},
+	{
+		immediate: true,
+	}
+)
+
+watch(
+	() : string[] => props.previewImages,
+	(newVal: string[]) => {
+		syncPreviewImages(newVal)
 	},
 	{
 		immediate: true,

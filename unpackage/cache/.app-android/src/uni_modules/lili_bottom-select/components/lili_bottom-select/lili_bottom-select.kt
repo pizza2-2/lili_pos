@@ -14,12 +14,17 @@ import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
+import uts.sdk.modules.limeScan.scanCode
+import uts.sdk.modules.limeScan.GeneralCallbackResult
+import uts.sdk.modules.limeScan.ScanCodeOption
+import uts.sdk.modules.limeScan.ScanCodeSuccessCallbackResult
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect : VueComponent {
     constructor(__ins: ComponentInternalInstance) : super(__ins) {}
     open var fetchData: (params: UTSJSONObject) -> UTSPromise<UTSJSONObject> by `$props`
     open var value: String by `$props`
     open var valueText: String by `$props`
+    open var valueImage: String by `$props`
     open var values: UTSArray<String> by `$props`
     open var multiple: Boolean by `$props`
     open var tree: Boolean by `$props`
@@ -37,11 +42,15 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
     open var disabled: Boolean by `$props`
     open var labelKey: String by `$props`
     open var valueKey: String by `$props`
+    open var imageKey: String by `$props`
+    open var subtitleKey: String by `$props`
     open var pageSize: Number by `$props`
     open var searchDelay: Number by `$props`
     open var closeOnOverlay: Boolean by `$props`
     open var showEditAction: Boolean by `$props`
     open var showAddAction: Boolean by `$props`
+    open var showScan: Boolean by `$props`
+    open var scanOnlyFromCamera: Boolean by `$props`
     open var editActionText: String by `$props`
     open var addActionText: String by `$props`
     open var editPath: String by `$props`
@@ -189,6 +198,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             val panelVisible = ref<Boolean>(false)
             val internalValue = ref<String>(props.value ?: "")
             val internalText = ref<String>(props.valueText ?: "")
+            val internalImage = ref<String>(props.valueImage ?: "")
             val textInitialized = ref<Boolean>((props.valueText ?: "") != "")
             val selectedItems = ref(_uA<UTSJSONObject>())
             val keyword = ref<String>("")
@@ -230,6 +240,22 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 return fieldLabel(item, props.labelKey)
             }
             val getItemLabel = ::gen_getItemLabel_fn
+            fun gen_getItemImage_fn(item: UTSJSONObject): String {
+                val key = props.imageKey ?: ""
+                if (key == "") {
+                    return ""
+                }
+                return fieldLabel(item, key)
+            }
+            val getItemImage = ::gen_getItemImage_fn
+            fun gen_getItemSubtitle_fn(item: UTSJSONObject): String {
+                val key = props.subtitleKey ?: ""
+                if (key == "") {
+                    return ""
+                }
+                return fieldLabel(item, key)
+            }
+            val getItemSubtitle = ::gen_getItemSubtitle_fn
             fun gen_getNumberField_fn(obj: UTSJSONObject, key: String): Number {
                 val value = obj[key]
                 if (value == null) {
@@ -296,7 +322,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val getBooleanField = ::gen_getBooleanField_fn
             fun gen_cloneItem_fn(item: UTSJSONObject): UTSJSONObject {
-                val next: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 415, 8))
+                val next: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 457, 8))
                 for(key in resolveUTSKeyIterator(item)){
                     next[key] = item[key]
                 }
@@ -315,7 +341,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val hasTreeChildren = ::gen_hasTreeChildren_fn
             fun buildFetchParams(page: Number, keywordValue: String, id: String, parent: String = ""): UTSJSONObject {
-                val params: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 434, 8), "page" to page, "pageSize" to props.pageSize, "keyword" to keywordValue, "id" to id)
+                val params: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 476, 8), "page" to page, "pageSize" to props.pageSize, "keyword" to keywordValue, "id" to id)
                 if (parent != "") {
                     params["parent"] = parent
                 }
@@ -690,7 +716,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             displayList.value = replaceTreeChildren(displayList.value, parentValue, children)
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select loadTreeChildren 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:750")
+                            console.error("lili_bottom-select loadTreeChildren 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:792")
                             uni_showToast(ShowToastOptions(title = "子节点加载失败", icon = "none"))
                         }
                          finally {
@@ -895,7 +921,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             if (seq != requestSeq) {
                                 return@w1
                             }
-                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:927")
+                            console.error("lili_bottom-select loadData 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:969")
                             uni_showToast(ShowToastOptions(title = "数据加载失败", icon = "none"))
                         }
                          finally {
@@ -917,11 +943,12 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             val item = findItemByValueInList(data, value)
                             if (item != null) {
                                 internalText.value = getItemLabel(item)
+                                internalImage.value = getItemImage(item)
                                 textInitialized.value = true
                             }
                         }
                          catch (e: Throwable) {
-                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:949")
+                            console.error("lili_bottom-select fetchTextByValue 失败:", e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:992")
                         }
                 })
             }
@@ -957,6 +984,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                     if (newVal != "") {
                         if (props.valueText != "") {
                             internalText.value = props.valueText
+                            internalImage.value = props.valueImage ?: ""
                             textInitialized.value = true
                         } else {
                             textInitialized.value = false
@@ -980,8 +1008,16 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 }
                 if (internalValue.value == "") {
                     internalText.value = ""
+                    internalImage.value = ""
                     textInitialized.value = false
                 }
+            }
+            )
+            watch(fun(): String {
+                return props.valueImage ?: ""
+            }
+            , fun(newImage: String){
+                internalImage.value = newImage
             }
             )
             watch(fun(): UTSArray<String> {
@@ -1008,6 +1044,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                 if (!props.multiple && internalValue.value != "") {
                     if (props.valueText != "") {
                         internalText.value = props.valueText
+                        internalImage.value = props.valueImage ?: ""
                         textInitialized.value = true
                     } else {
                         fetchTextByValue(internalValue.value)
@@ -1243,13 +1280,43 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             fun gen_confirmSingleItem_fn(item: UTSJSONObject) {
                 val value = getItemValue(item)
                 val text = getItemLabel(item)
+                val image = getItemImage(item)
                 internalValue.value = value
                 internalText.value = text
+                internalImage.value = image
                 textInitialized.value = true
-                emit("change", _uO("value" to value, "text" to text, "item" to item))
+                emit("change", _uO("value" to value, "text" to text, "image" to image, "item" to item))
                 close()
             }
             val confirmSingleItem = ::gen_confirmSingleItem_fn
+            fun gen_applyScanKeyword_fn(scanResult: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (scanResult == "") {
+                            return@w1
+                        }
+                        keyword.value = scanResult
+                        await(triggerSearch())
+                })
+            }
+            val applyScanKeyword = ::gen_applyScanKeyword_fn
+            fun gen_handleScanSearch_fn() {
+                if (props.disabled) {
+                    return
+                }
+                scanCode(ScanCodeOption(onlyFromCamera = props.scanOnlyFromCamera, success = fun(res: ScanCodeSuccessCallbackResult){
+                    applyScanKeyword(res.result)
+                }
+                , fail = fun(res: GeneralCallbackResult){
+                    val message = if (res.errMsg == "") {
+                        "扫码失败"
+                    } else {
+                        res.errMsg
+                    }
+                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                }
+                ))
+            }
+            val handleScanSearch = ::gen_handleScanSearch_fn
             fun gen_toggleMultiItem_fn(item: UTSJSONObject) {
                 if (props.tree && !props.checkStrictly) {
                     val allItems = collectSelfAndDescendantItems(item)
@@ -1367,6 +1434,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                     fetchTextByValue(value)
                 } else {
                     internalText.value = ""
+                    internalImage.value = ""
                     textInitialized.value = false
                 }
             }
@@ -1376,7 +1444,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             }
             val setValues = ::gen_setValues_fn
             fun gen_getValue_fn(): SelectChangePayload {
-                return SelectChangePayload(value = internalValue.value, text = internalText.value, item = _uO())
+                return SelectChangePayload(value = internalValue.value, text = internalText.value, image = internalImage.value, item = _uO())
             }
             val getValue = ::gen_getValue_fn
             fun gen_getValues_fn(): MultiSelectChangePayload {
@@ -1394,6 +1462,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             fun gen_clearValue_fn() {
                 internalValue.value = ""
                 internalText.value = ""
+                internalImage.value = ""
                 textInitialized.value = false
             }
             val clearValue = ::gen_clearValue_fn
@@ -1455,6 +1524,14 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                         renderSlot(_ctx.`$slots`, "trigger", _uO(), fun(): UTSArray<Any> {
                             return _uA(
                                 _cE("view", _uM("class" to "bs-trigger-default"), _uA(
+                                    if (unref(internalImage) != "") {
+                                        _cE("image", _uM("key" to 0, "class" to "bs-trigger-image", "src" to unref(internalImage), "mode" to "aspectFill"), null, 8, _uA(
+                                            "src"
+                                        ))
+                                    } else {
+                                        _cC("v-if", true)
+                                    }
+                                    ,
                                     _cE("text", _uM("class" to _nC(if (unref(displayText) != "") {
                                         "bs-trigger-text"
                                     } else {
@@ -1528,7 +1605,13 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                             )),
                             _cE("view", _uM("class" to "bs-search-bar"), _uA(
                                 _cE("view", _uM("class" to "bs-search-inner"), _uA(
-                                    _cE("text", _uM("class" to "bs-search-icon"), "🔍"),
+                                    if (isTrue(_ctx.showScan)) {
+                                        _cE("view", _uM("key" to 0, "class" to "bs-search-scan", "onClick" to handleScanSearch), _uA(
+                                            _cE("image", _uM("class" to "bs-search-scan-image", "src" to "/static/icon/扫码.png", "mode" to "aspectFit"))
+                                        ))
+                                    } else {
+                                        _cC("v-if", true)
+                                    },
                                     _cE("input", _uM("class" to "bs-search-input", "modelValue" to unref(keyword), "onInput" to _uA<Any?>(fun(`$event`: UniInputEvent){
                                         trySetRefValue(keyword, `$event`.detail.value)
                                     }, onSearchInput), "placeholder" to _ctx.searchPlaceholder, "disabled" to _ctx.disabled, "onConfirm" to triggerSearch, "confirm-type" to "search"), null, 40, _uA(
@@ -1537,7 +1620,7 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                                         "disabled"
                                     )),
                                     if (unref(keyword) != "") {
-                                        _cE("view", _uM("key" to 0, "class" to "bs-search-clear", "onClick" to clearSearch), _uA(
+                                        _cE("view", _uM("key" to 1, "class" to "bs-search-clear", "onClick" to clearSearch), _uA(
                                             _cE("text", _uM("class" to "bs-clear-icon"), "✕")
                                         ))
                                     } else {
@@ -1614,11 +1697,25 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
                                                         } else {
                                                             _cC("v-if", true)
                                                         },
-                                                        _cE("text", _uM("class" to _nC(if (isItemSelected(row.item)) {
-                                                            "bs-item-label bs-item-label-selected"
+                                                        if (getItemImage(row.item) != "") {
+                                                            _cE("image", _uM("key" to 1, "class" to "bs-item-image", "src" to getItemImage(row.item), "mode" to "aspectFill"), null, 8, _uA(
+                                                                "src"
+                                                            ))
                                                         } else {
-                                                            "bs-item-label"
-                                                        })), _tD(fieldLabel(row.item, _ctx.labelKey)), 3)
+                                                            _cC("v-if", true)
+                                                        },
+                                                        _cE("view", _uM("class" to "bs-item-texts"), _uA(
+                                                            _cE("text", _uM("class" to _nC(if (isItemSelected(row.item)) {
+                                                                "bs-item-label bs-item-label-selected"
+                                                            } else {
+                                                                "bs-item-label"
+                                                            })), _tD(fieldLabel(row.item, _ctx.labelKey)), 3),
+                                                            if (getItemSubtitle(row.item) != "") {
+                                                                _cE("text", _uM("key" to 0, "class" to "bs-item-subtitle"), _tD(getItemSubtitle(row.item)), 1)
+                                                            } else {
+                                                                _cC("v-if", true)
+                                                            }
+                                                        ))
                                                     )),
                                                     if (isTrue(isItemSelected(row.item) || isItemHalfSelected(row.item))) {
                                                         _cE("view", _uM("key" to 0, "class" to "bs-check-icon-wrapper"), _uA(
@@ -1683,18 +1780,19 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("bs-trigger-wrapper" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-trigger-default" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 20, "paddingBottom" to 20, "borderBottomWidth" to 1, "borderBottomColor" to "#E5E5E5", "borderBottomStyle" to "solid")), "bs-trigger-text" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#333333")), "bs-trigger-placeholder" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#999999")), "bs-trigger-actions" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-trigger-action" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "width" to 28, "height" to 28, "marginLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "#F5F7FA")), "bs-trigger-action-icon" to _pS(_uM("fontSize" to 14, "color" to "#666666", "lineHeight" to "14px")), "bs-trigger-arrow" to _pS(_uM("width" to 20, "height" to 20, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 8)), "bs-arrow-icon" to _pS(_uM("fontSize" to 20, "color" to "#CCCCCC", "lineHeight" to "20px")), "bs-overlay" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(0,0,0,0)", "zIndex" to 998, "opacity" to 0, "pointerEvents" to "none", "transitionProperty" to "opacity,backgroundColor", "transitionDuration" to "320ms", "transitionTimingFunction" to "ease")), "bs-overlay-active" to _pS(_uM("backgroundColor" to "rgba(10,18,30,0.32)", "opacity" to 1, "pointerEvents" to "auto")), "bs-panel" to _pS(_uM("position" to "fixed", "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 0, "borderBottomLeftRadius" to 0, "zIndex" to 999, "flexDirection" to "column", "opacity" to 0, "transform" to "translateY(48px)", "pointerEvents" to "none", "boxShadow" to "0 -18px 44px rgba(15, 23, 42, 0.14)", "transitionProperty" to "transform,opacity", "transitionDuration" to "340ms", "transitionTimingFunction" to "ease")), "bs-panel-active" to _pS(_uM("opacity" to 1, "transform" to "translateY(0px)", "pointerEvents" to "auto")), "bs-handle-wrap" to _pS(_uM("alignItems" to "center", "paddingTop" to 10, "paddingBottom" to 4)), "bs-handle" to _pS(_uM("width" to 44, "height" to 5, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "#D9DEE7")), "bs-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 10, "paddingBottom" to 16, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-header-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "bold", "color" to "#333333")), "bs-header-close" to _pS(_uM("width" to 32, "height" to 32, "alignItems" to "center", "justifyContent" to "center")), "bs-close-icon" to _pS(_uM("fontSize" to 16, "color" to "#999999")), "bs-search-bar" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-search-inner" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#F5F5F5", "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "paddingLeft" to 12, "paddingRight" to 12, "height" to 36)), "bs-search-icon" to _pS(_uM("fontSize" to 14, "color" to "#999999", "marginRight" to 6)), "bs-search-input" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#333333", "height" to 36)), "bs-search-clear" to _pS(_uM("width" to 20, "height" to 20, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 4)), "bs-clear-icon" to _pS(_uM("fontSize" to 12, "color" to "#999999")), "bs-tags-bar" to _pS(_uM("flexDirection" to "row", "paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-tags-inner" to _pS(_uM("flexDirection" to "row", "flexWrap" to "nowrap")), "bs-tag" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#E8F0FE", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "paddingTop" to 4, "paddingBottom" to 4, "paddingLeft" to 10, "paddingRight" to 10, "marginRight" to 8)), "bs-tag-text" to _pS(_uM("fontSize" to 12, "color" to "#4A90E2")), "bs-tag-remove" to _pS(_uM("width" to 16, "height" to 16, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 4)), "bs-tag-remove-icon" to _pS(_uM("fontSize" to 10, "color" to "#4A90E2")), "bs-list-item" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingBottom" to 14, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F5F5F5", "borderBottomStyle" to "solid")), "bs-list-item-selected" to _pS(_uM("backgroundColor" to "#F0F5FF")), "bs-item-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "flexDirection" to "row", "alignItems" to "center", "marginRight" to 12)), "bs-tree-prefix" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "flexShrink" to 0)), "bs-tree-indent" to _pS(_uM("height" to 1, "flexShrink" to 0)), "bs-tree-toggle" to _pS(_uM("width" to 24, "height" to 24, "alignItems" to "center", "justifyContent" to "center", "marginRight" to 4, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F7F8FA")), "bs-tree-toggle-placeholder" to _pS(_uM("width" to 24, "height" to 24, "marginRight" to 4)), "bs-tree-toggle-icon" to _pS(_uM("fontSize" to 18, "color" to "#8A8F99", "lineHeight" to "18px")), "bs-item-label" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#333333")), "bs-item-label-selected" to _pS(_uM("color" to "#4A90E2")), "bs-check-icon-wrapper" to _pS(_uM("width" to 22, "height" to 22, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "backgroundColor" to "#E8F0FE")), "bs-check-icon" to _pS(_uM("fontSize" to 15, "color" to "#4A90E2", "lineHeight" to "15px")), "bs-state-wrapper" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "paddingTop" to 60, "paddingBottom" to 60)), "bs-state-text" to _pS(_uM("fontSize" to 14, "color" to "#999999")), "bs-load-more" to _pS(_uM("alignItems" to "center", "paddingTop" to 16, "paddingBottom" to 16)), "bs-load-more-text" to _pS(_uM("fontSize" to 12, "color" to "#BBBBBB")), "bs-confirm-bar" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 12, "paddingBottom" to 12, "paddingLeft" to 16, "paddingRight" to 16, "borderTopWidth" to 1, "borderTopColor" to "#F0F0F0", "borderTopStyle" to "solid")), "bs-confirm-info" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "bs-confirm-count" to _pS(_uM("fontSize" to 13, "color" to "#666666")), "bs-confirm-btns" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-btn-clear" to _pS(_uM("paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 16, "paddingRight" to 16, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopColor" to "#DDDDDD", "borderRightColor" to "#DDDDDD", "borderBottomColor" to "#DDDDDD", "borderLeftColor" to "#DDDDDD", "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "marginRight" to 12, "alignItems" to "center", "justifyContent" to "center")), "bs-btn-clear-text" to _pS(_uM("fontSize" to 14, "color" to "#666666")), "bs-btn-confirm" to _pS(_uM("paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 24, "paddingRight" to 24, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "backgroundColor" to "#4A90E2", "alignItems" to "center", "justifyContent" to "center")), "bs-btn-confirm-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "@TRANSITION" to _uM("bs-overlay" to _uM("property" to "opacity,backgroundColor", "duration" to "320ms", "timingFunction" to "ease"), "bs-panel" to _uM("property" to "transform,opacity", "duration" to "340ms", "timingFunction" to "ease")))
+                return _uM("bs-trigger-wrapper" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-trigger-default" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 20, "paddingBottom" to 20, "borderBottomWidth" to 1, "borderBottomColor" to "#E5E5E5", "borderBottomStyle" to "solid")), "bs-trigger-image" to _pS(_uM("width" to 34, "height" to 34, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "marginRight" to 10, "backgroundColor" to "#EEF2F7", "flexShrink" to 0)), "bs-trigger-text" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#333333")), "bs-trigger-placeholder" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#999999")), "bs-trigger-actions" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-trigger-action" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "width" to 28, "height" to 28, "marginLeft" to 8, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "#F5F7FA")), "bs-trigger-action-icon" to _pS(_uM("fontSize" to 14, "color" to "#666666", "lineHeight" to "14px")), "bs-trigger-arrow" to _pS(_uM("width" to 20, "height" to 20, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 8)), "bs-arrow-icon" to _pS(_uM("fontSize" to 20, "color" to "#CCCCCC", "lineHeight" to "20px")), "bs-overlay" to _pS(_uM("position" to "fixed", "top" to 0, "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "rgba(0,0,0,0)", "zIndex" to 998, "opacity" to 0, "pointerEvents" to "none", "transitionProperty" to "opacity,backgroundColor", "transitionDuration" to "320ms", "transitionTimingFunction" to "ease")), "bs-overlay-active" to _pS(_uM("backgroundColor" to "rgba(10,18,30,0.32)", "opacity" to 1, "pointerEvents" to "auto")), "bs-panel" to _pS(_uM("position" to "fixed", "left" to 0, "right" to 0, "bottom" to 0, "backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 22, "borderTopRightRadius" to 22, "borderBottomRightRadius" to 0, "borderBottomLeftRadius" to 0, "zIndex" to 999, "flexDirection" to "column", "opacity" to 0, "transform" to "translateY(48px)", "pointerEvents" to "none", "boxShadow" to "0 -18px 44px rgba(15, 23, 42, 0.14)", "transitionProperty" to "transform,opacity", "transitionDuration" to "340ms", "transitionTimingFunction" to "ease")), "bs-panel-active" to _pS(_uM("opacity" to 1, "transform" to "translateY(0px)", "pointerEvents" to "auto")), "bs-handle-wrap" to _pS(_uM("alignItems" to "center", "paddingTop" to 10, "paddingBottom" to 4)), "bs-handle" to _pS(_uM("width" to 44, "height" to 5, "borderTopLeftRadius" to 999, "borderTopRightRadius" to 999, "borderBottomRightRadius" to 999, "borderBottomLeftRadius" to 999, "backgroundColor" to "#D9DEE7")), "bs-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 10, "paddingBottom" to 16, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-header-title" to _pS(_uM("fontSize" to 16, "fontWeight" to "bold", "color" to "#333333")), "bs-header-close" to _pS(_uM("width" to 32, "height" to 32, "alignItems" to "center", "justifyContent" to "center")), "bs-close-icon" to _pS(_uM("fontSize" to 16, "color" to "#999999")), "bs-search-bar" to _pS(_uM("paddingTop" to 12, "paddingBottom" to 12, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-search-inner" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#F5F5F5", "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "paddingLeft" to 12, "paddingRight" to 12, "height" to 36)), "bs-search-scan" to _pS(_uM("width" to 36, "height" to 36, "alignItems" to "center", "justifyContent" to "center", "marginRight" to 4)), "bs-search-scan-image" to _pS(_uM("width" to 24, "height" to 24)), "bs-search-input" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "color" to "#333333", "height" to 36)), "bs-search-clear" to _pS(_uM("width" to 20, "height" to 20, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 4)), "bs-clear-icon" to _pS(_uM("fontSize" to 12, "color" to "#999999")), "bs-tags-bar" to _pS(_uM("flexDirection" to "row", "paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F0F0F0", "borderBottomStyle" to "solid")), "bs-tags-inner" to _pS(_uM("flexDirection" to "row", "flexWrap" to "nowrap")), "bs-tag" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#E8F0FE", "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "paddingTop" to 4, "paddingBottom" to 4, "paddingLeft" to 10, "paddingRight" to 10, "marginRight" to 8)), "bs-tag-text" to _pS(_uM("fontSize" to 12, "color" to "#4A90E2")), "bs-tag-remove" to _pS(_uM("width" to 16, "height" to 16, "alignItems" to "center", "justifyContent" to "center", "marginLeft" to 4)), "bs-tag-remove-icon" to _pS(_uM("fontSize" to 10, "color" to "#4A90E2")), "bs-list-item" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 14, "paddingBottom" to 14, "paddingLeft" to 16, "paddingRight" to 16, "borderBottomWidth" to 1, "borderBottomColor" to "#F5F5F5", "borderBottomStyle" to "solid")), "bs-list-item-selected" to _pS(_uM("backgroundColor" to "#F0F5FF")), "bs-item-main" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "flexDirection" to "row", "alignItems" to "center", "marginRight" to 12)), "bs-item-image" to _pS(_uM("width" to 42, "height" to 42, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "marginRight" to 10, "backgroundColor" to "#EEF2F7", "flexShrink" to 0)), "bs-item-texts" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "flexDirection" to "column", "minWidth" to 0)), "bs-tree-prefix" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "flexShrink" to 0)), "bs-tree-indent" to _pS(_uM("height" to 1, "flexShrink" to 0)), "bs-tree-toggle" to _pS(_uM("width" to 24, "height" to 24, "alignItems" to "center", "justifyContent" to "center", "marginRight" to 4, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F7F8FA")), "bs-tree-toggle-placeholder" to _pS(_uM("width" to 24, "height" to 24, "marginRight" to 4)), "bs-tree-toggle-icon" to _pS(_uM("fontSize" to 18, "color" to "#8A8F99", "lineHeight" to "18px")), "bs-item-label" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "fontSize" to 14, "lineHeight" to "20px", "color" to "#333333")), "bs-item-label-selected" to _pS(_uM("color" to "#4A90E2")), "bs-item-subtitle" to _pS(_uM("marginTop" to 2, "fontSize" to 12, "lineHeight" to "17px", "color" to "#7B8796")), "bs-check-icon-wrapper" to _pS(_uM("width" to 22, "height" to 22, "alignItems" to "center", "justifyContent" to "center", "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "backgroundColor" to "#E8F0FE")), "bs-check-icon" to _pS(_uM("fontSize" to 15, "color" to "#4A90E2", "lineHeight" to "15px")), "bs-state-wrapper" to _pS(_uM("alignItems" to "center", "justifyContent" to "center", "paddingTop" to 60, "paddingBottom" to 60)), "bs-state-text" to _pS(_uM("fontSize" to 14, "color" to "#999999")), "bs-load-more" to _pS(_uM("alignItems" to "center", "paddingTop" to 16, "paddingBottom" to 16)), "bs-load-more-text" to _pS(_uM("fontSize" to 12, "color" to "#BBBBBB")), "bs-confirm-bar" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "paddingTop" to 12, "paddingBottom" to 12, "paddingLeft" to 16, "paddingRight" to 16, "borderTopWidth" to 1, "borderTopColor" to "#F0F0F0", "borderTopStyle" to "solid")), "bs-confirm-info" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%")), "bs-confirm-count" to _pS(_uM("fontSize" to 13, "color" to "#666666")), "bs-confirm-btns" to _pS(_uM("flexDirection" to "row", "alignItems" to "center")), "bs-btn-clear" to _pS(_uM("paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 16, "paddingRight" to 16, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopColor" to "#DDDDDD", "borderRightColor" to "#DDDDDD", "borderBottomColor" to "#DDDDDD", "borderLeftColor" to "#DDDDDD", "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "marginRight" to 12, "alignItems" to "center", "justifyContent" to "center")), "bs-btn-clear-text" to _pS(_uM("fontSize" to 14, "color" to "#666666")), "bs-btn-confirm" to _pS(_uM("paddingTop" to 8, "paddingBottom" to 8, "paddingLeft" to 24, "paddingRight" to 24, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "backgroundColor" to "#4A90E2", "alignItems" to "center", "justifyContent" to "center")), "bs-btn-confirm-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "@TRANSITION" to _uM("bs-overlay" to _uM("property" to "opacity,backgroundColor", "duration" to "320ms", "timingFunction" to "ease"), "bs-panel" to _uM("property" to "transform,opacity", "duration" to "340ms", "timingFunction" to "ease")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()
         var emits: Map<String, Any?> = _uM("change" to null, "multiChange" to null, "open" to null, "close" to null, "edit" to null, "add" to null)
-        var props = _nP(_uM("fetchData" to _uM("type" to "Function", "required" to true), "value" to _uM("type" to "String", "required" to false, "default" to ""), "valueText" to _uM("type" to "String", "required" to false, "default" to ""), "values" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
+        var props = _nP(_uM("fetchData" to _uM("type" to "Function", "required" to true), "value" to _uM("type" to "String", "required" to false, "default" to ""), "valueText" to _uM("type" to "String", "required" to false, "default" to ""), "valueImage" to _uM("type" to "String", "required" to false, "default" to ""), "values" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
-        ), "multiple" to _uM("type" to "Boolean", "required" to false, "default" to false), "tree" to _uM("type" to "Boolean", "required" to false, "default" to false), "childrenKey" to _uM("type" to "String", "required" to false, "default" to "children"), "defaultExpandAll" to _uM("type" to "Boolean", "required" to false, "default" to false), "expandOnClickNode" to _uM("type" to "Boolean", "required" to false, "default" to false), "checkStrictly" to _uM("type" to "Boolean", "required" to false, "default" to true), "accordion" to _uM("type" to "Boolean", "required" to false, "default" to false), "selectableLevel" to _uM("type" to "Number", "required" to false, "default" to -1), "selectableLevelMessage" to _uM("type" to "String", "required" to false, "default" to ""), "placeholder" to _uM("type" to "String", "required" to false, "default" to "请选择"), "title" to _uM("type" to "String", "required" to false, "default" to "请选择"), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入关键词搜索"), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "disabled" to _uM("type" to "Boolean", "required" to false, "default" to false), "labelKey" to _uM("type" to "String", "required" to false, "default" to "text"), "valueKey" to _uM("type" to "String", "required" to false, "default" to "value"), "pageSize" to _uM("type" to "Number", "required" to false, "default" to 20), "searchDelay" to _uM("type" to "Number", "required" to false, "default" to 300), "closeOnOverlay" to _uM("type" to "Boolean", "required" to false, "default" to true), "showEditAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showAddAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "editActionText" to _uM("type" to "String", "required" to false, "default" to "编辑"), "addActionText" to _uM("type" to "String", "required" to false, "default" to "新增"), "editPath" to _uM("type" to "String", "required" to false, "default" to ""), "addPath" to _uM("type" to "String", "required" to false, "default" to ""), "editQueryKey" to _uM("type" to "String", "required" to false, "default" to "id")))
+        ), "multiple" to _uM("type" to "Boolean", "required" to false, "default" to false), "tree" to _uM("type" to "Boolean", "required" to false, "default" to false), "childrenKey" to _uM("type" to "String", "required" to false, "default" to "children"), "defaultExpandAll" to _uM("type" to "Boolean", "required" to false, "default" to false), "expandOnClickNode" to _uM("type" to "Boolean", "required" to false, "default" to false), "checkStrictly" to _uM("type" to "Boolean", "required" to false, "default" to true), "accordion" to _uM("type" to "Boolean", "required" to false, "default" to false), "selectableLevel" to _uM("type" to "Number", "required" to false, "default" to -1), "selectableLevelMessage" to _uM("type" to "String", "required" to false, "default" to ""), "placeholder" to _uM("type" to "String", "required" to false, "default" to "请选择"), "title" to _uM("type" to "String", "required" to false, "default" to "请选择"), "searchPlaceholder" to _uM("type" to "String", "required" to false, "default" to "请输入关键词搜索"), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无数据"), "disabled" to _uM("type" to "Boolean", "required" to false, "default" to false), "labelKey" to _uM("type" to "String", "required" to false, "default" to "text"), "valueKey" to _uM("type" to "String", "required" to false, "default" to "value"), "imageKey" to _uM("type" to "String", "required" to false, "default" to ""), "subtitleKey" to _uM("type" to "String", "required" to false, "default" to ""), "pageSize" to _uM("type" to "Number", "required" to false, "default" to 20), "searchDelay" to _uM("type" to "Number", "required" to false, "default" to 300), "closeOnOverlay" to _uM("type" to "Boolean", "required" to false, "default" to true), "showEditAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showAddAction" to _uM("type" to "Boolean", "required" to false, "default" to true), "showScan" to _uM("type" to "Boolean", "required" to false, "default" to false), "scanOnlyFromCamera" to _uM("type" to "Boolean", "required" to false, "default" to true), "editActionText" to _uM("type" to "String", "required" to false, "default" to "编辑"), "addActionText" to _uM("type" to "String", "required" to false, "default" to "新增"), "editPath" to _uM("type" to "String", "required" to false, "default" to ""), "addPath" to _uM("type" to "String", "required" to false, "default" to ""), "editQueryKey" to _uM("type" to "String", "required" to false, "default" to "id")))
         var propsNeedCastKeys = _uA(
             "value",
             "valueText",
+            "valueImage",
             "values",
             "multiple",
             "tree",
@@ -1712,11 +1810,15 @@ open class GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSele
             "disabled",
             "labelKey",
             "valueKey",
+            "imageKey",
+            "subtitleKey",
             "pageSize",
             "searchDelay",
             "closeOnOverlay",
             "showEditAction",
             "showAddAction",
+            "showScan",
+            "scanOnlyFromCamera",
             "editActionText",
             "addActionText",
             "editPath",

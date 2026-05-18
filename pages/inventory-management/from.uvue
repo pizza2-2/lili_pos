@@ -1,155 +1,1225 @@
 <template>
 	<view class="page">
-		<lili-universal-filter title="调整库存" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/inventory-management/index" backgroundColor="#EEF2F7" />
-		<view class="page-content">
-			<lili-UniversaForm mode="create" :formSections="formSections" :initialData="initialData" :leaveSignal="leaveSignal" @submit="handleSubmit" @cancel="handleCancel" @discard-leave="handleDiscardLeave" @save-request="handleSaveRequest" @dirty-change="handleDirtyChange" @bottom-select-add="handleBottomSelectAdd" @bottom-select-edit="handleBottomSelectEdit" />
-		</view>
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			:homePath="homePath"
+			backgroundColor="#F6F7FB"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view scroll-y="true" style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-band">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="error-action" @click="loadAll">
+						<text class="error-action-text">重新加载</text>
+					</view>
+				</view>
+
+				<view class="product-band">
+					<view class="product-main">
+						<image v-if="productImage != ''" class="product-image" :src="productImage" mode="aspectFill" />
+						<view v-else class="product-image product-image-empty">
+							<text class="product-image-empty-text">货</text>
+						</view>
+						<view class="product-title-wrap">
+							<text class="product-title">{{ productTitle }}</text>
+							<text class="product-subtitle">{{ productSubtitle }}</text>
+						</view>
+					</view>
+					<view class="summary-grid">
+						<view class="summary-item">
+							<text class="summary-label">总库存</text>
+							<text class="summary-value">{{ totalQuantityText }}</text>
+						</view>
+						<view class="summary-item">
+							<text class="summary-label">可用</text>
+							<text class="summary-value">{{ totalAvailableText }}</text>
+						</view>
+						<view class="summary-item">
+							<text class="summary-label">位置</text>
+							<text class="summary-value">{{ stockLocationCountText }}</text>
+						</view>
+						<view class="summary-item">
+							<text class="summary-label">流水记录</text>
+							<text class="summary-value">{{ movementRecordCountText }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="section-head section-head-row">
+					<view class="section-title-wrap">
+						<text class="section-title">多位置库存</text>
+						<text class="section-subtitle">点击一个位置调整库存</text>
+					</view>
+					<view class="section-action" @click="openCreateSheet">
+						<text class="section-action-text">新增库存</text>
+					</view>
+				</view>
+				<view v-if="isLoading" class="empty-band">
+					<text class="empty-text">正在加载库存</text>
+				</view>
+				<view v-else-if="stocks.length == 0" class="empty-band">
+					<text class="empty-text">该商品还没有库存位置</text>
+				</view>
+				<view
+					v-for="stock in stocks"
+					:key="'stock-' + stringValue(stock['id'])"
+					:class="stockCardClass(stock)"
+					@click="openAdjustSheet(stock)"
+				>
+					<view class="stock-row-top">
+						<view class="stock-location-wrap">
+							<text class="stock-location">{{ stringValue(stock['location_name'], '未设置库存位置') }}</text>
+							<text class="stock-location-sub">{{ locationTypeText(stock) }}</text>
+						</view>
+						<text :class="stockAlertClass(stock)">{{ alertLabel(stringValue(stock['alert_status'])) }}</text>
+					</view>
+					<view class="stock-metrics">
+						<view class="stock-metric">
+							<text class="stock-metric-label">当前</text>
+							<text class="stock-metric-value">{{ numberText(stock['quantity']) }}</text>
+						</view>
+						<view class="stock-metric">
+							<text class="stock-metric-label">可用</text>
+							<text class="stock-metric-value">{{ numberText(stock['available_quantity']) }}</text>
+						</view>
+						<view class="stock-metric">
+							<text class="stock-metric-label">占用</text>
+							<text class="stock-metric-value">{{ numberText(stock['reserved_quantity']) }}</text>
+						</view>
+						<view class="stock-metric">
+							<text class="stock-metric-label">均价</text>
+							<text class="stock-metric-value stock-metric-money">{{ moneyText(stock['average_cost']) }}</text>
+						</view>
+					</view>
+					<view class="stock-row-bottom">
+						<text class="stock-tag">{{ listedLabel(stringValue(stock['is_listed'])) }}</text>
+						<text class="stock-muted">最近变动 {{ dateTimeText(stock['last_movement_at']) }}</text>
+					</view>
+				</view>
+
+				<view class="section-head">
+					<text class="section-title">库存变动记录</text>
+					<text class="section-subtitle">包含订单销售、手动调整、采购入库等库存流水</text>
+				</view>
+				<view v-if="movementRecords.length == 0" class="empty-band">
+					<text class="empty-text">暂无库存变动记录</text>
+				</view>
+				<view v-for="record in movementRecords" :key="'movement-' + stringValue(record['id'])" class="movement-row">
+					<view class="movement-row-top">
+						<view class="movement-main">
+							<text class="movement-title">{{ movementTitleText(record) }}</text>
+							<text class="movement-subtitle">{{ movementSubtitleText(record) }}</text>
+						</view>
+						<text :class="movementQuantityClass(record)">{{ movementQuantityText(record) }}</text>
+					</view>
+					<view class="movement-row-bottom">
+						<text class="movement-meta">{{ movementTimeText(record) }}</text>
+						<text class="movement-meta">{{ movementActorText(record) }}</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<page-container
+			:show="createSheetVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeCreateSheet"
+		>
+			<view class="sheet-panel" :style="sheetPanelStyle">
+				<view class="sheet-handle-wrap">
+					<view class="sheet-handle"></view>
+				</view>
+				<view class="sheet-header">
+					<view class="sheet-title-wrap">
+						<text class="sheet-title">新增库存</text>
+						<text class="sheet-subtitle">{{ productTitle }}</text>
+					</view>
+					<view class="sheet-close" @click="closeCreateSheet">
+						<text class="sheet-close-text">×</text>
+					</view>
+				</view>
+				<scroll-view scroll-y="true" class="sheet-scroll" :style="sheetScrollStyle">
+					<view class="field">
+						<text class="field-label">库存位置</text>
+						<liliBottomSelect
+							:value="createLocationValue"
+							:valueText="createLocationText"
+							title="选择库存位置"
+							placeholder="请选择库存位置"
+							searchPlaceholder="搜索库存位置"
+							emptyText="暂无可用库存位置"
+							:fetchData="fetchLocationOptions"
+							:showAddAction="false"
+							:showEditAction="false"
+							@change="handleCreateLocationChange"
+						/>
+					</view>
+					<view class="field-row">
+						<view class="field-half">
+							<text class="field-label">初始数量</text>
+							<input class="input" type="number" :value="createQuantityText" placeholder="0" @input="handleCreateQuantityInput" />
+						</view>
+						<view class="field-half field-half-right">
+							<text class="field-label">单位成本</text>
+							<input class="input" type="digit" :value="createUnitCostText" placeholder="0.00" @input="handleCreateUnitCostInput" />
+						</view>
+					</view>
+					<view class="field">
+						<text class="field-label">入库类型</text>
+						<liliBottomSelect
+							:value="createTypeValue"
+							:valueText="createTypeText"
+							title="选择入库类型"
+							placeholder="请选择入库类型"
+							:fetchData="fetchCreateTypeOptions"
+							:showAddAction="false"
+							:showEditAction="false"
+							@change="handleCreateTypeChange"
+						/>
+					</view>
+					<view class="field">
+						<text class="field-label">备注</text>
+						<textarea class="textarea" :value="createNotesText" placeholder="请输入备注" @input="handleCreateNotesInput"></textarea>
+					</view>
+				</scroll-view>
+				<view class="sheet-actions">
+					<view class="sheet-btn sheet-btn-light" @click="closeCreateSheet">
+						<text class="sheet-btn-light-text">取消</text>
+					</view>
+					<view class="sheet-btn sheet-btn-primary" @click="submitCreateStock">
+						<text class="sheet-btn-primary-text">{{ createButtonText }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
+
+		<page-container
+			:show="adjustSheetVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeAdjustSheet"
+		>
+			<view class="sheet-panel" :style="sheetPanelStyle">
+				<view class="sheet-handle-wrap">
+					<view class="sheet-handle"></view>
+				</view>
+				<view class="sheet-header">
+					<view class="sheet-title-wrap">
+						<text class="sheet-title">调整库存</text>
+						<text class="sheet-subtitle">{{ selectedStockHint }}</text>
+					</view>
+					<view class="sheet-close" @click="closeAdjustSheet">
+						<text class="sheet-close-text">×</text>
+					</view>
+				</view>
+				<scroll-view scroll-y="true" class="sheet-scroll" :style="sheetScrollStyle">
+					<view class="adjust-preview">
+						<view class="adjust-preview-item">
+							<text class="adjust-preview-label">变动前</text>
+							<text class="adjust-preview-value">{{ adjustBeforeText }}</text>
+						</view>
+						<view class="adjust-preview-item">
+							<text class="adjust-preview-label">本次变化</text>
+							<text :class="adjustChangeClass">{{ adjustChangeText }}</text>
+						</view>
+						<view class="adjust-preview-item">
+							<text class="adjust-preview-label">预计调整后</text>
+							<text class="adjust-preview-value adjust-preview-strong">{{ adjustAfterText }}</text>
+						</view>
+					</view>
+					<view class="field adjust-quantity-field">
+						<view class="field-title-row">
+							<text class="field-label">调整数量</text>
+							<text class="field-help">正数入库，负数出库</text>
+						</view>
+						<view class="quantity-input-row">
+							<view class="quantity-step quantity-step-out" @click="stepAdjustQuantity(-1)">
+								<text class="quantity-step-text">-</text>
+							</view>
+							<input class="quantity-input" type="number" :value="adjustQuantityText" placeholder="0" @input="handleAdjustQuantityInput" />
+							<view class="quantity-step quantity-step-in" @click="stepAdjustQuantity(1)">
+								<text class="quantity-step-text">+</text>
+							</view>
+						</view>
+						<view class="quantity-quick-row">
+							<view class="quantity-quick quantity-quick-out" @click="setAdjustQuantityQuick(-10)">
+								<text class="quantity-quick-out-text">-10</text>
+							</view>
+							<view class="quantity-quick quantity-quick-out" @click="setAdjustQuantityQuick(-5)">
+								<text class="quantity-quick-out-text">-5</text>
+							</view>
+							<view class="quantity-quick quantity-quick-out" @click="setAdjustQuantityQuick(-1)">
+								<text class="quantity-quick-out-text">-1</text>
+							</view>
+							<view class="quantity-quick quantity-quick-in" @click="setAdjustQuantityQuick(1)">
+								<text class="quantity-quick-in-text">+1</text>
+							</view>
+							<view class="quantity-quick quantity-quick-in" @click="setAdjustQuantityQuick(5)">
+								<text class="quantity-quick-in-text">+5</text>
+							</view>
+							<view class="quantity-quick quantity-quick-in quantity-quick-last" @click="setAdjustQuantityQuick(10)">
+								<text class="quantity-quick-in-text">+10</text>
+							</view>
+						</view>
+					</view>
+					<view class="field">
+						<text class="field-label">单位成本</text>
+						<input class="input" type="digit" :value="adjustUnitCostText" placeholder="0.00" @input="handleAdjustUnitCostInput" />
+					</view>
+					<view class="field">
+						<text class="field-label">调整类型</text>
+						<liliBottomSelect
+							:value="adjustTypeValue"
+							:valueText="adjustTypeText"
+							title="选择调整类型"
+							placeholder="请选择调整类型"
+							:fetchData="fetchAdjustTypeOptions"
+							:showAddAction="false"
+							:showEditAction="false"
+							@change="handleAdjustTypeChange"
+						/>
+					</view>
+					<view class="field">
+						<text class="field-label">备注</text>
+						<textarea class="textarea" :value="adjustNotesText" placeholder="请输入调整原因" @input="handleAdjustNotesInput"></textarea>
+					</view>
+				</scroll-view>
+				<view class="sheet-actions">
+					<view class="sheet-btn sheet-btn-light" @click="closeAdjustSheet">
+						<text class="sheet-btn-light-text">取消</text>
+					</view>
+					<view class="sheet-btn sheet-btn-primary" @click="submitAdjustStock">
+						<text class="sheet-btn-primary-text">{{ adjustButtonText }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
 <script setup lang="uts">
+import { computed } from 'vue'
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { adjustInventoryStock, getInventoryStockDetail, StockAdjustmentData } from '@/pkg/api/modules/inventory'
+import { adjustInventoryStock, createInventoryStockForProduct, getInventoryLocations, getInventoryStockDetail, getInventoryStocks, getInventoryTransactions, InventoryListQuery, InventoryStockCreateForProductData, StockAdjustmentData } from '@/pkg/api/modules/inventory'
 
 type SelectOption = {
 	value: string
-	text: string
+	label: string
 }
 
-const refreshStorageKey = 'refresh:pages:inventory-management:index'
-const leaveSignal = ref(0)
-const submitting = ref(false)
-const stockId = ref('')
-const initialData = ref<UTSJSONObject>({ stock_id: '', product: '', product_name: '', product_image: '', quantity_change: '', transaction_type: 'ADJUSTMENT', unit_cost: '', notes: '' } as UTSJSONObject)
-const typeOptions = ref<SelectOption[]>([
-	{ value: 'ADJUSTMENT', text: '盘点调整' } as SelectOption,
-	{ value: 'DAMAGE', text: '损坏' } as SelectOption,
-	{ value: 'LOSS', text: '丢失' } as SelectOption,
-	{ value: 'INITIAL', text: '初始库存' } as SelectOption,
-])
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
 
-function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string { const value = obj[key]; if (value == null) return fallback; return '' + value }
-function parseErrorMessage(error: any, fallback: string): string { if (error == null) return fallback; const text = JSON.stringify(error); if (text == null || text == '') return fallback; return text }
-function parseObjectArray(value: any | null): UTSJSONObject[] { if (value == null) return [] as UTSJSONObject[]; const text = JSON.stringify(value); if (text == null || text == '') return [] as UTSJSONObject[]; const parsed = JSON.parseArray<UTSJSONObject>(text); if (parsed == null) return [] as UTSJSONObject[]; return parsed! }
-function firstStringField(obj: UTSJSONObject, keys: string[]): string { for (let i = 0; i < keys.length; i++) { const text = getStringField(obj, keys[i]); if (text != '') return text } return '' }
+function intValue(value: any | null): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function floatValue(value: any | null): number {
+	const parsed = parseFloat(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	let parsed: UTSJSONObject[] | null = null
+	try {
+		parsed = JSON.parseArray<UTSJSONObject>(text)
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const directMessage = (error as Error).message
+	if (directMessage != null && directMessage != '') return directMessage
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	return text
+}
+
+function readInputValue(event: any): string {
+	const inputEvent = event as UniInputEvent
+	return inputEvent.detail.value
+}
+
+function decimalText(value: string): string {
+	let text = value.trim()
+	text = text.split(',').join('.')
+	let result = ''
+	let dotCount = 0
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch == '.') {
+			dotCount = dotCount + 1
+			if (dotCount <= 1) result = result + ch
+			continue
+		}
+		if (ch >= '0' && ch <= '9') result = result + ch
+	}
+	return result
+}
+
+function signedIntegerText(value: string): string {
+	const text = value.trim()
+	let result = ''
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch == '-' && result == '') {
+			result = '-'
+			continue
+		}
+		if (ch >= '0' && ch <= '9') result = result + ch
+	}
+	return result
+}
+
+function positiveIntegerText(value: string): string {
+	const text = value.trim()
+	let result = ''
+	for (let index = 0; index < text.length; index += 1) {
+		const ch = text.charAt(index)
+		if (ch >= '0' && ch <= '9') result = result + ch
+	}
+	return result
+}
+
+function firstStringField(obj: UTSJSONObject, keys: string[]): string {
+	for (let index = 0; index < keys.length; index += 1) {
+		const text = stringValue(obj[keys[index]])
+		if (text != '') return text
+	}
+	return ''
+}
+
 function firstImageFromStock(detail: UTSJSONObject): string {
-	const direct = getStringField(detail, 'product_image')
+	const direct = stringValue(detail['product_image'])
 	if (direct != '') return direct
 	const mediaFiles = parseObjectArray(detail['product_media_files'])
-	for (let i = 0; i < mediaFiles.length; i++) {
-		const image = firstStringField(mediaFiles[i], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const image = firstStringField(mediaFiles[index], ['signed_thumbnail_url', 'thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
 		if (image != '') return image
 	}
 	return ''
 }
-function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
-	const result: UTSJSONObject[] = []
+
+function numberText(value: any | null): string {
+	return intValue(value).toString()
+}
+
+function moneyText(value: any | null): string {
+	return floatValue(value).toFixed(2)
+}
+
+function normalizedCostText(value: string): string {
+	const text = decimalText(value)
+	if (text == '' || text == '.') return '0.00'
+	return text
+}
+
+function signedNumberText(value: number): string {
+	if (value > 0) return '+' + value.toString()
+	return value.toString()
+}
+
+function dateTimeText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') return '-'
+	const compact = text.split('T').join(' ')
+	if (compact.length > 19) return compact.substring(0, 19)
+	return compact
+}
+
+function alertLabel(value: string): string {
+	if (value == 'LOW_STOCK') return '低库存'
+	if (value == 'OUT_OF_STOCK') return '售罄'
+	if (value == 'NO_MOVEMENT') return '久未变动'
+	if (value == 'LOW') return '低库存'
+	if (value == 'OUT') return '售罄'
+	return '正常'
+}
+
+function listedLabel(value: string): string {
+	if (value == 'false') return '下架'
+	return '上架'
+}
+
+function optionText(source: SelectOption[], value: string, fallback: string): string {
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
-		if (keyword == '' || option.text.toLowerCase().indexOf(keyword) >= 0) result.push({ value: option.value, text: option.text } as UTSJSONObject)
+		if (option.value == value) return option.label
 	}
-	return { results: result, total_count: result.length } as UTSJSONObject
-}
-async function fetchTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> { return buildSelectResponse(typeOptions.value, params) }
-async function fetchCurrentProductOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
-	const productValue = getStringField(initialData.value, 'product')
-	const productText = getStringField(initialData.value, 'product_name')
-	const productImage = getStringField(initialData.value, 'product_image')
-	const option = { value: productValue, text: productText, image: productImage, subtitle: getStringField(initialData.value, 'stock_id') } as UTSJSONObject
-	const result: UTSJSONObject[] = []
-	if (productValue != '') result.push(option)
-	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
+	return fallback
 }
 
-const formSections = ref<UTSJSONObject[]>([
-	{
-		key: 'base',
-		title: '调整信息',
-		description: '',
-		defaultOpen: true,
-		fields: [
-			{ key: 'product', textKey: 'product_name', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', disabled: true, title: '当前商品', placeholder: '从库存列表进入后自动带出', imageKey: 'image', subtitleKey: 'subtitle', showAddAction: false, showEditAction: false, fetchData: fetchCurrentProductOptions } as UTSJSONObject,
-			{ key: 'stock_id', label: '库存ID', type: 'input', required: true, disabled: true } as UTSJSONObject,
-			{ key: 'quantity_change', label: '调整数量', type: 'input', required: true, placeholder: '正数入库，负数出库' } as UTSJSONObject,
-			{ key: 'transaction_type', label: '调整类型', type: 'bottomSelect', title: '选择调整类型', placeholder: '请选择调整类型', showAddAction: false, showEditAction: false, fetchData: fetchTypeOptions } as UTSJSONObject,
-			{ key: 'unit_cost', label: '单位成本', type: 'input', placeholder: '可选' } as UTSJSONObject,
-			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入调整原因' } as UTSJSONObject,
-		] as UTSJSONObject[],
-	} as UTSJSONObject,
-])
+function buildStaticSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
+	const id = stringValue(params['id'])
+	const rows: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const option = source[index]
+		if (id != '' && option.value != id) continue
+		rows.push({ value: option.value, text: option.label, label: option.label } as UTSJSONObject)
+	}
+	return { data: rows, results: rows, total: rows.length, total_count: rows.length } as UTSJSONObject
+}
 
-function markRefreshNeeded() { uni.setStorageSync(refreshStorageKey, '1') }
-function goBackToList() { leaveSignal.value = leaveSignal.value + 1; setTimeout(() => { uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/inventory-management/index' }) } }) }, 16) }
+function baseInventoryQuery(page: number, pageSize: number): InventoryListQuery {
+	return {
+		search: null,
+		page: page,
+		page_size: pageSize,
+		status: null,
+		alert_status: null,
+		transaction_type: null,
+		location_type: null,
+		is_active: null,
+	} as InventoryListQuery
+}
 
-async function loadDetail(idText: string) {
-	if (idText == '') return
+const refreshStorageKey = 'refresh:pages:inventory-management:index'
+const productId = ref('')
+const productName = ref('')
+const selectedStockId = ref('')
+const initialMode = ref('')
+const stocks = ref<UTSJSONObject[]>([])
+const movementRecords = ref<UTSJSONObject[]>([])
+const movementRecordTotal = ref(0)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const createSubmitting = ref(false)
+const adjustSubmitting = ref(false)
+const createSheetVisible = ref(false)
+const adjustSheetVisible = ref(false)
+const initialSheetConsumed = ref(false)
+const sheetPanelHeight = ref(620)
+const sheetScrollHeight = ref(420)
+const createLocationValue = ref('')
+const createLocationText = ref('')
+const createQuantityText = ref('')
+const createTypeValue = ref('INITIAL')
+const createTypeText = ref('初始库存')
+const createUnitCostText = ref('')
+const createNotesText = ref('')
+const adjustQuantityText = ref('')
+const adjustTypeValue = ref('ADJUSTMENT')
+const adjustTypeText = ref('盘点调整')
+const adjustUnitCostText = ref('')
+const adjustNotesText = ref('')
+
+const createTypeOptions = [
+	{ value: 'INITIAL', label: '初始库存' } as SelectOption,
+	{ value: 'PURCHASE', label: '采购入库' } as SelectOption,
+]
+
+const adjustTypeOptions = [
+	{ value: 'ADJUSTMENT', label: '盘点调整' } as SelectOption,
+	{ value: 'DAMAGE', label: '损坏' } as SelectOption,
+	{ value: 'LOSS', label: '丢失' } as SelectOption,
+	{ value: 'INITIAL', label: '初始库存' } as SelectOption,
+	{ value: 'PURCHASE', label: '采购入库' } as SelectOption,
+	{ value: 'RETURN_IN', label: '退货入库' } as SelectOption,
+]
+
+function stockById(id: string): UTSJSONObject | null {
+	for (let index = 0; index < stocks.value.length; index += 1) {
+		const stock = stocks.value[index]
+		if (stringValue(stock['id']) == id) return stock
+	}
+	return null
+}
+
+function firstStock(): UTSJSONObject | null {
+	if (stocks.value.length == 0) return null
+	return stocks.value[0]
+}
+
+function selectedStock(): UTSJSONObject | null {
+	if (selectedStockId.value == '') return null
+	return stockById(selectedStockId.value)
+}
+
+function hasStockAtLocation(locationId: string): boolean {
+	for (let index = 0; index < stocks.value.length; index += 1) {
+		const stock = stocks.value[index]
+		if (stringValue(stock['location']) == locationId) return true
+	}
+	return false
+}
+
+function locationTypeText(stock: UTSJSONObject): string {
+	const type = stringValue(stock['location_type'])
+	if (type == 'WAREHOUSE') return '仓库'
+	if (type == 'SHOP') return '门店'
+	if (type == 'TRANSIT') return '在途'
+	return type == '' ? '位置' : type
+}
+
+function updateProductFromStock(stock: UTSJSONObject) {
+	if (productId.value == '') productId.value = stringValue(stock['product'])
+	if (productName.value == '') productName.value = stringValue(stock['product_name'])
+}
+
+function markRefreshNeeded() {
+	uni.setStorageSync(refreshStorageKey, '1')
+}
+
+function updateSheetLayout() {
+	const info = uni.getWindowInfo()
+	let panelHeight = info.windowHeight - 96
+	if (panelHeight > 680) panelHeight = 680
+	if (panelHeight < 500) panelHeight = 500
+	let scrollHeight = panelHeight - 192
+	if (scrollHeight < 280) scrollHeight = 280
+	sheetPanelHeight.value = panelHeight
+	sheetScrollHeight.value = scrollHeight
+}
+
+const homePath = computed((): string => {
+	if (productId.value != '') return '/pages/tabbar/products'
+	return '/pages/inventory-management/index'
+})
+
+const pageTitle = computed((): string => {
+	if (productName.value != '') return '库存详情'
+	if (productId.value != '') return '商品库存'
+	return '库存详情'
+})
+
+const productTitle = computed((): string => {
+	if (productName.value != '') return productName.value
+	const stock = firstStock()
+	if (stock != null) return stringValue(stock!['product_name'], '未命名商品')
+	if (productId.value != '') return '商品 #' + productId.value
+	return '商品库存'
+})
+
+const productSubtitle = computed((): string => {
+	const stock = firstStock()
+	if (stock == null) return productId.value == '' ? '缺少商品信息' : '商品 ID ' + productId.value
+	const sku = stringValue(stock!['product_sku'])
+	const barcode = stringValue(stock!['product_barcode'])
+	if (sku != '' && barcode != '') return 'SKU ' + sku + ' / 条码 ' + barcode
+	if (sku != '') return 'SKU ' + sku
+	if (barcode != '') return '条码 ' + barcode
+	return '未设置 SKU/条码'
+})
+
+const productImage = computed((): string => {
+	const stock = firstStock()
+	if (stock == null) return ''
+	return firstImageFromStock(stock!)
+})
+
+const totalQuantityText = computed((): string => {
+	let total = 0
+	for (let index = 0; index < stocks.value.length; index += 1) total = total + intValue(stocks.value[index]['quantity'])
+	return total.toString()
+})
+
+const totalAvailableText = computed((): string => {
+	let total = 0
+	for (let index = 0; index < stocks.value.length; index += 1) total = total + intValue(stocks.value[index]['available_quantity'])
+	return total.toString()
+})
+
+const stockLocationCountText = computed((): string => {
+	return stocks.value.length.toString()
+})
+
+const movementRecordCountText = computed((): string => {
+	return movementRecordTotal.value.toString()
+})
+
+const selectedStockHint = computed((): string => {
+	const stock = selectedStock()
+	if (stock == null) return '选择一个库存位置后进行调整'
+	return stringValue(stock!['location_name'], '未设置库存位置') + '，当前库存 ' + numberText(stock!['quantity'])
+})
+
+const adjustBeforeText = computed((): string => {
+	const stock = selectedStock()
+	if (stock == null) return '-'
+	return numberText(stock!['quantity'])
+})
+
+const adjustChangeValue = computed((): number => {
+	return intValue(adjustQuantityText.value)
+})
+
+const adjustChangeText = computed((): string => {
+	if (adjustQuantityText.value == '') return '-'
+	return signedNumberText(adjustChangeValue.value)
+})
+
+const adjustChangeClass = computed((): string => {
+	if (adjustChangeValue.value > 0) return 'adjust-preview-value adjust-preview-in'
+	if (adjustChangeValue.value < 0) return 'adjust-preview-value adjust-preview-out'
+	return 'adjust-preview-value'
+})
+
+const adjustAfterText = computed((): string => {
+	const stock = selectedStock()
+	if (stock == null || adjustQuantityText.value == '') return '-'
+	return (intValue(stock!['quantity']) + adjustChangeValue.value).toString()
+})
+
+const createButtonText = computed((): string => {
+	return createSubmitting.value ? '创建中...' : '创建库存'
+})
+
+const adjustButtonText = computed((): string => {
+	return adjustSubmitting.value ? '保存中...' : '保存调整'
+})
+
+const sheetPanelStyle = computed((): string => {
+	return 'height:' + sheetPanelHeight.value.toString() + 'px;'
+})
+
+const sheetScrollStyle = computed((): string => {
+	return 'height:' + sheetScrollHeight.value.toString() + 'px;'
+})
+
+function stockCardClass(stock: UTSJSONObject): string {
+	if (stringValue(stock['id']) == selectedStockId.value) return 'stock-card stock-card-active'
+	return 'stock-card'
+}
+
+function stockAlertClass(stock: UTSJSONObject): string {
+	const status = stringValue(stock['alert_status'])
+	if (status != '' && status != 'NORMAL') return 'stock-alert stock-alert-warning'
+	return 'stock-alert'
+}
+
+function selectStock(stock: UTSJSONObject) {
+	selectedStockId.value = stringValue(stock['id'])
+	adjustUnitCostText.value = moneyText(stock['average_cost'])
+	adjustQuantityText.value = ''
+	adjustTypeValue.value = 'ADJUSTMENT'
+	adjustTypeText.value = optionText(adjustTypeOptions, 'ADJUSTMENT', '盘点调整')
+}
+
+function setAdjustQuantityValue(value: number) {
+	let next = value
+	if (next > 999999) next = 999999
+	if (next < -999999) next = -999999
+	adjustQuantityText.value = next.toString()
+}
+
+function stepAdjustQuantity(delta: number) {
+	setAdjustQuantityValue(intValue(adjustQuantityText.value) + delta)
+}
+
+function setAdjustQuantityQuick(value: number) {
+	setAdjustQuantityValue(value)
+}
+
+function locationOptionText(item: UTSJSONObject): string {
+	const name = stringValue(item['name'], stringValue(item['location_name'], '库存位置'))
+	const code = stringValue(item['code'])
+	if (code != '') return name + ' / ' + code
+	return name
+}
+
+async function fetchLocationOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const query = baseInventoryQuery(intValue(params['page']), intValue(params['pageSize']))
+	query.page = query.page <= 0 ? 1 : query.page
+	query.page_size = query.page_size <= 0 ? 50 : query.page_size
+	query.search = stringValue(params['keyword']) == '' ? null : stringValue(params['keyword'])
+	query.is_active = 'true'
+	const response = await getInventoryLocations(query)
+	const rows: UTSJSONObject[] = []
+	for (let index = 0; index < response.results.length; index += 1) {
+		const item = response.results[index]
+		const id = stringValue(item['id'])
+		if (id == '' || hasStockAtLocation(id)) continue
+		rows.push({
+			value: id,
+			text: locationOptionText(item),
+			label: locationOptionText(item),
+			subtitle: locationTypeText(item),
+		} as UTSJSONObject)
+	}
+	return { data: rows, results: rows, total: rows.length, total_count: rows.length } as UTSJSONObject
+}
+
+async function fetchCreateTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return buildStaticSelectResponse(createTypeOptions, params)
+}
+
+async function fetchAdjustTypeOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	return buildStaticSelectResponse(adjustTypeOptions, params)
+}
+
+function buildProductStockQuery(): InventoryListQuery {
+	const query = baseInventoryQuery(1, 100)
+	if (productId.value != '') query.product = productId.value
+	if (productId.value == '' && selectedStockId.value != '') query.stock = selectedStockId.value
+	return query
+}
+
+function buildMovementQuery(): InventoryListQuery {
+	const query = baseInventoryQuery(1, 50)
+	if (productId.value != '') query.product = productId.value
+	if (productId.value == '' && selectedStockId.value != '') query.stock = selectedStockId.value
+	return query
+}
+
+async function loadInitialStockIfNeeded() {
+	if (selectedStockId.value == '') return
 	try {
-		const detail = await getInventoryStockDetail(idText)
-		initialData.value = {
-			stock_id: idText,
-			product: getStringField(detail, 'product'),
-			product_name: getStringField(detail, 'product_name', '-') + ' / ' + getStringField(detail, 'location_name', '-'),
-			product_image: firstImageFromStock(detail),
-			quantity_change: '',
-			transaction_type: 'ADJUSTMENT',
-			unit_cost: getStringField(detail, 'average_cost'),
-			notes: '',
-		} as UTSJSONObject
+		const detail = await getInventoryStockDetail(selectedStockId.value)
+		updateProductFromStock(detail)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '库存详情加载失败'), icon: 'none' })
+		errorMessage.value = parseErrorMessage(error, '库存详情加载失败')
 	}
 }
 
-function buildPayload(data: UTSJSONObject): StockAdjustmentData {
-	const idText = getStringField(data, 'stock_id', stockId.value)
-	const quantityText = getStringField(data, 'quantity_change')
-	return { stock_id: parseInt(idText), quantity_change: parseInt(quantityText), transaction_type: getStringField(data, 'transaction_type', 'ADJUSTMENT'), unit_cost: getStringField(data, 'unit_cost'), notes: getStringField(data, 'notes') } as StockAdjustmentData
+async function loadProductStocks() {
+	const response = await getInventoryStocks(buildProductStockQuery())
+	stocks.value = response.results
+	for (let index = 0; index < stocks.value.length; index += 1) updateProductFromStock(stocks.value[index])
+	if (selectedStockId.value != '' && stockById(selectedStockId.value) == null && stocks.value.length > 0) selectedStockId.value = stringValue(stocks.value[0]['id'])
 }
 
-async function persistForm(payload: UTSJSONObject) {
-	if (submitting.value) return
-	const rawData = payload['formData']
-	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
-	const body = buildPayload(data)
-	if (isNaN(body.stock_id) || isNaN(body.quantity_change) || body.quantity_change == 0) {
-		uni.showToast({ title: '请输入有效的调整数量', icon: 'none' })
+async function loadMovementRecords() {
+	if (productId.value == '' && selectedStockId.value == '') {
+		movementRecords.value = [] as UTSJSONObject[]
+		movementRecordTotal.value = 0
 		return
 	}
-	submitting.value = true
-	uni.showLoading({ title: '调整库存中...', mask: true })
+	const response = await getInventoryTransactions(buildMovementQuery())
+	movementRecords.value = response.results
+	let count = response.total_count
+	if (count < response.results.length) count = response.results.length
+	movementRecordTotal.value = count
+}
+
+async function loadAll() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
 	try {
-		await adjustInventoryStock(body)
+		await loadInitialStockIfNeeded()
+		await loadProductStocks()
+		await loadMovementRecords()
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error, '库存详情加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function resetCreateForm() {
+	createLocationValue.value = ''
+	createLocationText.value = ''
+	createQuantityText.value = ''
+	createTypeValue.value = 'INITIAL'
+	createTypeText.value = optionText(createTypeOptions, 'INITIAL', '初始库存')
+	createUnitCostText.value = ''
+	createNotesText.value = ''
+}
+
+function openCreateSheet() {
+	if (productId.value == '') {
+		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		return
+	}
+	resetCreateForm()
+	updateSheetLayout()
+	createSheetVisible.value = true
+}
+
+function closeCreateSheet() {
+	if (createSubmitting.value) return
+	createSheetVisible.value = false
+}
+
+function openAdjustSheet(stock: UTSJSONObject) {
+	selectStock(stock)
+	updateSheetLayout()
+	adjustSheetVisible.value = true
+}
+
+function closeAdjustSheet() {
+	if (adjustSubmitting.value) return
+	adjustSheetVisible.value = false
+}
+
+function openSelectedAdjustSheet() {
+	const stock = selectedStock()
+	if (stock == null) {
+		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		return
+	}
+	openAdjustSheet(stock!)
+}
+
+function openInitialSheetIfNeeded() {
+	if (initialSheetConsumed.value) return
+	if (initialMode.value == 'create') {
+		initialSheetConsumed.value = true
+		openCreateSheet()
+		return
+	}
+	if (initialMode.value == 'adjust' && selectedStockId.value != '') {
+		const stock = selectedStock()
+		if (stock == null) return
+		initialSheetConsumed.value = true
+		openAdjustSheet(stock!)
+	}
+}
+
+function buildCreateStockPayload(): InventoryStockCreateForProductData | null {
+	const parsedProductId = parseInt(productId.value)
+	if (isNaN(parsedProductId) || parsedProductId <= 0) {
+		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		return null
+	}
+	const locationId = parseInt(createLocationValue.value)
+	if (isNaN(locationId) || locationId <= 0) {
+		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		return null
+	}
+	if (hasStockAtLocation(createLocationValue.value)) {
+		uni.showToast({ title: '该位置已有库存记录', icon: 'none' })
+		return null
+	}
+	const quantity = createQuantityText.value == '' ? 0 : parseInt(createQuantityText.value)
+	if (isNaN(quantity) || quantity < 0) {
+		uni.showToast({ title: '初始数量不能小于 0', icon: 'none' })
+		return null
+	}
+	return {
+		product: parsedProductId,
+		location: locationId,
+		quantity: quantity,
+		transaction_type: createTypeValue.value == '' ? 'INITIAL' : createTypeValue.value,
+		unit_cost: normalizedCostText(createUnitCostText.value),
+		notes: createNotesText.value,
+	} as InventoryStockCreateForProductData
+}
+
+async function submitCreateStock() {
+	if (createSubmitting.value) return
+	const payload = buildCreateStockPayload()
+	if (payload == null) return
+	createSubmitting.value = true
+	try {
+		const created = await createInventoryStockForProduct(payload!)
+		const createdText = JSON.stringify(created)
+		const createdObject = createdText == null || createdText == '' ? null : JSON.parseObject<UTSJSONObject>(createdText)
+		if (createdObject != null) selectedStockId.value = stringValue(createdObject!['id'])
 		markRefreshNeeded()
+		resetCreateForm()
+		createSheetVisible.value = false
+		uni.showToast({ title: takeLatestResponseMessage('库存创建成功'), icon: 'success' })
+		await loadAll()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '库存创建失败'), icon: 'none' })
+	} finally {
+		createSubmitting.value = false
+	}
+}
+
+function buildAdjustStockPayload(): StockAdjustmentData | null {
+	const stockId = parseInt(selectedStockId.value)
+	if (isNaN(stockId) || stockId <= 0) {
+		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		return null
+	}
+	const change = parseInt(adjustQuantityText.value)
+	if (isNaN(change) || change == 0) {
+		uni.showToast({ title: '请输入非 0 的调整数量', icon: 'none' })
+		return null
+	}
+	return {
+		stock_id: stockId,
+		quantity_change: change,
+		transaction_type: adjustTypeValue.value == '' ? 'ADJUSTMENT' : adjustTypeValue.value,
+		unit_cost: normalizedCostText(adjustUnitCostText.value),
+		notes: adjustNotesText.value,
+	} as StockAdjustmentData
+}
+
+async function submitAdjustStock() {
+	if (adjustSubmitting.value) return
+	const payload = buildAdjustStockPayload()
+	if (payload == null) return
+	adjustSubmitting.value = true
+	try {
+		await adjustInventoryStock(payload!)
+		markRefreshNeeded()
+		adjustQuantityText.value = ''
+		adjustNotesText.value = ''
+		adjustSheetVisible.value = false
 		uni.showToast({ title: takeLatestResponseMessage('库存调整成功'), icon: 'success' })
-		goBackToList()
+		await loadAll()
 	} catch (error) {
 		uni.showToast({ title: parseErrorMessage(error, '库存调整失败'), icon: 'none' })
 	} finally {
-		uni.hideLoading()
-		submitting.value = false
+		adjustSubmitting.value = false
 	}
 }
 
-async function handleSubmit(payload: UTSJSONObject) { await persistForm(payload) }
-async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(payload) }
-function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
-function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
-function handleDirtyChange(value: boolean) {}
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleCreateLocationChange(payload: UTSJSONObject) {
+	createLocationValue.value = stringValue(payload['value'])
+	createLocationText.value = stringValue(payload['text'])
+}
+
+function handleCreateTypeChange(payload: UTSJSONObject) {
+	createTypeValue.value = stringValue(payload['value'], 'INITIAL')
+	createTypeText.value = stringValue(payload['text'], optionText(createTypeOptions, createTypeValue.value, '初始库存'))
+}
+
+function handleAdjustTypeChange(payload: UTSJSONObject) {
+	adjustTypeValue.value = stringValue(payload['value'], 'ADJUSTMENT')
+	adjustTypeText.value = stringValue(payload['text'], optionText(adjustTypeOptions, adjustTypeValue.value, '盘点调整'))
+}
+
+function handleCreateQuantityInput(event: any) {
+	createQuantityText.value = positiveIntegerText(readInputValue(event))
+}
+
+function handleCreateUnitCostInput(event: any) {
+	createUnitCostText.value = decimalText(readInputValue(event))
+}
+
+function handleCreateNotesInput(event: any) {
+	createNotesText.value = readInputValue(event)
+}
+
+function handleAdjustQuantityInput(event: any) {
+	adjustQuantityText.value = signedIntegerText(readInputValue(event))
+}
+
+function handleAdjustUnitCostInput(event: any) {
+	adjustUnitCostText.value = decimalText(readInputValue(event))
+}
+
+function handleAdjustNotesInput(event: any) {
+	adjustNotesText.value = readInputValue(event)
+}
+
+function movementTypeText(record: UTSJSONObject): string {
+	const display = stringValue(record['transaction_type_display'])
+	if (display != '') return display
+	const type = stringValue(record['transaction_type'])
+	if (type == 'PURCHASE') return '采购入库'
+	if (type == 'SALE') return '销售出库'
+	if (type == 'RETURN_IN') return '退货入库'
+	if (type == 'RETURN_OUT') return '退货出库'
+	if (type == 'TRANSFER_IN') return '调拨入库'
+	if (type == 'TRANSFER_OUT') return '调拨出库'
+	if (type == 'ADJUSTMENT') return '盘点调整'
+	if (type == 'DAMAGE') return '损坏'
+	if (type == 'LOSS') return '丢失'
+	if (type == 'INITIAL') return '初始库存'
+	return type == '' ? '库存变动' : type
+}
+
+function movementTitleText(record: UTSJSONObject): string {
+	const location = stringValue(record['location_name'], '未知位置')
+	return movementTypeText(record) + ' · ' + location
+}
+
+function movementSubtitleText(record: UTSJSONObject): string {
+	const type = stringValue(record['transaction_type'])
+	const orderNumber = stringValue(record['order_number'])
+	if (orderNumber != '') return '订单 ' + orderNumber
+	const notes = stringValue(record['notes'])
+	if (notes != '') return notes
+	const referenceId = stringValue(record['reference_id'])
+	const referenceType = stringValue(record['reference_type'])
+	if (referenceId != '' && referenceType != '') return referenceType + ' #' + referenceId
+	if (referenceId != '') return '关联记录 #' + referenceId
+	if (type == 'SALE') return '未关联订单'
+	return '库存 ' + numberText(record['quantity_before']) + ' -> ' + numberText(record['quantity_after'])
+}
+
+function movementQuantityText(record: UTSJSONObject): string {
+	const value = intValue(record['quantity'])
+	return signedNumberText(value)
+}
+
+function movementQuantityClass(record: UTSJSONObject): string {
+	const value = intValue(record['quantity'])
+	if (value > 0) return 'movement-quantity movement-quantity-in'
+	if (value < 0) return 'movement-quantity movement-quantity-out'
+	return 'movement-quantity'
+}
+
+function movementTimeText(record: UTSJSONObject): string {
+	const orderTime = stringValue(record['order_time'])
+	if (orderTime != '') return dateTimeText(orderTime)
+	return dateTimeText(record['created_at'])
+}
+
+function movementActorText(record: UTSJSONObject): string {
+	const seller = stringValue(record['seller_name'])
+	if (stringValue(record['transaction_type']) == 'SALE' && seller != '') return '销售人 ' + seller
+	const cashierId = stringValue(record['cashier_id'])
+	if (cashierId != '') return '收银员 ' + cashierId
+	const userName = stringValue(record['created_by_name'])
+	if (userName != '') return '操作人 ' + userName
+	return '操作人 系统'
+}
 
 onLoad((query: OnLoadOptions) => {
-	const idValue = query['id']
-	if (idValue != null && idValue != '') {
-		stockId.value = idValue
-		initialData.value['stock_id'] = idValue
-		loadDetail(idValue)
+	const productValue = query['product']
+	productId.value = productValue == null ? '' : ('' + productValue)
+	const stockValue = query['stock']
+	if (stockValue == null) {
+		const oldIdValue = query['id']
+		selectedStockId.value = oldIdValue == null ? '' : ('' + oldIdValue)
+	} else {
+		selectedStockId.value = '' + stockValue
 	}
+	const modeValue = query['mode']
+	initialMode.value = modeValue == null ? '' : ('' + modeValue)
+	const productNameValue = query['productName']
+	if (productNameValue == null) {
+		productName.value = ''
+	} else {
+		productName.value = stringValue(decodeURIComponent('' + productNameValue))
+	}
+	updateSheetLayout()
+	if (initialMode.value == 'adjust' && selectedStockId.value == '') uni.showToast({ title: '请选择库存位置', icon: 'none' })
+	loadAll().then(() => {
+		openInitialSheetIfNeeded()
+	})
 })
 </script>
 
 <style>
-.page { flex: 1; background-color: #EEF2F7; }
-.page-content { flex: 1; padding-bottom: 0; }
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 8px; padding-right: 8px; padding-bottom: 96px; padding-left: 8px; }
+.error-band { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #FECACA; padding: 14px; margin-bottom: 10px; align-items: center; }
+.error-title { font-size: 16px; line-height: 22px; color: #B42318; font-weight: bold; }
+.error-desc { margin-top: 6px; font-size: 13px; line-height: 18px; color: #7F1D1D; text-align: center; }
+.error-action { margin-top: 12px; height: 38px; padding-left: 18px; padding-right: 18px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.error-action-text { font-size: 13px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
+.product-band { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 12px; margin-bottom: 12px; }
+.product-main { flex-direction: row; align-items: center; }
+.product-image { width: 56px; height: 56px; border-radius: 8px; background-color: #E2E8F0; }
+.product-image-empty { align-items: center; justify-content: center; }
+.product-image-empty-text { font-size: 18px; line-height: 24px; color: #64748B; font-weight: bold; }
+.product-title-wrap { flex: 1; margin-left: 10px; }
+.product-title { font-size: 18px; line-height: 24px; color: #0F172A; font-weight: bold; }
+.product-subtitle { margin-top: 4px; font-size: 12px; line-height: 17px; color: #64748B; }
+.summary-grid { flex-direction: row; margin-top: 12px; }
+.summary-item { flex: 1; min-height: 58px; background-color: #F8FAFC; border-radius: 8px; align-items: center; justify-content: center; margin-right: 6px; }
+.summary-label { font-size: 11px; line-height: 15px; color: #64748B; }
+.summary-value { margin-top: 4px; font-size: 18px; line-height: 24px; color: #0F172A; font-weight: bold; }
+.section-head { margin-top: 6px; margin-bottom: 8px; }
+.section-head-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.section-title-wrap { flex: 1; padding-right: 8px; }
+.section-title { font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.section-subtitle { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.section-action { height: 36px; padding-left: 12px; padding-right: 12px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.section-action-text { font-size: 13px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
+.empty-band { min-height: 62px; background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-bottom: 10px; }
+.empty-text { font-size: 13px; line-height: 18px; color: #64748B; }
+.stock-card { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 12px; margin-bottom: 8px; }
+.stock-card-active { border-color: #0F172A; background-color: #F8FAFC; }
+.stock-row-top { flex-direction: row; align-items: center; justify-content: space-between; }
+.stock-location-wrap { flex: 1; padding-right: 8px; }
+.stock-location { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; }
+.stock-location-sub { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.stock-alert { height: 24px; line-height: 24px; padding-left: 8px; padding-right: 8px; border-radius: 12px; background-color: #E8F7EF; color: #047857; font-size: 11px; }
+.stock-alert-warning { background-color: #FFF7ED; color: #B45309; }
+.stock-metrics { flex-direction: row; margin-top: 10px; }
+.stock-metric { flex: 1; min-height: 50px; align-items: center; justify-content: center; border-right-width: 1px; border-right-style: solid; border-right-color: #E2E8F0; }
+.stock-metric-label { font-size: 11px; line-height: 15px; color: #64748B; }
+.stock-metric-value { margin-top: 3px; font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.stock-metric-money { font-size: 13px; line-height: 18px; }
+.stock-row-bottom { flex-direction: row; align-items: center; margin-top: 10px; }
+.stock-tag { height: 24px; line-height: 24px; padding-left: 8px; padding-right: 8px; border-radius: 12px; background-color: #EEF2FF; color: #334155; font-size: 11px; margin-right: 8px; }
+.stock-muted { font-size: 12px; line-height: 17px; color: #64748B; }
+.field { margin-bottom: 10px; }
+.field-row { flex-direction: row; margin-bottom: 10px; }
+.field-half { flex: 1; }
+.field-half-right { margin-left: 8px; }
+.field-label { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.input { height: 42px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; padding-left: 10px; padding-right: 10px; font-size: 14px; color: #0F172A; }
+.textarea { height: 82px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; padding: 10px; font-size: 14px; color: #0F172A; }
+.field-title-row { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.field-help { font-size: 12px; line-height: 17px; color: #64748B; }
+.adjust-quantity-field { background-color: #FFFFFF; }
+.quantity-input-row { flex-direction: row; align-items: center; }
+.quantity-step { width: 46px; height: 46px; border-radius: 8px; align-items: center; justify-content: center; }
+.quantity-step-out { background-color: #FEF2F2; border-width: 1px; border-style: solid; border-color: #FCA5A5; }
+.quantity-step-in { background-color: #E8F7EF; border-width: 1px; border-style: solid; border-color: #86EFAC; }
+.quantity-step-text { font-size: 24px; line-height: 28px; color: #0F172A; font-weight: bold; }
+.quantity-input { flex: 1; height: 46px; margin-left: 8px; margin-right: 8px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; text-align: center; font-size: 18px; color: #0F172A; font-weight: bold; }
+.quantity-quick-row { flex-direction: row; margin-top: 8px; }
+.quantity-quick { flex: 1; height: 34px; border-radius: 8px; border-width: 1px; border-style: solid; align-items: center; justify-content: center; margin-right: 5px; }
+.quantity-quick-out { background-color: #FFF7ED; border-color: #FDBA74; }
+.quantity-quick-in { background-color: #F0FDF4; border-color: #86EFAC; }
+.quantity-quick-last { margin-right: 0; }
+.quantity-quick-out-text { font-size: 12px; line-height: 17px; color: #B42318; font-weight: bold; }
+.quantity-quick-in-text { font-size: 12px; line-height: 17px; color: #047857; font-weight: bold; }
+.adjust-preview { flex-direction: row; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; padding-top: 10px; padding-bottom: 10px; margin-bottom: 10px; }
+.adjust-preview-item { flex: 1; align-items: center; border-right-width: 1px; border-right-style: solid; border-right-color: #E2E8F0; }
+.adjust-preview-label { font-size: 11px; line-height: 15px; color: #64748B; }
+.adjust-preview-value { margin-top: 4px; font-size: 16px; line-height: 22px; color: #0F172A; font-weight: bold; }
+.adjust-preview-in { color: #047857; }
+.adjust-preview-out { color: #B42318; }
+.adjust-preview-strong { color: #0F172A; }
+.movement-row { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 12px; margin-bottom: 8px; }
+.movement-row-top { flex-direction: row; align-items: center; justify-content: space-between; }
+.movement-main { flex: 1; padding-right: 8px; }
+.movement-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.movement-subtitle { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.movement-quantity { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; }
+.movement-quantity-in { color: #047857; }
+.movement-quantity-out { color: #B42318; }
+.movement-row-bottom { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top-width: 1px; border-top-style: solid; border-top-color: #E2E8F0; }
+.movement-meta { font-size: 12px; line-height: 17px; color: #475569; }
+.sheet-panel { background-color: #FFFFFF; padding-left: 14px; padding-right: 14px; padding-bottom: 12px; border-top-left-radius: 16px; border-top-right-radius: 16px; border-width: 1px; border-style: solid; border-color: #E2E8F0; }
+.sheet-handle-wrap { height: 22px; align-items: center; justify-content: center; }
+.sheet-handle { width: 42px; height: 4px; border-radius: 2px; background-color: #CBD5E1; }
+.sheet-header { min-height: 56px; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #E2E8F0; padding-bottom: 10px; }
+.sheet-title-wrap { flex: 1; padding-right: 10px; }
+.sheet-title { font-size: 17px; line-height: 23px; color: #0F172A; font-weight: bold; }
+.sheet-subtitle { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.sheet-close { width: 38px; height: 38px; border-radius: 19px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; }
+.sheet-close-text { font-size: 24px; line-height: 24px; color: #64748B; font-weight: bold; }
+.sheet-scroll { padding-top: 12px; padding-bottom: 12px; }
+.sheet-actions { flex-direction: row; align-items: center; padding-top: 10px; border-top-width: 1px; border-top-style: solid; border-top-color: #E2E8F0; }
+.sheet-btn { flex: 1; height: 42px; border-radius: 8px; align-items: center; justify-content: center; }
+.sheet-btn-light { background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; margin-right: 8px; }
+.sheet-btn-primary { background-color: #0F172A; margin-left: 8px; }
+.sheet-btn-light-text { font-size: 14px; line-height: 19px; color: #334155; font-weight: bold; }
+.sheet-btn-primary-text { font-size: 14px; line-height: 19px; color: #FFFFFF; font-weight: bold; }
 </style>

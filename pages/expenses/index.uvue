@@ -123,7 +123,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deleteExpense, ExpenseFilterDefinition, ExpenseFilterOptionsResponse, ExpenseItem, ExpenseListResponse, getExpenseFilterOptions, getExpenseList } from '@/pkg/api/modules/expenses.uts'
+import { deleteExpense, ExpenseFilterDefinition, ExpenseFilterOptionsResponse, ExpenseItem, ExpenseListResponse, ExpenseMediaFile, getExpenseFilterOptions, getExpenseList } from '@/pkg/api/modules/expenses.uts'
 
 type ExpenseSelectedFilter = {
 	param: string
@@ -300,14 +300,43 @@ function getDisplayText(value: string | null, fallback: string = '-'): string {
 	return value
 }
 
+function expenseThumbnailUrl(mediaFile: ExpenseMediaFile): string {
+	if (mediaFile.signed_thumbnail_url != '') return mediaFile.signed_thumbnail_url
+	if (mediaFile.thumbnail_url != '') return mediaFile.thumbnail_url
+	if (mediaFile.signed_url != '') return mediaFile.signed_url
+	return mediaFile.file_url
+}
+
+function expenseFullUrl(mediaFile: ExpenseMediaFile): string {
+	if (mediaFile.signed_url != '') return mediaFile.signed_url
+	if (mediaFile.file_url != '') return mediaFile.file_url
+	return expenseThumbnailUrl(mediaFile)
+}
+
 function buildImages(item: ExpenseItem): string[] {
 	const result: string[] = []
 	for (let index = 0; index < item.media_files.length; index += 1) {
 		const mediaFile = item.media_files[index]
-		if (mediaFile.signed_thumbnail_url != '') result.push(mediaFile.signed_thumbnail_url)
-		else if (mediaFile.thumbnail_url != '') result.push(mediaFile.thumbnail_url)
-		else if (mediaFile.signed_url != '') result.push(mediaFile.signed_url)
-		else if (mediaFile.file_url != '') result.push(mediaFile.file_url)
+		const imageUrl = expenseThumbnailUrl(mediaFile)
+		if (imageUrl != '') result.push(imageUrl)
+	}
+	return result
+}
+
+function buildPreviewImages(item: ExpenseItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = expenseFullUrl(item.media_files[index])
+		if (imageUrl != '') result.push(imageUrl)
+	}
+	return result
+}
+
+function buildMediaIds(item: ExpenseItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaId = item.media_files[index].id
+		if (mediaId != '') result.push(mediaId)
 	}
 	return result
 }
@@ -318,6 +347,7 @@ function expenseToListItem(item: ExpenseItem): UTSJSONObject {
 	const invoiceText = getDisplayText(item.invoice_number, '-')
 	const noteText = getDisplayText(item.note, getDisplayText(item.description, '-'))
 	const images = buildImages(item)
+	const previewImages = buildPreviewImages(item)
 	return {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
@@ -330,6 +360,9 @@ function expenseToListItem(item: ExpenseItem): UTSJSONObject {
 		noteText: noteText,
 		cover: images.length > 0 ? images[0] : '',
 		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item),
 		tags: [item.files_count > 0 ? '附件 ' + item.files_count.toString() : '无附件'] as string[],
 	} as UTSJSONObject
 }

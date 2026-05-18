@@ -65,7 +65,7 @@ open class GenUniModulesLiliPopupComponentsLiliPopupLiliPopup : VueComponent {
             val confirmDangerValue = ref<Boolean>(props.confirmDanger)
             val autoCloseValue = ref<Boolean>(props.autoClose)
             fun gen_syncStyle_fn() {
-                panelStyle.value = "width:" + props.width + ";max-width:100%;"
+                panelStyle.value = "width:" + props.width + ";"
                 rootStyle.value = "z-index:" + props.zIndex + ";"
             }
             val syncStyle = ::gen_syncStyle_fn

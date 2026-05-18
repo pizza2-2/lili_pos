@@ -88,6 +88,13 @@
 			}
 		},
 		{
+			"path": "pages/suppliers_procure/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/kasa_category/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -235,6 +242,13 @@
 			}
 		},
 		{
+			"path": "pages/ksef/detail",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/expenses/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -347,6 +361,20 @@
 			}
 		},
 		{
+			"path": "pages/inventory-transfers/create",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-transfers/details/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/inventory-checks/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -355,6 +383,20 @@
 		},
 		{
 			"path": "pages/inventory-checks/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-checks/create",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/inventory-checks/details/index",
 			"style": {
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""

@@ -186,6 +186,7 @@ import { getSupplierExcelImportTaskStatus, precheckSupplierExcelImport, Purchase
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { parseExcelFile, pickExcelFile } from '@/uni_modules/lili-excel-picker'
 import { type ExcelParseResult, type ExcelPickerResult } from '@/uni_modules/lili-excel-picker/utssdk/interface.uts'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
 type PreviewCell = {
 	key: string
@@ -264,6 +265,7 @@ const autoDetectMessage = ref('')
 const precheckPassed = ref(false)
 const running = ref(false)
 const choosingFile = ref(false)
+const pageTaskGuard = createAsyncGuard()
 const maxRow = ref(0)
 const maxColumn = ref(0)
 const aiModalVisible = ref(false)
@@ -1372,18 +1374,23 @@ function chooseExcelFile() {
 async function runPrecheck() {
 	if (!hasFile.value || running.value) return
 	if (!validateMappingBeforeRun()) return
+	const taskToken = pageTaskGuard.begin()
 	running.value = true
 	uni.showLoading({ title: '预检中...', mask: true })
 	try {
 		const response = await precheckSupplierExcelImport(purchaseId.value, filePath.value, importConfigPayload())
+		if (!pageTaskGuard.canApply(taskToken)) return
 		applySummary(response)
 		messageText.value = buildPrecheckMessage(response)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) return
 		precheckPassed.value = false
 		uni.showToast({ title: parseErrorMessage(error, '预检失败'), icon: 'none' })
 	} finally {
-		uni.hideLoading()
-		running.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			uni.hideLoading()
+			running.value = false
+		}
 	}
 }
 
@@ -1395,14 +1402,23 @@ function waitImportPoll(): Promise<void> {
 	})
 }
 
-async function waitSupplierExcelImportTask(taskId: string): Promise<PurchaseImportResponse> {
+async function waitSupplierExcelImportTask(taskId: string, taskToken: number): Promise<PurchaseImportResponse> {
 	for (let index = 0; index < 300; index += 1) {
 		await waitImportPoll()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			throw new Error('页面已离开')
+		}
 		const status = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId, false)
+		if (!pageTaskGuard.canApply(taskToken)) {
+			throw new Error('页面已离开')
+		}
 		const statusValue = status.status.toLowerCase()
 		if (status.message != '') messageText.value = status.message
 		if (statusValue == 'success') {
 			const finalStatus = await getSupplierExcelImportTaskStatus(purchaseId.value, taskId, true)
+			if (!pageTaskGuard.canApply(taskToken)) {
+				throw new Error('页面已离开')
+			}
 			return {
 				resource: stringValue(finalStatus.data['resource']),
 				mode: stringValue(finalStatus.data['mode']),
@@ -1425,32 +1441,44 @@ async function waitSupplierExcelImportTask(taskId: string): Promise<PurchaseImpo
 async function runImport() {
 	if (!canImport.value || running.value) return
 	if (!validateMappingBeforeRun()) return
+	const taskToken = pageTaskGuard.begin()
 	running.value = true
 	uni.showLoading({ title: '上传中...', mask: true })
 	try {
 		const task = await startSupplierExcelImportTask(purchaseId.value, filePath.value, importConfigPayload())
+		if (!pageTaskGuard.canApply(taskToken)) return
 		messageText.value = task.message == '' ? '文件已上传，后台导入中' : task.message
 		uni.setStorageSync('refresh:pages:purchases:details:index:' + purchaseId.value, '1')
 		uni.setStorageSync('refresh:pages:purchases:index', '1')
 		uni.hideLoading()
 		uni.showLoading({ title: '后台导入中...', mask: true })
-		const response = await waitSupplierExcelImportTask(task.task_id)
+		const response = await waitSupplierExcelImportTask(task.task_id, taskToken)
+		if (!pageTaskGuard.canApply(taskToken)) return
 		applySummary(response)
 		messageText.value = takeLatestResponseMessage('导入完成')
 		uni.setStorageSync('refresh:pages:purchases:details:index:' + purchaseId.value, '1')
 		uni.setStorageSync('refresh:pages:purchases:index', '1')
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: parseErrorMessage(error, '导入失败'), icon: 'none' })
 	} finally {
-		uni.hideLoading()
-		running.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			uni.hideLoading()
+			running.value = false
+		}
 	}
 }
 
 onLoad((query: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	const purchaseValue = query['purchase']
 	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
 	mappingRows.value = buildDefaultMappingRows()
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 </script>
 

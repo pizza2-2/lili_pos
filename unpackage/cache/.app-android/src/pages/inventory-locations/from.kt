@@ -32,8 +32,8 @@ open class GenPagesInventoryLocationsFrom : BasePage {
             val leaveSignal = ref(0)
             val submitting = ref(false)
             val initialData = ref<UTSJSONObject>(_uO("name" to "", "code" to "", "location_type" to "WAREHOUSE", "location_type_text" to "仓库", "address" to "", "is_active" to "true", "is_active_text" to "启用"))
-            val typeOptions = ref(_uA<SelectOption__9>(SelectOption__9(value = "SHOP", text = "店铺"), SelectOption__9(value = "WAREHOUSE", text = "仓库"), SelectOption__9(value = "TRANSIT", text = "在途"), SelectOption__9(value = "SUPPLIER", text = "供应商处")))
-            val activeOptions = ref(_uA<SelectOption__9>(SelectOption__9(value = "true", text = "启用"), SelectOption__9(value = "false", text = "停用")))
+            val typeOptions = ref(_uA<SelectOption__10>(SelectOption__10(value = "SHOP", text = "店铺"), SelectOption__10(value = "WAREHOUSE", text = "仓库"), SelectOption__10(value = "TRANSIT", text = "在途"), SelectOption__10(value = "SUPPLIER", text = "供应商处")))
+            val activeOptions = ref(_uA<SelectOption__10>(SelectOption__10(value = "true", text = "启用"), SelectOption__10(value = "false", text = "停用")))
             fun getStringField(obj: UTSJSONObject, key: String, fallback: String = ""): String {
                 val value = obj[key]
                 if (value == null) {
@@ -52,8 +52,7 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                 return text
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
-            fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__9>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = getStringField(params, "keyword").toLowerCase()
+            fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__10>, params: UTSJSONObject): UTSJSONObject {
                 val id = getStringField(params, "id")
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -61,10 +60,6 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -115,7 +110,7 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                 return InventoryMutationData(payload = _uO("name" to getStringField(data, "name"), "code" to getStringField(data, "code"), "location_type" to getStringField(data, "location_type", "WAREHOUSE"), "address" to getStringField(data, "address"), "is_active" to (getStringField(data, "is_active", "true") == "true")))
             }
             val buildPayload = ::gen_buildPayload_fn
-            fun gen_optionText_fn(source: UTSArray<SelectOption__9>, value: String, fallback: String): String {
+            fun gen_optionText_fn(source: UTSArray<SelectOption__10>, value: String, fallback: String): String {
                 run {
                     var index: Number = 0
                     while(index < source.length){

@@ -56,9 +56,33 @@ open class GenPagesInventoryLocationsIndex : BasePage {
                 if (error == null) {
                     return fallback
                 }
+                val directMessage = (error as UTSError).message
+                if (directMessage != null && directMessage != "") {
+                    return directMessage
+                }
                 val text = JSON.stringify(error)
-                if (text == null || text == "") {
+                if (text == null || text == "" || text == "{}") {
                     return fallback
+                }
+                try {
+                    val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:156")
+                    if (parsed != null) {
+                        val message = stringField(parsed!!, "message")
+                        if (message != "") {
+                            return message
+                        }
+                        val detail = stringField(parsed!!, "detail")
+                        if (detail != "") {
+                            return detail
+                        }
+                        val errors = stringField(parsed!!, "errors")
+                        if (errors != "") {
+                            return errors
+                        }
+                    }
+                }
+                 catch (parseError: Throwable) {
+                    return text
                 }
                 return text
             }
@@ -132,7 +156,9 @@ open class GenPagesInventoryLocationsIndex : BasePage {
                             currentPage.value = 1
                             totalPages.value = 1
                             totalCount.value = 0
-                            errorMessage.value = parseErrorMessage(error, "库存位置加载失败")
+                            val message = parseErrorMessage(error, "库存位置加载失败")
+                            errorMessage.value = message
+                            uni_showToast(ShowToastOptions(title = message, icon = "none"))
                         }
                          finally {
                             isLoading.value = false
@@ -233,7 +259,7 @@ open class GenPagesInventoryLocationsIndex : BasePage {
                 }
             }
             val handleMenu = ::gen_handleMenu_fn
-            fun gen_handleCreate_fn(payload: UTSJSONObject) {
+            fun gen_handleCreate_fn() {
                 uni_navigateTo(NavigateToOptions(url = "/pages/inventory-locations/from"))
             }
             val handleCreate = ::gen_handleCreate_fn

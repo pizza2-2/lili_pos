@@ -1,4 +1,4 @@
-import 'C:/Users/LENOVO/Desktop/HBuilderX.4.65.2025051206/HBuilderX/plugins/uniapp-cli-vite/node_modules/@dcloudio/uni-console/src/runtime/app/index.ts';import App from './App.uvue'
+import App from './App.uvue'
 
 import { createSSRApp } from 'vue'
 export function createApp() {
@@ -28,6 +28,7 @@ import GenPagesTabbarReportsClass from './pages/tabbar/reports.uvue'
 import GenPagesTabbarProductsClass from './pages/tabbar/products.uvue'
 import GenPagesTabbarSettingsClass from './pages/tabbar/settings.uvue'
 import GenPagesTabbarMineClass from './pages/tabbar/mine.uvue'
+import GenPagesTestScanClass from './pages/test/scan.uvue'
 import GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopupClass from './uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.uvue'
 import GenPagesWebviewWebviewClass from './pages/webview/webview.uvue'
 import GenPagesPrivacyPrivacyClass from './pages/privacy/privacy.uvue'
@@ -35,6 +36,7 @@ import GenPagesSuppliersIndexClass from './pages/suppliers/index.uvue'
 import GenPagesSuppliersFromClass from './pages/suppliers/from.uvue'
 import GenPagesTransactionsIndexClass from './pages/transactions/index.uvue'
 import GenPagesTransactionsFromClass from './pages/transactions/from.uvue'
+import GenPagesSuppliersProcureIndexClass from './pages/suppliers_procure/index.uvue'
 import GenPagesKasaCategoryIndexClass from './pages/kasa_category/index.uvue'
 import GenPagesKasaCategoryFormClass from './pages/kasa_category/form.uvue'
 import GenPagesCategoryIndexClass from './pages/category/index.uvue'
@@ -43,18 +45,28 @@ import GenPagesShopIndexClass from './pages/shop/index.uvue'
 import GenPagesShopMediaClass from './pages/shop/media.uvue'
 import GenPagesShopFromClass from './pages/shop/from.uvue'
 import GenPagesProductsFromClass from './pages/products/from.uvue'
+import GenPagesProductsDiscountSelectorClass from './pages/products/discount-selector.uvue'
+import GenPagesProductsPriceCalculatorClass from './pages/products/price-calculator.uvue'
 import GenPagesProductsPricingFormulaClass from './pages/products/pricing-formula.uvue'
 import GenPagesProductsPricingFormulaIndexClass from './pages/products/pricing-formula/index.uvue'
 import GenPagesProductsPricingFormulaFromClass from './pages/products/pricing-formula/from.uvue'
+import GenPagesLabelPrintIndexClass from './pages/label-print/index.uvue'
+import GenPagesPrinterSettingsIndexClass from './pages/printer-settings/index.uvue'
+import GenPagesLabelTemplatesIndexClass from './pages/label-templates/index.uvue'
+import GenPagesLabelTemplatesFromClass from './pages/label-templates/from.uvue'
+import GenPagesLabelTemplatesDetailsIndexClass from './pages/label-templates/details/index.uvue'
 import GenPagesProductsConfigModelIndexClass from './pages/products/config-model/index.uvue'
 import GenPagesProductsConfigModelFromClass from './pages/products/config-model/from.uvue'
 import GenPagesKsefIndexClass from './pages/ksef/index.uvue'
+import GenPagesKsefDetailClass from './pages/ksef/detail.uvue'
 import GenPagesExpensesIndexClass from './pages/expenses/index.uvue'
 import GenPagesExpensesFromClass from './pages/expenses/from.uvue'
 import GenPagesPurchasesIndexClass from './pages/purchases/index.uvue'
 import GenPagesPurchasesFromClass from './pages/purchases/from.uvue'
 import GenPagesPurchasesDetailsIndexClass from './pages/purchases/details/index.uvue'
 import GenPagesPurchasesDetailsFromClass from './pages/purchases/details/from.uvue'
+import GenPagesPurchasesDetailsQuickInputClass from './pages/purchases/details/quick-input.uvue'
+import GenPagesPurchasesDetailsExcelUploadClass from './pages/purchases/details/excel-upload.uvue'
 import GenPagesOrdersIndexClass from './pages/orders/index.uvue'
 import GenPagesOrdersFromClass from './pages/orders/from.uvue'
 import GenPagesInventoryManagementIndexClass from './pages/inventory-management/index.uvue'
@@ -63,14 +75,19 @@ import GenPagesInventoryLocationsIndexClass from './pages/inventory-locations/in
 import GenPagesInventoryLocationsFromClass from './pages/inventory-locations/from.uvue'
 import GenPagesInventoryTransfersIndexClass from './pages/inventory-transfers/index.uvue'
 import GenPagesInventoryTransfersFromClass from './pages/inventory-transfers/from.uvue'
+import GenPagesInventoryTransfersCreateClass from './pages/inventory-transfers/create.uvue'
+import GenPagesInventoryTransfersDetailsIndexClass from './pages/inventory-transfers/details/index.uvue'
 import GenPagesInventoryChecksIndexClass from './pages/inventory-checks/index.uvue'
 import GenPagesInventoryChecksFromClass from './pages/inventory-checks/from.uvue'
+import GenPagesInventoryChecksCreateClass from './pages/inventory-checks/create.uvue'
+import GenPagesInventoryChecksDetailsIndexClass from './pages/inventory-checks/details/index.uvue'
 function definePageRoutes() {
 __uniRoutes.push({ path: "pages/login/login", component: GenPagesLoginLoginClass, meta: { isQuit: true } as UniPageMeta, style: _uM([["navigationStyle","custom"]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/tabbar/reports", component: GenPagesTabbarReportsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText","报表"]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/tabbar/products", component: GenPagesTabbarProductsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText","商品"]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/tabbar/settings", component: GenPagesTabbarSettingsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText","设置"]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/tabbar/mine", component: GenPagesTabbarMineClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText","我的"]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/test/scan", component: GenPagesTestScanClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText","扫码测试"]]) } as UniPageRoute)
 __uniRoutes.push({ path: "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup", component: GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopupClass, meta: { isQuit: false } as UniPageMeta, style: _uM() } as UniPageRoute)
 __uniRoutes.push({ path: "pages/webview/webview", component: GenPagesWebviewWebviewClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/privacy/privacy", component: GenPagesPrivacyPrivacyClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationBarTitleText",""]]) } as UniPageRoute)
@@ -78,6 +95,7 @@ __uniRoutes.push({ path: "pages/suppliers/index", component: GenPagesSuppliersIn
 __uniRoutes.push({ path: "pages/suppliers/from", component: GenPagesSuppliersFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/transactions/index", component: GenPagesTransactionsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/transactions/from", component: GenPagesTransactionsFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/suppliers_procure/index", component: GenPagesSuppliersProcureIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/kasa_category/index", component: GenPagesKasaCategoryIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/kasa_category/form", component: GenPagesKasaCategoryFormClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/category/index", component: GenPagesCategoryIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
@@ -86,18 +104,28 @@ __uniRoutes.push({ path: "pages/shop/index", component: GenPagesShopIndexClass, 
 __uniRoutes.push({ path: "pages/shop/media", component: GenPagesShopMediaClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/shop/from", component: GenPagesShopFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/from", component: GenPagesProductsFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/products/discount-selector", component: GenPagesProductsDiscountSelectorClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/products/price-calculator", component: GenPagesProductsPriceCalculatorClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/pricing-formula", component: GenPagesProductsPricingFormulaClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/pricing-formula/index", component: GenPagesProductsPricingFormulaIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/pricing-formula/from", component: GenPagesProductsPricingFormulaFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/label-print/index", component: GenPagesLabelPrintIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/printer-settings/index", component: GenPagesPrinterSettingsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/label-templates/index", component: GenPagesLabelTemplatesIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/label-templates/from", component: GenPagesLabelTemplatesFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/label-templates/details/index", component: GenPagesLabelTemplatesDetailsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/config-model/index", component: GenPagesProductsConfigModelIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/products/config-model/from", component: GenPagesProductsConfigModelFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/ksef/index", component: GenPagesKsefIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/ksef/detail", component: GenPagesKsefDetailClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/expenses/index", component: GenPagesExpensesIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/expenses/from", component: GenPagesExpensesFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/purchases/index", component: GenPagesPurchasesIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/purchases/from", component: GenPagesPurchasesFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/purchases/details/index", component: GenPagesPurchasesDetailsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/purchases/details/from", component: GenPagesPurchasesDetailsFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/purchases/details/quick-input", component: GenPagesPurchasesDetailsQuickInputClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/purchases/details/excel-upload", component: GenPagesPurchasesDetailsExcelUploadClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/orders/index", component: GenPagesOrdersIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/orders/from", component: GenPagesOrdersFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/inventory-management/index", component: GenPagesInventoryManagementIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
@@ -106,8 +134,12 @@ __uniRoutes.push({ path: "pages/inventory-locations/index", component: GenPagesI
 __uniRoutes.push({ path: "pages/inventory-locations/from", component: GenPagesInventoryLocationsFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/inventory-transfers/index", component: GenPagesInventoryTransfersIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/inventory-transfers/from", component: GenPagesInventoryTransfersFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/inventory-transfers/create", component: GenPagesInventoryTransfersCreateClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/inventory-transfers/details/index", component: GenPagesInventoryTransfersDetailsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/inventory-checks/index", component: GenPagesInventoryChecksIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 __uniRoutes.push({ path: "pages/inventory-checks/from", component: GenPagesInventoryChecksFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/inventory-checks/create", component: GenPagesInventoryChecksCreateClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
+__uniRoutes.push({ path: "pages/inventory-checks/details/index", component: GenPagesInventoryChecksDetailsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle","custom"],["navigationBarTitleText",""]]) } as UniPageRoute)
 }
 const __uniTabBar: Map<string, any | null> | null = _uM([["color","#94A3B8"],["selectedColor","#0F172A"],["backgroundColor","#FFFFFF"],["borderStyle","black"],["list",[_uM([["pagePath","pages/tabbar/reports"],["iconPath","static/tabBar/Report.png"],["selectedIconPath","static/tabBar/Report (1).png"],["text","报表"]]),_uM([["pagePath","pages/tabbar/products"],["iconPath","static/tabBar/product (1).png"],["selectedIconPath","static/tabBar/product (2).png"],["text","商品"]]),_uM([["pagePath","pages/tabbar/settings"],["iconPath","static/tabBar/set.png"],["selectedIconPath","static/tabBar/set (1).png"],["text","功能"]]),_uM([["pagePath","pages/tabbar/mine"],["iconPath","static/tabBar/me.png"],["selectedIconPath","static/tabBar/me (1).png"],["text","我的"]])]]])
 const __uniLaunchPage: Map<string, any | null> = _uM([["url","pages/login/login"],["style",_uM([["navigationStyle","custom"]])]])

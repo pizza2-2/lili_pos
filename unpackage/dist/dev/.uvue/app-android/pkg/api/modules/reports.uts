@@ -34,11 +34,26 @@ export type ReportAlert = {
     label: string;
     value: number;
 };
+export type ReportRankItem = {
+    key: string;
+    label: string;
+    subtitle: string;
+    code: string;
+    amount: string;
+    quantity: string;
+    order_count: number;
+    line_count: number;
+    share: string;
+    type: string;
+};
 export type DashboardReport = {
     overview: ReportOverview;
     sales_trend: ReportTrendItem[];
     payment_methods: ReportPaymentMethod[];
     order_status: UTSJSONObject;
+    top_products: ReportRankItem[];
+    top_categories: ReportRankItem[];
+    top_kasa_categories: ReportRankItem[];
     inventory: ReportInventory;
     alerts: ReportAlert[];
 };
@@ -144,6 +159,26 @@ function buildAlerts(value: any | null): ReportAlert[] {
     }
     return result;
 }
+function buildRankItems(value: any | null): ReportRankItem[] {
+    const rows = arrayValue(value);
+    const result: ReportRankItem[] = [];
+    for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        result.push({
+            key: stringValue(row['key']),
+            label: stringValue(row['label']),
+            subtitle: stringValue(row['subtitle']),
+            code: stringValue(row['code']),
+            amount: stringValue(row['amount']),
+            quantity: stringValue(row['quantity']),
+            order_count: intValue(row['order_count']),
+            line_count: intValue(row['line_count']),
+            share: stringValue(row['share']),
+            type: stringValue(row['type']),
+        } as ReportRankItem);
+    }
+    return result;
+}
 export function buildDashboardReport(raw: any): DashboardReport {
     const rawObject = rawDataObject(raw);
     return {
@@ -151,6 +186,9 @@ export function buildDashboardReport(raw: any): DashboardReport {
         sales_trend: buildTrendItems(rawObject['sales_trend']),
         payment_methods: buildPaymentMethods(rawObject['payment_methods']),
         order_status: objectValue(rawObject['order_status']),
+        top_products: buildRankItems(rawObject['top_products']),
+        top_categories: buildRankItems(rawObject['top_categories']),
+        top_kasa_categories: buildRankItems(rawObject['top_kasa_categories']),
         inventory: buildInventory(objectValue(rawObject['inventory'])),
         alerts: buildAlerts(rawObject['alerts']),
     } as DashboardReport;

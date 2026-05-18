@@ -152,6 +152,7 @@
 import { computed } from 'vue'
 import { quickProcurement, QuickProcurementItem } from '@/pkg/api/modules/purchases.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
 type QuickDraftRow = {
 	key: string
@@ -173,6 +174,7 @@ const draftText = ref('')
 const draftFocus = ref(false)
 const rows = ref<QuickDraftRow[]>([])
 const submitting = ref(false)
+const pageTaskGuard = createAsyncGuard()
 const nextRowId = ref(1)
 const aiModalVisible = ref(false)
 const aiResultText = ref('')
@@ -565,6 +567,8 @@ function markRefreshNeeded() {
 }
 
 function goBack() {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 	uni.navigateBack({ delta: 1 })
 }
 
@@ -589,20 +593,26 @@ async function submitRows() {
 			quantity: parseInt(row.quantity),
 		} as QuickProcurementItem)
 	}
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	uni.showLoading({ title: '上传中...', mask: true })
 	try {
 		await quickProcurement(purchaseId.value, items)
 		markRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: takeLatestResponseMessage('上传成功'), icon: 'success' })
 		setTimeout(() => {
+			if (!pageTaskGuard.canApply(taskToken)) return
 			goBack()
 		}, 600)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: parseErrorMessage(error, '上传失败'), icon: 'none' })
 	} finally {
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -659,9 +669,15 @@ const submitText = computed((): string => {
 })
 
 onLoad((query: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	const purchaseValue = query['purchase']
 	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
 	focusDraftSoon()
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 onShow(() => {

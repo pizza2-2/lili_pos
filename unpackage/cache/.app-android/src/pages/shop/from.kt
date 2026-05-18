@@ -33,6 +33,7 @@ open class GenPagesShopFrom : BasePage {
             val submitting = ref(false)
             val savingVisible = ref(false)
             val savingText = ref("处理中...")
+            val pageTaskGuard = createAsyncGuard()
             val initialData = ref<UTSJSONObject>(_uO("shop_id" to "", "shop_name" to "", "title" to "", "record_type" to "general", "expiration_date" to "", "notes" to "", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
             val recordTypeOptions = ref(_uA<SelectOption__5>(SelectOption__5(value = "general", text = "常规文件")))
             fun getStringField(obj: UTSJSONObject, key: String, fallback: String = ""): String {
@@ -64,7 +65,7 @@ open class GenPagesShopFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:102")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:104")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -80,7 +81,7 @@ open class GenPagesShopFrom : BasePage {
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/shop/from.uvue", 118, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/shop/from.uvue", 120, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -88,7 +89,6 @@ open class GenPagesShopFrom : BasePage {
             }
             val buildUploadHeaders = ::gen_buildUploadHeaders_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__5>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = getStringField(params, "keyword").toLowerCase()
                 val id = getStringField(params, "id")
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -96,10 +96,6 @@ open class GenPagesShopFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -220,7 +216,12 @@ open class GenPagesShopFrom : BasePage {
                 )
             }
             val buildShopMediaMutationPayload = ::gen_buildShopMediaMutationPayload_fn
-            fun gen_goBackToList_fn(): Unit {
+            fun goBackToList(markLeaving: Boolean = true): Unit {
+                if (markLeaving) {
+                    pageTaskGuard.leave()
+                    savingVisible.value = false
+                    uni_hideLoading(null)
+                }
                 leaveSignal.value = leaveSignal.value + 1
                 setTimeout(fun(){
                     uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
@@ -230,7 +231,6 @@ open class GenPagesShopFrom : BasePage {
                 }
                 , 16)
             }
-            val goBackToList = ::gen_goBackToList_fn
             fun gen_isRemoteImagePath_fn(path: String): Boolean {
                 if (path == "") {
                     return false
@@ -310,6 +310,7 @@ open class GenPagesShopFrom : BasePage {
                             uni_showToast(ShowToastOptions(title = "资料标题不能为空", icon = "none"))
                             return@w1
                         }
+                        val taskToken = pageTaskGuard.begin()
                         submitting.value = true
                         val isEditing = formMode.value == "edit" && mediaId.value != ""
                         val uploadContentTypeModel = getStringField(payload, "uploadContentTypeModel").trim()
@@ -347,10 +348,16 @@ open class GenPagesShopFrom : BasePage {
                                 }
                             }
                             markShopMediaRefreshNeeded()
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
-                            goBackToList()
+                            goBackToList(false)
                         }
                          catch (error: Throwable) {
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = parseErrorMessage(error, if (isEditing) {
                                 "资料保存失败"
                             } else {
@@ -359,9 +366,11 @@ open class GenPagesShopFrom : BasePage {
                             ), icon = "none"))
                         }
                          finally {
-                            savingVisible.value = false
-                            uni_hideLoading(null)
-                            submitting.value = false
+                            if (pageTaskGuard.canApply(taskToken)) {
+                                savingVisible.value = false
+                                uni_hideLoading(null)
+                                submitting.value = false
+                            }
                         }
                 })
             }
@@ -449,7 +458,7 @@ open class GenPagesShopFrom : BasePage {
                         }
                         var initialShopName = ""
                         if (shopNameValue != null) {
-                            val decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as String), " at pages/shop/from.uvue:540")
+                            val decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as String), " at pages/shop/from.uvue:552")
                             initialShopName = if (decodedShopName == null) {
                                 ""
                             } else {
@@ -475,7 +484,13 @@ open class GenPagesShopFrom : BasePage {
             }
             val initializeForm = ::gen_initializeForm_fn
             onLoad(fun(event: OnLoadOptions){
+                pageTaskGuard.reset()
                 initializeForm(event)
+            }
+            )
+            onUnload(fun(){
+                pageTaskGuard.leave()
+                uni_hideLoading(null)
             }
             )
             return fun(): Any? {

@@ -1,5 +1,7 @@
 import _easycom_lili_preview from '@/uni_modules/lili-preview/components/lili-preview/lili-preview.uvue'
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue", 185, 6>;
+import { getMediaFileShare, MediaShareResponse } from '@/pkg/api/modules/media.uts'
+
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue", 188, 6>;
 	items?: UTSJSONObject[]
 	keyField?: string
 	titleField?: string
@@ -7,6 +9,10 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	metaField?: string
 	imageField?: string
 	imageListField?: string
+	previewImageField?: string
+	previewImageListField?: string
+	mediaIdListField?: string
+	lazyPreviewFullImage?: boolean
 	showImage?: boolean
 	fields?: UTSJSONObject[]
 	tagField?: string
@@ -52,6 +58,10 @@ const __sfc__ = defineComponent({
     metaField: { type: String, required: false, default: '' },
     imageField: { type: String, required: false, default: 'image' },
     imageListField: { type: String, required: false, default: 'images' },
+    previewImageField: { type: String, required: false, default: 'previewCover' },
+    previewImageListField: { type: String, required: false, default: 'previewImages' },
+    mediaIdListField: { type: String, required: false, default: 'mediaIds' },
+    lazyPreviewFullImage: { type: Boolean, required: false, default: true },
     showImage: { type: Boolean, required: false, default: true },
     fields: { type: Array as PropType<UTSJSONObject[]>, required: false, default: () : UTSJSONObject[] => [] },
     tagField: { type: String, required: false, default: 'tags' },
@@ -112,7 +122,8 @@ function emit(event: string, ...do_not_transform_spread: Array<any | null>) {
 __ins.emit(event, ...do_not_transform_spread)
 }
 
-const previewImages = ref<string[]>([])
+const previewThumbImages = ref<string[]>([])
+const previewFullImages = ref<string[]>([])
 const previewIndex = ref<number>(0)
 const previewVisible = ref<boolean>(false)
 const previewItem = ref<UTSJSONObject | null>(null)
@@ -281,6 +292,20 @@ function stringArrayContains(list: string[], value: string) : boolean {
 	return false
 }
 
+function cloneStringArray(list: string[]) : string[] {
+	const result: string[] = []
+	for (let i = 0; i < list.length; i++) {
+		result.push(list[i])
+	}
+	return result
+}
+
+function appendUniqueString(list: string[], value: string) {
+	if (value != '' && !stringArrayContains(list, value)) {
+		list.push(value)
+	}
+}
+
 function displayField(item: UTSJSONObject, field: UTSJSONObject) : string {
 	const raw = fieldText(item, stringValue(field['key']))
 	const type = fieldType(field)
@@ -431,22 +456,20 @@ function handleFieldClick(item: UTSJSONObject, field: UTSJSONObject) {
 	} as UTSJSONObject)
 }
 
-function imageListFromItem(item: UTSJSONObject) : string[] {
+function stringListFromItemFields(item: UTSJSONObject, mainField: string, listField: string) : string[] {
 	const images: string[] = []
-	const mainImage = fieldText(item, props.imageField)
+	const mainImage = fieldText(item, mainField)
 	if (mainImage != '') {
-		images.push(mainImage)
+		appendUniqueString(images, mainImage)
 	}
-	if (props.imageListField != '') {
-		const raw = objectField(item, props.imageListField)
+	if (listField != '') {
+		const raw = objectField(item, listField)
 		if (raw != null) {
 			if (raw instanceof Array) {
 				const list = raw as Array<any>
 				for (let i = 0; i < list.length; i++) {
 					const imageUrl = stringValue(list[i])
-					if (imageUrl != '' && !stringArrayContains(images, imageUrl)) {
-						images.push(imageUrl)
-					}
+					appendUniqueString(images, imageUrl)
 				}
 			} else {
 				const text = stringValue(raw)
@@ -454,15 +477,68 @@ function imageListFromItem(item: UTSJSONObject) : string[] {
 					const parts = text.split(',')
 					for (let i = 0; i < parts.length; i++) {
 						const imageUrl = parts[i].trim()
-						if (imageUrl != '' && !stringArrayContains(images, imageUrl)) {
-							images.push(imageUrl)
-						}
+						appendUniqueString(images, imageUrl)
 					}
 				}
 			}
 		}
 	}
 	return images
+}
+
+function imageListFromItem(item: UTSJSONObject) : string[] {
+	return stringListFromItemFields(item, props.imageField, props.imageListField)
+}
+
+function previewImageListFromItem(item: UTSJSONObject) : string[] {
+	const list = stringListFromItemFields(item, props.previewImageField, props.previewImageListField)
+	if (list.length > 0) {
+		return list
+	}
+	return imageListFromItem(item)
+}
+
+function mediaIdListFromItem(item: UTSJSONObject) : string[] {
+	return stringListFromItemFields(item, '', props.mediaIdListField)
+}
+
+function previewUrlFromShareResponse(response: MediaShareResponse) : string {
+	if (response.signed_url != '') {
+		return response.signed_url
+	}
+	return response.url
+}
+
+async function resolvePreviewFullImages(item: UTSJSONObject, fallbackImages: string[]) : Promise<string[]> {
+	if (!props.lazyPreviewFullImage) {
+		return cloneStringArray(fallbackImages)
+	}
+	const mediaIds = mediaIdListFromItem(item)
+	if (mediaIds.length == 0) {
+		return cloneStringArray(fallbackImages)
+	}
+
+	const result: string[] = []
+	for (let index = 0; index < mediaIds.length; index += 1) {
+		let imageUrl = ''
+		if (index < fallbackImages.length) {
+			imageUrl = fallbackImages[index]
+		}
+		try {
+			const share = await getMediaFileShare(mediaIds[index])
+			const sharedUrl = previewUrlFromShareResponse(share)
+			if (sharedUrl != '') {
+				imageUrl = sharedUrl
+			}
+		} catch (error) {
+			// 保留列表接口已有的高清地址作为降级路径。
+		}
+		appendUniqueString(result, imageUrl)
+	}
+	if (result.length == 0) {
+		return cloneStringArray(fallbackImages)
+	}
+	return result
 }
 
 function firstImage(item: UTSJSONObject) : string {
@@ -475,10 +551,12 @@ function imageCount(item: UTSJSONObject) : number {
 	return imageListFromItem(item).length
 }
 
-function openPreview(item: UTSJSONObject, index: number) {
-	const list = imageListFromItem(item)
-	if (list.length == 0) return
-	previewImages.value = list
+async function openPreview(item: UTSJSONObject, index: number) {
+	const thumbList = imageListFromItem(item)
+	if (thumbList.length == 0) return
+	const fullList = previewImageListFromItem(item)
+	previewThumbImages.value = thumbList
+	previewFullImages.value = await resolvePreviewFullImages(item, fullList)
 	previewIndex.value = index
 	previewVisible.value = true
 	previewItem.value = item
@@ -930,7 +1008,8 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
     isTrue(unref(previewVisible))
       ? _cV(_component_lili_preview, _uM({
           key: 4,
-          images: unref(previewImages),
+          images: unref(previewThumbImages),
+          previewImages: unref(previewFullImages),
           initialIndex: unref(previewIndex),
           visible: unref(previewVisible),
           showList: false,
@@ -940,7 +1019,7 @@ const _component_lili_preview = resolveEasyComponent("lili-preview",_easycom_lil
           "onUpdate:index": handlePreviewIndexChange,
           onPreview: handlePreviewOpen,
           onClose: handlePreviewClose
-        }), null, 8 /* PROPS */, ["images", "initialIndex", "visible", "enableSave", "enableShare"])
+        }), null, 8 /* PROPS */, ["images", "previewImages", "initialIndex", "visible", "enableSave", "enableShare"])
       : _cC("v-if", true),
     isTrue(unref(showBatchBar))
       ? _cE("view", _uM({

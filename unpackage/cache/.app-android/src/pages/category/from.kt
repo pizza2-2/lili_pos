@@ -16,6 +16,7 @@ import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
+import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
@@ -34,9 +35,11 @@ open class GenPagesCategoryFrom : BasePage {
             val categoryId = ref("")
             val leaveSignal = ref(0)
             val submitting = ref(false)
+            val translating = ref(false)
             val savingVisible = ref(false)
             val savingText = ref("处理中...")
             val initialData = ref<UTSJSONObject>(_uO("name" to "", "name_en" to "", "code" to "", "parent_id" to "", "parent_text" to "", "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true))
+            val currentFormData = ref<UTSJSONObject>(_uO("name" to "", "name_en" to "", "code" to "", "parent_id" to "", "parent_text" to "", "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true))
             val parentInfo = ref<UTSJSONObject>(_uO("id" to "", "text" to "根分类（无父分类）"))
             val taxRateOptions = ref(_uA<SelectOption__4>(SelectOption__4(value = "0.00", text = "免税 0%"), SelectOption__4(value = "0.05", text = "低税率 5%"), SelectOption__4(value = "0.08", text = "中税率 8%"), SelectOption__4(value = "0.23", text = "标准税率 23%")))
             val statusOptions = ref(_uA<SelectOption__4>(SelectOption__4(value = "true", text = "启用"), SelectOption__4(value = "false", text = "停用")))
@@ -81,7 +84,7 @@ open class GenPagesCategoryFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:130")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:147")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -119,7 +122,6 @@ open class GenPagesCategoryFrom : BasePage {
             }
             val findTaxRateText = ::gen_findTaxRateText_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__4>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = stringValue(params["keyword"]).toLowerCase()
                 val id = stringValue(params["id"])
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -127,10 +129,6 @@ open class GenPagesCategoryFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -276,9 +274,96 @@ open class GenPagesCategoryFrom : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:321")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:334")
             }
             val parseObject = ::gen_parseObject_fn
+            fun gen_cloneFormData_fn(source: UTSJSONObject): UTSJSONObject {
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pages/category/from.uvue", 338, 8))
+                for(key in resolveUTSKeyIterator(source)){
+                    target[key] = source[key]
+                }
+                return target
+            }
+            val cloneFormData = ::gen_cloneFormData_fn
+            fun gen_setInitialData_fn(data: UTSJSONObject) {
+                initialData.value = data
+                currentFormData.value = cloneFormData(data)
+            }
+            val setInitialData = ::gen_setInitialData_fn
+            fun gen_getCurrentFormData_fn(): UTSJSONObject {
+                return currentFormData.value
+            }
+            val getCurrentFormData = ::gen_getCurrentFormData_fn
+            fun gen_setCurrentFormField_fn(key: String, value: Any) {
+                val nextData = cloneFormData(currentFormData.value)
+                nextData[key] = value
+                setInitialData(nextData)
+            }
+            val setCurrentFormField = ::gen_setCurrentFormField_fn
+            fun gen_buildAiTranslationPrompt_fn(sourceName: String): String {
+                return "请把下面的商品分类中文名称翻译成简洁、自然的波兰语分类名称。只输出波兰语名称，不要解释，不要加引号：\n" + sourceName
+            }
+            val buildAiTranslationPrompt = ::gen_buildAiTranslationPrompt_fn
+            fun gen_copyAiTranslationPrompt_fn() {
+                val sourceName = stringValue(getCurrentFormData()["name"]).trim()
+                if (sourceName == "") {
+                    uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none"))
+                    return
+                }
+                uni_setClipboardData(SetClipboardDataOptions(data = buildAiTranslationPrompt(sourceName), success = fun(_){
+                    uni_showToast(ShowToastOptions(title = "AI提示词已复制", icon = "success"))
+                }
+                ))
+            }
+            val copyAiTranslationPrompt = ::gen_copyAiTranslationPrompt_fn
+            fun gen_extractTranslatedName_fn(response: UTSJSONObject): String {
+                var translated = stringValue(response["translated"])
+                if (translated != "") {
+                    return translated
+                }
+                translated = stringValue(response["name_en"])
+                if (translated != "") {
+                    return translated
+                }
+                translated = stringValue(response["translation"])
+                if (translated != "") {
+                    return translated
+                }
+                return stringValue(response["target"])
+            }
+            val extractTranslatedName = ::gen_extractTranslatedName_fn
+            fun gen_fillServerTranslation_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (translating.value) {
+                            return@w1
+                        }
+                        val sourceName = stringValue(getCurrentFormData()["name"]).trim()
+                        if (sourceName == "") {
+                            uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none"))
+                            return@w1
+                        }
+                        translating.value = true
+                        uni_showLoading(ShowLoadingOptions(title = "翻译中...", mask = true))
+                        try {
+                            val response = await(translateCategoryName(sourceName))
+                            val translated = extractTranslatedName(response).trim()
+                            if (translated == "") {
+                                uni_showToast(ShowToastOptions(title = "服务器未返回译文", icon = "none"))
+                                return@w1
+                            }
+                            setCurrentFormField("name_en", translated)
+                            uni_showToast(ShowToastOptions(title = "波兰语名称已填充", icon = "success"))
+                        }
+                         catch (error: Throwable) {
+                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "服务器翻译失败"), icon = "none"))
+                        }
+                         finally {
+                            uni_hideLoading(null)
+                            translating.value = false
+                        }
+                })
+            }
+            val fillServerTranslation = ::gen_fillServerTranslation_fn
             fun gen_buildKasaCategoryTextFromInfo_fn(info: UTSJSONObject?): String {
                 if (info == null) {
                     return ""
@@ -374,7 +459,7 @@ open class GenPagesCategoryFrom : BasePage {
                             if (kasaCategoryIdText != "") {
                                 detailData["kasa_category_text"] = await(resolveKasaCategoryTextByValue(kasaCategoryIdText, currentKasaCategoryText))
                             }
-                            initialData.value = detailData
+                            setInitialData(detailData)
                             parentInfo.value = _uO("id" to if (detail.parent_id > 0) {
                                 detail.parent_id.toString(10)
                             } else {
@@ -552,6 +637,27 @@ open class GenPagesCategoryFrom : BasePage {
             val handleDiscardLeave = ::gen_handleDiscardLeave_fn
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
+            fun gen_handleFormChange_fn(payload: UTSJSONObject) {
+                val rawData = payload["formData"]
+                if (rawData == null) {
+                    return
+                }
+                currentFormData.value = cloneFormData(rawData as UTSJSONObject)
+            }
+            val handleFormChange = ::gen_handleFormChange_fn
+            fun gen_handleInputAction_fn(payload: UTSJSONObject): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        val action = stringValue(payload["action"])
+                        if (action == "copy-ai-translation-prompt") {
+                            copyAiTranslationPrompt()
+                            return@w1
+                        }
+                        if (action == "server-translate-name") {
+                            await(fillServerTranslation())
+                        }
+                })
+            }
+            val handleInputAction = ::gen_handleInputAction_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
                 uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none"))
             }
@@ -560,7 +666,7 @@ open class GenPagesCategoryFrom : BasePage {
                 uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
-            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "分类名称", "type" to "input", "required" to true, "placeholder" to "请输入分类名称"), _uO("key" to "name_en", "label" to "英文名称", "type" to "input", "placeholder" to "请输入英文名称"), _uO("key" to "code", "label" to "分类编码", "type" to "input", "placeholder" to "留空则自动生成"), _uO("key" to "parent_text", "label" to "当前父分类", "type" to "input", "readonly" to true, "placeholder" to "根分类（无父分类）"), _uO("key" to "parent_id", "label" to "调整父分类", "type" to "bottomSelect", "textKey" to "parent_text", "title" to "选择父分类", "placeholder" to "请选择父分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/category/from", "editPath" to "/pages/category/from", "editOnly" to true, "fetchData" to fetchParentOptions), _uO("key" to "description", "label" to "分类描述", "type" to "textarea", "placeholder" to "请输入分类描述"))), _uO("key" to "relation", "title" to "关联设置", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "kasa_category_id", "label" to "关联收银分类", "type" to "bottomSelect", "textKey" to "kasa_category_text", "title" to "选择收银分类", "placeholder" to "请选择收银分类", "searchPlaceholder" to "请输入收银分类名称", "emptyText" to "暂无收银分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/kasa_category/form", "editPath" to "/pages/kasa_category/form", "fetchData" to fetchKasaCategoryOptions), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_text", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions), _uO("key" to "sort_order", "label" to "排序号", "type" to "number", "placeholder" to "请输入排序号"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "switch", "defaultValue" to true)))))
+            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "分类名称", "type" to "input", "required" to true, "placeholder" to "请输入分类名称"), _uO("key" to "name_en", "label" to "波兰语名称", "type" to "input", "placeholder" to "请输入波兰语名称", "leftActionKey" to "copy-ai-translation-prompt", "leftActionIcon" to "/static/icon/ai.svg", "rightActionKey" to "server-translate-name", "rightActionIcon" to "/static/icon/search.svg"), _uO("key" to "code", "label" to "分类编码", "type" to "input", "placeholder" to "留空则自动生成"), _uO("key" to "parent_text", "label" to "当前父分类", "type" to "input", "readonly" to true, "placeholder" to "根分类（无父分类）"), _uO("key" to "parent_id", "label" to "调整父分类", "type" to "bottomSelect", "textKey" to "parent_text", "title" to "选择父分类", "placeholder" to "请选择父分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/category/from", "editPath" to "/pages/category/from", "editOnly" to true, "fetchData" to fetchParentOptions), _uO("key" to "description", "label" to "分类描述", "type" to "textarea", "placeholder" to "请输入分类描述"))), _uO("key" to "relation", "title" to "关联设置", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "kasa_category_id", "label" to "关联收银分类", "type" to "bottomSelect", "textKey" to "kasa_category_text", "title" to "选择收银分类", "placeholder" to "请选择收银分类", "searchPlaceholder" to "请输入收银分类名称", "emptyText" to "暂无收银分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/kasa_category/form", "editPath" to "/pages/kasa_category/form", "fetchData" to fetchKasaCategoryOptions), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_text", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions), _uO("key" to "sort_order", "label" to "排序号", "type" to "number", "placeholder" to "请输入排序号"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "switch", "defaultValue" to true)))))
             val pageTitle = computed(fun(): String {
                 if (operationMode.value == "edit") {
                     return "编辑分类"
@@ -600,7 +706,7 @@ open class GenPagesCategoryFrom : BasePage {
                     val parentNameText = if (parentNameValue == null) {
                         ""
                     } else {
-                        UTSAndroid.consoleDebugError(decodeURIComponent("" + parentNameValue), " at pages/category/from.uvue:713")
+                        UTSAndroid.consoleDebugError(decodeURIComponent("" + parentNameValue), " at pages/category/from.uvue:847")
                     }
                     parentInfo.value = _uO("id" to parentIdText, "text" to if (parentNameText == "") {
                         parentIdText
@@ -608,18 +714,18 @@ open class GenPagesCategoryFrom : BasePage {
                         parentNameText
                     }
                     )
-                    initialData.value = _uO("name" to "", "name_en" to "", "code" to "", "parent_id" to parentIdText, "parent_text" to if (parentNameText == "") {
+                    setInitialData(_uO("name" to "", "name_en" to "", "code" to "", "parent_id" to parentIdText, "parent_text" to if (parentNameText == "") {
                         parentIdText
                     } else {
                         parentNameText
                     }
-                    , "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true)
+                    , "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true))
                     return
                 }
                 operationMode.value = "create"
                 formMode.value = "create"
                 parentInfo.value = _uO("id" to "", "text" to "根分类（无父分类）")
-                initialData.value = _uO("name" to "", "name_en" to "", "code" to "", "parent_id" to "", "parent_text" to "根分类（无父分类）", "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true)
+                setInitialData(_uO("name" to "", "name_en" to "", "code" to "", "parent_id" to "", "parent_text" to "根分类（无父分类）", "description" to "", "kasa_category_id" to "", "kasa_category_text" to "", "tax_rate" to "0.23", "tax_rate_text" to "标准税率 23%", "sort_order" to "0", "is_active" to true))
             }
             )
             return fun(): Any? {
@@ -630,7 +736,7 @@ open class GenPagesCategoryFrom : BasePage {
                         "title"
                     )),
                     _cE("view", _uM("class" to "page-content"), _uA(
-                        _cV(_component_lili_UniversaForm, _uM("mode" to unref(formMode), "formSections" to unref(formSections), "initialData" to unref(initialData), "leaveSignal" to unref(leaveSignal), "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onDirtyChange" to handleDirtyChange, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit), null, 8, _uA(
+                        _cV(_component_lili_UniversaForm, _uM("mode" to unref(formMode), "formSections" to unref(formSections), "initialData" to unref(initialData), "leaveSignal" to unref(leaveSignal), "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onDirtyChange" to handleDirtyChange, "onFormChange" to handleFormChange, "onInputAction" to handleInputAction, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit), null, 8, _uA(
                             "mode",
                             "formSections",
                             "initialData",

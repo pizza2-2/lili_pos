@@ -56,6 +56,7 @@ export type TransactionSummary = {
 	purchase_amount: string
 	arrears_amount: string
 	payment_amount: string
+	total_paid: string
 	net_amount: string
 }
 
@@ -310,10 +311,11 @@ function buildTransactionSummary(value: any | null): TransactionSummary | null {
 	}
 
 	return {
-		purchase_amount: stringValue(rawObject['purchase_amount']),
-		arrears_amount: stringValue(rawObject['arrears_amount']),
-		payment_amount: stringValue(rawObject['payment_amount']),
-		net_amount: stringValue(rawObject['net_amount']),
+		purchase_amount: stringValue(rawObject['purchase_amount']) == '' ? stringValue(rawObject['purchaseAmount']) : stringValue(rawObject['purchase_amount']),
+		arrears_amount: stringValue(rawObject['arrears_amount']) == '' ? stringValue(rawObject['debtAmount']) : stringValue(rawObject['arrears_amount']),
+		payment_amount: stringValue(rawObject['payment_amount']) == '' ? stringValue(rawObject['paymentAmount']) : stringValue(rawObject['payment_amount']),
+		total_paid: stringValue(rawObject['total_paid']) == '' ? stringValue(rawObject['totalPaid']) : stringValue(rawObject['total_paid']),
+		net_amount: stringValue(rawObject['net_amount']) == '' ? stringValue(rawObject['actualDebt']) : stringValue(rawObject['net_amount']),
 	} as TransactionSummary
 }
 

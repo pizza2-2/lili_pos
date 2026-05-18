@@ -34,6 +34,18 @@
 							<text :class="selectedSyncStatus == 'SYNC_ERROR' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">异常</text>
 						</view>
 					</view>
+					<text class="filter-title filter-title-spaced">付款状态</text>
+					<view class="filter-row">
+						<view :class="selectedPaymentStatus == null ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus(null)">
+							<text :class="selectedPaymentStatus == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">全部</text>
+						</view>
+						<view :class="selectedPaymentStatus == 'false' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus('false')">
+							<text :class="selectedPaymentStatus == 'false' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">未付款</text>
+						</view>
+						<view :class="selectedPaymentStatus == 'true' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus('true')">
+							<text :class="selectedPaymentStatus == 'true' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">已付款</text>
+						</view>
+					</view>
 					<view class="filter-actions">
 						<view class="filter-btn filter-btn-light" @click="handleFilterReset">
 							<text class="filter-btn-light-text">重置</text>
@@ -101,7 +113,7 @@
 					emptyIcon="◎"
 					:showMenu="true"
 					:menuActions="menuActions"
-					:showChevron="false"
+					:showChevron="true"
 					:showPagination="true"
 					:currentPage="currentPage"
 					:totalPages="totalPages"
@@ -110,6 +122,7 @@
 					summaryTitle="KSeF 汇总"
 					:summaryItems="summaryItems"
 					:summaryCollapsedByDefault="false"
+					@item-click="handleItemClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
 					@subtitle-click="handleSubtitleClick"
@@ -127,6 +140,7 @@ import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { downloadKsefInvoiceXml, enqueueKsefAutoSync, getKsefAutoSyncStatus, getKsefInvoiceList, KsefAutoSyncStatus, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef'
 
+const refreshStorageKey = 'refresh:pages:ksef:index'
 const keyword = ref('')
 const filterVisible = ref(false)
 const isLoading = ref(false)
@@ -139,15 +153,23 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const selectedSyncStatus = ref<string | null>(null)
+const selectedPaymentStatus = ref<string | null>(null)
 
 const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'seller_name', label: '卖方' } as UTSJSONObject,
+	{ key: 'supplier_name', label: '供应商' } as UTSJSONObject,
 	{ key: 'seller_nip', label: '卖方NIP' } as UTSJSONObject,
-	{ key: 'gross_amount_text', label: '金额' } as UTSJSONObject,
+	{ key: 'gross_amount_text', label: '总额' } as UTSJSONObject,
+	{ key: 'amount_due_text', label: '待付' } as UTSJSONObject,
+	{ key: 'payment_due_text', label: '到期日' } as UTSJSONObject,
+	{ key: 'bank_account_text', label: '银行账号' } as UTSJSONObject,
 	{ key: 'sync_status_text', label: '详情状态' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'view_detail', text: '付款详情' } as UTSJSONObject,
 	{ key: 'download_xml', text: '同步详情' } as UTSJSONObject,
+	{ key: 'copy_account', text: '复制账号' } as UTSJSONObject,
 	{ key: 'copy_ksef', text: '复制KSeF号' } as UTSJSONObject,
 ])
 
@@ -182,7 +204,7 @@ async function loadInvoices() {
 			page: currentPage.value,
 			page_size: pageSize.value,
 			sync_status: selectedSyncStatus.value,
-			is_paid: null,
+			is_paid: selectedPaymentStatus.value,
 		})
 		applyListResponse(response)
 	} catch (error) {
@@ -227,8 +249,13 @@ function selectSyncStatus(value: string | null) {
 	selectedSyncStatus.value = value
 }
 
+function selectPaymentStatus(value: string | null) {
+	selectedPaymentStatus.value = value
+}
+
 function handleFilterReset() {
 	selectedSyncStatus.value = null
+	selectedPaymentStatus.value = null
 	keyword.value = ''
 	currentPage.value = 1
 	filterVisible.value = false
@@ -266,6 +293,15 @@ function statusTag(value: string): string {
 	return '待详情'
 }
 
+function paidText(value: boolean): string {
+	return value ? '已付款' : '未付款'
+}
+
+function supplierText(item: KsefInvoiceItem): string {
+	if (item.supplier_name != '') return item.supplier_name
+	return '未关联供应商'
+}
+
 function compactDate(value: string): string {
 	if (value == '') {
 		return '-'
@@ -283,19 +319,38 @@ function displayText(value: string): string {
 	return value
 }
 
+function normalizeAccount(value: string): string {
+	if (value == '') {
+		return ''
+	}
+	let result = ''
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value.substring(index, index + 1)
+		if (char >= '0' && char <= '9') {
+			result += char
+		}
+	}
+	return result == '' ? value : result
+}
+
 function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
 	return {
 		id: item.id.toString(),
 		name: displayText(item.invoice_number),
-		codeText: 'KSeF：' + displayText(item.ksef_number),
-		metaText: compactDate(item.issue_date),
+		codeText: displayText(item.seller_name),
+		metaText: displayText(item.amount_due) + ' ' + displayText(item.currency) + ' / ' + paidText(item.is_paid),
 		seller_name: displayText(item.seller_name),
+		supplier_name: supplierText(item),
 		seller_nip: displayText(item.seller_nip),
 		gross_amount_text: displayText(item.gross_amount) + ' ' + displayText(item.currency),
+		amount_due_text: displayText(item.amount_due) + ' ' + displayText(item.currency),
+		payment_due_text: compactDate(item.payment_due_date),
+		bank_account_text: displayText(normalizeAccount(item.bank_account_number)),
 		sync_status_text: statusText(item.sync_status),
 		rawId: item.id.toString(),
 		rawKsefNumber: item.ksef_number,
-		tags: [statusTag(item.sync_status)] as string[],
+		rawBankAccount: normalizeAccount(item.bank_account_number),
+		tags: [item.supplier > 0 ? '已关联供应商' : '未关联供应商', paidText(item.is_paid), statusTag(item.sync_status)] as string[],
 	} as UTSJSONObject
 }
 
@@ -333,6 +388,19 @@ async function handleDownloadXml(invoiceId: string) {
 	}
 }
 
+function openInvoiceDetail(invoiceId: string) {
+	if (invoiceId == '') {
+		return
+	}
+	uni.navigateTo({ url: '/pages/ksef/detail?id=' + invoiceId })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const idValue = payload['rawId']
+	const invoiceId = idValue == null ? '' : (idValue as string)
+	openInvoiceDetail(invoiceId)
+}
+
 function handleMenu(payload: UTSJSONObject) {
 	const action = payload['action']
 	const item = payload['item']
@@ -348,8 +416,18 @@ function handleMenu(payload: UTSJSONObject) {
 	const key = keyValue as string
 	const idValue = itemObject['rawId']
 	const invoiceId = idValue == null ? '' : (idValue as string)
+	if (key == 'view_detail') {
+		openInvoiceDetail(invoiceId)
+		return
+	}
 	if (key == 'download_xml') {
 		handleDownloadXml(invoiceId)
+		return
+	}
+	if (key == 'copy_account') {
+		const accountValue = itemObject['rawBankAccount']
+		const accountText = accountValue == null ? '' : (accountValue as string)
+		copyText(accountText, '账号已复制', '暂无银行账号')
 		return
 	}
 	if (key == 'copy_ksef') {
@@ -378,10 +456,10 @@ function handleFieldClick(payload: UTSJSONObject) {
 	}
 	const key = keyValue as string
 	const itemObject = item as UTSJSONObject
-	if (key == 'seller_nip') {
-		const value = itemObject['seller_nip']
+	if (key == 'seller_nip' || key == 'bank_account_text') {
+		const value = key == 'seller_nip' ? itemObject['seller_nip'] : itemObject['rawBankAccount']
 		const text = value == null ? '' : (value as string)
-		copyText(text, '卖方NIP已复制', '暂无卖方NIP')
+		copyText(text, key == 'seller_nip' ? '卖方NIP已复制' : '账号已复制', key == 'seller_nip' ? '暂无卖方NIP' : '暂无银行账号')
 	}
 }
 
@@ -394,7 +472,7 @@ const listItems = computed((): UTSJSONObject[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedSyncStatus.value != null
+	return keyword.value != '' || selectedSyncStatus.value != null || selectedPaymentStatus.value != null
 })
 
 const emptyText = computed((): string => {
@@ -428,6 +506,7 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '发票总数', value: totalCount.value.toString() } as UTSJSONObject,
 		{ key: 'pending', label: '待详情', value: pendingXmlText.value } as UTSJSONObject,
+		{ key: 'payment', label: '付款筛选', value: selectedPaymentStatus.value == null ? '全部' : (selectedPaymentStatus.value == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
 		{ key: 'last', label: '最近成功', value: lastSuccessText.value } as UTSJSONObject,
 	]
 })
@@ -439,6 +518,11 @@ onLoad(() => {
 
 onShow(() => {
 	loadAutoSyncStatus()
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag != null && ('' + flag) != '') {
+		uni.removeStorageSync(refreshStorageKey)
+		loadInvoices()
+	}
 })
 </script>
 
@@ -552,6 +636,10 @@ onShow(() => {
 	line-height: 18px;
 	color: #0F172A;
 	font-weight: bold;
+}
+
+.filter-title-spaced {
+	margin-top: 8px;
 }
 
 .filter-row {

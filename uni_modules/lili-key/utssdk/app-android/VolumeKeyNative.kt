@@ -1,6 +1,7 @@
 package uts.sdk.modules.liliKey
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.view.KeyEvent
 import android.view.Window
@@ -22,6 +23,9 @@ object VolumeKeyNative {
         actionCodeExtra = actionExtra
         activity.runOnUiThread {
             try {
+                if (installedActivity != null && installedActivity !== activity) {
+                    restoreInstalledCallback()
+                }
                 val window = activity.window
                 val current = window.callback
                 if (interceptCallback != null && installedActivity === activity) {
@@ -30,7 +34,7 @@ object VolumeKeyNative {
                 }
                 originalCallback = current
                 installedActivity = activity
-                interceptCallback = VolumeWindowCallback(activity, current)
+                interceptCallback = VolumeWindowCallback(activity.applicationContext, activity.packageName, current)
                 window.callback = interceptCallback
                 if (DEBUG) console.log("lili-key-native: installed callback=" + current.javaClass.name)
             } catch (error: Throwable) {
@@ -44,11 +48,7 @@ object VolumeKeyNative {
     fun uninstall(activity: Activity): Boolean {
         activity.runOnUiThread {
             try {
-                val window = activity.window
-                if (installedActivity === activity && interceptCallback != null && originalCallback != null) {
-                    window.callback = originalCallback
-                    if (DEBUG) console.log("lili-key-native: uninstalled")
-                }
+                if (installedActivity === activity) restoreInstalledCallback()
             } catch (error: Throwable) {
                 if (DEBUG) console.log("lili-key-native: uninstall failed " + error.message)
             } finally {
@@ -62,27 +62,44 @@ object VolumeKeyNative {
         return true
     }
 
+    private fun restoreInstalledCallback() {
+        val activity = installedActivity
+        val callback = originalCallback
+        if (activity != null && callback != null) {
+            try {
+                activity.window.callback = callback
+                if (DEBUG) console.log("lili-key-native: restored previous callback")
+            } catch (error: Throwable) {
+                if (DEBUG) console.log("lili-key-native: restore failed " + error.message)
+            }
+        }
+        installedActivity = null
+        interceptCallback = null
+        originalCallback = null
+    }
+
     private fun isVolumeKey(event: KeyEvent): Boolean {
         return event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
     }
 
-    private fun emit(activity: Activity, event: KeyEvent) {
+    private fun emit(context: Context, packageName: String, event: KeyEvent) {
         if (actionName.isEmpty()) return
         val intent = Intent(actionName)
-        intent.setPackage(activity.packageName)
+        intent.setPackage(packageName)
         intent.putExtra(keyCodeExtra, event.keyCode)
         intent.putExtra(actionCodeExtra, event.action)
-        activity.sendBroadcast(intent)
+        context.sendBroadcast(intent)
         if (DEBUG) console.log("lili-key-native: consumed key=" + event.keyCode + " action=" + event.action)
     }
 
     private class VolumeWindowCallback(
-        private val activity: Activity,
+        private val context: Context,
+        private val packageName: String,
         private val base: Window.Callback
     ) : Window.Callback by base {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (VolumeKeyNative.isVolumeKey(event)) {
-                VolumeKeyNative.emit(activity, event)
+                VolumeKeyNative.emit(context, packageName, event)
                 return true
             }
             return base.dispatchKeyEvent(event)

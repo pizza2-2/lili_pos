@@ -1,4 +1,4 @@
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue", 78, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue", 81, 6>;
 	title?: string
 	searchPlaceholder?: string
 	searchValue?: string
@@ -8,6 +8,8 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	showFilter?: boolean
 	showHome?: boolean
 	showMenu?: boolean
+	showRightText?: boolean
+	rightText?: string
 	showScan?: boolean
 	filterActive?: boolean
 	filterText?: string
@@ -29,6 +31,8 @@ const __sfc__ = defineComponent({
     showFilter: { type: Boolean, required: false, default: false },
     showHome: { type: Boolean, required: false, default: false },
     showMenu: { type: Boolean, required: false, default: false },
+    showRightText: { type: Boolean, required: false, default: false },
+    rightText: { type: String, required: false, default: '' },
     showScan: { type: Boolean, required: false, default: false },
     filterActive: { type: Boolean, required: false, default: false },
     filterText: { type: String, required: false, default: '筛选' },
@@ -36,7 +40,7 @@ const __sfc__ = defineComponent({
     backgroundColor: { type: String, required: false, default: '#FFFFFF' },
     homePath: { type: String, required: false, default: '/pages/tabbar/products' }
   },
-  emits: ["back", "home", "menu", "filter", "filter-open", "filter-close", "update:filterVisible", "scan", "searchInput", "searchConfirm", "searchClear"],
+  emits: ["back", "home", "menu", "right", "filter", "filter-open", "filter-close", "update:filterVisible", "scan", "searchInput", "searchConfirm", "searchClear"],
   setup(__props) {
 const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
@@ -113,6 +117,10 @@ function closeFilterPanel() {
 
 function handleMenu() {
 	emit('menu')
+}
+
+function handleRight() {
+	emit('right')
 }
 
 function handleScan() {
@@ -209,7 +217,11 @@ const _component_page_container = resolveComponent("page-container")
                     class: "uf-scan-btn",
                     onClick: handleScan
                   }), [
-                    _cE("text", _uM({ class: "uf-scan-icon" }), "▣")
+                    _cE("image", _uM({
+                      class: "uf-scan-image",
+                      src: "/static/icon/扫码.png",
+                      mode: "aspectFit"
+                    }))
                   ])
                 : _cC("v-if", true),
               _cE("input", _uM({
@@ -237,7 +249,7 @@ const _component_page_container = resolveComponent("page-container")
           }), [
             _cE("text", _uM({ class: "uf-title" }), _tD(_ctx.title), 1 /* TEXT */)
           ]),
-      isTrue(_ctx.showFilter || _ctx.showMenu)
+      isTrue(_ctx.showFilter || _ctx.showMenu || _ctx.showRightText)
         ? _cE("view", _uM({
             key: 3,
             class: "uf-segment-group uf-segment-group-right"
@@ -268,6 +280,15 @@ const _component_page_container = resolveComponent("page-container")
                   onClick: handleMenu
                 }), [
                   _cE("text", _uM({ class: "uf-segment-icon-light" }), "≡")
+                ])
+              : _cC("v-if", true),
+            isTrue(_ctx.showRightText)
+              ? _cE("view", _uM({
+                  key: 2,
+                  class: "uf-segment uf-segment-dark uf-text-segment",
+                  onClick: handleRight
+                }), [
+                  _cE("text", _uM({ class: "uf-right-text" }), _tD(_ctx.rightText), 1 /* TEXT */)
                 ])
               : _cC("v-if", true)
           ])
@@ -313,4 +334,4 @@ const _component_page_container = resolveComponent("page-container")
 })
 export default __sfc__
 export type LiliUniversalFilterComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterStyles = [_uM([["uf-root", _pS(_uM([["zIndex", 90], ["backgroundColor", "#FFFFFF"], ["borderBottomWidth", 1], ["borderBottomColor", "#EEF1F5"], ["borderBottomStyle", "solid"]]))], ["uf-bar", _pS(_uM([["height", 56], ["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["uf-segment-group", _pS(_uM([["height", 34], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["overflow", "hidden"]]))], ["uf-segment-group-left", _pS(_uM([["marginRight", 8]]))], ["uf-segment-group-right", _pS(_uM([["marginLeft", 8]]))], ["uf-segment", _pS(_uM([["minWidth", 34], ["height", 34], ["position", "relative"], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 10], ["paddingRight", 10]]))], ["uf-segment-split", _pS(_uM([["borderRightWidth", 1], ["borderRightColor", "rgba(148,163,184,0.32)"], ["borderRightStyle", "solid"]]))], ["uf-segment-dark", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["uf-segment-light", _pS(_uM([["backgroundColor", "#FFFFFF"]]))], ["uf-segment-icon", _pS(_uM([["fontSize", 15], ["color", "#1F2937"], ["lineHeight", "15px"]]))], ["uf-icon-image", _pS(_uM([["width", 18], ["height", 18]]))], ["uf-segment-icon-light", _pS(_uM([["fontSize", 15], ["color", "#FFFFFF"], ["lineHeight", "15px"]]))], ["uf-search-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-search-box", _pS(_uM([["height", 40], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["paddingLeft", 12], ["paddingRight", 10]]))], ["uf-scan-btn", _pS(_uM([["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#E2E8F0"], ["marginRight", 8]]))], ["uf-scan-icon", _pS(_uM([["fontSize", 12], ["color", "#334155"], ["lineHeight", "12px"]]))], ["uf-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["fontSize", 14], ["color", "#1F2937"], ["paddingRight", 6]]))], ["uf-clear-btn", _pS(_uM([["width", 24], ["height", 24], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#D8DEE6"]]))], ["uf-clear-icon", _pS(_uM([["fontSize", 14], ["color", "#536171"], ["lineHeight", "14px"]]))], ["uf-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["justifyContent", "center"]]))], ["uf-title", _pS(_uM([["fontSize", 17], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-segment-text-light", _pS(_uM([["fontSize", 12], ["color", "#FFFFFF"]]))], ["uf-dot", _pS(_uM([["width", 6], ["height", 6], ["borderTopLeftRadius", 3], ["borderTopRightRadius", 3], ["borderBottomRightRadius", 3], ["borderBottomLeftRadius", 3], ["backgroundColor", "#FB7185"], ["position", "absolute"], ["top", 9], ["right", 8]]))], ["uf-filter-panel", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 10], ["paddingBottom", 8]]))], ["uf-filter-handle", _pS(_uM([["width", 42], ["height", 4], ["borderTopLeftRadius", 2], ["borderTopRightRadius", 2], ["borderBottomRightRadius", 2], ["borderBottomLeftRadius", 2], ["backgroundColor", "#D5DCE5"], ["alignSelf", "center"]]))], ["uf-filter-header", _pS(_uM([["height", 44], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["uf-filter-title", _pS(_uM([["fontSize", 16], ["lineHeight", "16px"], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-filter-close", _pS(_uM([["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F3F6FA"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-close-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["color", "#475569"]]))], ["uf-filter-body", _pS(_uM([["paddingTop", 6]]))], ["uf-filter-empty", _pS(_uM([["height", 120], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-empty-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))]])]
+const GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterStyles = [_uM([["uf-root", _pS(_uM([["zIndex", 90], ["backgroundColor", "#FFFFFF"], ["borderBottomWidth", 1], ["borderBottomColor", "#EEF1F5"], ["borderBottomStyle", "solid"]]))], ["uf-bar", _pS(_uM([["height", 56], ["flexDirection", "row"], ["alignItems", "center"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["uf-segment-group", _pS(_uM([["height", 34], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["overflow", "hidden"]]))], ["uf-segment-group-left", _pS(_uM([["marginRight", 8]]))], ["uf-segment-group-right", _pS(_uM([["marginLeft", 8]]))], ["uf-segment", _pS(_uM([["minWidth", 34], ["height", 34], ["position", "relative"], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "center"], ["paddingLeft", 10], ["paddingRight", 10]]))], ["uf-segment-split", _pS(_uM([["borderRightWidth", 1], ["borderRightColor", "rgba(148,163,184,0.32)"], ["borderRightStyle", "solid"]]))], ["uf-segment-dark", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["uf-segment-light", _pS(_uM([["backgroundColor", "#FFFFFF"]]))], ["uf-segment-icon", _pS(_uM([["fontSize", 15], ["color", "#1F2937"], ["lineHeight", "15px"]]))], ["uf-icon-image", _pS(_uM([["width", 18], ["height", 18]]))], ["uf-segment-icon-light", _pS(_uM([["fontSize", 15], ["color", "#FFFFFF"], ["lineHeight", "15px"]]))], ["uf-search-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-search-box", _pS(_uM([["height", 40], ["flexDirection", "row"], ["alignItems", "center"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["paddingLeft", 12], ["paddingRight", 10]]))], ["uf-scan-btn", _pS(_uM([["width", 36], ["height", 36], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 4]]))], ["uf-scan-image", _pS(_uM([["width", 24], ["height", 24]]))], ["uf-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["fontSize", 14], ["color", "#1F2937"], ["paddingRight", 6]]))], ["uf-clear-btn", _pS(_uM([["width", 24], ["height", 24], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#D8DEE6"]]))], ["uf-clear-icon", _pS(_uM([["fontSize", 14], ["color", "#536171"], ["lineHeight", "14px"]]))], ["uf-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["justifyContent", "center"]]))], ["uf-title", _pS(_uM([["fontSize", 17], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-segment-text-light", _pS(_uM([["fontSize", 12], ["color", "#FFFFFF"]]))], ["uf-dot", _pS(_uM([["width", 6], ["height", 6], ["borderTopLeftRadius", 3], ["borderTopRightRadius", 3], ["borderBottomRightRadius", 3], ["borderBottomLeftRadius", 3], ["backgroundColor", "#FB7185"], ["position", "absolute"], ["top", 9], ["right", 8]]))], ["uf-filter-panel", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["paddingLeft", 16], ["paddingRight", 16], ["paddingTop", 10], ["paddingBottom", 8]]))], ["uf-filter-handle", _pS(_uM([["width", 42], ["height", 4], ["borderTopLeftRadius", 2], ["borderTopRightRadius", 2], ["borderBottomRightRadius", 2], ["borderBottomLeftRadius", 2], ["backgroundColor", "#D5DCE5"], ["alignSelf", "center"]]))], ["uf-filter-header", _pS(_uM([["height", 44], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"]]))], ["uf-filter-title", _pS(_uM([["fontSize", 16], ["lineHeight", "22px"], ["fontWeight", "bold"], ["color", "#111827"]]))], ["uf-filter-close", _pS(_uM([["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F3F6FA"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-close-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#475569"]]))], ["uf-filter-body", _pS(_uM([["paddingTop", 6]]))], ["uf-filter-empty", _pS(_uM([["height", 120], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-filter-empty-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["uf-text-segment", _pS(_uM([["width", 58]]))], ["uf-right-text", _pS(_uM([["color", "#FFFFFF"], ["fontSize", 14], ["fontWeight", "700"]]))]])]

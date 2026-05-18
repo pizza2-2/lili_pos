@@ -13,11 +13,19 @@ import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
+import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
+import uts.sdk.modules.limeScan.scanCode
+import uts.sdk.modules.limeScan.GeneralCallbackResult
+import uts.sdk.modules.limeScan.ScanCodeOption
+import uts.sdk.modules.limeScan.ScanCodeSuccessCallbackResult
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
+import uts.sdk.modules.liliKey.startVolumeKeyListener
+import uts.sdk.modules.liliKey.stopVolumeKeyListener
+import uts.sdk.modules.liliKey.VolumeKeyEvent
 open class GenPagesPurchasesDetailsIndex : BasePage {
     constructor(__ins: ComponentInternalInstance, __renderer: String?) : super(__ins, __renderer) {}
     companion object {
@@ -31,6 +39,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             val purchaseId = ref("")
             val purchaseInfo = ref<PurchaseItem?>(null)
             val keyword = ref("")
+            val filterVisible = ref(false)
             val details = ref(_uA<PurchaseDetailItem>())
             val isLoading = ref(false)
             val errorMessage = ref("")
@@ -39,7 +48,16 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             val totalCount = ref(0)
             val pageSize = ref(20)
             val pageTotalAmount = ref("0.00")
-            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "skuText", "label" to "SKU:"), _uO("key" to "quantityText", "label" to "数量:"), _uO("key" to "progressText", "label" to "收货:"), _uO("key" to "notesText", "label" to "备注:")))
+            val filterOptionsLoading = ref(false)
+            val filterOptionsError = ref("")
+            val filterOptions = ref<PurchaseDetailFilterOptionsResponse?>(null)
+            val selectedFilters = ref(_uA<PurchaseDetailSelectedFilter>())
+            val filterPanelHeight = ref(420)
+            val filterContentHeight = ref(356)
+            val volumeScanLocked = ref(false)
+            val scanLookupRunning = ref(false)
+            var volumeKeyStartTimer: Number = 0
+            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "skuText", "label" to "SKU:"), _uO("key" to "quantityText", "label" to "数量:"), _uO("key" to "progressText", "label" to "收货:")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "receive", "text" to "收货"), _uO("key" to "delete", "text" to "删除")))
             fun stringValue(value: Any?, fallback: String = ""): String {
                 if (value == null) {
@@ -60,7 +78,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:111")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:178")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -78,6 +96,89 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
+            fun gen_updateFilterPanelLayout_fn() {
+                val info = uni_getWindowInfo()
+                var nextPanelHeight = info.windowHeight - 168
+                if (nextPanelHeight > 420) {
+                    nextPanelHeight = 420
+                }
+                if (nextPanelHeight < 320) {
+                    nextPanelHeight = 320
+                }
+                var nextContentHeight = nextPanelHeight - 64
+                if (nextContentHeight < 240) {
+                    nextContentHeight = 240
+                }
+                filterPanelHeight.value = nextPanelHeight
+                filterContentHeight.value = nextContentHeight
+            }
+            val updateFilterPanelLayout = ::gen_updateFilterPanelLayout_fn
+            fun gen_closeFilterDrawer_fn() {
+                filterVisible.value = false
+            }
+            val closeFilterDrawer = ::gen_closeFilterDrawer_fn
+            fun gen_handleFilterVisibleChange_fn(value: Boolean) {
+                filterVisible.value = value
+            }
+            val handleFilterVisibleChange = ::gen_handleFilterVisibleChange_fn
+            fun gen_setSelectedFilterValue_fn(param: String, value: String) {
+                val nextFilters: UTSArray<PurchaseDetailSelectedFilter> = _uA()
+                var updated = false
+                run {
+                    var index: Number = 0
+                    while(index < selectedFilters.value.length){
+                        val filter = selectedFilters.value[index]
+                        if (filter.param == param) {
+                            if (value != "") {
+                                nextFilters.push(PurchaseDetailSelectedFilter(param = param, value = value))
+                            }
+                            updated = true
+                            index += 1
+                            continue
+                        }
+                        nextFilters.push(filter)
+                        index += 1
+                    }
+                }
+                if (!updated && value != "") {
+                    nextFilters.push(PurchaseDetailSelectedFilter(param = param, value = value))
+                }
+                selectedFilters.value = nextFilters
+            }
+            val setSelectedFilterValue = ::gen_setSelectedFilterValue_fn
+            fun gen_selectedFilterValue_fn(param: String): String {
+                run {
+                    var index: Number = 0
+                    while(index < selectedFilters.value.length){
+                        val filter = selectedFilters.value[index]
+                        if (filter.param == param) {
+                            return filter.value
+                        }
+                        index += 1
+                    }
+                }
+                return ""
+            }
+            val selectedFilterValue = ::gen_selectedFilterValue_fn
+            fun gen_splitSelectedValues_fn(value: String): UTSArray<String> {
+                if (value == "") {
+                    return _uA<String>()
+                }
+                val parts = value.split(",")
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < parts.length){
+                        val text = parts[index].trim()
+                        if (text != "") {
+                            result.push(text)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val splitSelectedValues = ::gen_splitSelectedValues_fn
             fun gen_applyResponse_fn(response: PurchaseDetailListResponse) {
                 details.value = response.results
                 currentPage.value = response.current_page
@@ -127,7 +228,12 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                             } else {
                                 keyword.value
                             }
-                            , page = currentPage.value, page_size = pageSize.value, purchase = purchaseId.value, product = null, is_fully_received = null)))
+                            , page = currentPage.value, page_size = pageSize.value, purchase = purchaseId.value, product = null, is_fully_received = if (selectedFilterValue("is_fully_received") == "") {
+                                null
+                            } else {
+                                selectedFilterValue("is_fully_received")
+                            }
+                            )))
                             applyResponse(response)
                             await(loadPurchaseInfo())
                         }
@@ -168,7 +274,12 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 } else {
                     "待收货"
                 }
-                return _uO("id" to item.id.toString(10), "rawId" to item.id.toString(10), "title" to stringValue(item.product_name, "商品 #" + item.product.toString(10)), "subtitle" to ("条码：" + stringValue(item.product_barcode, "-")), "amountText" to ("¥ " + stringValue(item.amount, "0.00")), "skuText" to stringValue(item.product_sku, "-"), "quantityText" to (item.received_quantity.toString(10) + "/" + item.quantity.toString(10) + "，剩余 " + item.remaining_quantity.toString(10)), "progressText" to (stringValue(item.receive_progress, "0") + "%"), "notesText" to stringValue(item.notes, "-"), "tags" to _uA<String>(statusText, "单价 ¥ " + stringValue(item.unit_price, "0.00")))
+                return _uO("id" to item.id.toString(10), "rawId" to item.id.toString(10), "title" to stringValue(item.product_name, "商品 #" + item.product.toString(10)), "subtitle" to ("条码：" + stringValue(item.product_barcode, "-")), "image" to item.product_image, "images" to item.product_images, "previewCover" to if (item.product_preview_images.length > 0) {
+                    item.product_preview_images[0]
+                } else {
+                    item.product_image
+                }
+                , "previewImages" to item.product_preview_images, "mediaIds" to item.product_media_ids, "amountText" to ("¥ " + stringValue(item.amount, "0.00")), "skuText" to stringValue(item.product_sku, "-"), "quantityText" to (item.received_quantity.toString(10) + "/" + item.quantity.toString(10) + "，剩余 " + item.remaining_quantity.toString(10)), "progressText" to (stringValue(item.receive_progress, "0") + "%"), "notesText" to stringValue(item.notes, "-"), "tags" to _uA<String>(statusText, "单价 ¥ " + stringValue(item.unit_price, "0.00")))
             }
             val detailToListItem = ::gen_detailToListItem_fn
             fun gen_handleSearchInput_fn(value: String) {
@@ -187,7 +298,183 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 loadDetails()
             }
             val handleSearchClear = ::gen_handleSearchClear_fn
-            fun gen_handleCreate_fn(payload: UTSJSONObject) {
+            fun gen_searchByScannedBarcode_fn(barcode: String) {
+                keyword.value = barcode
+                currentPage.value = 1
+                closeFilterDrawer()
+                loadDetails()
+            }
+            val searchByScannedBarcode = ::gen_searchByScannedBarcode_fn
+            fun gen_handleFilterOpen_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (filterOptions.value != null || filterOptionsLoading.value) {
+                            return@w1
+                        }
+                        filterOptionsLoading.value = true
+                        filterOptionsError.value = ""
+                        try {
+                            filterOptions.value = await(getPurchaseDetailFilterOptions(if (purchaseId.value == "") {
+                                null
+                            } else {
+                                purchaseId.value
+                            }
+                            ))
+                        }
+                         catch (error: Throwable) {
+                            filterOptionsError.value = parseErrorMessage(error, "筛选选项加载失败")
+                        }
+                         finally {
+                            filterOptionsLoading.value = false
+                        }
+                })
+            }
+            val handleFilterOpen = ::gen_handleFilterOpen_fn
+            fun gen_isFilterOptionSelected_fn(param: String, value: String): Boolean {
+                return splitSelectedValues(selectedFilterValue(param)).includes(value)
+            }
+            val isFilterOptionSelected = ::gen_isFilterOptionSelected_fn
+            fun gen_toggleFilterOption_fn(param: String, value: String, multiple: Boolean) {
+                val currentValues = splitSelectedValues(selectedFilterValue(param))
+                if (!multiple) {
+                    setSelectedFilterValue(param, if (currentValues.includes(value)) {
+                        ""
+                    } else {
+                        value
+                    }
+                    )
+                    return
+                }
+                val nextValues: UTSArray<String> = _uA()
+                var alreadySelected = false
+                run {
+                    var index: Number = 0
+                    while(index < currentValues.length){
+                        val currentValue = currentValues[index]
+                        if (currentValue == value) {
+                            alreadySelected = true
+                            index += 1
+                            continue
+                        }
+                        nextValues.push(currentValue)
+                        index += 1
+                    }
+                }
+                if (!alreadySelected) {
+                    nextValues.push(value)
+                }
+                setSelectedFilterValue(param, nextValues.join(","))
+            }
+            val toggleFilterOption = ::gen_toggleFilterOption_fn
+            fun gen_handleFilterReset_fn() {
+                selectedFilters.value = _uA<PurchaseDetailSelectedFilter>()
+                keyword.value = ""
+                currentPage.value = 1
+                closeFilterDrawer()
+                loadDetails()
+            }
+            val handleFilterReset = ::gen_handleFilterReset_fn
+            fun gen_applySelectedFilters_fn() {
+                currentPage.value = 1
+                closeFilterDrawer()
+                loadDetails()
+            }
+            val applySelectedFilters = ::gen_applySelectedFilters_fn
+            fun gen_handleScannedBarcode_fn(scanResult: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        val barcode = scanResult.trim()
+                        if (barcode == "" || scanLookupRunning.value) {
+                            return@w1
+                        }
+                        if (purchaseId.value == "") {
+                            searchByScannedBarcode(barcode)
+                            return@w1
+                        }
+                        scanLookupRunning.value = true
+                        try {
+                            val result = await(checkPurchaseProduct(purchaseId.value, barcode, ""))
+                            if (result.exists && result.purchase_detail_id > 0) {
+                                closeFilterDrawer()
+                                uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value + "&id=" + result.purchase_detail_id.toString(10)))
+                                return@w1
+                            }
+                            searchByScannedBarcode(barcode)
+                        }
+                         catch (error: Throwable) {
+                            searchByScannedBarcode(barcode)
+                        }
+                         finally {
+                            scanLookupRunning.value = false
+                        }
+                })
+            }
+            val handleScannedBarcode = ::gen_handleScannedBarcode_fn
+            fun gen_handleScanSearch_fn() {
+                scanCode(ScanCodeOption(onlyFromCamera = true, success = fun(res: ScanCodeSuccessCallbackResult){
+                    val scanResult = res.result
+                    if (scanResult == "") {
+                        return
+                    }
+                    handleScannedBarcode(scanResult)
+                }
+                , fail = fun(res: GeneralCallbackResult){
+                    val message = if (res.errMsg == "") {
+                        "扫码失败"
+                    } else {
+                        res.errMsg
+                    }
+                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                }
+                ))
+            }
+            val handleScanSearch = ::gen_handleScanSearch_fn
+            fun gen_unlockVolumeScanSoon_fn() {
+                setTimeout(fun(){
+                    volumeScanLocked.value = false
+                }
+                , 1200)
+            }
+            val unlockVolumeScanSoon = ::gen_unlockVolumeScanSoon_fn
+            fun gen_handleVolumeKeyEvent_fn(event: VolumeKeyEvent) {
+                if (event.key != "VOLUME_UP" && event.key != "VOLUME_DOWN") {
+                    return
+                }
+                if (volumeScanLocked.value) {
+                    return
+                }
+                volumeScanLocked.value = true
+                closeFilterDrawer()
+                handleScanSearch()
+                unlockVolumeScanSoon()
+            }
+            val handleVolumeKeyEvent = ::gen_handleVolumeKeyEvent_fn
+            fun gen_startPurchaseDetailVolumeKeyListener_fn() {
+                startVolumeKeyListener(fun(event: VolumeKeyEvent){
+                    handleVolumeKeyEvent(event)
+                }
+                )
+            }
+            val startPurchaseDetailVolumeKeyListener = ::gen_startPurchaseDetailVolumeKeyListener_fn
+            fun gen_schedulePurchaseDetailVolumeKeyListener_fn() {
+                if (volumeKeyStartTimer != 0) {
+                    clearTimeout(volumeKeyStartTimer)
+                }
+                volumeKeyStartTimer = setTimeout(fun(){
+                    volumeKeyStartTimer = 0
+                    startPurchaseDetailVolumeKeyListener()
+                }
+                , 260)
+            }
+            val schedulePurchaseDetailVolumeKeyListener = ::gen_schedulePurchaseDetailVolumeKeyListener_fn
+            fun gen_stopPurchaseDetailVolumeKeyListener_fn() {
+                if (volumeKeyStartTimer != 0) {
+                    clearTimeout(volumeKeyStartTimer)
+                    volumeKeyStartTimer = 0
+                }
+                stopVolumeKeyListener()
+                volumeScanLocked.value = false
+            }
+            val stopPurchaseDetailVolumeKeyListener = ::gen_stopPurchaseDetailVolumeKeyListener_fn
+            fun gen_handleCreate_fn() {
                 uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value))
             }
             val handleCreate = ::gen_handleCreate_fn
@@ -316,11 +603,15 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 return result
             }
             )
+            val hasActiveFilter = computed(fun(): Boolean {
+                return keyword.value != "" || selectedFilters.value.length > 0
+            }
+            )
             val emptyText = computed(fun(): String {
                 if (isLoading.value) {
                     return "正在加载"
                 }
-                if (keyword.value != "") {
+                if (hasActiveFilter.value) {
                     return "没有匹配的采购明细"
                 }
                 return "暂无采购明细"
@@ -334,7 +625,34 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 )
             }
             )
+            val filterPanelStyle = computed(fun(): String {
+                return "height:" + filterPanelHeight.value.toString(10) + "px;"
+            }
+            )
+            val filterContentScrollStyle = computed(fun(): String {
+                return "height:" + filterContentHeight.value.toString(10) + "px;"
+            }
+            )
+            val filterDefinitions = computed(fun(): UTSArray<PurchaseDetailFilterDefinition> {
+                if (filterOptions.value == null) {
+                    return _uA<PurchaseDetailFilterDefinition>()
+                }
+                val result: UTSArray<PurchaseDetailFilterDefinition> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < filterOptions.value!!.filters.length){
+                        val filter = filterOptions.value!!.filters[index]
+                        if (filter.param != "product" && filter.key != "product") {
+                            result.push(filter)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            )
             onLoad(fun(query: OnLoadOptions){
+                updateFilterPanelLayout()
                 val purchaseValue = query["purchase"]
                 purchaseId.value = if (purchaseValue == null) {
                     ""
@@ -345,18 +663,90 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             }
             )
             onShow(fun(){
+                schedulePurchaseDetailVolumeKeyListener()
+                updateFilterPanelLayout()
                 if (consumeRefreshNeeded()) {
                     loadDetails()
                 }
+            }
+            )
+            onHide(fun(){
+                stopPurchaseDetailVolumeKeyListener()
+            }
+            )
+            onUnload(fun(){
+                stopPurchaseDetailVolumeKeyListener()
             }
             )
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass)
                 return _cE("view", _uM("class" to "page"), _uA(
-                    _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "searchPlaceholder" to "商品名、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to false, "showBack" to true, "showSearch" to true, "showFilter" to false, "showHome" to true, "homePath" to "/pages/purchases/index", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear), null, 8, _uA(
+                    _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "searchPlaceholder" to "商品名、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to true, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to true, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "homePath" to "/pages/purchases/index", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "purchase-filter-panel", "style" to _nS(filterPanelStyle.value)), _uA(
+                                _cE("scroll-view", _uM("scroll-y" to "true", "class" to "purchase-filter-content-scroll", "style" to _nS(filterContentScrollStyle.value)), _uA(
+                                    _cE("view", _uM("class" to "purchase-filter-scroll-inner"), _uA(
+                                        if (isTrue(unref(filterOptionsLoading))) {
+                                            _cE("view", _uM("key" to 0, "class" to "purchase-filter-state"), _uA(
+                                                _cE("text", _uM("class" to "purchase-filter-state-text"), "筛选选项加载中...")
+                                            ))
+                                        } else {
+                                            if (unref(filterOptionsError) != "") {
+                                                _cE("view", _uM("key" to 1, "class" to "purchase-filter-state"), _uA(
+                                                    _cE("text", _uM("class" to "purchase-filter-state-text"), _tD(unref(filterOptionsError)), 1)
+                                                ))
+                                            } else {
+                                                if (filterDefinitions.value.length > 0) {
+                                                    _cE("view", _uM("key" to 2, "class" to "purchase-filter-groups"), _uA(
+                                                        _cE(Fragment, null, RenderHelpers.renderList(filterDefinitions.value, fun(filter, __key, __index, _cached): Any {
+                                                            return _cE("view", _uM("key" to filter.key, "class" to "purchase-filter-group"), _uA(
+                                                                _cE("text", _uM("class" to "purchase-filter-group-title"), _tD(filter.label), 1),
+                                                                _cE("view", _uM("class" to "purchase-filter-options"), _uA(
+                                                                    _cE(Fragment, null, RenderHelpers.renderList(filter.options, fun(option, __key, __index, _cached): Any {
+                                                                        return _cE("view", _uM("key" to (filter.key + "-" + option.value), "class" to _nC(if (isFilterOptionSelected(filter.param, option.value)) {
+                                                                            "purchase-filter-option purchase-filter-option-active"
+                                                                        } else {
+                                                                            "purchase-filter-option"
+                                                                        }), "onClick" to fun(){
+                                                                            toggleFilterOption(filter.param, option.value, filter.multiple)
+                                                                        }), _uA(
+                                                                            _cE("text", _uM("class" to _nC(if (isFilterOptionSelected(filter.param, option.value)) {
+                                                                                "purchase-filter-option-text purchase-filter-option-text-active"
+                                                                            } else {
+                                                                                "purchase-filter-option-text"
+                                                                            })), _tD(option.label), 3)
+                                                                        ), 10, _uA(
+                                                                            "onClick"
+                                                                        ))
+                                                                    }), 128)
+                                                                ))
+                                                            ))
+                                                        }), 128)
+                                                    ))
+                                                } else {
+                                                    _cC("v-if", true)
+                                                }
+                                            }
+                                        }
+                                    ))
+                                ), 4),
+                                _cE("view", _uM("class" to "purchase-filter-actions"), _uA(
+                                    _cE("view", _uM("class" to "purchase-filter-btn purchase-filter-btn-light", "onClick" to handleFilterReset), _uA(
+                                        _cE("text", _uM("class" to "purchase-filter-btn-light-text"), "重置")
+                                    )),
+                                    _cE("view", _uM("class" to "purchase-filter-btn purchase-filter-btn-primary", "onClick" to applySelectedFilters), _uA(
+                                        _cE("text", _uM("class" to "purchase-filter-btn-primary-text"), "应用")
+                                    ))
+                                ))
+                            ), 4)
+                        )
+                    }
+                    ), "_" to 1), 8, _uA(
                         "title",
-                        "searchValue"
+                        "searchValue",
+                        "filterVisible",
+                        "filterActive"
                     )),
                     _cE("scroll-view", _uM("style" to _nS(_uM("flex" to "1")), "class" to "page-scroll"), _uA(
                         _cE("view", _uM("class" to "page-content"), _uA(
@@ -395,7 +785,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "purchase-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "purchase-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "purchase-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "purchase-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "purchase-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "purchase-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "purchase-filter-groups" to _pS(_uM("marginBottom" to 6)), "purchase-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "purchase-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "purchase-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "purchase-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "purchase-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "purchase-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "purchase-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "purchase-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "purchase-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "purchase-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

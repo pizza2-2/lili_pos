@@ -124,6 +124,69 @@
 		<!-- #ifdef APP -->
 		</scroll-view>
 		<!-- #endif -->
+
+		<page-container
+			:show="pricePopupVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closePricePopup"
+		>
+			<view class="price-panel">
+				<view class="price-handle"></view>
+				<view class="price-head">
+					<view>
+						<text class="price-title">计算基础售价</text>
+						<text class="price-subtitle">{{ pricePurchaseTitle }}</text>
+					</view>
+					<view class="price-close" @click="closePricePopup">
+						<text class="price-close-text">关闭</text>
+					</view>
+				</view>
+
+				<view class="price-field">
+					<text class="price-label">售价公式</text>
+					<liliBottomSelect
+						:value="priceFormulaValue"
+						:valueText="priceFormulaText"
+						title="选择售价公式"
+						placeholder="请选择公式"
+						searchPlaceholder="搜索公式名称、编码"
+						emptyText="暂无启用公式"
+						subtitleKey="subtitle"
+						:showAddAction="false"
+						:showEditAction="true"
+						editPath="/pages/products/pricing-formula/from"
+						:fetchData="fetchPricingFormulaOptions"
+						@change="handlePriceFormulaChange"
+					/>
+				</view>
+
+				<view v-if="priceFormulaExpression != ''" class="price-formula-box">
+					<text class="price-formula-label">公式</text>
+					<text class="price-formula-text">{{ priceFormulaExpression }}</text>
+				</view>
+				<view v-if="priceFormulaDescription != ''" class="price-formula-box">
+					<text class="price-formula-label">说明</text>
+					<text class="price-formula-text">{{ priceFormulaDescription }}</text>
+				</view>
+				<view v-if="priceResultText != ''" class="price-result-box">
+					<text class="price-result-text">{{ priceResultText }}</text>
+				</view>
+
+				<view class="price-actions">
+					<view class="price-secondary-btn" @click="closePricePopup">
+						<text class="price-secondary-text">取消</text>
+					</view>
+					<view class="price-primary-btn" @click="confirmPriceCalculation">
+						<text class="price-primary-text">{{ priceCalculating ? '计算中...' : '确认计算' }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
@@ -131,7 +194,8 @@
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
+import { autoGeneratePurchasePrices, deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
+import { getProductPricingFormulaList, ProductPricingFormulaListQuery } from '@/pkg/api/modules/products.uts'
 
 type PurchaseSelectOption = {
 	value: string
@@ -157,6 +221,15 @@ const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
 const filterPanelHeight = ref(420)
 const filterContentHeight = ref(356)
+const pricePopupVisible = ref(false)
+const priceCalculating = ref(false)
+const pricePurchaseId = ref('')
+const pricePurchaseTitle = ref('')
+const priceFormulaValue = ref('')
+const priceFormulaText = ref('')
+const priceFormulaExpression = ref('')
+const priceFormulaDescription = ref('')
+const priceResultText = ref('')
 let importRefreshTimer = 0
 let importRefreshCount = 0
 
@@ -171,6 +244,7 @@ const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'details', text: '明细' } as UTSJSONObject,
 	{ key: 'quick_input', text: '手写录入' } as UTSJSONObject,
 	{ key: 'excel_upload', text: 'Excel上传' } as UTSJSONObject,
+	{ key: 'calculate_prices', text: '计算价格' } as UTSJSONObject,
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'approve', text: '审核' } as UTSJSONObject,
 	{ key: 'complete', text: '完成' } as UTSJSONObject,
@@ -378,21 +452,57 @@ function buildSelectOptions(value: any | null): PurchaseSelectOption[] {
 }
 
 function buildBottomSelectResponse(source: PurchaseSelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keywordValue = stringValue(params['keyword']).toLowerCase()
 	const idValue = stringValue(params['id'])
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (idValue != '' && option.value != idValue) continue
-		if (keywordValue != '' && option.text.toLowerCase().indexOf(keywordValue) < 0 && option.value.toLowerCase().indexOf(keywordValue) < 0) continue
 		result.push({ value: option.value, text: option.text } as UTSJSONObject)
 	}
 	return { data: result, total: result.length } as UTSJSONObject
 }
 
+function buildSupplierOptionQuery(params: UTSJSONObject): UTSJSONObject {
+	const keywordValue = stringValue(params['keyword'])
+	const query: UTSJSONObject = {
+		key: 'supplier',
+		limit: 50,
+	} as UTSJSONObject
+	if (keywordValue != '') {
+		query['search'] = keywordValue
+		query['keyword'] = keywordValue
+	}
+	return query
+}
+
 async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
-	const raw = await request('/api/procurement/suppliers/options/', 'GET', {} as UTSJSONObject, true)
-	return buildBottomSelectResponse(buildSelectOptions(raw), params)
+	const raw = await request('/api/procurement/suppliers/options/', 'GET', buildSupplierOptionQuery(params), true)
+	return buildBottomSelectResponse(buildSelectOptions(raw), { keyword: '', id: stringValue(params['id']) } as UTSJSONObject)
+}
+
+async function fetchPricingFormulaOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keywordValue = stringValue(params['keyword'])
+	const idValue = stringValue(params['id'])
+	const response = await getProductPricingFormulaList({
+		search: keywordValue == '' ? null : keywordValue,
+		page: 1,
+		page_size: 50,
+		is_active: 'true',
+	} as ProductPricingFormulaListQuery)
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < response.results.length; index += 1) {
+		const formula = response.results[index]
+		if (!formula.is_active) continue
+		if (idValue != '' && formula.id.toString() != idValue) continue
+		result.push({
+			value: formula.id.toString(),
+			text: formula.name,
+			subtitle: formula.code + ' / ' + formula.expression,
+			expression: formula.expression,
+			description: formula.description,
+		} as UTSJSONObject)
+	}
+	return { data: result, total: result.length } as UTSJSONObject
 }
 
 function applyResponse(response: PurchaseListResponse) {
@@ -587,6 +697,57 @@ function confirmDelete(id: string) {
 	uni.showModal({ title: '删除采购单', content: '确定删除这张采购单吗？', success: (res) => { if (res.confirm) runDelete(id) } })
 }
 
+function openPricePopup(itemObject: UTSJSONObject) {
+	pricePurchaseId.value = stringValue(itemObject['rawId'])
+	pricePurchaseTitle.value = stringValue(itemObject['title'], '采购单')
+	priceFormulaValue.value = ''
+	priceFormulaText.value = ''
+	priceFormulaExpression.value = ''
+	priceFormulaDescription.value = ''
+	priceResultText.value = ''
+	pricePopupVisible.value = true
+}
+
+function closePricePopup() {
+	if (priceCalculating.value) return
+	pricePopupVisible.value = false
+}
+
+function handlePriceFormulaChange(payload: UTSJSONObject) {
+	priceFormulaValue.value = stringValue(payload['value'])
+	priceFormulaText.value = stringValue(payload['text'])
+	const item = parseObject(payload['item'])
+	if (item != null) {
+		priceFormulaExpression.value = stringValue(item['expression'])
+		priceFormulaDescription.value = stringValue(item['description'])
+	} else {
+		priceFormulaExpression.value = ''
+		priceFormulaDescription.value = ''
+	}
+	priceResultText.value = ''
+}
+
+async function confirmPriceCalculation() {
+	if (priceCalculating.value) return
+	if (pricePurchaseId.value == '') return
+	if (priceFormulaValue.value == '') {
+		uni.showToast({ title: '请选择售价公式', icon: 'none' })
+		return
+	}
+	priceCalculating.value = true
+	priceResultText.value = ''
+	try {
+		const result = await autoGeneratePurchasePrices(pricePurchaseId.value, priceFormulaValue.value)
+		priceResultText.value = '已更新 ' + result.updated_count.toString() + ' 个，跳过已有价格 ' + result.skipped_existing_count.toString() + ' 个，异常 ' + result.skipped_error_count.toString() + ' 个。'
+		uni.showToast({ title: takeLatestResponseMessage('价格计算完成'), icon: 'success' })
+		loadPurchases()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '价格计算失败'), icon: 'none' })
+	} finally {
+		priceCalculating.value = false
+	}
+}
+
 function handleMenu(payload: UTSJSONObject) {
 	const action = payload['action']
 	const item = payload['item']
@@ -620,6 +781,10 @@ function handleMenu(payload: UTSJSONObject) {
 			return
 		}
 		uni.navigateTo({ url: '/pages/purchases/details/excel-upload?purchase=' + id })
+		return
+	}
+	if (actionKey == 'calculate_prices') {
+		openPricePopup(itemObject)
 		return
 	}
 	if (actionKey == 'edit') {
@@ -709,4 +874,25 @@ onUnload(() => { stopImportRefreshTimer() })
 .purchase-filter-btn-primary { background-color: #0F172A; }
 .purchase-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
 .purchase-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
+.price-panel { padding-left: 16px; padding-right: 16px; padding-top: 8px; padding-bottom: 18px; background-color: #FFFFFF; }
+.price-handle { width: 38px; height: 4px; border-radius: 2px; background-color: #CBD5E1; align-self: center; margin-bottom: 12px; }
+.price-head { flex-direction: row; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+.price-title { font-size: 18px; line-height: 24px; color: #0F172A; font-weight: bold; }
+.price-subtitle { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 2px; }
+.price-close { height: 32px; padding-left: 12px; padding-right: 12px; border-radius: 8px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.price-close-text { font-size: 12px; color: #475569; }
+.price-field { margin-bottom: 12px; }
+.price-label { font-size: 13px; line-height: 18px; color: #334155; font-weight: bold; margin-bottom: 6px; }
+.price-formula-box { padding-left: 12px; padding-right: 12px; padding-top: 10px; padding-bottom: 10px; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; background-color: #F8FAFC; margin-bottom: 8px; }
+.price-formula-label { font-size: 12px; line-height: 16px; color: #64748B; margin-bottom: 4px; }
+.price-formula-text { font-size: 12px; line-height: 18px; color: #0F172A; }
+.price-result-box { padding-left: 12px; padding-right: 12px; padding-top: 10px; padding-bottom: 10px; border-radius: 8px; background-color: #ECFDF3; margin-bottom: 10px; }
+.price-result-text { font-size: 12px; line-height: 18px; color: #047857; }
+.price-actions { flex-direction: row; padding-top: 8px; }
+.price-secondary-btn,
+.price-primary-btn { flex: 1; height: 42px; border-radius: 10px; align-items: center; justify-content: center; }
+.price-secondary-btn { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 10px; }
+.price-primary-btn { background-color: #0F172A; }
+.price-secondary-text { font-size: 14px; color: #475569; }
+.price-primary-text { font-size: 14px; color: #FFFFFF; }
 </style>

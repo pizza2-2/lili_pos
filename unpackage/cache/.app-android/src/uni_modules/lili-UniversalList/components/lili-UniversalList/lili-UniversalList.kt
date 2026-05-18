@@ -22,6 +22,10 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
     open var metaField: String by `$props`
     open var imageField: String by `$props`
     open var imageListField: String by `$props`
+    open var previewImageField: String by `$props`
+    open var previewImageListField: String by `$props`
+    open var mediaIdListField: String by `$props`
+    open var lazyPreviewFullImage: Boolean by `$props`
     open var showImage: Boolean by `$props`
     open var fields: UTSArray<UTSJSONObject> by `$props`
     open var tagField: String by `$props`
@@ -91,7 +95,8 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             fun emit(event: String, vararg do_not_transform_spread: Any?) {
                 __ins.emit(event, *do_not_transform_spread)
             }
-            val previewImages = ref(_uA<String>())
+            val previewThumbImages = ref(_uA<String>())
+            val previewFullImages = ref(_uA<String>())
             val previewIndex = ref<Number>(0)
             val previewVisible = ref<Boolean>(false)
             val previewItem = ref<UTSJSONObject?>(null)
@@ -291,6 +296,24 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return false
             }
             val stringArrayContains = ::gen_stringArrayContains_fn
+            fun gen_cloneStringArray_fn(list: UTSArray<String>): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < list.length){
+                        result.push(list[i])
+                        i++
+                    }
+                }
+                return result
+            }
+            val cloneStringArray = ::gen_cloneStringArray_fn
+            fun gen_appendUniqueString_fn(list: UTSArray<String>, value: String) {
+                if (value != "" && !stringArrayContains(list, value)) {
+                    list.push(value)
+                }
+            }
+            val appendUniqueString = ::gen_appendUniqueString_fn
             fun gen_displayField_fn(item: UTSJSONObject, field: UTSJSONObject): String {
                 val raw = fieldText(item, stringValue(field["key"]))
                 val type = fieldType(field)
@@ -438,14 +461,14 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 emit("field-click", _uO("item" to item, "field" to field, "key" to stringValue(field["key"]), "label" to fieldLabel(field), "value" to displayField(item, field)))
             }
             val handleFieldClick = ::gen_handleFieldClick_fn
-            fun gen_imageListFromItem_fn(item: UTSJSONObject): UTSArray<String> {
+            fun gen_stringListFromItemFields_fn(item: UTSJSONObject, mainField: String, listField: String): UTSArray<String> {
                 val images: UTSArray<String> = _uA()
-                val mainImage = fieldText(item, props.imageField)
+                val mainImage = fieldText(item, mainField)
                 if (mainImage != "") {
-                    images.push(mainImage)
+                    appendUniqueString(images, mainImage)
                 }
-                if (props.imageListField != "") {
-                    val raw = objectField(item, props.imageListField)
+                if (listField != "") {
+                    val raw = objectField(item, listField)
                     if (raw != null) {
                         if (raw is UTSArray<*>) {
                             val list = raw as UTSArray<Any>
@@ -453,9 +476,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                 var i: Number = 0
                                 while(i < list.length){
                                     val imageUrl = stringValue(list[i])
-                                    if (imageUrl != "" && !stringArrayContains(images, imageUrl)) {
-                                        images.push(imageUrl)
-                                    }
+                                    appendUniqueString(images, imageUrl)
                                     i++
                                 }
                             }
@@ -467,9 +488,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                     var i: Number = 0
                                     while(i < parts.length){
                                         val imageUrl = parts[i].trim()
-                                        if (imageUrl != "" && !stringArrayContains(images, imageUrl)) {
-                                            images.push(imageUrl)
-                                        }
+                                        appendUniqueString(images, imageUrl)
                                         i++
                                     }
                                 }
@@ -479,7 +498,66 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 }
                 return images
             }
+            val stringListFromItemFields = ::gen_stringListFromItemFields_fn
+            fun gen_imageListFromItem_fn(item: UTSJSONObject): UTSArray<String> {
+                return stringListFromItemFields(item, props.imageField, props.imageListField)
+            }
             val imageListFromItem = ::gen_imageListFromItem_fn
+            fun gen_previewImageListFromItem_fn(item: UTSJSONObject): UTSArray<String> {
+                val list = stringListFromItemFields(item, props.previewImageField, props.previewImageListField)
+                if (list.length > 0) {
+                    return list
+                }
+                return imageListFromItem(item)
+            }
+            val previewImageListFromItem = ::gen_previewImageListFromItem_fn
+            fun gen_mediaIdListFromItem_fn(item: UTSJSONObject): UTSArray<String> {
+                return stringListFromItemFields(item, "", props.mediaIdListField)
+            }
+            val mediaIdListFromItem = ::gen_mediaIdListFromItem_fn
+            fun gen_previewUrlFromShareResponse_fn(response: MediaShareResponse): String {
+                if (response.signed_url != "") {
+                    return response.signed_url
+                }
+                return response.url
+            }
+            val previewUrlFromShareResponse = ::gen_previewUrlFromShareResponse_fn
+            fun gen_resolvePreviewFullImages_fn(item: UTSJSONObject, fallbackImages: UTSArray<String>): UTSPromise<UTSArray<String>> {
+                return wrapUTSPromise(suspend w1@{
+                        if (!props.lazyPreviewFullImage) {
+                            return@w1 cloneStringArray(fallbackImages)
+                        }
+                        val mediaIds = mediaIdListFromItem(item)
+                        if (mediaIds.length == 0) {
+                            return@w1 cloneStringArray(fallbackImages)
+                        }
+                        val result: UTSArray<String> = _uA()
+                        run {
+                            var index: Number = 0
+                            while(index < mediaIds.length){
+                                var imageUrl = ""
+                                if (index < fallbackImages.length) {
+                                    imageUrl = fallbackImages[index]
+                                }
+                                try {
+                                    val share = await(getMediaFileShare(mediaIds[index]))
+                                    val sharedUrl = previewUrlFromShareResponse(share)
+                                    if (sharedUrl != "") {
+                                        imageUrl = sharedUrl
+                                    }
+                                }
+                                 catch (error: Throwable) {}
+                                appendUniqueString(result, imageUrl)
+                                index += 1
+                            }
+                        }
+                        if (result.length == 0) {
+                            return@w1 cloneStringArray(fallbackImages)
+                        }
+                        return@w1 result
+                })
+            }
+            val resolvePreviewFullImages = ::gen_resolvePreviewFullImages_fn
             fun gen_firstImage_fn(item: UTSJSONObject): String {
                 val list = imageListFromItem(item)
                 if (list.length == 0) {
@@ -492,15 +570,19 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return imageListFromItem(item).length
             }
             val imageCount = ::gen_imageCount_fn
-            fun gen_openPreview_fn(item: UTSJSONObject, index: Number) {
-                val list = imageListFromItem(item)
-                if (list.length == 0) {
-                    return
-                }
-                previewImages.value = list
-                previewIndex.value = index
-                previewVisible.value = true
-                previewItem.value = item
+            fun gen_openPreview_fn(item: UTSJSONObject, index: Number): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        val thumbList = imageListFromItem(item)
+                        if (thumbList.length == 0) {
+                            return@w1
+                        }
+                        val fullList = previewImageListFromItem(item)
+                        previewThumbImages.value = thumbList
+                        previewFullImages.value = await(resolvePreviewFullImages(item, fullList))
+                        previewIndex.value = index
+                        previewVisible.value = true
+                        previewItem.value = item
+                })
             }
             val openPreview = ::gen_openPreview_fn
             fun gen_handlePreviewVisibleChange_fn(value: Boolean) {
@@ -965,8 +1047,9 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                     }
                     ,
                     if (isTrue(unref(previewVisible))) {
-                        _cV(_component_lili_preview, _uM("key" to 4, "images" to unref(previewImages), "initialIndex" to unref(previewIndex), "visible" to unref(previewVisible), "showList" to false, "enableSave" to _ctx.enablePreviewSave, "enableShare" to _ctx.enablePreviewShare, "onUpdate:visible" to handlePreviewVisibleChange, "onUpdate:index" to handlePreviewIndexChange, "onPreview" to handlePreviewOpen, "onClose" to handlePreviewClose), null, 8, _uA(
+                        _cV(_component_lili_preview, _uM("key" to 4, "images" to unref(previewThumbImages), "previewImages" to unref(previewFullImages), "initialIndex" to unref(previewIndex), "visible" to unref(previewVisible), "showList" to false, "enableSave" to _ctx.enablePreviewSave, "enableShare" to _ctx.enablePreviewShare, "onUpdate:visible" to handlePreviewVisibleChange, "onUpdate:index" to handlePreviewIndexChange, "onPreview" to handlePreviewOpen, "onClose" to handlePreviewClose), null, 8, _uA(
                             "images",
+                            "previewImages",
                             "initialIndex",
                             "visible",
                             "enableSave",
@@ -1062,7 +1145,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
         var props = _nP(_uM("items" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
             return _uA()
         }
-        ), "keyField" to _uM("type" to "String", "required" to false, "default" to "id"), "titleField" to _uM("type" to "String", "required" to false, "default" to "title"), "subtitleField" to _uM("type" to "String", "required" to false, "default" to ""), "metaField" to _uM("type" to "String", "required" to false, "default" to ""), "imageField" to _uM("type" to "String", "required" to false, "default" to "image"), "imageListField" to _uM("type" to "String", "required" to false, "default" to "images"), "showImage" to _uM("type" to "Boolean", "required" to false, "default" to true), "fields" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
+        ), "keyField" to _uM("type" to "String", "required" to false, "default" to "id"), "titleField" to _uM("type" to "String", "required" to false, "default" to "title"), "subtitleField" to _uM("type" to "String", "required" to false, "default" to ""), "metaField" to _uM("type" to "String", "required" to false, "default" to ""), "imageField" to _uM("type" to "String", "required" to false, "default" to "image"), "imageListField" to _uM("type" to "String", "required" to false, "default" to "images"), "previewImageField" to _uM("type" to "String", "required" to false, "default" to "previewCover"), "previewImageListField" to _uM("type" to "String", "required" to false, "default" to "previewImages"), "mediaIdListField" to _uM("type" to "String", "required" to false, "default" to "mediaIds"), "lazyPreviewFullImage" to _uM("type" to "Boolean", "required" to false, "default" to true), "showImage" to _uM("type" to "Boolean", "required" to false, "default" to true), "fields" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<UTSJSONObject> {
             return _uA()
         }
         ), "tagField" to _uM("type" to "String", "required" to false, "default" to "tags"), "tagColorMap" to _uM("type" to "UTSJSONObject", "required" to false, "default" to fun(): UTSJSONObject {
@@ -1095,6 +1178,10 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             "metaField",
             "imageField",
             "imageListField",
+            "previewImageField",
+            "previewImageListField",
+            "mediaIdListField",
+            "lazyPreviewFullImage",
             "showImage",
             "fields",
             "tagField",

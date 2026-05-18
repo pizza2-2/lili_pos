@@ -3,9 +3,11 @@ import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/compon
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
-import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
 
-type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 166, 6>;
+type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 170, 6>;
 	value: string
 	text: string
 }
@@ -36,25 +38,22 @@ const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
+const volumeScanLocked = ref(false)
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'supplierText', label: '供应商' } as UTSJSONObject,
-	{ key: 'purchasePriceText', label: '进价' } as UTSJSONObject,
-	{ key: 'salesPriceText', label: '售价' } as UTSJSONObject,
-	{ key: 'salesCountText', label: '销量' } as UTSJSONObject,
+	{ key: 'supplierText', label: '供应商：' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '含税进价：' } as UTSJSONObject,
+	{ key: 'salesPriceText', label: '售价：' } as UTSJSONObject,
+	{ key: 'salesCountText', label: '销量：' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
-	{ key: 'copy-sku', text: '复制SKU' } as UTSJSONObject,
-	{ key: 'copy-barcode', text: '复制条码' } as UTSJSONObject,
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
-	ACTIVE: 'success',
-	INACTIVE: 'danger',
-	DRAFT: 'warning',
 	新品: 'violet',
 	精选: 'info',
 	热销: 'warning',
@@ -83,7 +82,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:236")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:237")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -136,6 +135,7 @@ async function loadProducts() {
 			filters: selectedFilters.value,
 		})
 		applyProductResponse(response)
+		console.log("输出打印",response, " at pages/tabbar/products.uvue:290")
 	} catch (error) {
 		products.value = []
 		currentPage.value = 1
@@ -176,7 +176,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 		return null
 	}
 
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:329")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:331")
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
@@ -189,7 +189,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 		return []
 	}
 
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:342")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:344")
 	if (parsed == null) {
 		return []
 	}
@@ -204,24 +204,58 @@ function getDisplayText(value: string | null, fallback: string = '-'): string {
 	return value
 }
 
+function productThumbnailUrl(mediaFile: ProductMediaFile): string {
+	if (mediaFile.signed_thumbnail_url != '') {
+		return mediaFile.signed_thumbnail_url
+	}
+	if (mediaFile.thumbnail_url != '') {
+		return mediaFile.thumbnail_url
+	}
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	return mediaFile.file_url
+}
+
+function productFullUrl(mediaFile: ProductMediaFile): string {
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	if (mediaFile.file_url != '') {
+		return mediaFile.file_url
+	}
+	return productThumbnailUrl(mediaFile)
+}
+
 function buildImages(item: ProductItem): string[] {
 	const result: string[] = []
 	for (let index = 0; index < item.media_files.length; index += 1) {
 		const mediaFile = item.media_files[index]
-		if (mediaFile.signed_thumbnail_url != '') {
-			result.push(mediaFile.signed_thumbnail_url)
-			continue
+		const imageUrl = productThumbnailUrl(mediaFile)
+		if (imageUrl != '') {
+			result.push(imageUrl)
 		}
-		if (mediaFile.thumbnail_url != '') {
-			result.push(mediaFile.thumbnail_url)
-			continue
+	}
+	return result
+}
+
+function buildPreviewImages(item: ProductItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = productFullUrl(item.media_files[index])
+		if (imageUrl != '') {
+			result.push(imageUrl)
 		}
-		if (mediaFile.signed_url != '') {
-			result.push(mediaFile.signed_url)
-			continue
-		}
-		if (mediaFile.file_url != '') {
-			result.push(mediaFile.file_url)
+	}
+	return result
+}
+
+function buildMediaIds(item: ProductItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaId = item.media_files[index].id
+		if (mediaId != '') {
+			result.push(mediaId)
 		}
 	}
 	return result
@@ -409,19 +443,12 @@ function buildSelectOptions(value: any | null): ProductSelectOption[] {
 }
 
 function buildBottomSelectResponse(source: ProductSelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keywordValue = stringValue(params['keyword']).toLowerCase()
 	const idValue = stringValue(params['id'])
 	const result: UTSJSONObject[] = []
 
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (idValue != '' && option.value != idValue) {
-			continue
-		}
-
-		const optionTextLowerCase = option.text.toLowerCase()
-		const optionValueLowerCase = option.value.toLowerCase()
-		if (keywordValue != '' && optionTextLowerCase.indexOf(keywordValue) < 0 && optionValueLowerCase.indexOf(keywordValue) < 0) {
 			continue
 		}
 
@@ -491,13 +518,22 @@ function buildCategoryTreeResponse(raw: any): UTSJSONObject {
 }
 
 async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keywordValue = stringValue(params['keyword'])
+	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 674, 8), 
+		key: 'supplier',
+		limit: 50,
+	} as UTSJSONObject
+	if (keywordValue != '') {
+		query['search'] = keywordValue
+		query['keyword'] = keywordValue
+	}
 	const raw = await request(
 		'/api/procurement/suppliers/options/',
 		'GET',
-		{} as UTSJSONObject,
+		query,
 		true
 	)
-	return buildBottomSelectResponse(buildSelectOptions(raw), params)
+	return buildBottomSelectResponse(buildSelectOptions(raw), { keyword: '', id: stringValue(params['id']) } as UTSJSONObject)
 }
 
 async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
@@ -506,7 +542,7 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 	const parentValue = stringValue(params['parent'])
 	const pageSizeValue = stringValue(params['pageSize'], '20')
 
-	const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 659, 8), 
+	const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 697, 8), 
 		key: 'parent',
 		page: parseInt(pageValue == '' ? '1' : pageValue),
 		page_size: parseInt(pageSizeValue),
@@ -528,30 +564,8 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 	return buildCategoryTreeResponse(raw)
 }
 
-function getProductImage(item: ProductItem): string {
-	if (item.media_files.length == 0) {
-		return ''
-	}
-
-	const mediaFile = item.media_files[0]
-	if (mediaFile.signed_thumbnail_url != '') {
-		return mediaFile.signed_thumbnail_url
-	}
-	if (mediaFile.thumbnail_url != '') {
-		return mediaFile.thumbnail_url
-	}
-	if (mediaFile.signed_url != '') {
-		return mediaFile.signed_url
-	}
-	return mediaFile.file_url
-}
-
 function buildProductTags(item: ProductItem): string[] {
 	const result: string[] = []
-	const statusText = getDisplayText(item.status, '')
-	if (statusText != '') {
-		result.push(statusText)
-	}
 	if (item.is_new) {
 		result.push('新品')
 	}
@@ -573,26 +587,40 @@ function productDisplayName(item: ProductItem): string {
 	if (englishName != '') {
 		return englishName
 	}
+	const otherName = getDisplayText(item.name_other, '')
+	if (otherName != '') {
+		return otherName
+	}
 	return item.sku == '' ? ('商品 #' + item.id.toString()) : item.sku
 }
 
 function productToListItem(item: ProductItem): UTSJSONObject {
+	const images = buildImages(item)
+	const previewImages = buildPreviewImages(item)
 	return {
 		id: item.id.toString(),
 		name: productDisplayName(item),
 		name_en: getDisplayText(item.name_en),
+		name_other: getDisplayText(item.name_other),
 		sku: getDisplayText(item.sku),
 		skuText: 'SKU：' + getDisplayText(item.sku),
 		barcode: getDisplayText(item.barcode),
 		barcodeText: '条码：' + getDisplayText(item.barcode),
+		foreignNameText: getDisplayText(item.name_en),
+		otherNameText: getDisplayText(item.name_other),
 		supplierText: getDisplayText(item.supplier_name),
 		purchasePriceText: getDisplayText(item.purchase_price),
+		netPurchasePriceText: getDisplayText(item.net_purchase_price),
+		costPriceText: getDisplayText(item.cost_price),
 		salesPriceText: getDisplayText(item.base_sales_price),
 		salesCountText: item.total_sales_quantity.toString(),
 		variantCountText: item.variant_count.toString(),
 		updatedText: getDisplayText(item.updated_at),
-		cover: getProductImage(item),
-		images: buildImages(item),
+		cover: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item),
 		tags: buildProductTags(item),
 		rawId: item.id.toString(),
 	} as UTSJSONObject
@@ -632,6 +660,54 @@ function handleSearchClear() {
 	keyword.value = ''
 	currentPage.value = 1
 	loadProducts()
+}
+
+function handleScanSearch() {
+	scanCode({
+		onlyFromCamera: true,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			keyword.value = scanResult
+			currentPage.value = 1
+			closeFilterDrawer()
+			loadProducts()
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({ title: message, icon: 'none' })
+		},
+	} as ScanCodeOption)
+}
+
+function unlockVolumeScanSoon() {
+	setTimeout(() => {
+		volumeScanLocked.value = false
+	}, 1200)
+}
+
+function handleVolumeKeyEvent(event: VolumeKeyEvent) {
+	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
+		return
+	}
+	if (volumeScanLocked.value) {
+		return
+	}
+	volumeScanLocked.value = true
+	closeFilterDrawer()
+	handleScanSearch()
+	unlockVolumeScanSoon()
+}
+
+function startProductVolumeKeyListener() {
+	startVolumeKeyListener((event: VolumeKeyEvent) => {
+		handleVolumeKeyEvent(event)
+	})
+}
+
+function stopProductVolumeKeyListener() {
+	stopVolumeKeyListener()
+	volumeScanLocked.value = false
 }
 
 async function handleFilterOpen() {
@@ -780,8 +856,24 @@ function handleFieldClick(payload: UTSJSONObject) {
 		copyText(stringValue(item['supplierText']), '供应商已复制', '暂无供应商')
 		return
 	}
+	if (key == 'foreignNameText') {
+		copyText(stringValue(item['foreignNameText']), '波兰名已复制', '暂无波兰名')
+		return
+	}
+	if (key == 'otherNameText') {
+		copyText(stringValue(item['otherNameText']), '其他名已复制', '暂无其他名')
+		return
+	}
 	if (key == 'purchasePriceText') {
-		copyText(stringValue(item['purchasePriceText']), '进价已复制', '暂无进价')
+		copyText(stringValue(item['purchasePriceText']), '含税进价已复制', '暂无含税进价')
+		return
+	}
+	if (key == 'netPurchasePriceText') {
+		copyText(stringValue(item['netPurchasePriceText']), '不含税进价已复制', '暂无不含税进价')
+		return
+	}
+	if (key == 'costPriceText') {
+		copyText(stringValue(item['costPriceText']), '成本已复制', '暂无成本')
 		return
 	}
 	if (key == 'salesPriceText') {
@@ -791,6 +883,20 @@ function handleFieldClick(payload: UTSJSONObject) {
 	if (key == 'salesCountText') {
 		copyText(stringValue(item['salesCountText']), '销量已复制', '暂无销量')
 	}
+}
+
+function navigateToProductInventory(item: UTSJSONObject) {
+	const rawId = stringValue(item['rawId'], stringValue(item['id']))
+	if (rawId == '') {
+		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		return
+	}
+	const productName = stringValue(item['name'])
+	let url = '/pages/inventory-management/from?product=' + rawId
+	if (productName != '') url = url + '&productName=' + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1048")
+	uni.navigateTo({
+		url: url,
+	})
 }
 
 function handleMenu(payload: UTSJSONObject) {
@@ -819,6 +925,10 @@ function handleMenu(payload: UTSJSONObject) {
 		uni.navigateTo({
 			url: '/pages/products/from?id=' + rawId,
 		})
+		return
+	}
+	if (key == 'inventory') {
+		navigateToProductInventory(item)
 		return
 	}
 	if (key == 'reload') {
@@ -929,6 +1039,7 @@ onLoad(() => {
 })
 
 onShow(() => {
+	startProductVolumeKeyListener()
 	updateFilterPanelLayout()
 	if (consumeProductListRefreshFlag()) {
 		loadProducts()
@@ -937,6 +1048,14 @@ onShow(() => {
 	if (products.value.length == 0 && !isLoading.value) {
 		loadProducts()
 	}
+})
+
+onHide(() => {
+	stopProductVolumeKeyListener()
+})
+
+onUnload(() => {
+	stopProductVolumeKeyListener()
 })
 
 return (): any | null => {
@@ -953,12 +1072,14 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
       showBack: false,
       showSearch: true,
       showFilter: true,
+      showScan: true,
       showHome: false,
       filterActive: hasActiveFilter.value,
       filterText: "重置",
       onSearchInput: handleSearchInput,
       onSearchConfirm: handleSearchConfirm,
       onSearchClear: handleSearchClear,
+      onScan: handleScanSearch,
       "onUpdate:filterVisible": handleFilterVisibleChange,
       onFilterOpen: handleFilterOpen
     }), _uM({
@@ -1083,7 +1204,7 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
             }), [
               _cE("text", _uM({ class: "error-title" }), "加载失败"),
               _cE("text", _uM({ class: "error-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */),
-              _cE("button", _uM({
+              _cE("view", _uM({
                 class: "retry-btn",
                 onClick: loadProducts
               }), [
@@ -1136,4 +1257,4 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
 
 })
 export default __sfc__
-const GenPagesTabbarProductsStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["paddingLeft", 18], ["paddingRight", 18], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#B42318"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["product-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["product-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["product-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["product-filter-select-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-select-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-select-wrap", _pS(_uM([["marginTop", 8]]))], ["product-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["product-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["product-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["product-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#FFFFFF"]]))], ["product-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["product-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["product-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["product-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["product-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["product-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "12px"], ["color", "#334155"]]))], ["product-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["product-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["marginTop", 0], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))]])]
+const GenPagesTabbarProductsStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["paddingLeft", 18], ["paddingRight", 18], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#B42318"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["product-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["product-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["product-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["product-filter-select-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-select-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-select-wrap", _pS(_uM([["marginTop", 8]]))], ["product-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["product-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["product-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["product-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))], ["product-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["product-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["product-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["product-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["product-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["product-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["product-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["product-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["marginTop", 0], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))]])]

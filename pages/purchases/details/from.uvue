@@ -2,20 +2,105 @@
 	<view class="page">
 		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" :homePath="homePath" backgroundColor="#EEF2F7" />
 		<view class="page-content">
+			<view v-if="productInfoVisible" class="product-card">
+				<view class="product-card-head">
+					<text class="product-card-title">{{ productInfoTitle }}</text>
+					<text v-if="productInfoLoading" class="product-card-state">刷新中</text>
+					<text v-else-if="productInfoError != ''" class="product-card-state product-card-state-error">加载失败</text>
+				</view>
+				<view class="product-info-row">
+					<view class="product-info-cell">
+						<text class="product-info-label">销售价</text>
+						<text class="product-info-value product-info-price">{{ productInfoSalesPrice }}</text>
+					</view>
+					<view class="product-info-cell product-info-cell-right">
+						<text class="product-info-label">KASA编码</text>
+						<text class="product-info-value">{{ productInfoKasaCode }}</text>
+					</view>
+				</view>
+				<view class="product-info-row">
+					<view class="product-info-cell">
+						<text class="product-info-label">分类</text>
+						<text class="product-info-value">{{ productInfoCategoryName }}</text>
+					</view>
+					<view class="product-info-cell product-info-cell-right">
+						<text class="product-info-label">KOD/条码</text>
+						<text class="product-info-value">{{ productInfoBarcode }}</text>
+					</view>
+				</view>
+			</view>
 			<lili-UniversaForm
 				:mode="formMode"
 				:formSections="formSections"
 				:initialData="initialData"
 				:leaveSignal="leaveSignal"
+				:dirtySignal="dirtySignal"
+				:showFloatingAction="formMode == 'edit'"
+				:floatingActionText="quickPrintLoading ? '准备中' : '快速打印'"
+				:floatingActionDisabled="quickPrintLoading || printing"
+				leaveConfirmContent="是否已收到全部数量"
+				leaveConfirmConfirmText="确认"
 				@submit="handleSubmit"
 				@cancel="handleCancel"
 				@discard-leave="handleDiscardLeave"
 				@save-request="handleSaveRequest"
 				@dirty-change="handleDirtyChange"
+				@field-change="handleFieldChange"
+				@input-add="handleInputAdd"
+				@floating-action="handleQuickPrint"
 				@bottom-select-add="handleBottomSelectAdd"
 				@bottom-select-edit="handleBottomSelectEdit"
 			/>
 		</view>
+
+		<page-container
+			:show="printPopupVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closePrintPopup"
+		>
+			<view class="print-panel">
+				<view class="print-handle"></view>
+				<view class="print-head">
+					<view>
+						<text class="print-title">确认打印</text>
+						<text class="print-subtitle">{{ selectedTemplateName }}</text>
+					</view>
+					<view class="print-close" @click="closePrintPopup">
+						<text class="print-close-text">关闭</text>
+					</view>
+				</view>
+				<view class="print-content-card">
+					<view v-if="printPreviewFields.length == 0" class="print-empty-row">
+						<text class="print-empty-text">当前模板没有需要核对的字段</text>
+					</view>
+					<view v-for="field in printPreviewFields" :key="field.key" class="print-row">
+						<text class="print-label">{{ field.label }}</text>
+						<text :class="field.emphasis ? 'print-value print-value-emphasis' : 'print-value'">{{ field.value }}</text>
+					</view>
+				</view>
+				<view class="print-copies-wrap">
+					<lili-print-copies-stepper
+						:value="printCopiesText"
+						title="打印页数"
+						desc="一个商品可一次贴上多张价格"
+						@change="handlePrintCopiesChange"
+					/>
+				</view>
+				<view class="print-actions">
+					<view class="print-secondary-btn" @click="closePrintPopup">
+						<text class="print-secondary-text">取消</text>
+					</view>
+					<view class="print-primary-btn" @click="confirmPrintProduct">
+						<text class="print-primary-text">{{ printing ? '打印中...' : '打印' }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
@@ -23,6 +108,8 @@
 import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createPurchaseDetail, getPurchaseDetailItem, PurchaseDetailItem, PurchaseDetailMutationData, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+import { ProductItem, PrintTemplateItem, getProductDetail, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
+import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
 
 type ProductOption = {
 	value: string
@@ -31,19 +118,53 @@ type ProductOption = {
 	subtitle: string
 }
 
+type PrintPreviewField = {
+	key: string
+	label: string
+	value: string
+	emphasis: boolean
+}
+
+type ProductCategoryQuickInfo = {
+	id: string
+	name: string
+	kasaCode: string
+	kasaText: string
+}
+
 const refreshStorageKey = 'refresh:pages:purchases:details:index'
 const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
 const formMode = ref('create')
 const purchaseId = ref('')
 const detailId = ref('')
 const leaveSignal = ref(0)
+const dirtySignal = ref(0)
 const submitting = ref(false)
 const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
+const currentDetail = ref<PurchaseDetailItem | null>(null)
+const printProduct = ref<ProductItem | null>(null)
+const printProductId = ref('')
+const printPopupVisible = ref(false)
+const selectedPrintTemplate = ref<PrintTemplateItem | null>(null)
+const printing = ref(false)
+const printCopiesText = ref('1')
+const quickPrintLoading = ref(false)
+const productCategoryInfo = ref<ProductCategoryQuickInfo>({ id: '', name: '', kasaCode: '', kasaText: '' } as ProductCategoryQuickInfo)
+const productInfoLoading = ref(false)
+const productInfoError = ref('')
+let productInfoRequestSeq = 0
 
 function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
 	const value = obj[key]
 	if (value == null) return fallback
 	return '' + value
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
 }
 
 function parseErrorMessage(error: any, fallback: string): string {
@@ -60,8 +181,10 @@ function parseErrorMessage(error: any, fallback: string): string {
 
 function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) return null
+	if (typeof value != 'object') return null
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return null
+	if (text.indexOf('{') != 0) return null
 	return JSON.parseObject<UTSJSONObject>(text)
 }
 
@@ -87,6 +210,21 @@ function firstStringField(obj: UTSJSONObject, keys: string[]): string {
 		if (text != '') return text
 	}
 	return ''
+}
+
+function numberValue(value: any | null, fallback: number): number {
+	if (value == null) return fallback
+	const parsed = parseFloat('' + value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function boolValue(value: any | null, fallback: boolean): boolean {
+	if (value == null) return fallback
+	const text = ('' + value).toLowerCase()
+	if (text == 'true' || text == '1' || text == 'yes') return true
+	if (text == 'false' || text == '0' || text == 'no') return false
+	return fallback
 }
 
 function extractRows(raw: any | null): UTSJSONObject[] {
@@ -121,13 +259,11 @@ function productImageFromRow(row: UTSJSONObject): string {
 }
 
 function buildSelectResponse(source: ProductOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) continue
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
 		result.push({ value: option.value, text: option.text, image: option.image, subtitle: option.subtitle } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
@@ -158,6 +294,37 @@ async function fetchProductOptions(params: UTSJSONObject): Promise<UTSJSONObject
 		options.push({ value: value, text: text, image: productImageFromRow(row), subtitle: subtitle } as ProductOption)
 	}
 	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+}
+
+function categoryDisplayName(row: UTSJSONObject): string {
+	let text = getStringField(row, 'text')
+	if (text == '') text = getStringField(row, 'label')
+	if (text == '') text = getStringField(row, 'full_name')
+	if (text == '') text = getStringField(row, 'path')
+	if (text == '') text = getStringField(row, 'name')
+	if (text == '') text = getStringField(row, 'name_cn')
+	if (text == '') text = getStringField(row, 'code')
+	return text
+}
+
+function categoryKasaCode(row: UTSJSONObject): string {
+	const info = parseObject(row['kasa_category_info'])
+	if (info != null) {
+		const infoCode = getStringField(info!, 'unique_kod')
+		if (infoCode != '') return infoCode
+	}
+	let code = getStringField(row, 'kasa_unique_kod')
+	if (code == '') code = getStringField(row, 'kasa_category_unique_kod')
+	if (code == '') code = getStringField(row, 'unique_kod')
+	return code
+}
+
+function categoryKasaText(row: UTSJSONObject): string {
+	const code = categoryKasaCode(row)
+	if (code != '') return 'KASA ' + code
+	const kasaId = getStringField(row, 'kasa_category')
+	if (kasaId != '') return 'KASA #' + kasaId
+	return '未关联 KASA'
 }
 
 function initialCreateData(): UTSJSONObject {
@@ -195,7 +362,7 @@ const formSections = ref<UTSJSONObject[]>([
 		fields: [
 			{ key: 'product', textKey: 'product_text', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', imageKey: 'image', subtitleKey: 'subtitle', showScan: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
 			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
-			{ key: 'received_quantity', label: '已收货数量', type: 'number', placeholder: '通常由收货操作更新' } as UTSJSONObject,
+			{ key: 'received_quantity', label: '已收货数量', type: 'number', showStepper: false, placeholder: '通常由收货操作更新', showAdd: true, addText: '全部收货', fillFromKey: 'quantity' } as UTSJSONObject,
 			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,
 		] as UTSJSONObject[],
 	} as UTSJSONObject,
@@ -203,6 +370,11 @@ const formSections = ref<UTSJSONObject[]>([
 
 const homePath = computed((): string => '/pages/purchases/details/index?purchase=' + purchaseId.value)
 const pageTitle = computed((): string => formMode.value == 'edit' ? '编辑采购明细' : '新建采购明细')
+const selectedTemplateName = computed((): string => {
+	const item = selectedPrintTemplate.value
+	if (item == null) return '未选择模板'
+	return item.name
+})
 
 function markRefresh() {
 	uni.setStorageSync(refreshStorageKey + ':' + purchaseId.value, '1')
@@ -214,13 +386,410 @@ function goBackToList() {
 	setTimeout(() => { uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: homePath.value }) } }) }, 16)
 }
 
+function markLeaveConfirmRequired() {
+	setTimeout(() => {
+		dirtySignal.value = dirtySignal.value + 1
+	}, 50)
+}
+
+function categoryQuickInfoFromRow(row: UTSJSONObject): ProductCategoryQuickInfo {
+	const id = getStringField(row, 'value', getStringField(row, 'id'))
+	const name = categoryDisplayName(row)
+	const kasaCode = categoryKasaCode(row)
+	const kasaText = categoryKasaText(row)
+	return {
+		id: id,
+		name: name,
+		kasaCode: kasaCode,
+		kasaText: kasaText,
+	} as ProductCategoryQuickInfo
+}
+
+async function resolveProductCategoryQuickInfo(product: ProductItem): Promise<ProductCategoryQuickInfo> {
+	const categoryObject = parseObject(product.category)
+	if (categoryObject != null) return categoryQuickInfoFromRow(categoryObject!)
+	const categoryId = product.category == null ? '' : stringValue(product.category)
+	if (categoryId == '') {
+		return { id: '', name: '', kasaCode: '', kasaText: '' } as ProductCategoryQuickInfo
+	}
+	const raw = await request('/api/categories/categories/' + categoryId + '/', 'GET', {} as UTSJSONObject, true)
+	const rawObject = parseObject(raw)
+	if (rawObject == null) {
+		return { id: categoryId, name: categoryId, kasaCode: '', kasaText: '' } as ProductCategoryQuickInfo
+	}
+	return categoryQuickInfoFromRow(rawObject!)
+}
+
+function emptyProductCategoryInfo(): ProductCategoryQuickInfo {
+	return { id: '', name: '', kasaCode: '', kasaText: '' } as ProductCategoryQuickInfo
+}
+
+function resetProductInfo(productIdText: string = '') {
+	printProduct.value = null
+	printProductId.value = productIdText
+	productCategoryInfo.value = emptyProductCategoryInfo()
+	productInfoError.value = ''
+}
+
+async function loadProductInfo(productIdText: string) {
+	const resolvedProductId = productIdText.trim()
+	productInfoRequestSeq = productInfoRequestSeq + 1
+	const seq = productInfoRequestSeq
+	if (resolvedProductId == '') {
+		resetProductInfo()
+		return
+	}
+	const currentProduct = printProduct.value
+	if (currentProduct == null || currentProduct.id.toString() != resolvedProductId) {
+		printProduct.value = null
+		productCategoryInfo.value = emptyProductCategoryInfo()
+	}
+	printProductId.value = resolvedProductId
+	productInfoLoading.value = true
+	productInfoError.value = ''
+	try {
+		const product = await getProductDetail(resolvedProductId)
+		if (seq != productInfoRequestSeq) return
+		printProduct.value = product
+		let categoryInfo = emptyProductCategoryInfo()
+		try {
+			categoryInfo = await resolveProductCategoryQuickInfo(product)
+		} catch (categoryError) {
+		}
+		if (seq != productInfoRequestSeq) return
+		productCategoryInfo.value = categoryInfo
+	} catch (error) {
+		if (seq != productInfoRequestSeq) return
+		printProduct.value = null
+		productCategoryInfo.value = emptyProductCategoryInfo()
+		productInfoError.value = parseErrorMessage(error, '商品信息加载失败')
+	} finally {
+		if (seq == productInfoRequestSeq) productInfoLoading.value = false
+	}
+}
+
+async function buildInitialDataWithProductInfo(detail: PurchaseDetailItem): Promise<UTSJSONObject> {
+	const data = buildInitialDataFromDetail(detail)
+	await loadProductInfo(detail.product.toString())
+	return data
+}
+
 async function loadDetail(idText: string) {
 	if (idText == '') return
 	try {
 		const detail = await getPurchaseDetailItem(idText)
-		initialData.value = buildInitialDataFromDetail(detail)
+		currentDetail.value = detail
+		initialData.value = await buildInitialDataWithProductInfo(detail)
+		markLeaveConfirmRequired()
 	} catch (error) {
 		uni.showToast({ title: parseErrorMessage(error, '采购明细加载失败'), icon: 'none' })
+	}
+}
+
+function activePrintProduct(): ProductItem | null {
+	return printProduct.value
+}
+
+function productNameText(): string {
+	const product = activePrintProduct()
+	if (product == null) return '-'
+	if (product.name_cn != '') return product.name_cn
+	if (product.name_en != '') return product.name_en
+	if (product.name_other != '') return product.name_other
+	return '未命名商品'
+}
+
+function productOriginalPriceText(): string {
+	const product = activePrintProduct()
+	if (product == null) return '0.00'
+	return product.base_sales_price == '' ? '0.00' : product.base_sales_price
+}
+
+function productDiscountPriceText(): string {
+	const product = activePrintProduct()
+	if (product == null) return '0.00'
+	const discount = product.discount_info
+	if (discount != null && discount.has_discount && discount.final_price != '') return discount.final_price
+	return product.base_sales_price == '' ? '0.00' : product.base_sales_price
+}
+
+function productBarcodeText(): string {
+	const product = activePrintProduct()
+	if (product == null) return '-'
+	if (product.barcode != '') return product.barcode
+	if (product.sku != '') return product.sku
+	return '-'
+}
+
+function productSkuText(): string {
+	const product = activePrintProduct()
+	if (product == null) return '-'
+	return product.sku == '' ? '-' : product.sku
+}
+
+const productInfoVisible = computed((): boolean => {
+	return productInfoLoading.value || productInfoError.value != '' || printProduct.value != null || printProductId.value != ''
+})
+
+const productInfoTitle = computed((): string => {
+	const product = activePrintProduct()
+	if (product == null) return '商品信息'
+	return productNameText()
+})
+
+const productInfoSalesPrice = computed((): string => productOriginalPriceText())
+const productInfoBarcode = computed((): string => productBarcodeText())
+const productInfoCategoryName = computed((): string => {
+	const name = productCategoryInfo.value.name
+	return name == '' ? '未分类' : name
+})
+const productInfoKasaCode = computed((): string => {
+	const code = productCategoryInfo.value.kasaCode
+	return code == '' ? '未关联' : code
+})
+
+function printValueForSource(source: string, fallback: string): string {
+	if (source == 'name') return productNameText()
+	if (source == 'price') return productDiscountPriceText()
+	if (source == 'base_sales_price') return productOriginalPriceText()
+	if (source == 'discount_price') return productDiscountPriceText()
+	if (source == 'barcode') return productBarcodeText()
+	if (source == 'sku') return productSkuText()
+	if (source == 'kod') return productSkuText()
+	return fallback
+}
+
+function printLabelForSource(source: UTSJSONObject, index: number): string {
+	const elementLabel = getStringField(source, 'label')
+	if (elementLabel != '') return elementLabel
+	const elementSource = getStringField(source, 'source')
+	if (elementSource == 'name') return '商品名称'
+	if (elementSource == 'price') return '打印价格'
+	if (elementSource == 'base_sales_price') return '原价'
+	if (elementSource == 'discount_price') return '折扣价'
+	if (elementSource == 'barcode') return '条码'
+	if (elementSource == 'sku' || elementSource == 'kod') return 'KOD'
+	return '字段 ' + (index + 1).toString()
+}
+
+function printFieldKey(source: UTSJSONObject, index: number): string {
+	const elementSource = getStringField(source, 'source')
+	if (elementSource != '' && elementSource != 'custom') return elementSource
+	const elementKey = getStringField(source, 'key')
+	return elementKey == '' ? ('custom-' + index.toString()) : elementKey
+}
+
+function isEmphasisPrintSource(source: string): boolean {
+	return source == 'price' || source == 'discount_price' || source == 'base_sales_price'
+}
+
+function hasPreviewField(fields: PrintPreviewField[], key: string): boolean {
+	for (let index = 0; index < fields.length; index += 1) {
+		if (fields[index].key == key) return true
+	}
+	return false
+}
+
+function buildPrintPreviewFields(): PrintPreviewField[] {
+	const item = selectedPrintTemplate.value
+	if (item == null) return [] as PrintPreviewField[]
+	const result: PrintPreviewField[] = []
+	for (let index = 0; index < item.elements.length; index += 1) {
+		const source = item.elements[index]
+		const type = getStringField(source, 'type')
+		if (type == 'hline' || type == 'vline' || type == 'rect') continue
+		const key = printFieldKey(source, index)
+		if (hasPreviewField(result, key)) continue
+		const elementSource = getStringField(source, 'source')
+		const fallbackContent = getStringField(source, 'content')
+		result.push({
+			key: key,
+			label: printLabelForSource(source, index),
+			value: printValueForSource(elementSource, fallbackContent),
+			emphasis: isEmphasisPrintSource(elementSource),
+		} as PrintPreviewField)
+	}
+	return result
+}
+
+const printPreviewFields = computed((): PrintPreviewField[] => {
+	return buildPrintPreviewFields()
+})
+
+function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
+	const elementSource = getStringField(source, 'source')
+	const fallbackContent = getStringField(source, 'content')
+	return {
+		type: getStringField(source, 'type', 'text'),
+		x: numberValue(source['x'], 0),
+		y: numberValue(source['y'], 0),
+		width: numberValue(source['width'], 10),
+		height: numberValue(source['height'], 6),
+		fontSize: numberValue(source['fontSize'], 4),
+		content: printValueForSource(elementSource, fallbackContent),
+		source: elementSource,
+		barcodeType: getStringField(source, 'barcodeType', 'EAN13'),
+		showText: boolValue(source['showText'], true),
+		lineWidth: numberValue(source['lineWidth'], 1),
+	} as UTSJSONObject
+}
+
+function buildProductPrintElements(item: PrintTemplateItem): UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < item.elements.length; index += 1) {
+		result.push(mappedPrintElement(item.elements[index]))
+	}
+	return result
+}
+
+function handlePrintCopiesChange(value: string) {
+	printCopiesText.value = value
+}
+
+function printCopiesValue(): number {
+	const copies = intValue(printCopiesText.value)
+	if (copies <= 0) return 1
+	if (copies > 999) return 999
+	return copies
+}
+
+function connectedPrinterAddress(): string {
+	const connected = getConnectedPrinter()
+	if (!connected.success || connected.data == null) return ''
+	const data = connected.data as UTSJSONObject
+	return getStringField(data, 'address')
+}
+
+function goPrinterSettings() {
+	uni.showToast({ title: '请先连接打印机', icon: 'none' })
+	setTimeout(() => {
+		uni.navigateTo({ url: '/pages/printer-settings/index' })
+	}, 450)
+}
+
+function closePrintPopup() {
+	if (printing.value) return
+	printPopupVisible.value = false
+}
+
+function confirmPrintProduct() {
+	if (printing.value) return
+	const item = selectedPrintTemplate.value
+	if (item == null) return
+	const address = connectedPrinterAddress()
+	if (address == '') {
+		closePrintPopup()
+		goPrinterSettings()
+		return
+	}
+	printing.value = true
+	const response = printLabelBitmap({
+		address: address,
+		paperWidthMm: numberValue(item.paper_width_mm, 30),
+		paperHeightMm: numberValue(item.paper_height_mm, 20),
+		dotsPerMm: item.dots_per_mm,
+		elements: buildProductPrintElements(item),
+		chunkSize: 1024,
+		delayMs: 20,
+		copies: printCopiesValue(),
+	})
+	printing.value = false
+	if (response.success) {
+		uni.showToast({ title: '已发送打印', icon: 'success' })
+		closePrintPopup()
+		return
+	}
+	uni.showToast({ title: response.message == '' ? '打印失败' : response.message, icon: 'none' })
+}
+
+function productIdFromPayload(payload: UTSJSONObject): string {
+	const rawData = payload['formData']
+	if (rawData != null) {
+		const data = rawData as UTSJSONObject
+		const product = getStringField(data, 'product')
+		if (product != '') return product
+	}
+	const initialProduct = getStringField(initialData.value, 'product')
+	if (initialProduct != '') return initialProduct
+	const detail = currentDetail.value
+	if (detail != null) return detail.product.toString()
+	return ''
+}
+
+async function resolveProductIdForPrint(payload: UTSJSONObject): Promise<string> {
+	const currentProductId = productIdFromPayload(payload)
+	if (currentProductId != '') return currentProductId
+	if (detailId.value == '') return ''
+	const detail = await getPurchaseDetailItem(detailId.value)
+	currentDetail.value = detail
+	return detail.product.toString()
+}
+
+async function ensurePrintProduct(productIdText: string): Promise<boolean> {
+	if (productIdText == '') return false
+	await loadProductInfo(productIdText)
+	return printProduct.value != null && printProductId.value == productIdText
+}
+
+function firstUsableDefaultTemplate(items: PrintTemplateItem[]): PrintTemplateItem | null {
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		if (item.is_default && item.is_active) return item
+	}
+	if (items.length > 0) return items[0]
+	return null
+}
+
+async function getDefaultProductPrintTemplate(): Promise<PrintTemplateItem | null> {
+	const response = await getPrintTemplateList({
+		search: null,
+		page: 1,
+		page_size: 20,
+		template_type: 'product_label',
+		is_active: 'true',
+		is_default: 'true',
+	})
+	const productTemplate = firstUsableDefaultTemplate(response.results)
+	if (productTemplate != null) return productTemplate
+	const fallbackResponse = await getPrintTemplateList({
+		search: null,
+		page: 1,
+		page_size: 20,
+		template_type: null,
+		is_active: 'true',
+		is_default: 'true',
+	})
+	return firstUsableDefaultTemplate(fallbackResponse.results)
+}
+
+async function handleQuickPrint(payload: UTSJSONObject) {
+	if (quickPrintLoading.value || printing.value) return
+	quickPrintLoading.value = true
+	uni.showLoading({ title: '准备打印...', mask: true })
+	try {
+		const productIdText = await resolveProductIdForPrint(payload)
+		if (productIdText == '') {
+			uni.showToast({ title: '当前明细缺少商品，无法打印', icon: 'none' })
+			return
+		}
+		const productReady = await ensurePrintProduct(productIdText)
+		if (!productReady) {
+			uni.showToast({ title: '商品信息加载失败，无法打印', icon: 'none' })
+			return
+		}
+		const template = await getDefaultProductPrintTemplate()
+		if (template == null) {
+			uni.showToast({ title: '未设置默认商品价签模板', icon: 'none' })
+			return
+		}
+		selectedPrintTemplate.value = template
+		printCopiesText.value = template.copies_default <= 0 ? '1' : template.copies_default.toString()
+		printPopupVisible.value = true
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '快速打印准备失败'), icon: 'none' })
+	} finally {
+		uni.hideLoading()
+		quickPrintLoading.value = false
 	}
 }
 
@@ -262,10 +831,41 @@ async function persistForm(payload: UTSJSONObject) {
 }
 
 async function handleSubmit(payload: UTSJSONObject) { await persistForm(payload) }
-async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(payload) }
+function fillReceivedQuantityFromQuantity(data: UTSJSONObject): boolean {
+	const quantity = getStringField(data, 'quantity')
+	const quantityNumber = parseInt(quantity)
+	if (quantity == '' || isNaN(quantityNumber) || quantityNumber <= 0) {
+		uni.showToast({ title: '请先填写有效采购数量', icon: 'none' })
+		return false
+	}
+	data['received_quantity'] = quantity
+	return true
+}
+
+async function handleSaveRequest(payload: UTSJSONObject) {
+	const rawData = payload['formData']
+	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
+	if (!fillReceivedQuantityFromQuantity(data)) return
+	await persistForm({ formData: data } as UTSJSONObject)
+}
 function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
 function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
 function handleDirtyChange(value: boolean) {}
+function handleFieldChange(payload: UTSJSONObject) {
+	const key = getStringField(payload, 'key')
+	if (key != 'product') return
+	const productIdText = getStringField(payload, 'value')
+	loadProductInfo(productIdText)
+}
+function handleInputAdd(payload: UTSJSONObject) {
+	const key = getStringField(payload, 'key')
+	if (key != 'received_quantity') return
+
+	const rawData = payload['formData']
+	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
+	if (!fillReceivedQuantityFromQuantity(data)) return
+	uni.showToast({ title: '已填入采购数量', icon: 'none' })
+}
 function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none' }) }
 function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none' }) }
 
@@ -275,12 +875,54 @@ onLoad((query: OnLoadOptions) => {
 	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
 	detailId.value = idValue == null ? '' : ('' + idValue)
 	formMode.value = detailId.value == '' ? 'create' : 'edit'
+	currentDetail.value = null
+	resetProductInfo()
 	initialData.value = initialCreateData()
-	if (formMode.value == 'edit') loadDetail(detailId.value)
+	if (formMode.value == 'edit') {
+		loadDetail(detailId.value)
+	} else {
+		markLeaveConfirmRequired()
+	}
+})
+
+onShow(() => {
+	const productIdText = printProductId.value
+	if (productIdText != '') loadProductInfo(productIdText)
 })
 </script>
 
 <style>
 .page { flex: 1; background-color: #EEF2F7; }
 .page-content { flex: 1; padding-bottom: 0; }
+.product-card { margin: 6px 10px 4px; padding: 7px 10px; border-radius: 8px; border-width: 1px; border-color: #DDE6F2; background-color: #FFFFFF; }
+.product-card-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.product-card-title { flex: 1; font-size: 14px; line-height: 18px; color: #0F172A; font-weight: 700; }
+.product-card-state { margin-left: 6px; font-size: 11px; line-height: 14px; color: #64748B; }
+.product-card-state-error { color: #B91C1C; }
+.product-info-row { flex-direction: row; margin-top: 3px; }
+.product-info-cell { flex: 1; min-height: 24px; padding-right: 6px; flex-direction: row; align-items: center; }
+.product-info-cell-right { padding-left: 6px; padding-right: 0; border-left-width: 1px; border-left-color: #E2E8F0; }
+.product-info-label { width: 56px; font-size: 10px; line-height: 14px; color: #64748B; }
+.product-info-value { flex: 1; font-size: 13px; line-height: 17px; color: #111827; }
+.product-info-price { color: #B91C1C; font-weight: 700; }
+.print-panel { padding: 12px 14px 22px; background-color: #FFFFFF; }
+.print-handle { width: 42px; height: 4px; border-radius: 2px; background-color: #CBD5E1; align-self: center; margin-bottom: 14px; }
+.print-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.print-title { font-size: 20px; color: #0F172A; font-weight: 700; line-height: 28px; }
+.print-subtitle { margin-top: 3px; font-size: 13px; color: #64748B; line-height: 18px; }
+.print-close { height: 34px; padding-left: 14px; padding-right: 14px; border-radius: 17px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.print-close-text { font-size: 13px; color: #334155; }
+.print-content-card { border-radius: 8px; border-width: 1px; border-color: #DDE6F2; background-color: #F8FAFC; padding: 12px; margin-bottom: 10px; }
+.print-row { flex-direction: row; align-items: flex-start; justify-content: space-between; padding-top: 9px; padding-bottom: 9px; border-bottom-width: 1px; border-bottom-color: #E2E8F0; }
+.print-empty-row { min-height: 42px; align-items: center; justify-content: center; }
+.print-empty-text { font-size: 13px; color: #64748B; }
+.print-label { width: 78px; font-size: 13px; color: #64748B; line-height: 20px; }
+.print-value { flex: 1; font-size: 14px; color: #0F172A; line-height: 20px; text-align: right; }
+.print-value-emphasis { color: #B91C1C; font-weight: 700; }
+.print-copies-wrap { margin-bottom: 14px; }
+.print-actions { flex-direction: row; }
+.print-secondary-btn { flex: 1; height: 44px; border-radius: 14px; background-color: #F1F5F9; align-items: center; justify-content: center; margin-right: 12px; }
+.print-secondary-text { font-size: 15px; color: #334155; font-weight: 700; }
+.print-primary-btn { flex: 1; height: 44px; border-radius: 14px; background-color: #111827; align-items: center; justify-content: center; }
+.print-primary-text { font-size: 15px; color: #FFFFFF; font-weight: 700; }
 </style>

@@ -1,4 +1,4 @@
-import { request } from '../index.uts'
+import { baseUrl, buildDownloadHeader, request, timeOut } from '../index.uts'
 
 export type PurchaseListQuery = {
 	search: string | null
@@ -32,6 +32,7 @@ export type PurchaseItem = {
 	created_at: string
 	updated_at: string
 	items: UTSJSONObject[]
+	supplier_excel_import_status: UTSJSONObject
 }
 
 export type PurchaseListResponse = {
@@ -55,6 +56,32 @@ export type PurchaseOptionItem = {
 	text: string
 }
 
+export type PurchaseSelectedFilter = {
+	param: string
+	value: string
+}
+
+export type PurchaseFilterOption = {
+	value: string
+	label: string
+}
+
+export type PurchaseFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: PurchaseFilterOption[]
+}
+
+export type PurchaseFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: PurchaseFilterDefinition[]
+}
+
 export type PurchaseDetailItem = {
 	id: number
 	purchase: number
@@ -63,6 +90,10 @@ export type PurchaseDetailItem = {
 	product_name: string
 	product_sku: string
 	product_barcode: string
+	product_image: string
+	product_images: string[]
+	product_preview_images: string[]
+	product_media_ids: string[]
 	quantity: number
 	unit_price: string
 	amount: string
@@ -92,6 +123,27 @@ export type PurchaseDetailListResponse = {
 	page_size: number
 }
 
+export type PurchaseDetailFilterOption = {
+	value: string
+	label: string
+}
+
+export type PurchaseDetailFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: PurchaseDetailFilterOption[]
+}
+
+export type PurchaseDetailFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: PurchaseDetailFilterDefinition[]
+}
+
 export type PurchaseDetailMutationData = {
 	purchase: string
 	product: string
@@ -100,9 +152,87 @@ export type PurchaseDetailMutationData = {
 	notes: string | null
 }
 
+export type PurchaseTemplateDownloadResult = {
+	tempFilePath: string
+	statusCode: number
+}
+
+export type PurchaseImportResponse = {
+	resource: string
+	mode: string
+	summary: UTSJSONObject
+	diagnostics: UTSJSONObject
+	results: UTSJSONObject[]
+	errors: UTSJSONObject[]
+	warnings: UTSJSONObject[]
+}
+
+export type SupplierExcelImportTask = {
+	task_id: string
+	status: string
+	message: string
+	percent: number
+	data: UTSJSONObject
+}
+
+export type QuickProcurementItem = {
+	name: string
+	price: string
+	quantity: number
+}
+
+export type QuickProcurementResultItem = {
+	product_id: number
+	product_name: string
+	product_sku: string
+	product_barcode: string
+	purchase_price: string
+	quantity: number
+	total: string
+}
+
+export type QuickProcurementResponse = {
+	procure_id: number
+	items: QuickProcurementResultItem[]
+	total_quantity: number
+	total_amount: string
+	message: string
+}
+
+export type PurchaseProductCheckResult = {
+	exists: boolean
+	purchase_detail_id: number
+	product_id: number
+	product_name: string
+	product_sku: string
+	product_barcode: string
+	quantity: number
+	received_quantity: number
+	remaining_quantity: number
+	unit_price: string
+}
+
+export type PurchaseAutoPriceResponse = {
+	formula: UTSJSONObject
+	total_count: number
+	updated_count: number
+	skipped_existing_count: number
+	skipped_error_count: number
+	updated_products: UTSJSONObject[]
+}
+
 function stringValue(value: any | null): string {
 	if (value == null) return ''
 	return '' + value
+}
+
+function normalizeServerUrl(url: string): string {
+	if (url == '') return ''
+	if (url.startsWith('http://localhost:8000')) return baseUrl + url.substring('http://localhost:8000'.length)
+	if (url.startsWith('https://localhost:8000')) return baseUrl + url.substring('https://localhost:8000'.length)
+	if (url.startsWith('http://127.0.0.1:8000')) return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	if (url.startsWith('https://127.0.0.1:8000')) return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	return url
 }
 
 function intValue(value: any | null): number {
@@ -120,7 +250,11 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) return null
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return null
-	return JSON.parseObject<UTSJSONObject>(text)
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
 }
 
 function rawDataObject(raw: any): UTSJSONObject {
@@ -132,13 +266,135 @@ function rawDataObject(raw: any): UTSJSONObject {
 	return rawObject!
 }
 
+function rawDetailObject(raw: any): UTSJSONObject {
+	const rawObject = rawDataObject(raw)
+	const detailObject = parseObject(rawObject['detail'])
+	if (detailObject != null) return detailObject!
+	const purchaseDetailObject = parseObject(rawObject['purchase_detail'])
+	if (purchaseDetailObject != null) return purchaseDetailObject!
+	return rawObject
+}
+
 function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (value == null) return [] as UTSJSONObject[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as UTSJSONObject[]
-	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	let parsed: UTSJSONObject[] | null = null
+	try {
+		parsed = JSON.parseArray<UTSJSONObject>(text)
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
 	if (parsed == null) return [] as UTSJSONObject[]
 	return parsed!
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) return [] as string[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as string[]
+	let parsed: any[] | null = null
+	try {
+		parsed = JSON.parseArray<any>(text)
+	} catch (error) {
+		const singleValue = stringValue(value)
+		if (singleValue == '') return [] as string[]
+		const result: string[] = []
+		result.push(singleValue)
+		return result
+	}
+	if (parsed == null) return [] as string[]
+	const result: string[] = []
+	for (let index = 0; index < parsed.length; index += 1) {
+		result.push(stringValue(parsed[index]))
+	}
+	return result
+}
+
+function pushImageUrl(images: string[], url: string) {
+	const normalizedUrl = normalizeServerUrl(url)
+	if (normalizedUrl != '' && images.indexOf(normalizedUrl) < 0) images.push(normalizedUrl)
+}
+
+function mediaImageUrl(rawObject: UTSJSONObject): string {
+	let imageUrl = stringValue(rawObject['signed_thumbnail_url'])
+	if (imageUrl == '') imageUrl = stringValue(rawObject['thumbnail_url'])
+	if (imageUrl == '') imageUrl = stringValue(rawObject['signed_url'])
+	if (imageUrl == '') imageUrl = stringValue(rawObject['file_url'])
+	return imageUrl
+}
+
+function mediaFullImageUrl(rawObject: UTSJSONObject): string {
+	let imageUrl = stringValue(rawObject['signed_url'])
+	if (imageUrl == '') imageUrl = stringValue(rawObject['file_url'])
+	if (imageUrl == '') imageUrl = mediaImageUrl(rawObject)
+	return imageUrl
+}
+
+function appendMediaImages(images: string[], value: any | null) {
+	const mediaFiles = parseObjectArray(value)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		pushImageUrl(images, mediaImageUrl(mediaFiles[index]))
+	}
+}
+
+function appendMediaPreviewImages(images: string[], value: any | null) {
+	const mediaFiles = parseObjectArray(value)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		pushImageUrl(images, mediaFullImageUrl(mediaFiles[index]))
+	}
+}
+
+function appendMediaIds(ids: string[], value: any | null) {
+	const mediaFiles = parseObjectArray(value)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const mediaId = stringValue(mediaFiles[index]['id'])
+		if (mediaId != '' && ids.indexOf(mediaId) < 0) ids.push(mediaId)
+	}
+}
+
+function appendStringImages(images: string[], value: any | null) {
+	const rawImages = stringArrayValue(value)
+	for (let index = 0; index < rawImages.length; index += 1) {
+		pushImageUrl(images, rawImages[index])
+	}
+}
+
+function buildProductImages(rawObject: UTSJSONObject, productObject: UTSJSONObject | null): string[] {
+	const images: string[] = []
+	pushImageUrl(images, stringValue(rawObject['product_image']))
+	appendStringImages(images, rawObject['product_images'])
+	appendMediaImages(images, rawObject['product_media_files'])
+	if (productObject != null) {
+		pushImageUrl(images, stringValue(productObject!['image']))
+		appendStringImages(images, productObject!['images'])
+		appendMediaImages(images, productObject!['media_files'])
+	}
+	return images
+}
+
+function buildProductPreviewImages(rawObject: UTSJSONObject, productObject: UTSJSONObject | null): string[] {
+	const images: string[] = []
+	appendMediaPreviewImages(images, rawObject['product_media_files'])
+	if (productObject != null) {
+		appendMediaPreviewImages(images, productObject!['media_files'])
+		pushImageUrl(images, stringValue(productObject!['image']))
+		appendStringImages(images, productObject!['images'])
+	}
+	if (images.length == 0) {
+		pushImageUrl(images, stringValue(rawObject['product_image']))
+		appendStringImages(images, rawObject['product_images'])
+	}
+	return images
+}
+
+function buildProductMediaIds(rawObject: UTSJSONObject, productObject: UTSJSONObject | null): string[] {
+	const ids: string[] = []
+	appendMediaIds(ids, rawObject['product_media_files'])
+	if (productObject != null) {
+		appendMediaIds(ids, productObject!['media_files'])
+	}
+	return ids
 }
 
 function buildQuery(data: PurchaseListQuery): UTSJSONObject {
@@ -170,6 +426,7 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 	let supplierName = stringValue(rawObject['supplier_name'])
 	const supplierInfo = parseObject(rawObject['supplier_info'])
 	if (supplierName == '' && supplierInfo != null) supplierName = stringValue(supplierInfo!['name'])
+	const supplierExcelImportStatus = parseObject(rawObject['supplier_excel_import_status'])
 	return {
 		id: intValue(rawObject['id']),
 		purchase_number: stringValue(rawObject['purchase_number']),
@@ -189,18 +446,50 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
 		items: parseObjectArray(rawObject['items']),
+		supplier_excel_import_status: supplierExcelImportStatus == null ? ({} as UTSJSONObject) : supplierExcelImportStatus!,
 	} as PurchaseItem
 }
 
 function buildPurchaseDetailItem(rawObject: UTSJSONObject): PurchaseDetailItem {
+	let purchaseObject = parseObject(rawObject['purchase'])
+	const purchaseInfo = parseObject(rawObject['purchase_info'])
+	if (purchaseObject == null && purchaseInfo != null) purchaseObject = purchaseInfo
+	let purchaseId = intValue(rawObject['purchase'])
+	if (purchaseId <= 0 && purchaseObject != null) purchaseId = intValue(purchaseObject!['id'])
+	let purchaseNumber = stringValue(rawObject['purchase_number'])
+	if (purchaseNumber == '' && purchaseObject != null) purchaseNumber = stringValue(purchaseObject!['purchase_number'])
+
+	let productObject = parseObject(rawObject['product'])
+	const productInfo = parseObject(rawObject['product_info'])
+	const productDetail = parseObject(rawObject['product_detail'])
+	if (productObject == null && productInfo != null) productObject = productInfo
+	if (productObject == null && productDetail != null) productObject = productDetail
+	let productId = intValue(rawObject['product'])
+	if (productId <= 0 && productObject != null) productId = intValue(productObject!['id'])
+	let productName = stringValue(rawObject['product_name'])
+	if (productName == '' && productObject != null) productName = stringValue(productObject!['name_cn'])
+	if (productName == '' && productObject != null) productName = stringValue(productObject!['name'])
+	if (productName == '' && productObject != null) productName = stringValue(productObject!['title'])
+	let productSku = stringValue(rawObject['product_sku'])
+	if (productSku == '' && productObject != null) productSku = stringValue(productObject!['sku'])
+	let productBarcode = stringValue(rawObject['product_barcode'])
+	if (productBarcode == '' && productObject != null) productBarcode = stringValue(productObject!['barcode'])
+	const productImages = buildProductImages(rawObject, productObject)
+	const productPreviewImages = buildProductPreviewImages(rawObject, productObject)
+	const productMediaIds = buildProductMediaIds(rawObject, productObject)
+
 	return {
 		id: intValue(rawObject['id']),
-		purchase: intValue(rawObject['purchase']),
-		purchase_number: stringValue(rawObject['purchase_number']),
-		product: intValue(rawObject['product']),
-		product_name: stringValue(rawObject['product_name']),
-		product_sku: stringValue(rawObject['product_sku']),
-		product_barcode: stringValue(rawObject['product_barcode']),
+		purchase: purchaseId,
+		purchase_number: purchaseNumber,
+		product: productId,
+		product_name: productName,
+		product_sku: productSku,
+		product_barcode: productBarcode,
+		product_image: productImages.length > 0 ? productImages[0] : '',
+		product_images: productImages,
+		product_preview_images: productPreviewImages,
+		product_media_ids: productMediaIds,
 		quantity: intValue(rawObject['quantity']),
 		unit_price: stringValue(rawObject['unit_price']),
 		amount: stringValue(rawObject['amount']),
@@ -278,6 +567,175 @@ function buildDetailListResponse(raw: any, query: PurchaseDetailListQuery): Purc
 	return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as PurchaseDetailListResponse
 }
 
+function buildPurchaseFilterOptionsResponse(raw: any): PurchaseFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: PurchaseFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filterObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters))
+		if (filterObjects != null) {
+			const nextFilters: PurchaseFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+				const filterObject = filterObjects[filterIndex]
+				let options: PurchaseFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions))
+					if (optionObjects != null) {
+						const nextOptions: PurchaseFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+							const optionObject = optionObjects[optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as PurchaseFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: stringValue(filterObject['multiple']) == 'true',
+					options: options,
+				} as PurchaseFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as PurchaseFilterOptionsResponse
+}
+
+function buildPurchaseDetailFilterOptionsResponse(raw: any): PurchaseDetailFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: PurchaseDetailFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filterObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters))
+		if (filterObjects != null) {
+			const nextFilters: PurchaseDetailFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+				const filterObject = filterObjects[filterIndex]
+				let options: PurchaseDetailFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions))
+					if (optionObjects != null) {
+						const nextOptions: PurchaseDetailFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+							const optionObject = optionObjects[optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as PurchaseDetailFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: stringValue(filterObject['multiple']) == 'true',
+					options: options,
+				} as PurchaseDetailFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as PurchaseDetailFilterOptionsResponse
+}
+
+function buildPurchaseImportResponse(rawObject: UTSJSONObject): PurchaseImportResponse {
+	const summaryObject = parseObject(rawObject['summary'])
+	const diagnosticsObject = parseObject(rawObject['diagnostics'])
+	return {
+		resource: stringValue(rawObject['resource']),
+		mode: stringValue(rawObject['mode']),
+		summary: summaryObject == null ? ({} as UTSJSONObject) : summaryObject!,
+		diagnostics: diagnosticsObject == null ? ({} as UTSJSONObject) : diagnosticsObject!,
+		results: parseObjectArray(rawObject['results']),
+		errors: parseObjectArray(rawObject['errors']),
+		warnings: parseObjectArray(rawObject['warnings']),
+	} as PurchaseImportResponse
+}
+
+function buildQuickProcurementResponse(rawObject: UTSJSONObject): QuickProcurementResponse {
+	const rows = parseObjectArray(rawObject['items'])
+	const items: QuickProcurementResultItem[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		items.push({
+			product_id: intValue(row['product_id']),
+			product_name: stringValue(row['product_name']),
+			product_sku: stringValue(row['product_sku']),
+			product_barcode: stringValue(row['product_barcode']),
+			purchase_price: stringValue(row['purchase_price']),
+			quantity: intValue(row['quantity']),
+			total: stringValue(row['total']),
+		} as QuickProcurementResultItem)
+	}
+	return {
+		procure_id: intValue(rawObject['procure_id']),
+		items: items,
+		total_quantity: intValue(rawObject['total_quantity']),
+		total_amount: stringValue(rawObject['total_amount']),
+		message: stringValue(rawObject['message']),
+	} as QuickProcurementResponse
+}
+
+function parseImportUploadResponse(text: string): PurchaseImportResponse {
+	const rootObject = text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	if (rootObject == null) throw new Error('导入响应解析失败')
+	if (stringValue(rootObject!['success']) == 'false') {
+		let message = stringValue(rootObject!['message'])
+		if (message == '') message = '导入失败'
+		throw new Error(message)
+	}
+	const dataObject = parseObject(rootObject!['data'])
+	if (dataObject != null) return buildPurchaseImportResponse(dataObject!)
+	return buildPurchaseImportResponse(rootObject!)
+}
+
+function parseImportUploadError(text: string, fallback: string): string {
+	if (text == '') return fallback
+	try {
+		const rootObject = JSON.parseObject<UTSJSONObject>(text)
+		if (rootObject == null) return fallback
+		const message = stringValue(rootObject!['message'])
+		if (message != '') return message
+	} catch (error) {
+		return fallback
+	}
+	return fallback
+}
+
+function parseUploadDataObject(text: string): UTSJSONObject {
+	const rootObject = text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	if (rootObject == null) throw new Error('接口响应解析失败')
+	if (stringValue(rootObject!['success']) == 'false') {
+		let message = stringValue(rootObject!['message'])
+		if (message == '') message = '请求失败'
+		throw new Error(message)
+	}
+	const dataObject = parseObject(rootObject!['data'])
+	if (dataObject != null) return dataObject!
+	return rootObject!
+}
+
 function mutationBody(data: PurchaseMutationData): UTSJSONObject {
 	const body = {
 		purchase_date: data.purchase_date,
@@ -316,9 +774,33 @@ function purchaseDetailPath(id: number | string): string {
 	return '/api/purchases/purchase-details/' + stringValue(id) + '/'
 }
 
+function buildPurchaseProductCheckResult(rawObject: UTSJSONObject): PurchaseProductCheckResult {
+	return {
+		exists: boolValue(rawObject['exists']),
+		purchase_detail_id: intValue(rawObject['purchase_detail_id']),
+		product_id: intValue(rawObject['product_id']),
+		product_name: stringValue(rawObject['product_name']),
+		product_sku: stringValue(rawObject['product_sku']),
+		product_barcode: stringValue(rawObject['product_barcode']),
+		quantity: intValue(rawObject['quantity']),
+		received_quantity: intValue(rawObject['received_quantity']),
+		remaining_quantity: intValue(rawObject['remaining_quantity']),
+		unit_price: stringValue(rawObject['unit_price']),
+	} as PurchaseProductCheckResult
+}
+
+export function purchaseProductTemplateDownloadUrl(id: number | string): string {
+	return baseUrl + detailPath(id) + 'product-template-download/'
+}
+
 export async function getPurchaseList(data: PurchaseListQuery): Promise<PurchaseListResponse> {
 	const raw = await request('/api/purchases/purchases/', 'GET', buildQuery(data), true)
 	return buildListResponse(raw, data)
+}
+
+export async function getPurchaseFilterOptions(): Promise<PurchaseFilterOptionsResponse> {
+	const raw = await request('/api/purchases/purchases/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildPurchaseFilterOptionsResponse(raw)
 }
 
 export async function getPurchaseDetail(id: number | string): Promise<PurchaseItem> {
@@ -326,19 +808,230 @@ export async function getPurchaseDetail(id: number | string): Promise<PurchaseIt
 	return buildPurchaseItem(rawDataObject(raw))
 }
 
+export async function checkPurchaseProduct(id: number | string, barcode: string, sku: string = ''): Promise<PurchaseProductCheckResult> {
+	const body = {
+		barcode: barcode,
+		sku: sku,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'check-product/', 'POST', body, true)
+	return buildPurchaseProductCheckResult(rawDataObject(raw))
+}
+
+export async function downloadPurchaseProductTemplate(id: number | string): Promise<PurchaseTemplateDownloadResult> {
+	return new Promise((resolve, reject) => {
+		const url = purchaseProductTemplateDownloadUrl(id)
+		__f__('log','at pkg/api/modules/purchases.uts:823','下载采购商品模板:', url)
+		uni.downloadFile({
+			url: url,
+			header: buildDownloadHeader(),
+			success: (res) => {
+				const statusCode = res.statusCode
+				const tempFilePath = res.tempFilePath
+				if (statusCode >= 200 && statusCode < 300 && tempFilePath != '') {
+					resolve({
+						tempFilePath: tempFilePath,
+						statusCode: statusCode,
+					} as PurchaseTemplateDownloadResult)
+					return
+				}
+				reject(new Error('模板下载失败: HTTP ' + statusCode))
+			},
+			fail: (err) => {
+				reject(new Error('模板下载失败'))
+			},
+		})
+	})
+}
+
+function uploadPurchaseProductImportFile(id: number | string, filePath: string, actionPath: string): Promise<PurchaseImportResponse> {
+	return new Promise((resolve, reject) => {
+		const url = baseUrl + detailPath(id) + actionPath + '/'
+		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
+		__f__('log','at pkg/api/modules/purchases.uts:850','采购商品导入上传:', url, filePath)
+		uni.uploadFile({
+			url: url,
+			filePath: filePath,
+			name: 'file',
+			header: buildDownloadHeader(),
+			timeout: uploadTimeout,
+			success: (res) => {
+				if (res.statusCode < 200 || res.statusCode >= 300) {
+					reject(new Error(parseImportUploadError(res.data, 'HTTP状态码错误: ' + res.statusCode)))
+					return
+				}
+				try {
+					resolve(parseImportUploadResponse(res.data))
+				} catch (error) {
+					reject(error)
+				}
+			},
+			fail: (err) => {
+				let message = stringValue(err.errMsg)
+				if (message == '') message = '上传失败'
+				reject(new Error(message))
+			},
+		})
+	})
+}
+
+export async function precheckPurchaseProductImport(id: number | string, filePath: string): Promise<PurchaseImportResponse> {
+	return await uploadPurchaseProductImportFile(id, filePath, 'product-import-precheck')
+}
+
+export async function executePurchaseProductImport(id: number | string, filePath: string): Promise<PurchaseImportResponse> {
+	return await uploadPurchaseProductImportFile(id, filePath, 'product-import-execute')
+}
+
+function uploadSupplierExcelFile(id: number | string, filePath: string, actionPath: string, config: UTSJSONObject): Promise<UTSJSONObject> {
+	return new Promise((resolve, reject) => {
+		const url = baseUrl + detailPath(id) + actionPath + '/'
+		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
+		const formData = {
+			config: JSON.stringify(config),
+		} as UTSJSONObject
+		__f__('log','at pkg/api/modules/purchases.uts:892','供应商Excel上传:', url, filePath)
+		uni.uploadFile({
+			url: url,
+			filePath: filePath,
+			name: 'file',
+			header: buildDownloadHeader(),
+			formData: formData,
+			timeout: uploadTimeout,
+			success: (res) => {
+				if (res.statusCode < 200 || res.statusCode >= 300) {
+					reject(new Error(parseImportUploadError(res.data, 'HTTP状态码错误: ' + res.statusCode)))
+					return
+				}
+				try {
+					resolve(parseUploadDataObject(res.data))
+				} catch (error) {
+					reject(error)
+				}
+			},
+			fail: (err) => {
+				let message = stringValue(err.errMsg)
+				if (message == '') message = '上传失败'
+				reject(new Error(message))
+			},
+		})
+	})
+}
+
+function buildSupplierExcelImportResponse(raw: UTSJSONObject): PurchaseImportResponse {
+	return buildPurchaseImportResponse(raw)
+}
+
+export async function previewSupplierExcel(id: number | string, filePath: string): Promise<UTSJSONObject> {
+	return await uploadSupplierExcelFile(id, filePath, 'supplier-excel-preview', {} as UTSJSONObject)
+}
+
+export async function precheckSupplierExcelImport(id: number | string, filePath: string, config: UTSJSONObject): Promise<PurchaseImportResponse> {
+	const raw = await uploadSupplierExcelFile(id, filePath, 'supplier-excel-precheck', config)
+	return buildSupplierExcelImportResponse(raw)
+}
+
+export async function executeSupplierExcelImport(id: number | string, filePath: string, config: UTSJSONObject): Promise<PurchaseImportResponse> {
+	const raw = await uploadSupplierExcelFile(id, filePath, 'supplier-excel-import', config)
+	return buildSupplierExcelImportResponse(raw)
+}
+
+export async function startSupplierExcelImportTask(id: number | string, filePath: string, config: UTSJSONObject): Promise<SupplierExcelImportTask> {
+	const raw = await uploadSupplierExcelFile(id, filePath, 'supplier-excel-import-async', config)
+	const dataObject = parseObject(raw['data'])
+	return {
+		task_id: stringValue(raw['task_id']),
+		status: stringValue(raw['status']),
+		message: stringValue(raw['message']),
+		percent: intValue(raw['percent']),
+		data: dataObject == null ? ({} as UTSJSONObject) : dataObject!,
+	} as SupplierExcelImportTask
+}
+
+export async function getSupplierExcelImportTaskStatus(id: number | string, taskId: string, includeData: boolean): Promise<SupplierExcelImportTask> {
+	const raw = await request(detailPath(id) + 'supplier-excel-import-task/' + taskId + '/', 'GET', {
+		include_data: includeData ? '1' : '0',
+	} as UTSJSONObject, true)
+	const rawObject = rawDataObject(raw)
+	const dataObject = parseObject(rawObject['data'])
+	return {
+		task_id: stringValue(rawObject['task_id']),
+		status: stringValue(rawObject['status']),
+		message: stringValue(rawObject['message']),
+		percent: intValue(rawObject['percent']),
+		data: dataObject == null ? ({} as UTSJSONObject) : dataObject!,
+	} as SupplierExcelImportTask
+}
+
+export async function precheckSupplierExcelRowsImport(id: number | string, rows: UTSJSONObject[]): Promise<PurchaseImportResponse> {
+	const body = {
+		rows: rows,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'supplier-excel-rows-precheck/', 'POST', body, true)
+	return buildSupplierExcelImportResponse(rawDataObject(raw))
+}
+
+export async function executeSupplierExcelRowsImport(id: number | string, rows: UTSJSONObject[]): Promise<PurchaseImportResponse> {
+	const body = {
+		rows: rows,
+	} as UTSJSONObject
+	const raw = await request(detailPath(id) + 'supplier-excel-rows-import/', 'POST', body, true)
+	return buildSupplierExcelImportResponse(rawDataObject(raw))
+}
+
+export async function getSupplierExcelProfiles(id: number | string): Promise<UTSJSONObject[]> {
+	const raw = await request(detailPath(id) + 'supplier-excel-profiles/', 'GET', {} as UTSJSONObject, true)
+	const rawObject = rawDataObject(raw)
+	return parseObjectArray(rawObject['results'])
+}
+
+export async function saveSupplierExcelProfile(id: number | string, config: UTSJSONObject, name: string, profileId: string = '', isDefault: boolean = true): Promise<UTSJSONObject> {
+	const body = {
+		config: config,
+		name: name,
+		is_default: isDefault,
+	} as UTSJSONObject
+	if (profileId != '') body['profile_id'] = profileId
+	const raw = await request(detailPath(id) + 'supplier-excel-profile-save/', 'POST', body, true)
+	return rawDataObject(raw)
+}
+
 export async function getPurchaseDetailList(data: PurchaseDetailListQuery): Promise<PurchaseDetailListResponse> {
 	const raw = await request('/api/purchases/purchase-details/', 'GET', buildDetailQuery(data), true)
 	return buildDetailListResponse(raw, data)
 }
 
+export async function getPurchaseDetailFilterOptions(purchase: string | null): Promise<PurchaseDetailFilterOptionsResponse> {
+	const query = {} as UTSJSONObject
+	if (purchase != null && purchase != '') query['purchase'] = purchase
+	const raw = await request('/api/purchases/purchase-details/filter-options/', 'GET', query, true)
+	return buildPurchaseDetailFilterOptionsResponse(raw)
+}
+
 export async function getPurchaseDetailItem(id: number | string): Promise<PurchaseDetailItem> {
 	const raw = await request(purchaseDetailPath(id), 'GET', {} as UTSJSONObject, true)
-	return buildPurchaseDetailItem(rawDataObject(raw))
+	return buildPurchaseDetailItem(rawDetailObject(raw))
 }
 
 export async function createPurchase(data: PurchaseMutationData): Promise<PurchaseItem> {
 	const raw = await request('/api/purchases/purchases/', 'POST', mutationBody(data), true)
 	return buildPurchaseItem(rawDataObject(raw))
+}
+
+export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[]): Promise<QuickProcurementResponse> {
+	const requestItems: UTSJSONObject[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		requestItems.push({
+			name: item.name,
+			price: item.price,
+			quantity: item.quantity,
+		} as UTSJSONObject)
+	}
+	const raw = await request('/api/purchases/purchases/quick_procurement/', 'POST', {
+		procure_id: parseInt(stringValue(purchaseId)),
+		items: requestItems,
+	} as UTSJSONObject, true)
+	return buildQuickProcurementResponse(rawDataObject(raw))
 }
 
 export async function updatePurchase(id: number | string, data: PurchaseMutationData): Promise<PurchaseItem> {
@@ -348,12 +1041,12 @@ export async function updatePurchase(id: number | string, data: PurchaseMutation
 
 export async function createPurchaseDetail(data: PurchaseDetailMutationData): Promise<PurchaseDetailItem> {
 	const raw = await request('/api/purchases/purchase-details/', 'POST', detailMutationBody(data), true)
-	return buildPurchaseDetailItem(rawDataObject(raw))
+	return buildPurchaseDetailItem(rawDetailObject(raw))
 }
 
 export async function updatePurchaseDetail(id: number | string, data: PurchaseDetailMutationData): Promise<PurchaseDetailItem> {
 	const raw = await request(purchaseDetailPath(id), 'PUT', detailMutationBody(data), true)
-	return buildPurchaseDetailItem(rawDataObject(raw))
+	return buildPurchaseDetailItem(rawDetailObject(raw))
 }
 
 export function deletePurchase(id: number | string): Promise<any> {
@@ -370,6 +1063,25 @@ export function runPurchaseAction(id: number | string, actionName: string): Prom
 	return request(detailPath(id) + 'action_purchase/', 'POST', body, true)
 }
 
+export async function autoGeneratePurchasePrices(id: number | string, formulaId: number | string): Promise<PurchaseAutoPriceResponse> {
+	const raw = await request(
+		detailPath(id) + 'auto_generate_prices/',
+		'POST',
+		{ formula_id: formulaId } as UTSJSONObject,
+		true
+	)
+	const data = rawDataObject(raw)
+	const formula = parseObject(data['formula'])
+	return {
+		formula: formula == null ? ({} as UTSJSONObject) : formula!,
+		total_count: intValue(data['total_count']),
+		updated_count: intValue(data['updated_count']),
+		skipped_existing_count: intValue(data['skipped_existing_count']),
+		skipped_error_count: intValue(data['skipped_error_count']),
+		updated_products: parseObjectArray(data['updated_products']),
+	} as PurchaseAutoPriceResponse
+}
+
 export function receivePurchaseDetail(id: number | string, quantity: number, notes: string = ''): Promise<any> {
 	return request(purchaseDetailPath(id) + 'receive/', 'POST', { quantity: quantity, notes: notes } as UTSJSONObject, true)
 }
@@ -384,6 +1096,10 @@ export async function getPurchaseOptionList(path: string, search: string | null,
 	for (let index = 0; index < rows.length; index += 1) {
 		const row = rows[index]
 		let text = stringValue(row[labelField])
+		const nameEn = stringValue(row['name_en'])
+		const nameOther = stringValue(row['name_other'])
+		if (nameEn != '' && text.indexOf(nameEn) < 0) text = text == '' ? nameEn : text + ' / ' + nameEn
+		if (nameOther != '' && text.indexOf(nameOther) < 0) text = text == '' ? nameOther : text + ' / ' + nameOther
 		const extra = stringValue(row[extraLabelField])
 		if (extra != '') text = text + ' / ' + extra
 		result.push({ value: stringValue(row['id']), text: text } as PurchaseOptionItem)

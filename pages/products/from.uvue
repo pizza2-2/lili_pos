@@ -117,6 +117,7 @@ import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { ProductItem, ProductMutationData, createProduct, getProductConfigList, getProductDetail, productDiscountsPath, removeProductDiscountFromProduct, updateProduct } from '@/pkg/api/modules/products.uts'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
 const productListRefreshStorageKey = 'refresh:pages:products:index'
 const productDiscountSelectionStorageKey = 'selected_discount_for_product:'
@@ -133,6 +134,7 @@ const dirtySignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 const discountCards = ref<UTSJSONObject[]>([])
 const discountCardsLoading = ref(false)
 
@@ -320,15 +322,11 @@ function buildUploadHeaders(): UTSJSONObject {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0 && option.value.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -436,14 +434,27 @@ async function fetchStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject>
 	return buildSelectResponse(statusOptions.value, params)
 }
 
+function buildSupplierOptionQuery(params: UTSJSONObject): UTSJSONObject {
+	const keywordValue = stringValue(params['keyword'])
+	const query: UTSJSONObject = {
+		key: 'supplier',
+		limit: 50,
+	} as UTSJSONObject
+	if (keywordValue != '') {
+		query['search'] = keywordValue
+		query['keyword'] = keywordValue
+	}
+	return query
+}
+
 async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request(
 		'/api/procurement/suppliers/options/',
 		'GET',
-		{} as UTSJSONObject,
+		buildSupplierOptionQuery(params),
 		true
 	)
-	return buildSelectResponse(buildSelectOptions(raw), params)
+	return buildSelectResponse(buildSelectOptions(raw), { keyword: '', id: stringValue(params['id']) } as UTSJSONObject)
 }
 
 function convertCategoryTreeItems(items: UTSJSONObject[]): UTSJSONObject[] {
@@ -588,6 +599,7 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 	for (let index = 0; index < item.media_files.length; index += 1) {
 		const mediaFile = item.media_files[index]
 		let imageUrl = ''
+		let previewUrl = ''
 		if (mediaFile.signed_thumbnail_url != '') {
 			imageUrl = mediaFile.signed_thumbnail_url
 		} else if (mediaFile.thumbnail_url != '') {
@@ -597,12 +609,22 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		} else if (mediaFile.file_url != '') {
 			imageUrl = mediaFile.file_url
 		}
+		if (mediaFile.signed_url != '') {
+			previewUrl = mediaFile.signed_url
+		} else if (mediaFile.file_url != '') {
+			previewUrl = mediaFile.file_url
+		} else {
+			previewUrl = imageUrl
+		}
 		if (imageUrl != '') {
 			images.push(imageUrl)
 			imageItems.push({
 				id: mediaFile.id,
 				path: imageUrl,
 				url: imageUrl,
+				previewUrl: previewUrl,
+				signed_url: mediaFile.signed_url,
+				file_url: mediaFile.file_url,
 				isRemote: true,
 			} as UTSJSONObject)
 		}
@@ -744,6 +766,7 @@ const formSections = ref<UTSJSONObject[]>([
 				label: '含税采购价',
 				type: 'number',
 				required: true,
+				decimal: true,
 				placeholder: '请输入含税采购价',
 			} as UTSJSONObject,
 			{
@@ -751,6 +774,7 @@ const formSections = ref<UTSJSONObject[]>([
 				label: '不含税采购价',
 				type: 'number',
 				required: true,
+				decimal: true,
 				placeholder: '请输入不含税采购价',
 			} as UTSJSONObject,
 			{
@@ -758,6 +782,7 @@ const formSections = ref<UTSJSONObject[]>([
 				label: '成本价',
 				type: 'number',
 				required: true,
+				decimal: true,
 				placeholder: '请输入成本价',
 			} as UTSJSONObject,
 			{
@@ -765,6 +790,7 @@ const formSections = ref<UTSJSONObject[]>([
 				label: '基础售价',
 				type: 'number',
 				required: true,
+				decimal: true,
 				placeholder: '请输入基础售价',
 			} as UTSJSONObject,
 			{
@@ -1113,7 +1139,12 @@ function handleInputAdd(payload: UTSJSONObject) {
 	}
 }
 
-function goBackToList(): void {
+function goBackToList(markLeaving: boolean = true): void {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({
@@ -1230,6 +1261,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		return
 	}
 
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	const isEditing = formMode.value == 'edit' && productId.value != ''
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
@@ -1262,20 +1294,28 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 			}
 		}
 		markProductListRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: successMessage,
 			icon: 'success',
 		})
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'),
 			icon: 'none',
 		})
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -1385,6 +1425,7 @@ function applyCalculatedPrice() {
 }
 
 onLoad((event: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	leaveSignal.value = 0
 	const idValue = event['id']
 	productId.value = idValue == null ? '' : (idValue as string)
@@ -1392,6 +1433,11 @@ onLoad((event: OnLoadOptions) => {
 	if (formMode.value == 'edit') {
 		loadProductDetailData(productId.value)
 	}
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 onShow(() => {

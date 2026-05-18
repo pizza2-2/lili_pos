@@ -6,8 +6,9 @@ import { getSupplierDetail } from '@/pkg/api/modules/suppliers'
 import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { createTransaction, getTransactionDetail, getTransactionOptions, TransactionItem, TransactionMutationData, TransactionOptionGroup, updateTransaction } from '@/pkg/api/modules/transactions.uts'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 50, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 51, 6>;
 	value: string
 	text: string
 }
@@ -29,6 +30,7 @@ const leaveSignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 const initialData = ref<UTSJSONObject>({
 	supplier_id: '',
 	supplier_name: '',
@@ -58,7 +60,7 @@ function getArrayField(obj: UTSJSONObject, key: string) : string[] {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 91, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 93, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -74,7 +76,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:107")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:109")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -128,15 +130,11 @@ function buildInitialDataFromTransaction(item: TransactionItem) : UTSJSONObject 
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject) : UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -342,7 +340,12 @@ async function loadTransactionDetailData(idText: string) {
 	}
 }
 
-function goBackToList() {
+function goBackToList(markLeaving: boolean = true) {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({
@@ -440,6 +443,7 @@ async function persistForm(payload: UTSJSONObject) {
 	const data = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
 	const actionText = formMode.value == 'edit' ? '保存修改' : '创建采购记录'
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	savingText.value = actionText + '中...'
 	savingVisible.value = true
@@ -474,20 +478,28 @@ async function persistForm(payload: UTSJSONObject) {
 		}
 		clearDraftStorage()
 		markTransactionListRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: successMessage,
 			icon: 'success',
 		})
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: parseErrorMessage(error, actionText + '失败'),
 			icon: 'none',
 		})
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -564,6 +576,7 @@ function handleUploadError(payload: UTSJSONObject) {
 }
 
 onLoad((event : OnLoadOptions) => {
+	pageTaskGuard.reset()
 	leaveSignal.value = 0
 	const idValue = event['id']
 	transactionId.value = idValue == null ? '' : (idValue as string)
@@ -587,6 +600,11 @@ onLoad((event : OnLoadOptions) => {
 	}
 	loadSupplierName()
 	clearDraftStorage()
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 return (): any | null => {

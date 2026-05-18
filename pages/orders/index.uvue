@@ -133,6 +133,7 @@ const keyword = ref('')
 const filterVisible = ref(false)
 const orders = ref<OrderItem[]>([])
 const isLoading = ref(false)
+const reloadAfterLoading = ref(false)
 const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
@@ -365,7 +366,10 @@ async function loadStatistics() {
 }
 
 async function loadOrders() {
-	if (isLoading.value) return
+	if (isLoading.value) {
+		reloadAfterLoading.value = true
+		return
+	}
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
@@ -381,6 +385,10 @@ async function loadOrders() {
 		errorMessage.value = parseErrorMessage(error, '订单加载失败')
 	} finally {
 		isLoading.value = false
+		if (reloadAfterLoading.value) {
+			reloadAfterLoading.value = false
+			loadOrders()
+		}
 	}
 }
 

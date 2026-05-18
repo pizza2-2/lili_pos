@@ -1,8 +1,8 @@
 <template>
 	<view class="page">
 		<lili-universal-filter
-			title="库存管理"
-			searchPlaceholder="搜索商品名称、SKU、条码"
+			:title="pageTitle"
+			searchPlaceholder="商品名、SKU、条码"
 			:searchValue="keyword"
 			:filterVisible="filterVisible"
 			:showBack="true"
@@ -10,235 +10,379 @@
 			:showFilter="true"
 			:showScan="true"
 			:showHome="true"
-			homePath="/pages/tabbar/settings"
-			backgroundColor="#EEF2F7"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			:homePath="homePath"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
 			@scan="handleScanSearch"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
 		>
-			<view v-if="filterVisible" class="filter-panel">
-				<view class="filter-section">
-					<text class="filter-label">供应商</text>
-					<liliBottomSelect
-						:value="supplierFilterValue"
-						:valueText="supplierFilterText"
-						title="选择供应商"
-						placeholder="全部供应商"
-						searchPlaceholder="搜索供应商"
-						emptyText="暂无供应商"
-						:fetchData="fetchSupplierFilterOptions"
-						:showEditAction="false"
-						:showAddAction="false"
-						@change="handleSupplierFilterChange"
-					/>
-				</view>
+			<template #filter-panel>
+				<view class="inventory-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="inventory-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="inventory-filter-scroll-inner">
+							<view class="inventory-filter-select-group">
+								<text class="inventory-filter-select-title">供应商</text>
+								<view class="inventory-filter-select-wrap">
+									<liliBottomSelect
+										:value="draftSupplierValue"
+										:valueText="draftSupplierText"
+										title="选择供应商"
+										placeholder="全部供应商"
+										searchPlaceholder="搜索供应商"
+										emptyText="暂无供应商"
+										:fetchData="fetchSupplierFilterOptions"
+										:showAddAction="false"
+										:showEditAction="false"
+										@change="handleSupplierFilterChange"
+									/>
+								</view>
+							</view>
 
-				<view class="filter-section">
-					<text class="filter-label">分类</text>
-					<liliBottomSelect
-						:values="categoryFilterValues"
-						title="选择分类"
-						placeholder="全部分类"
-						searchPlaceholder="搜索分类"
-						emptyText="暂无分类"
-						:fetchData="fetchCategoryFilterOptions"
-						:showEditAction="false"
-						:showAddAction="false"
-						:tree="true"
-						:multiple="true"
-						:checkStrictly="false"
-						:defaultExpandAll="true"
-						childrenKey="children"
-						@multiChange="handleCategoryFilterChange"
-					/>
-				</view>
+							<view class="inventory-filter-select-group">
+								<text class="inventory-filter-select-title">分类</text>
+								<view class="inventory-filter-select-wrap">
+									<liliBottomSelect
+										:values="draftCategoryValues"
+										title="选择分类"
+										placeholder="全部分类"
+										searchPlaceholder="搜索分类"
+										emptyText="暂无分类"
+										:fetchData="fetchCategoryFilterOptions"
+										:showEditAction="false"
+										:showAddAction="false"
+										:tree="true"
+										:multiple="true"
+										:checkStrictly="false"
+										:defaultExpandAll="true"
+										childrenKey="children"
+										@multiChange="handleCategoryFilterChange"
+									/>
+								</view>
+							</view>
 
-				<view class="filter-section">
-					<text class="filter-label">库存状态</text>
-					<view class="status-row">
-						<view
-							v-for="item in alertStatusOptions"
-							:key="getStringField(item, 'value')"
-							:class="selectedAlertStatus == getStringField(item, 'value') ? 'status-chip status-chip-active' : 'status-chip'"
-							@click="selectAlertStatus(getStringField(item, 'value'))"
-						>
-							<text :class="selectedAlertStatus == getStringField(item, 'value') ? 'status-chip-text-active' : 'status-chip-text'">{{ getStringField(item, 'text') }}</text>
+							<view class="inventory-filter-select-group">
+								<text class="inventory-filter-select-title">库存位置</text>
+								<view class="inventory-filter-select-wrap">
+									<liliBottomSelect
+										:value="draftLocationValue"
+										:valueText="draftLocationText"
+										title="选择库存位置"
+										placeholder="全部库存位置"
+										searchPlaceholder="搜索库存位置"
+										emptyText="暂无库存位置"
+										:fetchData="fetchLocationFilterOptions"
+										:showAddAction="false"
+										:showEditAction="false"
+										@change="handleLocationFilterChange"
+									/>
+								</view>
+							</view>
+
+							<view class="inventory-filter-group">
+								<text class="inventory-filter-group-title">预警状态</text>
+								<view class="inventory-filter-options">
+									<view
+										v-for="option in alertStatusOptions"
+										:key="'alert-' + option.value"
+										:class="draftAlertStatus == option.value ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'"
+										@click="selectAlertStatus(option.value)"
+									>
+										<text :class="draftAlertStatus == option.value ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">{{ option.label }}</text>
+									</view>
+								</view>
+							</view>
+
+							<view class="inventory-filter-group">
+								<text class="inventory-filter-group-title">上架状态</text>
+								<view class="inventory-filter-options">
+									<view
+										v-for="option in listedStatusOptions"
+										:key="'listed-' + option.value"
+										:class="draftListedStatus == option.value ? 'inventory-filter-option inventory-filter-option-active' : 'inventory-filter-option'"
+										@click="selectListedStatus(option.value)"
+									>
+										<text :class="draftListedStatus == option.value ? 'inventory-filter-option-text inventory-filter-option-text-active' : 'inventory-filter-option-text'">{{ option.label }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="inventory-filter-actions">
+						<view class="inventory-filter-btn inventory-filter-btn-light" @click="handleFilterReset">
+							<text class="inventory-filter-btn-light-text">重置</text>
+						</view>
+						<view class="inventory-filter-btn inventory-filter-btn-primary" @click="applySelectedFilters">
+							<text class="inventory-filter-btn-primary-text">应用</text>
 						</view>
 					</view>
 				</view>
-
-				<view class="filter-actions">
-					<view class="filter-reset" @click="resetFilters">
-						<text class="filter-reset-text">重置</text>
-					</view>
-					<view class="filter-apply" @click="applyFilters">
-						<text class="filter-apply-text">应用</text>
-					</view>
-				</view>
-			</view>
+			</template>
 		</lili-universal-filter>
 
-		<scroll-view class="content-scroll" scroll-y="true" @scrolltolower="handleLoadMore" :show-scrollbar="false">
-			<view class="overview-card">
-				<view class="overview-row">
-					<text class="overview-label">记录数</text>
-					<text class="overview-value">{{ totalCount }}</text>
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="productMode" class="product-stock-header">
+					<view class="product-stock-title-wrap">
+						<text class="product-stock-title">{{ productStockTitle }}</text>
+						<text class="product-stock-subtitle">统一管理该商品在所有库存位置的数量</text>
+					</view>
+					<view class="product-stock-action" @click="navigateToCreateStock">
+						<text class="product-stock-action-text">新增库存</text>
+					</view>
 				</view>
-				<view class="overview-row">
-					<text class="overview-label">页码</text>
-					<text class="overview-value">{{ currentPageDisplay }}</text>
+
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadStocks"><text class="retry-btn-text">重新加载</text></view>
 				</view>
-			</view>
 
-			<view v-if="loadError != ''" class="error-card">
-				<text class="error-title">加载失败</text>
-				<text class="error-text">{{ loadError }}</text>
-				<view class="retry-btn" @click="reload">
-					<text class="retry-text">重新加载</text>
-				</view>
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="locationText"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载库存"
+					:keepContentOnLoading="true"
+					inlineLoadingText="库存刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="库存概览"
+					:summaryItems="summaryItems"
+					:showFloatingAdd="productMode"
+					floatingAddText="新增库存"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@subtitle-click="handleSubtitleClick"
+					@field-click="handleFieldClick"
+					@meta-click="handleMetaClick"
+					@floating-add="navigateToCreateStock"
+				/>
 			</view>
-
-			<liliUniversalList
-				v-if="items.length > 0"
-				:items="items"
-				:fieldConfig="fieldConfig"
-				titleField="name"
-				subtitleField="subtitle"
-				metaField="meta"
-				imageField="image"
-				imageListField="images"
-				@itemClick="handleItemClick"
-			/>
-
-			<view v-else-if="!loading && loadError == ''" class="empty-card">
-				<view class="empty-icon">
-					<text class="empty-icon-text">□</text>
-				</view>
-				<text class="empty-title">暂无库存记录</text>
-				<text class="empty-text">当前筛选条件下没有可展示的数据。</text>
-			</view>
-
-			<view v-if="loading" class="loading-wrap">
-				<text class="loading-text">加载中...</text>
-			</view>
+		<!-- #ifdef APP -->
 		</scroll-view>
-
-		<view class="fab" @click="handleAdd">
-			<text class="fab-text">新增</text>
-		</view>
+		<!-- #endif -->
 	</view>
 </template>
 
 <script setup lang="uts">
-import liliUniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
+import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
-import { getInventoryStocks, type InventoryListQuery, type InventoryListResponse } from '@/pkg/api/modules/inventory.uts'
+import { getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+
+type SelectOption = {
+	value: string
+	label: string
+}
 
 const refreshStorageKey = 'refresh:pages:inventory-management:index'
-const keyword = ref<string>('')
-const filterVisible = ref<boolean>(false)
-const supplierFilterValue = ref<string>('')
-const supplierFilterText = ref<string>('')
+const keyword = ref('')
+const filterVisible = ref(false)
+const stocks = ref<UTSJSONObject[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const totalQuantityText = ref('0')
+const alertCountText = ref('0')
+const supplierFilterValue = ref('')
+const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
-const selectedAlertStatus = ref<string>('')
-const items = ref<UTSJSONObject[]>([])
-const page = ref<number>(1)
-const pageSize = ref<number>(20)
-const totalCount = ref<number>(0)
-const totalPages = ref<number>(1)
-const loading = ref<boolean>(false)
-const loadError = ref<string>('')
-const hasMore = ref<boolean>(true)
-const loadedOnce = ref<boolean>(false)
+const locationFilterValue = ref('')
+const locationFilterText = ref('')
+const alertStatusFilter = ref('')
+const listedStatusFilter = ref('')
+const draftSupplierValue = ref('')
+const draftSupplierText = ref('')
+const draftCategoryValues = ref<string[]>([])
+const draftLocationValue = ref('')
+const draftLocationText = ref('')
+const draftAlertStatus = ref('')
+const draftListedStatus = ref('')
+const filterPanelHeight = ref(420)
+const filterContentHeight = ref(356)
+const volumeScanLocked = ref(false)
+const scanLookupRunning = ref(false)
+const productFilterId = ref('')
+const productFilterName = ref('')
+let volumeKeyStartTimer = 0
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'quantityText', label: '库存:' } as UTSJSONObject,
+	{ key: 'availableText', label: '可用:' } as UTSJSONObject,
+	{ key: 'costText', label: '成本:' } as UTSJSONObject,
+	{ key: 'categoryText', label: '分类:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'adjust', text: '调整库存' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const tagColorMap = ref<UTSJSONObject>({
+	正常: 'success',
+	低库存: 'warning',
+	售罄: 'danger',
+	久未变动: 'warning',
+	上架: 'success',
+	下架: 'muted',
+} as UTSJSONObject)
 
 const alertStatusOptions = [
-	{ value: '', text: '全部' },
-	{ value: 'NORMAL', text: '正常' },
-	{ value: 'LOW', text: '低库存' },
-	{ value: 'OUT', text: '缺货' },
-] as UTSJSONObject[]
+	{ value: '', label: '全部' } as SelectOption,
+	{ value: 'NORMAL', label: '正常' } as SelectOption,
+	{ value: 'LOW_STOCK', label: '低库存' } as SelectOption,
+	{ value: 'OUT_OF_STOCK', label: '售罄' } as SelectOption,
+	{ value: 'NO_MOVEMENT', label: '久未变动' } as SelectOption,
+]
 
-const fieldConfig = [
-	{ key: 'quantityText', label: '库存' },
-	{ key: 'availableText', label: '可用' },
-	{ key: 'barcodeText', label: '条码' },
-	{ key: 'supplierText', label: '供应商' },
-	{ key: 'categoryText', label: '分类' },
-	{ key: 'alertText', label: '状态' },
-] as UTSJSONObject[]
+const listedStatusOptions = [
+	{ value: '', label: '全部' } as SelectOption,
+	{ value: 'true', label: '上架' } as SelectOption,
+	{ value: 'false', label: '下架' } as SelectOption,
+]
 
-const currentPageDisplay = computed<string>(() : string => {
-	if (totalPages.value <= 0) return '1/1'
-	return '' + page.value + '/' + totalPages.value
-})
-
-function stringValue(value: any | null) : string {
-	if (value == null) return ''
-	return '' + value
-}
-
-function intValue(value: any | null) : number {
-	if (value == null) return 0
-	const parsed = parseInt('' + value)
-	if (isNaN(parsed)) return 0
-	return parsed
-}
-
-function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') : string {
-	const value = obj[key]
+function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
 	const text = '' + value
 	if (text == '') return fallback
 	return text
 }
 
-function parseObject(value: any | null) : UTSJSONObject | null {
+function intValue(value: any | null): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback && errorText != '{}') message = errorText
+		}
+	}
+	return message
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) return null
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return null
-	return JSON.parseObject<UTSJSONObject>(text)
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
 }
 
-function parseObjectArray(value: any | null) : UTSJSONObject[] {
+function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (value == null) return [] as UTSJSONObject[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as UTSJSONObject[]
-	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	let parsed: UTSJSONObject[] | null = null
+	try {
+		parsed = JSON.parseArray<UTSJSONObject>(text)
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
 	if (parsed == null) return [] as UTSJSONObject[]
 	return parsed!
 }
 
-function parseStringArray(value: any | null) : string[] {
+function parseStringArray(value: any | null): string[] {
 	if (value == null) return [] as string[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as string[]
-	const parsed = JSON.parseArray<string>(text)
+	let parsed: string[] | null = null
+	try {
+		parsed = JSON.parseArray<string>(text)
+	} catch (error) {
+		return [] as string[]
+	}
 	if (parsed == null) return [] as string[]
 	return parsed!
 }
 
-function firstStringField(obj: UTSJSONObject, keys: string[]) : string {
-	for (let i = 0; i < keys.length; i++) {
-		const text = getStringField(obj, keys[i])
-		if (text != '') return text
+function firstStringField(obj: UTSJSONObject, keys: string[]): string {
+	for (let index = 0; index < keys.length; index += 1) {
+		const value = stringValue(obj[keys[index]])
+		if (value != '') return value
 	}
 	return ''
 }
 
-function extractRows(raw: any | null) : UTSJSONObject[] {
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 460) nextPanelHeight = 460
+	if (nextPanelHeight < 320) nextPanelHeight = 320
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 240) nextContentHeight = 240
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function extractRows(raw: any | null): UTSJSONObject[] {
 	const directArray = parseObjectArray(raw)
 	if (directArray.length > 0) return directArray
-	const obj = parseObject(raw)
-	if (obj == null) return [] as UTSJSONObject[]
-	const dataArray = parseObjectArray(obj['data'])
+	const rawObject = parseObject(raw)
+	if (rawObject == null) return [] as UTSJSONObject[]
+	const dataArray = parseObjectArray(rawObject!['data'])
 	if (dataArray.length > 0) return dataArray
-	const resultsArray = parseObjectArray(obj['results'])
+	const resultsArray = parseObjectArray(rawObject!['results'])
 	if (resultsArray.length > 0) return resultsArray
-	const itemsArray = parseObjectArray(obj['items'])
+	const itemsArray = parseObjectArray(rawObject!['items'])
 	if (itemsArray.length > 0) return itemsArray
-	const dataObject = parseObject(obj['data'])
+	const dataObject = parseObject(rawObject!['data'])
 	if (dataObject != null) {
 		const nestedResults = parseObjectArray(dataObject!['results'])
 		if (nestedResults.length > 0) return nestedResults
@@ -246,7 +390,7 @@ function extractRows(raw: any | null) : UTSJSONObject[] {
 	return [] as UTSJSONObject[]
 }
 
-function getChildren(item: UTSJSONObject) : UTSJSONObject[] {
+function getChildren(item: UTSJSONObject): UTSJSONObject[] {
 	const children = parseObjectArray(item['children'])
 	if (children.length > 0) return children
 	const childList = parseObjectArray(item['child_list'])
@@ -254,15 +398,13 @@ function getChildren(item: UTSJSONObject) : UTSJSONObject[] {
 	return [] as UTSJSONObject[]
 }
 
-function normalizeOptionNode(item: UTSJSONObject) : UTSJSONObject {
+function normalizeOptionNode(item: UTSJSONObject): UTSJSONObject {
 	const value = firstStringField(item, ['value', 'id', 'pk'])
 	let text = firstStringField(item, ['text', 'label', 'name', 'name_cn', 'title'])
 	if (text == '') text = value
 	const children = getChildren(item)
 	const normalizedChildren: UTSJSONObject[] = []
-	for (let i = 0; i < children.length; i++) {
-		normalizedChildren.push(normalizeOptionNode(children[i]))
-	}
+	for (let index = 0; index < children.length; index += 1) normalizedChildren.push(normalizeOptionNode(children[index]))
 	return {
 		value: value,
 		text: text,
@@ -271,552 +413,558 @@ function normalizeOptionNode(item: UTSJSONObject) : UTSJSONObject {
 	} as UTSJSONObject
 }
 
-function optionMatches(item: UTSJSONObject, word: string) : boolean {
-	if (word == '') return true
-	const text = getStringField(item, 'text').toLowerCase()
-	const value = getStringField(item, 'value').toLowerCase()
-	const keywordLower = word.toLowerCase()
-	return text.indexOf(keywordLower) >= 0 || value.indexOf(keywordLower) >= 0
-}
-
-function filterOptionTree(list: UTSJSONObject[], word: string) : UTSJSONObject[] {
-	if (word == '') return list
-	const result: UTSJSONObject[] = []
-	for (let i = 0; i < list.length; i++) {
-		const item = list[i]
-		const children = filterOptionTree(getChildren(item), word)
-		if (optionMatches(item, word) || children.length > 0) {
-			const cloned = {} as UTSJSONObject
-			for (const key in item) {
-				cloned[key] = item[key]
-			}
-			cloned['children'] = children
-			cloned['has_children'] = children.length > 0
-			result.push(cloned)
-		}
-	}
-	return result
-}
-
-function buildBottomSelectResponse(raw: any | null, params: UTSJSONObject) : UTSJSONObject {
-	const keywordValue = getStringField(params, 'keyword')
+function buildBottomSelectResponse(raw: any | null, params: UTSJSONObject): UTSJSONObject {
 	const rows = extractRows(raw)
 	const normalized: UTSJSONObject[] = []
-	for (let i = 0; i < rows.length; i++) {
-		normalized.push(normalizeOptionNode(rows[i]))
-	}
-	const filtered = filterOptionTree(normalized, keywordValue)
+	for (let index = 0; index < rows.length; index += 1) normalized.push(normalizeOptionNode(rows[index]))
 	return {
-		data: filtered,
-		results: filtered,
-		total: filtered.length,
-		total_count: filtered.length,
+		data: normalized,
+		results: normalized,
+		total: normalized.length,
+		total_count: normalized.length,
 	} as UTSJSONObject
 }
 
-function buildOptionQuery(params: UTSJSONObject) : UTSJSONObject {
+function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const pageValue = intValue(params['page'])
 	const pageSizeValue = intValue(params['pageSize'])
 	const query = {
 		page: pageValue <= 0 ? 1 : pageValue,
 		page_size: pageSizeValue <= 0 ? 50 : pageSizeValue,
 	} as UTSJSONObject
-	const keywordValue = getStringField(params, 'keyword')
+	const keywordValue = stringValue(params['keyword'])
 	if (keywordValue != '') {
 		query['search'] = keywordValue
 		query['keyword'] = keywordValue
 	}
-	const idValue = getStringField(params, 'id')
+	const idValue = stringValue(params['id'])
 	if (idValue != '') query['id'] = idValue
-	const parentValue = getStringField(params, 'parent')
+	const parentValue = stringValue(params['parent'])
 	if (parentValue != '') query['parent'] = parentValue
 	return query
 }
 
-async function fetchSupplierFilterOptions(params: UTSJSONObject) : Promise<UTSJSONObject> {
+async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request('/api/procurement/suppliers/options/', 'GET', buildOptionQuery(params), true)
-	return buildBottomSelectResponse(raw, params)
+	return buildBottomSelectResponse(raw, { keyword: '' } as UTSJSONObject)
 }
 
-async function fetchCategoryFilterOptions(params: UTSJSONObject) : Promise<UTSJSONObject> {
+async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request('/api/categories/categories/options/', 'GET', buildOptionQuery(params), true)
 	return buildBottomSelectResponse(raw, params)
 }
 
-function numberText(value: any | null) : string {
+async function fetchLocationFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request('/api/inventory/locations/', 'GET', buildOptionQuery(params), true)
+	return buildBottomSelectResponse(raw, params)
+}
+
+function alertStatusText(value: string): string {
+	if (value == 'NORMAL' || value == '') return '正常'
+	if (value == 'LOW_STOCK') return '低库存'
+	if (value == 'OUT_OF_STOCK') return '售罄'
+	if (value == 'NO_MOVEMENT') return '久未变动'
+	if (value == 'LOW') return '低库存'
+	if (value == 'OUT') return '售罄'
+	return value
+}
+
+function listedText(value: string): string {
+	if (value == 'false') return '下架'
+	return '上架'
+}
+
+function numberText(value: any | null): string {
 	const text = stringValue(value)
 	if (text == '') return '0'
 	return text
 }
 
-function statusText(value: string) : string {
-	if (value == 'LOW') return '低库存'
-	if (value == 'OUT') return '缺货'
-	if (value == 'OVER') return '超储'
-	if (value == 'NORMAL') return '正常'
-	if (value == '') return '正常'
-	return value
+function moneyText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') return '¥ 0.00'
+	return '¥ ' + text
 }
 
-function firstImageFromStock(stock: UTSJSONObject) : string {
-	const directImage = getStringField(stock, 'product_image')
-	if (directImage != '') return directImage
-	const mediaFiles = parseObjectArray(stock['product_media_files'])
-	for (let i = 0; i < mediaFiles.length; i++) {
-		const image = firstStringField(mediaFiles[i], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
-		if (image != '') return image
-	}
-	return ''
-}
-
-function imageListFromStock(stock: UTSJSONObject) : string[] {
+function imageListFromStock(stock: UTSJSONObject): string[] {
 	const result: string[] = []
-	const directImage = getStringField(stock, 'product_image')
+	const directImage = stringValue(stock['product_image'])
 	if (directImage != '') result.push(directImage)
 	const mediaFiles = parseObjectArray(stock['product_media_files'])
-	for (let i = 0; i < mediaFiles.length; i++) {
-		const image = firstStringField(mediaFiles[i], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
-		if (image != '') result.push(image)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const image = firstStringField(mediaFiles[index], ['signed_thumbnail_url', 'thumbnail_url', 'signed_url', 'signed_download_url', 'file_url', 'url', 'image'])
+		if (image != '' && result.indexOf(image) < 0) result.push(image)
 	}
 	return result
 }
 
-function stockToListItem(stock: UTSJSONObject) : UTSJSONObject {
-	const id = getStringField(stock, 'id')
-	const name = getStringField(stock, 'product_name', '未命名商品')
-	const sku = getStringField(stock, 'product_sku')
-	const barcode = getStringField(stock, 'product_barcode')
-	const location = getStringField(stock, 'location_name')
-	const supplier = getStringField(stock, 'product_supplier_name', '未设置')
-	const category = getStringField(stock, 'product_category_name', '未分类')
-	const alertStatus = getStringField(stock, 'alert_status')
-	const subtitleParts: string[] = []
-	if (sku != '') subtitleParts.push('SKU ' + sku)
-	if (barcode != '') subtitleParts.push(barcode)
+function previewImageListFromStock(stock: UTSJSONObject): string[] {
+	const result: string[] = []
+	const directImage = stringValue(stock['product_image'])
+	const mediaFiles = parseObjectArray(stock['product_media_files'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const image = firstStringField(mediaFiles[index], ['signed_url', 'signed_download_url', 'file_url', 'url', 'image', 'signed_thumbnail_url', 'thumbnail_url'])
+		if (image != '' && result.indexOf(image) < 0) result.push(image)
+	}
+	if (result.length == 0 && directImage != '') result.push(directImage)
+	return result
+}
+
+function mediaIdListFromStock(stock: UTSJSONObject): string[] {
+	const result: string[] = []
+	const mediaFiles = parseObjectArray(stock['product_media_files'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const mediaId = firstStringField(mediaFiles[index], ['id', 'pk'])
+		if (mediaId != '' && result.indexOf(mediaId) < 0) result.push(mediaId)
+	}
+	return result
+}
+
+function stockToListItem(item: UTSJSONObject): UTSJSONObject {
+	const id = stringValue(item['id'])
+	const sku = stringValue(item['product_sku'])
+	const barcode = stringValue(item['product_barcode'])
+	const supplierName = stringValue(item['product_supplier_name'], '未设置供应商')
+	const categoryName = stringValue(item['product_category_name'], '未分类')
+	const alertStatus = stringValue(item['alert_status'])
+	const listedValue = stringValue(item['is_listed']) == 'false' ? 'false' : 'true'
+	const tags = [alertStatusText(alertStatus), listedText(listedValue)] as string[]
+	if (supplierName != '未设置供应商') tags.push(supplierName)
+	const images = imageListFromStock(item)
+	const previewImages = previewImageListFromStock(item)
 	return {
 		id: id,
-		raw: stock,
-		name: name,
-		subtitle: subtitleParts.join(' / '),
-		meta: location == '' ? '未设置库存位置' : location,
-		image: firstImageFromStock(stock),
-		images: imageListFromStock(stock),
-		quantityText: numberText(stock['quantity']),
-		availableText: numberText(stock['available_quantity']),
+		rawId: id,
+		title: stringValue(item['product_name'], '未命名商品'),
+		subtitle: '条码：' + (barcode == '' ? '-' : barcode),
+		locationText: stringValue(item['location_name'], '未设置库存位置'),
+		image: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: mediaIdListFromStock(item),
+		skuText: sku == '' ? '-' : sku,
 		barcodeText: barcode == '' ? '-' : barcode,
-		supplierText: supplier,
-		categoryText: category,
-		alertText: statusText(alertStatus),
+		quantityText: numberText(item['quantity']),
+		availableText: numberText(item['available_quantity']),
+		reservedText: numberText(item['reserved_quantity']),
+		costText: moneyText(item['average_cost']),
+		categoryText: categoryName,
+		supplierText: supplierName,
+		alertText: alertStatusText(alertStatus),
+		tags: tags,
 	} as UTSJSONObject
 }
 
-function buildQuery(reset: boolean) : InventoryListQuery {
+function applyResponse(response: InventoryListResponse) {
+	stocks.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+	let quantityTotal = 0
+	let alertTotal = 0
+	for (let index = 0; index < response.results.length; index += 1) {
+		const row = response.results[index]
+		if (productFilterName.value == '') productFilterName.value = stringValue(row['product_name'])
+		quantityTotal = quantityTotal + intValue(row['quantity'])
+		const status = stringValue(row['alert_status'])
+		if (status != '' && status != 'NORMAL') alertTotal = alertTotal + 1
+	}
+	totalQuantityText.value = quantityTotal.toString()
+	alertCountText.value = alertTotal.toString()
+}
+
+function buildQuery(): InventoryListQuery {
 	return {
 		search: keyword.value == '' ? null : keyword.value,
-		page: reset ? 1 : page.value,
+		page: currentPage.value,
 		page_size: pageSize.value,
 		status: null,
-		alert_status: selectedAlertStatus.value == '' ? null : selectedAlertStatus.value,
+		alert_status: alertStatusFilter.value == '' ? null : alertStatusFilter.value,
 		supplier: supplierFilterValue.value == '' ? null : supplierFilterValue.value,
 		category: categoryFilterValues.value.length == 0 ? null : categoryFilterValues.value.join(','),
+		is_listed: listedStatusFilter.value == '' ? null : listedStatusFilter.value,
+		location: locationFilterValue.value == '' ? null : locationFilterValue.value,
+		product: productFilterId.value == '' ? null : productFilterId.value,
 		transaction_type: null,
 		location_type: null,
 		is_active: null,
 	} as InventoryListQuery
 }
 
-function applyListResponse(result: InventoryListResponse, reset: boolean) {
-	const mapped: UTSJSONObject[] = []
-	for (let i = 0; i < result.results.length; i++) {
-		mapped.push(stockToListItem(result.results[i]))
-	}
-	if (reset) {
-		items.value = mapped
-		page.value = 1
-	} else {
-		items.value = [...items.value, ...mapped]
-	}
-	totalCount.value = result.total_count
-	totalPages.value = result.total_pages <= 0 ? 1 : result.total_pages
-	hasMore.value = page.value < totalPages.value
-}
-
-function parseLoadError(error: any | null) : string {
-	if (error == null) return '获取库存数据失败'
-	const text = '' + error
-	if (text == '') return '获取库存数据失败'
-	return text
-}
-
-async function loadItems(reset: boolean) {
-	if (loading.value) return
-	loading.value = true
-	loadError.value = ''
+async function loadStocks() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
 	try {
-		const result = await getInventoryStocks(buildQuery(reset))
-		applyListResponse(result, reset)
-		loadedOnce.value = true
+		applyResponse(await getInventoryStocks(buildQuery()))
 	} catch (error) {
-		loadError.value = parseLoadError(error)
-		if (reset) {
-			items.value = []
-			totalCount.value = 0
-			totalPages.value = 1
-			hasMore.value = false
-		}
+		stocks.value = [] as UTSJSONObject[]
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		totalQuantityText.value = '0'
+		alertCountText.value = '0'
+		errorMessage.value = parseErrorMessage(error, '库存加载失败')
 	} finally {
-		loading.value = false
+		isLoading.value = false
 	}
 }
 
-function handleSearchInput(value: string) {
-	keyword.value = value
+function searchByScannedBarcode(barcode: string) {
+	keyword.value = barcode
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadStocks()
 }
 
-function handleSearchConfirm(value: string) {
-	keyword.value = value
-	loadItems(true)
-}
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadStocks() }
+function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadStocks() }
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
 
-function handleSearchClear() {
-	keyword.value = ''
-	loadItems(true)
-}
-
-function handleScanSearch(payload: any | null) {
-	let scanText = stringValue(payload)
-	if (scanText == '[object Object]') {
-		const objectPayload = parseObject(payload)
-		if (objectPayload != null) {
-			scanText = firstStringField(objectPayload!, ['result', 'value', 'text', 'code'])
-		}
-	}
-	if (scanText == '') return
-	keyword.value = scanText
-	loadItems(true)
+function handleFilterOpen() {
+	updateFilterPanelLayout()
+	draftSupplierValue.value = supplierFilterValue.value
+	draftSupplierText.value = supplierFilterText.value
+	draftCategoryValues.value = [...categoryFilterValues.value]
+	draftLocationValue.value = locationFilterValue.value
+	draftLocationText.value = locationFilterText.value
+	draftAlertStatus.value = alertStatusFilter.value
+	draftListedStatus.value = listedStatusFilter.value
 }
 
 function handleSupplierFilterChange(payload: UTSJSONObject) {
-	supplierFilterValue.value = getStringField(payload, 'value')
-	supplierFilterText.value = getStringField(payload, 'text')
+	draftSupplierValue.value = stringValue(payload['value'])
+	draftSupplierText.value = stringValue(payload['text'])
 }
 
 function handleCategoryFilterChange(payload: UTSJSONObject) {
-	categoryFilterValues.value = parseStringArray(payload['values'])
+	draftCategoryValues.value = parseStringArray(payload['values'])
+}
+
+function handleLocationFilterChange(payload: UTSJSONObject) {
+	draftLocationValue.value = stringValue(payload['value'])
+	draftLocationText.value = stringValue(payload['text'])
 }
 
 function selectAlertStatus(value: string) {
-	selectedAlertStatus.value = value
+	draftAlertStatus.value = value
 }
 
-function resetFilters() {
+function selectListedStatus(value: string) {
+	draftListedStatus.value = value
+}
+
+function handleFilterReset() {
 	supplierFilterValue.value = ''
 	supplierFilterText.value = ''
-	categoryFilterValues.value = []
-	selectedAlertStatus.value = ''
+	categoryFilterValues.value = [] as string[]
+	locationFilterValue.value = ''
+	locationFilterText.value = ''
+	alertStatusFilter.value = ''
+	listedStatusFilter.value = ''
+	draftSupplierValue.value = ''
+	draftSupplierText.value = ''
+	draftCategoryValues.value = [] as string[]
+	draftLocationValue.value = ''
+	draftLocationText.value = ''
+	draftAlertStatus.value = ''
+	draftListedStatus.value = ''
 	keyword.value = ''
-	filterVisible.value = false
-	loadItems(true)
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadStocks()
 }
 
-function applyFilters() {
-	filterVisible.value = false
-	loadItems(true)
+function applySelectedFilters() {
+	supplierFilterValue.value = draftSupplierValue.value
+	supplierFilterText.value = draftSupplierText.value
+	categoryFilterValues.value = [...draftCategoryValues.value]
+	locationFilterValue.value = draftLocationValue.value
+	locationFilterText.value = draftLocationText.value
+	alertStatusFilter.value = draftAlertStatus.value
+	listedStatusFilter.value = draftListedStatus.value
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadStocks()
 }
 
-function reload() {
-	loadItems(true)
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadStocks()
 }
 
-function handleLoadMore() {
-	if (!hasMore.value || loading.value) return
-	page.value = page.value + 1
-	loadItems(false)
+function buildInventoryDetailUrl(stockId: string, mode: string, productName: string): string {
+	let url = '/pages/inventory-management/from'
+	let separator = '?'
+	if (productFilterId.value != '') {
+		url = url + separator + 'product=' + productFilterId.value
+		separator = '&'
+	}
+	if (stockId != '') {
+		url = url + separator + 'stock=' + stockId
+		separator = '&'
+	}
+	if (mode != '') {
+		url = url + separator + 'mode=' + mode
+		separator = '&'
+	}
+	const titleText = productName == '' ? productFilterName.value : productName
+	if (titleText != '') url = url + separator + 'productName=' + encodeURIComponent(titleText)
+	return url
+}
+
+function navigateToInventoryDetail(stockId: string, mode: string, productName: string) {
+	if (stockId == '' && productFilterId.value == '') {
+		uni.showToast({ title: '缺少商品或库存记录', icon: 'none' })
+		return
+	}
+	uni.navigateTo({ url: buildInventoryDetailUrl(stockId, mode, productName) })
+}
+
+function navigateToCreateStock() {
+	if (productFilterId.value == '') {
+		uni.showToast({ title: '请先从商品页进入库存', icon: 'none' })
+		return
+	}
+	navigateToInventoryDetail('', 'create', productFilterName.value)
+}
+
+function navigateToAdjust(id: string, productName: string) {
+	if (id == '') return
+	navigateToInventoryDetail(id, 'adjust', productName)
 }
 
 function handleItemClick(payload: UTSJSONObject) {
-	let item = payload
-	const rawItem = parseObject(payload['item'])
-	if (rawItem != null) item = rawItem!
-	const id = getStringField(item, 'id')
-	if (id == '') return
-	uni.navigateTo({
-		url: '/pages/inventory-management/from?id=' + id,
-	})
+	let productName = stringValue(payload['title'])
+	const itemValue = payload['item']
+	if (productName == '' && itemValue != null) productName = stringValue((itemValue as UTSJSONObject)['title'])
+	navigateToAdjust(stringValue(payload['rawId'], stringValue(payload['id'])), productName)
 }
 
-function handleAdd() {
-	uni.navigateTo({
-		url: '/pages/inventory-management/from',
-	})
-}
-
-function consumeRefreshFlag() {
-	const flag = uni.getStorageSync(refreshStorageKey)
-	if (stringValue(flag) == '1') {
-		uni.removeStorageSync(refreshStorageKey)
-		loadItems(true)
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	if (actionKey == 'reload') {
+		loadStocks()
+		return
+	}
+	if (actionKey == 'adjust' && item != null) {
+		const row = item as UTSJSONObject
+		navigateToAdjust(stringValue(row['rawId']), stringValue(row['title']))
 	}
 }
 
-onLoad(() => {
-	loadItems(true)
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	copyText(stringValue((item as UTSJSONObject)['barcodeText']), '条码已复制', '暂无条码')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '库存位置已复制', '暂无库存位置')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const value = stringValue(payload['value'])
+	const label = stringValue(payload['label'], '内容')
+	copyText(value, label.replace(':', '') + '已复制', '暂无内容')
+}
+
+async function handleScannedBarcode(scanResult: string) {
+	const barcode = scanResult.trim()
+	if (barcode == '' || scanLookupRunning.value) return
+	scanLookupRunning.value = true
+	try {
+		searchByScannedBarcode(barcode)
+	} finally {
+		scanLookupRunning.value = false
+	}
+}
+
+function handleScanSearch() {
+	scanCode({
+		onlyFromCamera: true,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			handleScannedBarcode(scanResult)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({ title: message, icon: 'none' })
+		},
+	} as ScanCodeOption)
+}
+
+function unlockVolumeScanSoon() {
+	setTimeout(() => {
+		volumeScanLocked.value = false
+	}, 1200)
+}
+
+function handleVolumeKeyEvent(event: VolumeKeyEvent) {
+	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') return
+	if (volumeScanLocked.value) return
+	volumeScanLocked.value = true
+	closeFilterDrawer()
+	handleScanSearch()
+	unlockVolumeScanSoon()
+}
+
+function startInventoryVolumeKeyListener() {
+	startVolumeKeyListener((event: VolumeKeyEvent) => {
+		handleVolumeKeyEvent(event)
+	})
+}
+
+function scheduleInventoryVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) clearTimeout(volumeKeyStartTimer)
+	volumeKeyStartTimer = setTimeout(() => {
+		volumeKeyStartTimer = 0
+		startInventoryVolumeKeyListener()
+	}, 260)
+}
+
+function stopInventoryVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) {
+		clearTimeout(volumeKeyStartTimer)
+		volumeKeyStartTimer = 0
+	}
+	stopVolumeKeyListener()
+	volumeScanLocked.value = false
+}
+
+function consumeRefresh(): boolean {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag == null || ('' + flag) == '') return false
+	uni.removeStorageSync(refreshStorageKey)
+	return true
+}
+
+function applyRouteQuery(query: OnLoadOptions) {
+	const productValue = query['product']
+	productFilterId.value = productValue == null ? '' : ('' + productValue)
+	const productNameValue = query['productName']
+	productFilterName.value = productNameValue == null ? '' : ('' + productNameValue)
+	if (productFilterId.value != '') currentPage.value = 1
+}
+
+const productMode = computed((): boolean => {
+	return productFilterId.value != ''
+})
+
+const pageTitle = computed((): string => {
+	if (productMode.value) return '商品库存'
+	return '库存管理'
+})
+
+const homePath = computed((): string => {
+	if (productMode.value) return '/pages/tabbar/products'
+	return '/pages/tabbar/settings'
+})
+
+const productStockTitle = computed((): string => {
+	if (productFilterName.value != '') return productFilterName.value
+	if (productFilterId.value != '') return '商品 #' + productFilterId.value
+	return '商品库存'
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < stocks.value.length; index += 1) result.push(stockToListItem(stocks.value[index]))
+	return result
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || supplierFilterValue.value != '' || categoryFilterValues.value.length > 0 || locationFilterValue.value != '' || alertStatusFilter.value != '' || listedStatusFilter.value != ''
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (hasActiveFilter.value) return '没有匹配的库存记录'
+	if (productMode.value) return '该商品暂无库存记录'
+	return '暂无库存记录'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'total', label: '库存记录', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'quantity', label: '本页库存', value: totalQuantityText.value } as UTSJSONObject,
+		{ key: 'alerts', label: '本页预警', value: alertCountText.value } as UTSJSONObject,
+		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+	]
+})
+
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+onLoad((query: OnLoadOptions) => {
+	applyRouteQuery(query)
+	updateFilterPanelLayout()
+	loadStocks()
 })
 
 onShow(() => {
-	if (loadedOnce.value) {
-		consumeRefreshFlag()
-	}
+	scheduleInventoryVolumeKeyListener()
+	updateFilterPanelLayout()
+	if (consumeRefresh()) loadStocks()
+})
+
+onHide(() => {
+	stopInventoryVolumeKeyListener()
+})
+
+onUnload(() => {
+	stopInventoryVolumeKeyListener()
 })
 </script>
 
 <style>
-.page {
-	flex: 1;
-	background-color: #EEF2F7;
-}
-
-.filter-panel {
-	margin-top: 8px;
-	padding: 12px;
-	border-radius: 18px;
-	background-color: #FFFFFF;
-	border-width: 1px;
-	border-color: #E1E8F2;
-	border-style: solid;
-}
-
-.filter-section {
-	margin-bottom: 12px;
-}
-
-.filter-label {
-	margin-bottom: 6px;
-	font-size: 13px;
-	line-height: 20px;
-	font-weight: 700;
-	color: #111827;
-}
-
-.status-row {
-	flex-direction: row;
-	flex-wrap: wrap;
-}
-
-.status-chip {
-	min-width: 68px;
-	height: 34px;
-	margin-right: 8px;
-	margin-bottom: 8px;
-	border-radius: 17px;
-	background-color: #F5F7FA;
-	border-width: 1px;
-	border-color: #DEE6F1;
-	border-style: solid;
-	align-items: center;
-	justify-content: center;
-}
-
-.status-chip-active {
-	background-color: #111827;
-	border-color: #111827;
-}
-
-.status-chip-text {
-	font-size: 13px;
-	line-height: 19px;
-	color: #34465D;
-}
-
-.status-chip-text-active {
-	font-size: 13px;
-	line-height: 19px;
-	color: #FFFFFF;
-}
-
-.filter-actions {
-	flex-direction: row;
-	margin-top: 2px;
-}
-
-.filter-reset,
-.filter-apply {
-	flex: 1;
-	height: 42px;
-	border-radius: 14px;
-	align-items: center;
-	justify-content: center;
-}
-
-.filter-reset {
-	margin-right: 8px;
-	background-color: #F5F7FA;
-	border-width: 1px;
-	border-color: #DEE6F1;
-	border-style: solid;
-}
-
-.filter-apply {
-	background-color: #111827;
-}
-
-.filter-reset-text {
-	font-size: 14px;
-	line-height: 20px;
-	color: #53657C;
-}
-
-.filter-apply-text {
-	font-size: 14px;
-	line-height: 20px;
-	color: #FFFFFF;
-}
-
-.content-scroll {
-	flex: 1;
-}
-
-.overview-card {
-	margin: 10px;
-	padding: 10px 12px;
-	border-radius: 16px;
-	background-color: #FFFFFF;
-	border-width: 1px;
-	border-color: #E1E8F2;
-	border-style: solid;
-	flex-direction: row;
-	justify-content: space-between;
-}
-
-.overview-row {
-	flex-direction: row;
-	align-items: center;
-}
-
-.overview-label {
-	margin-right: 6px;
-	font-size: 12px;
-	line-height: 18px;
-	color: #738197;
-}
-
-.overview-value {
-	font-size: 14px;
-	line-height: 20px;
-	font-weight: 700;
-	color: #111827;
-}
-
-.error-card,
-.empty-card {
-	margin: 10px;
-	padding: 26px 14px;
-	border-radius: 20px;
-	background-color: #FFFFFF;
-	border-width: 1px;
-	border-style: solid;
-	align-items: center;
-}
-
-.error-card {
-	border-color: #FEB2B2;
-}
-
-.empty-card {
-	border-color: #E1E8F2;
-}
-
-.error-title {
-	font-size: 18px;
-	line-height: 26px;
-	font-weight: 700;
-	color: #B91C1C;
-}
-
-.error-text {
-	margin-top: 8px;
-	font-size: 13px;
-	line-height: 20px;
-	color: #8A1C1C;
-	text-align: center;
-}
-
-.retry-btn {
-	margin-top: 14px;
-	height: 38px;
-	padding-left: 20px;
-	padding-right: 20px;
-	border-radius: 14px;
-	background-color: #111827;
-	align-items: center;
-	justify-content: center;
-}
-
-.retry-text {
-	font-size: 14px;
-	line-height: 20px;
-	color: #FFFFFF;
-}
-
-.empty-icon {
-	width: 64px;
-	height: 64px;
-	border-radius: 32px;
-	background-color: #EEF2F7;
-	align-items: center;
-	justify-content: center;
-}
-
-.empty-icon-text {
-	font-size: 26px;
-	line-height: 34px;
-	color: #6B7C93;
-}
-
-.empty-title {
-	margin-top: 16px;
-	font-size: 18px;
-	line-height: 26px;
-	font-weight: 700;
-	color: #111827;
-}
-
-.empty-text {
-	margin-top: 6px;
-	font-size: 13px;
-	line-height: 20px;
-	color: #6B7C93;
-}
-
-.loading-wrap {
-	align-items: center;
-	padding-top: 14px;
-	padding-bottom: 88px;
-}
-
-.loading-text {
-	font-size: 13px;
-	line-height: 20px;
-	color: #6B7C93;
-}
-
-.fab {
-	position: fixed;
-	right: 14px;
-	bottom: 24px;
-	height: 48px;
-	padding-left: 20px;
-	padding-right: 20px;
-	border-radius: 24px;
-	background-color: #111827;
-	align-items: center;
-	justify-content: center;
-	box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
-}
-
-.fab-text {
-	font-size: 15px;
-	line-height: 22px;
-	color: #FFFFFF;
-}
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.inventory-filter-panel { position: relative; padding-top: 2px; }
+.inventory-filter-content-scroll { padding-right: 2px; }
+.inventory-filter-scroll-inner { padding-bottom: 58px; }
+.inventory-filter-select-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.inventory-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.inventory-filter-select-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.inventory-filter-group-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.inventory-filter-select-wrap { margin-top: 8px; }
+.inventory-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.inventory-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.inventory-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.inventory-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.inventory-filter-option-text-active { color: #FFFFFF; }
+.inventory-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.inventory-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.inventory-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.inventory-filter-btn-primary { background-color: #0F172A; }
+.inventory-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.inventory-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
+.product-stock-header { flex-direction: row; align-items: center; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.product-stock-title-wrap { flex: 1; padding-right: 10px; }
+.product-stock-title { font-size: 17px; line-height: 23px; color: #0F172A; font-weight: bold; }
+.product-stock-subtitle { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.product-stock-action { height: 38px; padding-left: 14px; padding-right: 14px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.product-stock-action-text { font-size: 13px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
 </style>

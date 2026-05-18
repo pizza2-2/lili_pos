@@ -2,7 +2,14 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+import { checkPurchaseProduct, deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+
+type PurchaseDetailSelectedFilter = { __$originalPosition?: UTSSourceMapPosition<"PurchaseDetailSelectedFilter", "pages/purchases/details/index.uvue", 123, 6>;
+	param: string
+	value: string
+}
 
 
 const __sfc__ = defineComponent({
@@ -17,6 +24,7 @@ const purchaseListRefreshStorageKey = 'refresh:pages:purchases:index'
 const purchaseId = ref('')
 const purchaseInfo = ref<PurchaseItem | null>(null)
 const keyword = ref('')
+const filterVisible = ref(false)
 const details = ref<PurchaseDetailItem[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -25,12 +33,20 @@ const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
 const pageTotalAmount = ref('0.00')
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<PurchaseDetailFilterOptionsResponse | null>(null)
+const selectedFilters = ref<PurchaseDetailSelectedFilter[]>([])
+const filterPanelHeight = ref(420)
+const filterContentHeight = ref(356)
+const volumeScanLocked = ref(false)
+const scanLookupRunning = ref(false)
+let volumeKeyStartTimer = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'skuText', label: 'SKU:' } as UTSJSONObject,
 	{ key: 'quantityText', label: '数量:' } as UTSJSONObject,
 	{ key: 'progressText', label: '收货:' } as UTSJSONObject,
-	{ key: 'notesText', label: '备注:' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
@@ -53,7 +69,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:111")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:178")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -65,6 +81,64 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 	}
 	return message
+}
+
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 420) nextPanelHeight = 420
+	if (nextPanelHeight < 320) nextPanelHeight = 320
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 240) nextContentHeight = 240
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: PurchaseDetailSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as PurchaseDetailSelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as PurchaseDetailSelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function splitSelectedValues(value: string): string[] {
+	if (value == '') return [] as string[]
+	const parts = value.split(',')
+	const result: string[] = []
+	for (let index = 0; index < parts.length; index += 1) {
+		const text = parts[index].trim()
+		if (text != '') result.push(text)
+	}
+	return result
 }
 
 function applyResponse(response: PurchaseDetailListResponse) {
@@ -104,7 +178,7 @@ async function loadDetails() {
 			page_size: pageSize.value,
 			purchase: purchaseId.value,
 			product: null,
-			is_fully_received: null,
+			is_fully_received: selectedFilterValue('is_fully_received') == '' ? null : selectedFilterValue('is_fully_received'),
 		})
 		applyResponse(response)
 		await loadPurchaseInfo()
@@ -142,6 +216,11 @@ function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
 		rawId: item.id.toString(),
 		title: stringValue(item.product_name, '商品 #' + item.product.toString()),
 		subtitle: '条码：' + stringValue(item.product_barcode, '-'),
+		image: item.product_image,
+		images: item.product_images,
+		previewCover: item.product_preview_images.length > 0 ? item.product_preview_images[0] : item.product_image,
+		previewImages: item.product_preview_images,
+		mediaIds: item.product_media_ids,
 		amountText: '¥ ' + stringValue(item.amount, '0.00'),
 		skuText: stringValue(item.product_sku, '-'),
 		quantityText: item.received_quantity.toString() + '/' + item.quantity.toString() + '，剩余 ' + item.remaining_quantity.toString(),
@@ -154,7 +233,146 @@ function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadDetails() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadDetails() }
-function handleCreate(payload: UTSJSONObject) { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }) }
+
+function searchByScannedBarcode(barcode: string) {
+	keyword.value = barcode
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadDetails()
+}
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getPurchaseDetailFilterOptions(purchaseId.value == '' ? null : purchaseId.value)
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return splitSelectedValues(selectedFilterValue(param)).includes(value)
+}
+
+function toggleFilterOption(param: string, value: string, multiple: boolean) {
+	const currentValues = splitSelectedValues(selectedFilterValue(param))
+	if (!multiple) {
+		setSelectedFilterValue(param, currentValues.includes(value) ? '' : value)
+		return
+	}
+	const nextValues: string[] = []
+	let alreadySelected = false
+	for (let index = 0; index < currentValues.length; index += 1) {
+		const currentValue = currentValues[index]
+		if (currentValue == value) {
+			alreadySelected = true
+			continue
+		}
+		nextValues.push(currentValue)
+	}
+	if (!alreadySelected) nextValues.push(value)
+	setSelectedFilterValue(param, nextValues.join(','))
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as PurchaseDetailSelectedFilter[]
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadDetails()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadDetails()
+}
+
+async function handleScannedBarcode(scanResult: string) {
+	const barcode = scanResult.trim()
+	if (barcode == '' || scanLookupRunning.value) return
+	if (purchaseId.value == '') {
+		searchByScannedBarcode(barcode)
+		return
+	}
+	scanLookupRunning.value = true
+	try {
+		const result = await checkPurchaseProduct(purchaseId.value, barcode, '')
+		if (result.exists && result.purchase_detail_id > 0) {
+			closeFilterDrawer()
+			uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + result.purchase_detail_id.toString() })
+			return
+		}
+		searchByScannedBarcode(barcode)
+	} catch (error) {
+		searchByScannedBarcode(barcode)
+	} finally {
+		scanLookupRunning.value = false
+	}
+}
+
+function handleScanSearch() {
+	scanCode({
+		onlyFromCamera: true,
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			handleScannedBarcode(scanResult)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({ title: message, icon: 'none' })
+		},
+	} as ScanCodeOption)
+}
+
+function unlockVolumeScanSoon() {
+	setTimeout(() => {
+		volumeScanLocked.value = false
+	}, 1200)
+}
+
+function handleVolumeKeyEvent(event: VolumeKeyEvent) {
+	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
+		return
+	}
+	if (volumeScanLocked.value) {
+		return
+	}
+	volumeScanLocked.value = true
+	closeFilterDrawer()
+	handleScanSearch()
+	unlockVolumeScanSoon()
+}
+
+function startPurchaseDetailVolumeKeyListener() {
+	startVolumeKeyListener((event: VolumeKeyEvent) => {
+		handleVolumeKeyEvent(event)
+	})
+}
+
+function schedulePurchaseDetailVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) {
+		clearTimeout(volumeKeyStartTimer)
+	}
+	volumeKeyStartTimer = setTimeout(() => {
+		volumeKeyStartTimer = 0
+		startPurchaseDetailVolumeKeyListener()
+	}, 260)
+}
+
+function stopPurchaseDetailVolumeKeyListener() {
+	if (volumeKeyStartTimer != 0) {
+		clearTimeout(volumeKeyStartTimer)
+		volumeKeyStartTimer = 0
+	}
+	stopVolumeKeyListener()
+	volumeScanLocked.value = false
+}
+function handleCreate() { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }) }
 
 function handleItemClick(payload: UTSJSONObject) {
 	const id = stringValue(payload['rawId'], stringValue(payload['id']))
@@ -249,9 +467,13 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || selectedFilters.value.length > 0
+})
+
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
-	if (keyword.value != '') return '没有匹配的采购明细'
+	if (hasActiveFilter.value) return '没有匹配的采购明细'
 	return '暂无采购明细'
 })
 
@@ -263,13 +485,46 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	]
 })
 
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+const filterDefinitions = computed((): PurchaseDetailFilterDefinition[] => {
+	if (filterOptions.value == null) return [] as PurchaseDetailFilterDefinition[]
+	const result: PurchaseDetailFilterDefinition[] = []
+	for (let index = 0; index < filterOptions.value.filters.length; index += 1) {
+		const filter = filterOptions.value.filters[index]
+		if (filter.param != 'product' && filter.key != 'product') {
+			result.push(filter)
+		}
+	}
+	return result
+})
+
 onLoad((query: OnLoadOptions) => {
+	updateFilterPanelLayout()
 	const purchaseValue = query['purchase']
 	purchaseId.value = purchaseValue == null ? '' : ('' + purchaseValue)
 	loadDetails()
 })
 
-onShow(() => { if (consumeRefreshNeeded()) loadDetails() })
+onShow(() => {
+	schedulePurchaseDetailVolumeKeyListener()
+	updateFilterPanelLayout()
+	if (consumeRefreshNeeded()) loadDetails()
+})
+
+onHide(() => {
+	stopPurchaseDetailVolumeKeyListener()
+})
+
+onUnload(() => {
+	stopPurchaseDetailVolumeKeyListener()
+})
 
 return (): any | null => {
 
@@ -281,16 +536,95 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
       title: pageTitle.value,
       searchPlaceholder: "商品名、SKU、条码",
       searchValue: unref(keyword),
-      filterVisible: false,
+      filterVisible: unref(filterVisible),
       showBack: true,
       showSearch: true,
-      showFilter: false,
+      showFilter: true,
+      showScan: true,
       showHome: true,
+      filterActive: hasActiveFilter.value,
+      filterText: "重置",
       homePath: "/pages/purchases/index",
       onSearchInput: handleSearchInput,
       onSearchConfirm: handleSearchConfirm,
-      onSearchClear: handleSearchClear
-    }), null, 8 /* PROPS */, ["title", "searchValue"]),
+      onSearchClear: handleSearchClear,
+      onScan: handleScanSearch,
+      "onUpdate:filterVisible": handleFilterVisibleChange,
+      onFilterOpen: handleFilterOpen
+    }), _uM({
+      "filter-panel": withSlotCtx((): any[] => [
+        _cE("view", _uM({
+          class: "purchase-filter-panel",
+          style: _nS(filterPanelStyle.value)
+        }), [
+          _cE("scroll-view", _uM({
+            "scroll-y": "true",
+            class: "purchase-filter-content-scroll",
+            style: _nS(filterContentScrollStyle.value)
+          }), [
+            _cE("view", _uM({ class: "purchase-filter-scroll-inner" }), [
+              isTrue(unref(filterOptionsLoading))
+                ? _cE("view", _uM({
+                    key: 0,
+                    class: "purchase-filter-state"
+                  }), [
+                    _cE("text", _uM({ class: "purchase-filter-state-text" }), "筛选选项加载中...")
+                  ])
+                : unref(filterOptionsError) != ''
+                  ? _cE("view", _uM({
+                      key: 1,
+                      class: "purchase-filter-state"
+                    }), [
+                      _cE("text", _uM({ class: "purchase-filter-state-text" }), _tD(unref(filterOptionsError)), 1 /* TEXT */)
+                    ])
+                  : filterDefinitions.value.length > 0
+                    ? _cE("view", _uM({
+                        key: 2,
+                        class: "purchase-filter-groups"
+                      }), [
+                        _cE(Fragment, null, RenderHelpers.renderList(filterDefinitions.value, (filter, __key, __index, _cached): any => {
+                          return _cE("view", _uM({
+                            key: filter.key,
+                            class: "purchase-filter-group"
+                          }), [
+                            _cE("text", _uM({ class: "purchase-filter-group-title" }), _tD(filter.label), 1 /* TEXT */),
+                            _cE("view", _uM({ class: "purchase-filter-options" }), [
+                              _cE(Fragment, null, RenderHelpers.renderList(filter.options, (option, __key, __index, _cached): any => {
+                                return _cE("view", _uM({
+                                  key: filter.key + '-' + option.value,
+                                  class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'purchase-filter-option purchase-filter-option-active' : 'purchase-filter-option'),
+                                  onClick: () => {toggleFilterOption(filter.param, option.value, filter.multiple)}
+                                }), [
+                                  _cE("text", _uM({
+                                    class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'purchase-filter-option-text purchase-filter-option-text-active' : 'purchase-filter-option-text')
+                                  }), _tD(option.label), 3 /* TEXT, CLASS */)
+                                ], 10 /* CLASS, PROPS */, ["onClick"])
+                              }), 128 /* KEYED_FRAGMENT */)
+                            ])
+                          ])
+                        }), 128 /* KEYED_FRAGMENT */)
+                      ])
+                    : _cC("v-if", true)
+            ])
+          ], 4 /* STYLE */),
+          _cE("view", _uM({ class: "purchase-filter-actions" }), [
+            _cE("view", _uM({
+              class: "purchase-filter-btn purchase-filter-btn-light",
+              onClick: handleFilterReset
+            }), [
+              _cE("text", _uM({ class: "purchase-filter-btn-light-text" }), "重置")
+            ]),
+            _cE("view", _uM({
+              class: "purchase-filter-btn purchase-filter-btn-primary",
+              onClick: applySelectedFilters
+            }), [
+              _cE("text", _uM({ class: "purchase-filter-btn-primary-text" }), "应用")
+            ])
+          ])
+        ], 4 /* STYLE */)
+      ]),
+      _: 1 /* STABLE */
+    }), 8 /* PROPS */, ["title", "searchValue", "filterVisible", "filterActive"]),
     _cE("scroll-view", _uM({
       style: _nS(_uM({"flex":"1"})),
       class: "page-scroll"
@@ -349,4 +683,4 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
 
 })
 export default __sfc__
-const GenPagesPurchasesDetailsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingTop", 6], ["paddingRight", 6], ["paddingBottom", 96], ["paddingLeft", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))]])]
+const GenPagesPurchasesDetailsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingTop", 6], ["paddingRight", 6], ["paddingBottom", 96], ["paddingLeft", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["purchase-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["purchase-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["purchase-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["purchase-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["purchase-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["purchase-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["purchase-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["purchase-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["purchase-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["purchase-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["purchase-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["purchase-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["purchase-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))], ["purchase-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["purchase-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["purchase-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["purchase-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))]])]

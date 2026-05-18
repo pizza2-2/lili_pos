@@ -57,7 +57,7 @@ const _cache = __ins.renderCache;
 				avatar: ''
 			})
 			uni.switchTab({
-				url: '/pages/tabbar/products'
+				url: '/pages/tabbar/settings'
 			})
 	} catch (error) {
 		clearAuthState()

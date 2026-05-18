@@ -43,6 +43,7 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createShopMedia, getShopDetail, getShopMediaDetail, ShopMediaItem, ShopMediaMutationData, updateShopMedia } from '@/pkg/api/modules/shops'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
 const shopMediaListRefreshStorageKey = 'refresh:pages:shop:media'
 
@@ -57,6 +58,7 @@ const leaveSignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 
 const initialData = ref<UTSJSONObject>({
 	shop_id: '',
@@ -123,15 +125,11 @@ function buildUploadHeaders(): UTSJSONObject {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -313,7 +311,12 @@ function buildShopMediaMutationPayload(formDataObject: UTSJSONObject): ShopMedia
 	} as ShopMediaMutationData
 }
 
-function goBackToList(): void {
+function goBackToList(markLeaving: boolean = true): void {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({
@@ -403,6 +406,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		return
 	}
 
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	const isEditing = formMode.value == 'edit' && mediaId.value != ''
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
@@ -435,20 +439,28 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 			}
 		}
 		markShopMediaRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: successMessage,
 			icon: 'success',
 		})
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: parseErrorMessage(error, isEditing ? '资料保存失败' : '资料创建失败'),
 			icon: 'none',
 		})
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -573,7 +585,13 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 }
 
 onLoad((event: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	initializeForm(event)
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 </script>
 

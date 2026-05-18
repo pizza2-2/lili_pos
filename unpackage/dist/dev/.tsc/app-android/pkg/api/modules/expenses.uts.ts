@@ -81,6 +81,27 @@ export type ExpenseOptionsResponse = {
 	groups: ExpenseOptionGroup[]
 }
 
+export type ExpenseFilterOption = {
+	value: string
+	label: string
+}
+
+export type ExpenseFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: ExpenseFilterOption[]
+}
+
+export type ExpenseFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: ExpenseFilterDefinition[]
+}
+
 export type ExpenseMutationData = {
 	expenditure_type_id: string | null
 	supplier_id: string | null
@@ -114,6 +135,51 @@ function stringValue(value: any | null): string {
 
 function boolValue(value: any | null): boolean {
 	return stringValue(value) == 'true'
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	let parsed: UTSJSONObject[] | null = null
+	try {
+		parsed = JSON.parseArray<UTSJSONObject>(text)
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) return [] as string[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as string[]
+	let parsed: any[] | null = null
+	try {
+		parsed = JSON.parseArray<any>(text)
+	} catch (error) {
+		const singleValue = stringValue(value)
+		if (singleValue == '') return [] as string[]
+		const result: string[] = []
+		result.push(singleValue)
+		return result
+	}
+	if (parsed == null) return [] as string[]
+	const result: string[] = []
+	for (let index = 0; index < parsed.length; index += 1) result.push(stringValue(parsed[index]))
+	return result
 }
 
 function buildExpenseListQuery(data: ExpenseListQuery): UTSJSONObject {
@@ -196,15 +262,11 @@ function buildExpenseItemsFromValue(value: any | null): ExpenseItem[] {
 }
 
 function rawDataObject(raw: any): UTSJSONObject {
-	const rawText = JSON.stringify(raw)
-	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	const rawObject = parseObject(raw)
 	if (rawObject == null) throw new Error('支出接口响应解析失败')
 	const dataValue = rawObject!['data']
-	if (dataValue != null) {
-		const dataText = JSON.stringify(dataValue)
-		const dataObject = dataText == null || dataText == '' ? null : JSON.parseObject<UTSJSONObject>(dataText)
-		if (dataObject != null) return dataObject!
-	}
+	const dataObject = parseObject(dataValue)
+	if (dataObject != null) return dataObject!
 	return rawObject!
 }
 
@@ -273,6 +335,42 @@ function buildOptionsResponse(raw: any): ExpenseOptionsResponse {
 	return { resource: stringValue(rawObject['resource']), total_groups: intValue(rawObject['total_groups']), groups: groups } as ExpenseOptionsResponse
 }
 
+function buildExpenseFilterOptionsResponse(raw: any): ExpenseFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: ExpenseFilterDefinition[] = []
+	const filterObjects = parseObjectArray(rawObject['filters'])
+	if (filterObjects.length > 0) {
+		const nextFilters: ExpenseFilterDefinition[] = []
+		for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+			const filterObject = filterObjects[filterIndex]
+			const optionObjects = parseObjectArray(filterObject['options'])
+			const options: ExpenseFilterOption[] = []
+			for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+				const optionObject = optionObjects[optionIndex]
+				options.push({
+					value: stringValue(optionObject['value']),
+					label: stringValue(optionObject['label']),
+				} as ExpenseFilterOption)
+			}
+			nextFilters.push({
+				key: stringValue(filterObject['key']),
+				param: stringValue(filterObject['param']),
+				label: stringValue(filterObject['label']),
+				control: stringValue(filterObject['control']),
+				aliases: stringArrayValue(filterObject['aliases']),
+				multiple: stringValue(filterObject['multiple']) == 'true',
+				options: options,
+			} as ExpenseFilterDefinition)
+		}
+		filters = nextFilters
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as ExpenseFilterOptionsResponse
+}
+
 function buildMutationBody(data: ExpenseMutationData): UTSJSONObject {
 	const body = {
 		amount: data.amount,
@@ -304,6 +402,11 @@ export async function getExpenseOptions(key: string | null = null, search: strin
 	if (limit > 0) query['limit'] = limit
 	const raw = await request('/api/expenses/expenditures/options/', 'GET', query, true)
 	return buildOptionsResponse(raw)
+}
+
+export async function getExpenseFilterOptions(): Promise<ExpenseFilterOptionsResponse> {
+	const raw = await request('/api/expenses/expenditures/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildExpenseFilterOptionsResponse(raw)
 }
 
 export async function getExpenseDetail(id: number | string): Promise<ExpenseItem> {

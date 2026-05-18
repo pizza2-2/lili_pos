@@ -1,0 +1,838 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="采购汇总"
+			searchPlaceholder="采购单号、供应商、备注"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="summary-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="summary-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="summary-filter-scroll-inner">
+							<view class="summary-filter-group">
+								<text class="summary-filter-group-title">日期范围</text>
+								<view class="summary-filter-input-row">
+									<input class="summary-filter-input" :value="filterDateFrom" placeholder="开始日期 YYYY-MM-DD" @input="handleDateFromInput" />
+									<input class="summary-filter-input" :value="filterDateTo" placeholder="结束日期 YYYY-MM-DD" @input="handleDateToInput" />
+								</view>
+								<view class="summary-filter-options">
+									<view
+										v-for="option in datePresetOptions"
+										:key="optionKey(option)"
+										:class="selectedDatePreset == optionValue(option) ? 'summary-filter-option summary-filter-option-active' : 'summary-filter-option'"
+										@click="applyDatePreset(optionValue(option))"
+									>
+										<text :class="selectedDatePreset == optionValue(option) ? 'summary-filter-option-text summary-filter-option-text-active' : 'summary-filter-option-text'">{{ optionLabel(option) }}</text>
+									</view>
+								</view>
+							</view>
+
+							<view v-if="filterOptionsLoading" class="summary-filter-state">
+								<text class="summary-filter-state-text">筛选选项加载中...</text>
+							</view>
+
+							<view v-else-if="filterOptionsError != ''" class="summary-filter-state">
+								<text class="summary-filter-state-text">{{ filterOptionsError }}</text>
+							</view>
+
+							<view v-else>
+								<view
+									v-for="filter in filterDefinitions"
+									:key="filter.key"
+									class="summary-filter-group"
+								>
+									<text class="summary-filter-group-title">{{ filter.label }}</text>
+									<view class="summary-filter-options">
+										<view
+											v-for="option in filter.options"
+											:key="filter.key + '-' + option.value"
+											:class="isFilterOptionSelected(filter.param, option.value) ? 'summary-filter-option summary-filter-option-active' : 'summary-filter-option'"
+											@click="toggleFilterOption(filter.param, option.value)"
+										>
+											<text :class="isFilterOptionSelected(filter.param, option.value) ? 'summary-filter-option-text summary-filter-option-text-active' : 'summary-filter-option-text'">{{ option.label }}</text>
+										</view>
+									</view>
+								</view>
+							</view>
+
+							<view class="summary-filter-group">
+								<text class="summary-filter-group-title">金额范围</text>
+								<view class="summary-filter-input-row">
+									<input class="summary-filter-input" type="digit" :value="filterAmountMin" placeholder="最低金额" @input="handleAmountMinInput" />
+									<input class="summary-filter-input" type="digit" :value="filterAmountMax" placeholder="最高金额" @input="handleAmountMaxInput" />
+								</view>
+							</view>
+
+							<view class="summary-filter-group">
+								<text class="summary-filter-group-title">排序方式</text>
+								<view class="summary-filter-options">
+									<view
+										v-for="option in sortOptions"
+										:key="optionKey(option)"
+										:class="selectedOrdering == optionValue(option) ? 'summary-filter-option summary-filter-option-active' : 'summary-filter-option'"
+										@click="selectOrdering(optionValue(option))"
+									>
+										<text :class="selectedOrdering == optionValue(option) ? 'summary-filter-option-text summary-filter-option-text-active' : 'summary-filter-option-text'">{{ optionLabel(option) }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="summary-filter-actions">
+						<view class="summary-filter-btn summary-filter-btn-light" @click="handleFilterReset">
+							<text class="summary-filter-btn-light-text">重置</text>
+						</view>
+						<view class="summary-filter-btn summary-filter-btn-primary" @click="applySelectedFilters">
+							<text class="summary-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="refreshSummaryData"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					imageField="cover"
+					imageListField="images"
+					:showImage="true"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载采购汇总"
+					:keepContentOnLoading="true"
+					inlineLoadingText="采购汇总刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="日期汇总"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { deleteTransaction, getTransactionFilterOptions, getTransactionList, getTransactionStatistics, TransactionFilterDefinition, TransactionFilterOption, TransactionFilterOptionsResponse, TransactionItem, TransactionListQuery, TransactionListResponse, TransactionMediaFile, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
+
+type SummarySelectedFilter = {
+	param: string
+	value: string
+}
+
+const refreshStorageKey = 'refresh:pages:suppliers_procure:index'
+const keyword = ref('')
+const filterVisible = ref(false)
+const transactions = ref<TransactionItem[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const summary = ref<TransactionSummary | null>(null)
+const statistics = ref<TransactionStatisticsResponse | null>(null)
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<TransactionFilterOptionsResponse | null>(null)
+const selectedFilters = ref<SummarySelectedFilter[]>([])
+const filterDateFrom = ref('')
+const filterDateTo = ref('')
+const filterAmountMin = ref('')
+const filterAmountMax = ref('')
+const selectedOrdering = ref('-transaction_date')
+const selectedDatePreset = ref('last7')
+const filterPanelHeight = ref(460)
+const filterContentHeight = ref(396)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'supplierText', label: '供应商:' } as UTSJSONObject,
+	{ key: 'transactionTypeText', label: '类型:' } as UTSJSONObject,
+	{ key: 'filesText', label: '附件:' } as UTSJSONObject,
+	{ key: 'noteText', label: '备注:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+])
+
+const defaultFilterDefinitions = ref<TransactionFilterDefinition[]>([
+	{
+		key: 'transaction_type',
+		param: 'transaction_type',
+		label: '记录类型',
+		control: 'choice',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: '1', label: '采购' } as TransactionFilterOption,
+			{ value: '2', label: '欠单' } as TransactionFilterOption,
+			{ value: '3', label: '还款' } as TransactionFilterOption,
+		],
+	} as TransactionFilterDefinition,
+])
+
+const datePresetOptions = ref<UTSJSONObject[]>([
+	{ value: 'today', label: '今天' } as UTSJSONObject,
+	{ value: 'last7', label: '近7天' } as UTSJSONObject,
+	{ value: 'month', label: '本月' } as UTSJSONObject,
+])
+
+const sortOptions = ref<UTSJSONObject[]>([
+	{ value: '-transaction_date', label: '日期最新' } as UTSJSONObject,
+	{ value: 'transaction_date', label: '日期最早' } as UTSJSONObject,
+	{ value: '-amount', label: '金额最高' } as UTSJSONObject,
+	{ value: 'amount', label: '金额最低' } as UTSJSONObject,
+	{ value: '-created_at', label: '最近创建' } as UTSJSONObject,
+])
+
+const tagColorMap = ref<UTSJSONObject>({
+	采购: 'success',
+	欠单: 'warning',
+	还款: 'info',
+	无附件: 'muted',
+} as UTSJSONObject)
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function twoDigit(value: number): string {
+	if (value < 10) return '0' + value.toString()
+	return value.toString()
+}
+
+function dateText(value: Date): string {
+	return value.getFullYear().toString() + '-' + twoDigit(value.getMonth() + 1) + '-' + twoDigit(value.getDate())
+}
+
+function dateFromOffset(days: number): string {
+	const now = new Date()
+	const target = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+	return dateText(target)
+}
+
+function todayText(): string {
+	return dateText(new Date())
+}
+
+function monthStartText(): string {
+	const now = new Date()
+	return now.getFullYear().toString() + '-' + twoDigit(now.getMonth() + 1) + '-01'
+}
+
+function applyDefaultDateRange() {
+	filterDateFrom.value = dateFromOffset(7)
+	filterDateTo.value = todayText()
+	selectedDatePreset.value = 'last7'
+}
+
+function applyTransactionResponse(response: TransactionListResponse) {
+	transactions.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+	summary.value = response.summary
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '采购汇总加载失败'
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == '采购汇总加载失败') message = errorText
+		}
+	}
+	if (message.startsWith('Error: ')) return message.substring(7)
+	return message
+}
+
+function readEventValue(event: any): string {
+	if (event == null) return ''
+	const inputEvent = event as UniInputEvent
+	const detail = inputEvent.detail
+	if (detail == null) return ''
+	return detail.value
+}
+
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 156
+	if (nextPanelHeight > 460) nextPanelHeight = 460
+	if (nextPanelHeight < 330) nextPanelHeight = 330
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 250) nextContentHeight = 250
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function handleFilterVisibleChange(value: boolean) {
+	filterVisible.value = value
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: SummarySelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') nextFilters.push({ param: param, value: value } as SummarySelectedFilter)
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') nextFilters.push({ param: param, value: value } as SummarySelectedFilter)
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return selectedFilterValue(param) == value
+}
+
+function toggleFilterOption(param: string, value: string) {
+	const currentValue = selectedFilterValue(param)
+	setSelectedFilterValue(param, currentValue == value ? '' : value)
+}
+
+function optionValue(option: UTSJSONObject): string {
+	return stringValue(option['value'])
+}
+
+function optionLabel(option: UTSJSONObject): string {
+	return stringValue(option['label'])
+}
+
+function optionKey(option: UTSJSONObject): string {
+	const value = optionValue(option)
+	if (value != '') return value
+	return optionLabel(option)
+}
+
+function selectOrdering(value: string) {
+	selectedOrdering.value = value
+}
+
+function handleDateFromInput(event: any) {
+	filterDateFrom.value = readEventValue(event).trim()
+	selectedDatePreset.value = ''
+}
+
+function handleDateToInput(event: any) {
+	filterDateTo.value = readEventValue(event).trim()
+	selectedDatePreset.value = ''
+}
+
+function handleAmountMinInput(event: any) {
+	filterAmountMin.value = readEventValue(event).trim()
+}
+
+function handleAmountMaxInput(event: any) {
+	filterAmountMax.value = readEventValue(event).trim()
+}
+
+function applyDatePreset(value: string) {
+	selectedDatePreset.value = value
+	if (value == 'today') {
+		filterDateFrom.value = todayText()
+		filterDateTo.value = todayText()
+		return
+	}
+	if (value == 'month') {
+		filterDateFrom.value = monthStartText()
+		filterDateTo.value = todayText()
+		return
+	}
+	applyDefaultDateRange()
+}
+
+function transactionTypeFilterValue(): string | null {
+	const value = selectedFilterValue('transaction_type')
+	return value == '' ? null : value
+}
+
+function buildTransactionQuery(): TransactionListQuery {
+	return {
+		search: keyword.value == '' ? null : keyword.value,
+		page: currentPage.value,
+		page_size: pageSize.value,
+		transaction_type: transactionTypeFilterValue(),
+		supplier: null,
+		supplier_id: null,
+		date_from: filterDateFrom.value == '' ? null : filterDateFrom.value,
+		start_date: null,
+		date_to: filterDateTo.value == '' ? null : filterDateTo.value,
+		end_date: null,
+		amount_min: filterAmountMin.value == '' ? null : filterAmountMin.value,
+		amount_max: filterAmountMax.value == '' ? null : filterAmountMax.value,
+		ordering: selectedOrdering.value == '' ? null : selectedOrdering.value,
+		sort_by: null,
+	} as TransactionListQuery
+}
+
+function markRefreshNeeded() {
+	uni.setStorageSync(refreshStorageKey, '1')
+}
+
+function consumeRefreshNeeded(): boolean {
+	const storedValue = uni.getStorageSync(refreshStorageKey)
+	if (storedValue == null || ('' + storedValue) == '') return false
+	uni.removeStorageSync(refreshStorageKey)
+	return true
+}
+
+async function loadTransactions() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getTransactionList(buildTransactionQuery())
+		applyTransactionResponse(response)
+	} catch (error) {
+		transactions.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		summary.value = null
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function getStatisticsText(key: string, fallback: string): string {
+	if (statistics.value == null) return fallback
+	const rawValue = statistics.value.data[key]
+	if (rawValue == null) return fallback
+	const text = '' + rawValue
+	if (text == '') return fallback
+	return text
+}
+
+function summaryAmountText(value: string, fallback: string = '0.00'): string {
+	if (value == '') return fallback
+	return value
+}
+
+async function loadTransactionStatistics() {
+	try {
+		statistics.value = await getTransactionStatistics(buildTransactionQuery())
+	} catch (error) {
+		statistics.value = null
+	}
+}
+
+function refreshSummaryData() {
+	loadTransactions()
+	loadTransactionStatistics()
+}
+
+function getDisplayText(value: string | null): string {
+	if (value == null || value == '') return '-'
+	return value
+}
+
+function transactionThumbnailUrl(mediaFile: TransactionMediaFile): string {
+	if (mediaFile.signed_thumbnail_url != '') return mediaFile.signed_thumbnail_url
+	if (mediaFile.thumbnail_url != '') return mediaFile.thumbnail_url
+	if (mediaFile.signed_url != '') return mediaFile.signed_url
+	return mediaFile.file_url
+}
+
+function transactionFullUrl(mediaFile: TransactionMediaFile): string {
+	if (mediaFile.signed_url != '') return mediaFile.signed_url
+	if (mediaFile.file_url != '') return mediaFile.file_url
+	return transactionThumbnailUrl(mediaFile)
+}
+
+function buildImages(item: TransactionItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = transactionThumbnailUrl(item.media_files[index])
+		if (imageUrl != '') result.push(imageUrl)
+	}
+	return result
+}
+
+function buildPreviewImages(item: TransactionItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = transactionFullUrl(item.media_files[index])
+		if (imageUrl != '') result.push(imageUrl)
+	}
+	return result
+}
+
+function buildMediaIds(item: TransactionItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaId = item.media_files[index].id
+		if (mediaId != '') result.push(mediaId)
+	}
+	return result
+}
+
+function formatDateText(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function transactionToListItem(item: TransactionItem): UTSJSONObject {
+	const images = buildImages(item)
+	const previewImages = buildPreviewImages(item)
+	const title = item.transaction_number != '' ? item.transaction_number : ('采购记录 #' + item.id.toString())
+	const typeText = getDisplayText(item.transaction_type_display)
+	const supplierText = getDisplayText(item.supplier_name)
+	const filesText = item.files_count.toString() + ' 个'
+	const tags = [typeText, item.files_count > 0 ? '附件 ' + item.files_count.toString() : '无附件'] as string[]
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		rawSupplierId: item.supplier.toString(),
+		title: title,
+		subtitle: '日期：' + formatDateText(item.transaction_date),
+		amountText: '¥ ' + item.amount,
+		supplierText: supplierText,
+		transactionTypeText: typeText,
+		filesText: filesText,
+		noteText: getDisplayText(item.note),
+		cover: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item),
+		tags: tags,
+	} as UTSJSONObject
+}
+
+async function handleFilterOpen() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getTransactionFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error)
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	refreshSummaryData()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	refreshSummaryData()
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as SummarySelectedFilter[]
+	applyDefaultDateRange()
+	filterAmountMin.value = ''
+	filterAmountMax.value = ''
+	selectedOrdering.value = '-transaction_date'
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	refreshSummaryData()
+}
+
+function applySelectedFilters() {
+	currentPage.value = 1
+	closeFilterDrawer()
+	refreshSummaryData()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	refreshSummaryData()
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	const titleText = stringValue(payload['title'], '采购记录')
+	const itemValue = payload['item']
+	if (itemValue == null) {
+		uni.showToast({ title: titleText, icon: 'none' })
+		return
+	}
+	const item = itemValue as UTSJSONObject
+	const detailText = [
+		'供应商：' + stringValue(item['supplierText'], '-'),
+		'类型：' + stringValue(item['transactionTypeText'], '-'),
+		'金额：' + stringValue(item['amountText'], '-'),
+		stringValue(item['subtitle'], '日期：-'),
+		'附件：' + stringValue(item['filesText'], '0 个'),
+		'备注：' + stringValue(item['noteText'], '-'),
+	].join('\n')
+	uni.showModal({
+		title: titleText,
+		content: detailText,
+		showCancel: false,
+		confirmText: '知道了',
+	})
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '日期已复制', '暂无日期')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '金额已复制', '暂无金额')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '内容已复制', '暂无内容')
+}
+
+async function runDelete(id: string) {
+	try {
+		await deleteTransaction(id)
+		markRefreshNeeded()
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
+		refreshSummaryData()
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error), icon: 'none' })
+	}
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const itemObject = item as UTSJSONObject
+	const id = stringValue(itemObject['rawId'])
+	if (id == '') return
+	if (actionKey == 'edit') {
+		const supplierId = stringValue(itemObject['rawSupplierId'])
+		uni.navigateTo({ url: '/pages/transactions/from?id=' + id + '&supplier_id=' + supplierId })
+		return
+	}
+	if (actionKey == 'delete') {
+		uni.showModal({
+			title: '删除采购记录',
+			content: '确定删除这条采购记录吗？',
+			success: (res) => {
+				if (res.confirm) runDelete(id)
+			},
+		})
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < transactions.value.length; index += 1) {
+		result.push(transactionToListItem(transactions.value[index]))
+	}
+	return result
+})
+
+const dateRangeText = computed((): string => {
+	if (filterDateFrom.value == '' && filterDateTo.value == '') return '全部日期'
+	if (filterDateFrom.value == '') return '截至 ' + filterDateTo.value
+	if (filterDateTo.value == '') return filterDateFrom.value + ' 起'
+	return filterDateFrom.value + ' 至 ' + filterDateTo.value
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != ''
+		|| selectedFilters.value.length > 0
+		|| filterAmountMin.value != ''
+		|| filterAmountMax.value != ''
+		|| selectedOrdering.value != '-transaction_date'
+		|| selectedDatePreset.value != 'last7'
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (hasActiveFilter.value) return '该日期范围没有匹配的采购记录'
+	return '暂无采购记录'
+})
+
+const purchaseAmountText = computed((): string => {
+	if (summary.value != null) return summaryAmountText(summary.value!.purchase_amount)
+	return getStatisticsText('purchaseAmount', '0.00')
+})
+
+const debtAmountText = computed((): string => {
+	if (summary.value != null) return summaryAmountText(summary.value!.arrears_amount)
+	return getStatisticsText('debtAmount', getStatisticsText('arrearsAmount', '0.00'))
+})
+
+const paymentAmountText = computed((): string => {
+	if (summary.value != null) return summaryAmountText(summary.value!.payment_amount)
+	return getStatisticsText('paymentAmount', '0.00')
+})
+
+const totalPaidText = computed((): string => {
+	if (summary.value != null) return summaryAmountText(summary.value!.total_paid)
+	return getStatisticsText('totalPaid', '0.00')
+})
+
+const actualDebtText = computed((): string => {
+	if (summary.value != null) return summaryAmountText(summary.value!.net_amount)
+	return getStatisticsText('actualDebt', '0.00')
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'date-range', label: '日期', value: dateRangeText.value } as UTSJSONObject,
+		{ key: 'total-count', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'purchase-amount', label: '采购金额', value: '¥ ' + purchaseAmountText.value } as UTSJSONObject,
+		{ key: 'debt-amount', label: '欠单金额', value: '¥ ' + debtAmountText.value } as UTSJSONObject,
+		{ key: 'payment-amount', label: '还款金额', value: '¥ ' + paymentAmountText.value } as UTSJSONObject,
+		{ key: 'total-paid', label: '总付款', value: '¥ ' + totalPaidText.value } as UTSJSONObject,
+		{ key: 'actual-debt', label: '实际欠款', value: '¥ ' + actualDebtText.value } as UTSJSONObject,
+	]
+})
+
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+const filterDefinitions = computed((): TransactionFilterDefinition[] => {
+	if (filterOptions.value == null) return defaultFilterDefinitions.value
+	if (filterOptions.value!.filters.length == 0) return defaultFilterDefinitions.value
+	return filterOptions.value!.filters
+})
+
+onLoad(() => {
+	updateFilterPanelLayout()
+	applyDefaultDateRange()
+	refreshSummaryData()
+})
+
+onShow(() => {
+	updateFilterPanelLayout()
+	if (consumeRefreshNeeded()) refreshSummaryData()
+})
+</script>
+
+<style>
+.page { flex: 1; position: relative; background-color: #EEF2F7; }
+.page-scroll { flex: 1; }
+.page-content { padding-left: 6px; padding-right: 6px; padding-top: 6px; padding-bottom: 88px; }
+.error-card { margin-bottom: 12px; padding: 18px 16px; border-radius: 16px; background-color: #FFFFFF; }
+.error-title { font-size: 16px; font-weight: 600; color: #111827; }
+.error-desc { margin-top: 8px; font-size: 14px; line-height: 20px; color: #6B7280; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 10px; background-color: #111827; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; font-weight: 600; color: #FFFFFF; }
+.summary-filter-panel { position: relative; padding-top: 2px; }
+.summary-filter-content-scroll { padding-right: 2px; }
+.summary-filter-scroll-inner { padding-bottom: 58px; }
+.summary-filter-state { height: 112px; border-radius: 12px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.summary-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.summary-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.summary-filter-group-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.summary-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.summary-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.summary-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.summary-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.summary-filter-option-text-active { color: #FFFFFF; }
+.summary-filter-input-row { flex-direction: row; margin-top: 8px; }
+.summary-filter-input { flex: 1; height: 36px; border-radius: 18px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 12px; padding-right: 12px; font-size: 12px; color: #0F172A; margin-right: 6px; }
+.summary-filter-actions { position: absolute; left: 0px; right: 0px; bottom: 0px; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.summary-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.summary-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.summary-filter-btn-primary { background-color: #0F172A; }
+.summary-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.summary-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
+</style>

@@ -12,6 +12,7 @@ uni-app x 图片预览组件，支持：
 ```vue
 <lili-preview
   :images="images"
+  :previewImages="previewImages"
   :thumbSize="72"
   :radius="36"
   :gap="12"
@@ -23,7 +24,8 @@ uni-app x 图片预览组件，支持：
 
 ## Props
 
-- `images: string[]` 图片地址数组，支持本地路径和网络地址
+- `images: string[]` 外层缩略图地址数组，支持本地路径和网络地址
+- `previewImages: string[]` 点开预览时使用的高清图地址数组；为空时回退使用 `images`
 - `initialIndex: number` 初始预览索引
 - `thumbSize: number` 缩略图尺寸，默认 `72`
 - `radius: number` 缩略图圆角，默认 `12`

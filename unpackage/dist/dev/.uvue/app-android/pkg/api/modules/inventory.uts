@@ -5,6 +5,18 @@ export type InventoryListQuery = {
     page_size: number;
     status: string | null;
     alert_status: string | null;
+    supplier?: string | null;
+    category?: string | null;
+    is_listed?: string | null;
+    location?: string | null;
+    from_location?: string | null;
+    to_location?: string | null;
+    transfer_order?: string | null;
+    inventory_check?: string | null;
+    product?: string | null;
+    stock?: string | null;
+    check_type?: string | null;
+    is_checked?: string | null;
     transaction_type: string | null;
     location_type: string | null;
     is_active: string | null;
@@ -19,6 +31,14 @@ export type InventoryListResponse = {
 export type StockAdjustmentData = {
     stock_id: number;
     quantity_change: number;
+    transaction_type: string;
+    unit_cost: string;
+    notes: string;
+};
+export type InventoryStockCreateForProductData = {
+    product: number;
+    location: number;
+    quantity: number;
     transaction_type: string;
     unit_cost: string;
     notes: string;
@@ -50,6 +70,30 @@ function buildQuery(data: InventoryListQuery): UTSJSONObject {
         query['status'] = data.status;
     if (data.alert_status != null && data.alert_status != '')
         query['alert_status'] = data.alert_status;
+    if (data.supplier != null && data.supplier != '')
+        query['supplier'] = data.supplier;
+    if (data.category != null && data.category != '')
+        query['category'] = data.category;
+    if (data.is_listed != null && data.is_listed != '')
+        query['is_listed'] = data.is_listed;
+    if (data.location != null && data.location != '')
+        query['location'] = data.location;
+    if (data.from_location != null && data.from_location != '')
+        query['from_location'] = data.from_location;
+    if (data.to_location != null && data.to_location != '')
+        query['to_location'] = data.to_location;
+    if (data.transfer_order != null && data.transfer_order != '')
+        query['transfer_order'] = data.transfer_order;
+    if (data.inventory_check != null && data.inventory_check != '')
+        query['inventory_check'] = data.inventory_check;
+    if (data.product != null && data.product != '')
+        query['product'] = data.product;
+    if (data.stock != null && data.stock != '')
+        query['stock'] = data.stock;
+    if (data.check_type != null && data.check_type != '')
+        query['check_type'] = data.check_type;
+    if (data.is_checked != null && data.is_checked != '')
+        query['is_checked'] = data.is_checked;
     if (data.transaction_type != null && data.transaction_type != '')
         query['transaction_type'] = data.transaction_type;
     if (data.location_type != null && data.location_type != '')
@@ -62,7 +106,18 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
     if (value == null)
         return [] as UTSJSONObject[];
     const text = JSON.stringify(value);
-    const parsed = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text);
+    if (text == null || text == '')
+        return [] as UTSJSONObject[];
+    const trimmedText = text.trim();
+    if (trimmedText == '' || trimmedText.substring(0, 1) != '[')
+        return [] as UTSJSONObject[];
+    let parsed: UTSJSONObject[] | null = null;
+    try {
+        parsed = JSON.parseArray<UTSJSONObject>(trimmedText);
+    }
+    catch (error: any) {
+        return [] as UTSJSONObject[];
+    }
     if (parsed == null)
         return [] as UTSJSONObject[];
     return parsed!;
@@ -73,41 +128,66 @@ function parseObject(value: any | null): UTSJSONObject | null {
     const text = JSON.stringify(value);
     if (text == null || text == '')
         return null;
-    return JSON.parseObject<UTSJSONObject>(text);
+    const trimmedText = text.trim();
+    if (trimmedText == '' || trimmedText.substring(0, 1) != '{')
+        return null;
+    try {
+        return JSON.parseObject<UTSJSONObject>(trimmedText);
+    }
+    catch (error: any) {
+        return null;
+    }
 }
 function buildListResponse(raw: any, query: InventoryListQuery): InventoryListResponse {
+    const directRows = parseObjectArray(raw);
     const rawObject = parseObject(raw);
     if (rawObject == null) {
-        throw new Error('库存列表响应解析失败');
+        return {
+            results: directRows,
+            total_count: directRows.length,
+            total_pages: 1,
+            current_page: query.page,
+            page_size: query.page_size,
+        } as InventoryListResponse;
     }
+    let sourceObject = rawObject!;
+    const nestedDataObject = parseObject(rawObject!['data']);
+    if (parseObjectArray(sourceObject['results']).length == 0 && nestedDataObject != null)
+        sourceObject = nestedDataObject!;
     let paginationObject: UTSJSONObject | null = null;
-    const rawPagination = rawObject!['pagination'];
+    let rawPagination = sourceObject['pagination'];
+    if (rawPagination == null)
+        rawPagination = rawObject!['pagination'];
     if (rawPagination != null) {
         paginationObject = parseObject(rawPagination);
     }
-    const results = parseObjectArray(rawObject!['results']);
-    let totalCount = intValue(rawObject!['count']);
+    let results = parseObjectArray(sourceObject['results']);
+    if (results.length == 0)
+        results = parseObjectArray(sourceObject['data']);
+    if (results.length == 0)
+        results = directRows;
+    let totalCount = intValue(sourceObject['count']);
     if (totalCount <= 0)
-        totalCount = intValue(rawObject!['total_count']);
+        totalCount = intValue(sourceObject['total_count']);
     if (totalCount <= 0 && paginationObject != null)
         totalCount = intValue(paginationObject!['total']);
     if (totalCount <= 0 && paginationObject != null)
         totalCount = intValue(paginationObject!['count']);
     if (totalCount <= 0)
         totalCount = results.length;
-    let currentPage = intValue(rawObject!['current_page']);
+    let currentPage = intValue(sourceObject['current_page']);
     if (currentPage <= 0)
-        currentPage = intValue(rawObject!['page']);
+        currentPage = intValue(sourceObject['page']);
     if (currentPage <= 0 && paginationObject != null)
         currentPage = intValue(paginationObject!['page']);
     if (currentPage <= 0)
         currentPage = query.page;
-    let pageSize = intValue(rawObject!['page_size']);
+    let pageSize = intValue(sourceObject['page_size']);
     if (pageSize <= 0 && paginationObject != null)
         pageSize = intValue(paginationObject!['page_size']);
     if (pageSize <= 0)
         pageSize = query.page_size;
-    let totalPages = intValue(rawObject!['total_pages']);
+    let totalPages = intValue(sourceObject['total_pages']);
     if (totalPages <= 0 && paginationObject != null)
         totalPages = intValue(paginationObject!['total_pages']);
     if (totalPages <= 0 && pageSize > 0)
@@ -133,6 +213,16 @@ function stockAdjustmentBody(data: StockAdjustmentData): UTSJSONObject {
         reference_id: '',
     } as UTSJSONObject;
 }
+function stockCreateForProductBody(data: InventoryStockCreateForProductData): UTSJSONObject {
+    return {
+        product: data.product,
+        location: data.location,
+        quantity: data.quantity,
+        transaction_type: data.transaction_type,
+        unit_cost: data.unit_cost,
+        notes: data.notes,
+    } as UTSJSONObject;
+}
 export async function getInventoryStocks(data: InventoryListQuery): Promise<InventoryListResponse> {
     const raw = await request('/api/inventory/stocks/', 'GET', buildQuery(data), true);
     return buildListResponse(raw, data);
@@ -145,8 +235,16 @@ export async function getInventoryTransfers(data: InventoryListQuery): Promise<I
     const raw = await request('/api/inventory/transfer-orders/', 'GET', buildQuery(data), true);
     return buildListResponse(raw, data);
 }
+export async function getInventoryTransferItems(data: InventoryListQuery): Promise<InventoryListResponse> {
+    const raw = await request('/api/inventory/transfer-order-items/', 'GET', buildQuery(data), true);
+    return buildListResponse(raw, data);
+}
 export async function getInventoryChecks(data: InventoryListQuery): Promise<InventoryListResponse> {
     const raw = await request('/api/inventory/checks/', 'GET', buildQuery(data), true);
+    return buildListResponse(raw, data);
+}
+export async function getInventoryCheckItems(data: InventoryListQuery): Promise<InventoryListResponse> {
+    const raw = await request('/api/inventory/check-items/', 'GET', buildQuery(data), true);
     return buildListResponse(raw, data);
 }
 export async function getInventoryTransactions(data: InventoryListQuery): Promise<InventoryListResponse> {
@@ -193,14 +291,35 @@ export function createInventoryTransfer(data: InventoryMutationData): Promise<an
 export function updateInventoryTransfer(id: string, data: InventoryMutationData): Promise<any> {
     return request('/api/inventory/transfer-orders/' + stringValue(id) + '/', 'PUT', data.payload, true);
 }
+export function createInventoryTransferItem(data: InventoryMutationData): Promise<any> {
+    return request('/api/inventory/transfer-order-items/', 'POST', data.payload, true);
+}
+export function updateInventoryTransferItem(id: string, data: InventoryMutationData): Promise<any> {
+    return request('/api/inventory/transfer-order-items/' + stringValue(id) + '/', 'PUT', data.payload, true);
+}
+export function deleteInventoryTransferItem(id: string): Promise<any> {
+    return request('/api/inventory/transfer-order-items/' + stringValue(id) + '/', 'DELETE', {} as UTSJSONObject, true);
+}
 export function createInventoryCheck(data: InventoryMutationData): Promise<any> {
     return request('/api/inventory/checks/', 'POST', data.payload, true);
 }
 export function updateInventoryCheck(id: string, data: InventoryMutationData): Promise<any> {
     return request('/api/inventory/checks/' + stringValue(id) + '/', 'PUT', data.payload, true);
 }
+export function createInventoryCheckItem(data: InventoryMutationData): Promise<any> {
+    return request('/api/inventory/check-items/', 'POST', data.payload, true);
+}
+export function updateInventoryCheckItem(id: string, data: InventoryMutationData): Promise<any> {
+    return request('/api/inventory/check-items/' + stringValue(id) + '/', 'PUT', data.payload, true);
+}
+export function checkInventoryCheckItem(id: string, data: InventoryMutationData): Promise<any> {
+    return request('/api/inventory/check-items/' + stringValue(id) + '/check/', 'POST', data.payload, true);
+}
 export function adjustInventoryStock(data: StockAdjustmentData): Promise<any> {
     return request('/api/inventory/stocks/adjust/', 'POST', stockAdjustmentBody(data), true);
+}
+export function createInventoryStockForProduct(data: InventoryStockCreateForProductData): Promise<any> {
+    return request('/api/inventory/stocks/create-for-product/', 'POST', stockCreateForProductBody(data), true);
 }
 export function approveInventoryTransfer(id: string): Promise<any> {
     return request('/api/inventory/transfer-orders/' + stringValue(id) + '/approve/', 'POST', {} as UTSJSONObject, true);

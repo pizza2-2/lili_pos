@@ -1,0 +1,1122 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/ksef/index" backgroundColor="#EEF2F7" />
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadInvoice">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<view v-if="isLoading" class="loading-card">
+					<text class="loading-text">正在加载 KSeF 发票</text>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="summary-card">
+					<view class="summary-head">
+						<view class="summary-main">
+							<text class="summary-title">{{ invoiceNumberText }}</text>
+							<text class="summary-subtitle">{{ sellerNameText }}</text>
+						</view>
+						<view :class="isInvoicePaid ? 'status-pill status-pill-paid' : 'status-pill status-pill-open'">
+							<text :class="isInvoicePaid ? 'status-pill-text status-pill-text-paid' : 'status-pill-text status-pill-text-open'">{{ isInvoicePaid ? '已付款' : '未付款' }}</text>
+						</view>
+					</view>
+					<view class="amount-row">
+						<view class="amount-cell">
+							<text class="amount-label">待付金额</text>
+							<text class="amount-value">{{ amountDueText }}</text>
+						</view>
+						<view class="amount-cell">
+							<text class="amount-label">税额</text>
+							<text class="amount-value small">{{ taxText }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<text class="section-title">发票信息</text>
+					<view class="info-row" v-for="row in invoiceRows" :key="row['key']">
+						<text class="info-label">{{ row['label'] }}</text>
+						<text class="info-value">{{ row['value'] }}</text>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<view class="section-head">
+						<text class="section-title">对应供应商</text>
+						<text class="section-note">{{ supplierLinkNote }}</text>
+					</view>
+					<view class="supplier-context">
+						<text class="supplier-context-label">KSeF 销售方</text>
+						<text class="supplier-context-value">{{ sellerNameText }} / {{ sellerNipText }}</text>
+					</view>
+					<view class="supplier-picker">
+						<liliBottomSelect
+							:value="supplierDraftValue"
+							:valueText="supplierDraftText"
+							title="选择供应商"
+							placeholder="请选择对应供应商"
+							searchPlaceholder="搜索名称、NIP、电话"
+							subtitleKey="subtitle"
+							:fetchData="fetchSupplierOptions"
+							:showAddAction="true"
+							:showEditAction="true"
+							addPath="/pages/suppliers/from"
+							editPath="/pages/suppliers/from"
+							@change="handleSupplierChange"
+						/>
+					</view>
+					<view class="form-actions">
+						<view class="form-btn form-btn-light" @click="clearSupplierLink">
+							<text class="form-btn-light-text">清除关联</text>
+						</view>
+						<view class="form-btn form-btn-primary" @click="saveSupplierLink">
+							<text class="form-btn-primary-text">{{ supplierSaving ? '保存中' : '保存供应商' }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<text class="section-title">付款信息</text>
+					<view class="info-row clickable" @click="copyText(normalizedAccount, '账号已复制', '暂无银行账号')">
+						<text class="info-label">银行账号</text>
+						<text class="info-value">{{ displayText(normalizedAccount) }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-label">银行</text>
+						<text class="info-value">{{ bankNameText }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-label">方式</text>
+						<text class="info-value">{{ paymentMethodText }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-label">到期日</text>
+						<text class="info-value">{{ paymentDueText }}</text>
+					</view>
+					<view class="copy-grid">
+						<view class="copy-btn" @click="copyTransferTitle">
+							<text class="copy-btn-text">复制标题</text>
+						</view>
+						<view class="copy-btn" @click="copyTransferSummary">
+							<text class="copy-btn-text">复制转账信息</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<view class="section-head">
+						<text class="section-title">付款二维码</text>
+						<text class="section-note">{{ qrNote }}</text>
+					</view>
+					<view v-if="paymentQrUrl != ''" class="qr-box">
+						<image class="qr-image" :src="paymentQrUrl" mode="aspectFit"></image>
+						<text class="qr-title">{{ transferTitle }}</text>
+						<text class="qr-desc">{{ amountDueText }} · {{ displayText(normalizedAccount) }}</text>
+						<view class="qr-action" @click="copyText(paymentQrPayload, '二维码内容已复制', '暂无二维码内容')">
+							<text class="qr-action-text">复制二维码内容</text>
+						</view>
+					</view>
+					<view v-if="paymentQrUrl == ''" class="qr-empty">
+						<text class="qr-empty-text">{{ qrUnavailableText }}</text>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<text class="section-title">付款登记</text>
+					<view class="switch-line">
+						<view class="switch-copy">
+							<text class="switch-title">已付款</text>
+							<text class="switch-desc">保存后同步更新后端付款状态</text>
+						</view>
+						<switch :checked="isPaidDraft" color="#111827" @change="handlePaidChange" />
+					</view>
+					<view class="field-block">
+						<text class="field-label">已付金额</text>
+						<input class="field-input" type="digit" :value="paidAmountDraft" placeholder="0.00" @input="handlePaidAmountInput" />
+					</view>
+					<view class="field-block">
+						<text class="field-label">付款时间</text>
+						<input class="field-input" :value="paidAtDraft" placeholder="YYYY-MM-DD HH:mm" @input="handlePaidAtInput" />
+					</view>
+					<view class="field-block">
+						<text class="field-label">付款说明</text>
+						<textarea class="field-textarea" :value="paymentNoteDraft" placeholder="付款说明、流水号等" @input="handlePaymentNoteInput"></textarea>
+					</view>
+					<view class="field-block">
+						<text class="field-label">备注</text>
+						<textarea class="field-textarea" :value="remarkDraft" placeholder="内部备注" @input="handleRemarkInput"></textarea>
+					</view>
+					<view class="form-actions">
+						<view class="form-btn form-btn-light" @click="fillPaidNow">
+							<text class="form-btn-light-text">填为已付</text>
+						</view>
+						<view class="form-btn form-btn-primary" @click="savePayment">
+							<text class="form-btn-primary-text">{{ saving ? '保存中' : '保存付款' }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="invoice != null && !isLoading" class="section">
+					<text class="section-title">付款凭证</text>
+					<view v-if="mediaRows.length == 0" class="attachment-empty">
+						<text class="attachment-empty-text">暂无付款凭证</text>
+					</view>
+					<view v-for="file in mediaRows" :key="file['key']" class="attachment-row" @click="openAttachment(file)">
+						<view class="attachment-main">
+							<text class="attachment-name">{{ file['name'] }}</text>
+							<text class="attachment-meta">{{ file['meta'] }}</text>
+						</view>
+						<text class="attachment-open">查看</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, watch } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import { getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, updateKsefInvoicePayment } from '@/pkg/api/modules/ksef'
+import { getSupplierList, SupplierItem } from '@/pkg/api/modules/suppliers'
+import { createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan'
+
+const refreshStorageKey = 'refresh:pages:ksef:index'
+const invoiceId = ref('')
+const invoice = ref<KsefInvoiceDetail | null>(null)
+const isLoading = ref(false)
+const saving = ref(false)
+const supplierSaving = ref(false)
+const errorMessage = ref('')
+const isPaidDraft = ref(false)
+const paidAmountDraft = ref('')
+const paidAtDraft = ref('')
+const paymentNoteDraft = ref('')
+const remarkDraft = ref('')
+const supplierDraftValue = ref('')
+const supplierDraftText = ref('')
+const qrImageSrc = ref('')
+const qrGenerating = ref(false)
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number): number {
+	if (value == null) return fallback
+	if (typeof value == 'number') return value as number
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function parseErrorMessage(error: any, fallback: string = '操作失败'): string {
+	let message = fallback
+	if (error != null) {
+		const text = JSON.stringify(error)
+		if (text != null && text != '') {
+			message = text
+		}
+	}
+	return message
+}
+
+function readEventValue(event: any): string {
+	if (event == null) return ''
+	const inputEvent = event as UniInputEvent
+	const detail = inputEvent.detail
+	if (detail == null) return ''
+	return detail.value
+}
+
+function displayText(value: string): string {
+	if (value == '') return '-'
+	return value
+}
+
+function compactDate(value: string): string {
+	if (value == '') return '-'
+	if (value.length >= 16) return value.substring(0, 16)
+	return value
+}
+
+function normalizeAccount(value: string): string {
+	let result = ''
+	let source = value
+	if (source.length >= 2 && source.substring(0, 2).toUpperCase() == 'PL') {
+		source = source.substring(2)
+	}
+	for (let index = 0; index < source.length; index += 1) {
+		const char = source.substring(index, index + 1)
+		if (char >= '0' && char <= '9') {
+			result += char
+		}
+	}
+	return result
+}
+
+function sanitizeQrPart(value: string): string {
+	let result = ''
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value.substring(index, index + 1)
+		if (char == '|' || char == '\n' || char == '\r' || char == '\t') {
+			result += ' '
+		} else {
+			result += char
+		}
+	}
+	return result
+}
+
+function objectStringValue(obj: UTSJSONObject, key: string): string {
+	const value = obj[key]
+	if (value == null) return ''
+	return '' + value
+}
+
+function firstCompanyInfoNip(item: SupplierItem): string {
+	for (let index = 0; index < item.company_infos.length; index += 1) {
+		const info = item.company_infos[index]
+		const nip = objectStringValue(info, 'nip')
+		if (nip != '') return nip
+	}
+	return ''
+}
+
+function supplierOptionSubtitle(item: SupplierItem): string {
+	const parts: string[] = []
+	if (item.code != '') parts.push(item.code)
+	const nip = firstCompanyInfoNip(item)
+	if (nip != '') parts.push('NIP ' + nip)
+	if (item.phone != '') parts.push(item.phone)
+	return parts.join(' · ')
+}
+
+function supplierToOption(item: SupplierItem): UTSJSONObject {
+	return {
+		value: item.id.toString(),
+		text: item.name,
+		subtitle: supplierOptionSubtitle(item),
+	} as UTSJSONObject
+}
+
+async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = stringValue(params['keyword'])
+	const page = intValue(params['page'], 1)
+	const pageSize = intValue(params['pageSize'], 20)
+	const response = await getSupplierList({
+		search: keyword == '' ? null : keyword,
+		page: page,
+		page_size: pageSize,
+		is_active: null,
+		has_arrears: null,
+	})
+	const rows: UTSJSONObject[] = []
+	for (let index = 0; index < response.results.length; index += 1) {
+		rows.push(supplierToOption(response.results[index]))
+	}
+	return {
+		data: rows,
+		results: rows,
+		total: response.total_count,
+		total_count: response.total_count,
+	} as UTSJSONObject
+}
+
+function amountNumber(value: string): number {
+	if (value == '') return 0
+	const normalized = value.replace(',', '.')
+	const parsed = parseFloat(normalized)
+	return isNaN(parsed) ? 0 : parsed
+}
+
+function centsText(amount: number): string {
+	let cents = Math.round(amount * 100).toString()
+	while (cents.length < 6) {
+		cents = '0' + cents
+	}
+	return cents
+}
+
+function nowText(): string {
+	const value = new Date()
+	const year = value.getFullYear().toString()
+	const month = (value.getMonth() + 1).toString()
+	const day = value.getDate().toString()
+	const hour = value.getHours().toString()
+	const minute = value.getMinutes().toString()
+	return year + '-' + (month.length == 1 ? '0' + month : month) + '-' + (day.length == 1 ? '0' + day : day) + ' ' + (hour.length == 1 ? '0' + hour : hour) + ':' + (minute.length == 1 ? '0' + minute : minute)
+}
+
+function applyDraft(data: KsefInvoiceDetail) {
+	isPaidDraft.value = data.is_paid
+	paidAmountDraft.value = data.paid_amount == '' || data.paid_amount == '0.00' ? data.amount_due : data.paid_amount
+	paidAtDraft.value = compactDate(data.paid_at) == '-' ? '' : compactDate(data.paid_at)
+	paymentNoteDraft.value = data.payment_note
+	remarkDraft.value = data.remark
+	supplierDraftValue.value = data.supplier > 0 ? data.supplier.toString() : ''
+	supplierDraftText.value = data.supplier_name
+}
+
+async function loadInvoice() {
+	if (invoiceId.value == '' || isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const data = await getKsefInvoiceDetail(invoiceId.value)
+		invoice.value = data
+		applyDraft(data)
+	} catch (error) {
+		invoice.value = null
+		errorMessage.value = parseErrorMessage(error, 'KSeF 发票详情加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+function transferTitleText(): string {
+	if (invoice.value == null) return ''
+	if (invoice.value.invoice_number != '') return invoice.value.invoice_number
+	if (invoice.value.ksef_number != '') return 'KSeF ' + invoice.value.ksef_number
+	return ''
+}
+
+function normalizedAccountText(): string {
+	if (invoice.value == null) return ''
+	return normalizeAccount(invoice.value.bank_account_number)
+}
+
+function transferAmountText(): string {
+	if (invoice.value == null) return ''
+	const due = amountNumber(invoice.value.amount_due)
+	if (due > 0) return invoice.value.amount_due
+	return invoice.value.gross_amount
+}
+
+function amountDueDisplayText(): string {
+	if (invoice.value == null) return '-'
+	return displayText(transferAmountText()) + ' ' + displayText(invoice.value.currency)
+}
+
+function transferSummaryText(): string {
+	if (invoice.value == null) return ''
+	return 'Odbiorca: ' + displayText(invoice.value.seller_name) + '\nKonto: ' + displayText(normalizedAccountText()) + '\nKwota: ' + amountDueDisplayText() + '\nTytul: ' + displayText(transferTitleText())
+}
+
+function copyTransferTitle() {
+	copyText(transferTitleText(), '标题已复制', '暂无标题')
+}
+
+function copyTransferSummary() {
+	copyText(transferSummaryText(), '转账信息已复制', '暂无转账信息')
+}
+
+function openAttachment(file: UTSJSONObject) {
+	const url = objectStringValue(file, 'url')
+	if (url == '') {
+		uni.showToast({ title: '暂无文件地址', icon: 'none' })
+		return
+	}
+	uni.navigateTo({ url: '/pages/webview/webview?url=' + encodeURIComponent(url) })
+}
+
+function handleSupplierChange(payload: UTSJSONObject) {
+	supplierDraftValue.value = stringValue(payload['value'])
+	supplierDraftText.value = stringValue(payload['text'])
+}
+
+function handlePaidChange(event: any) {
+	const switchEvent = event as UniSwitchChangeEvent
+	const detail = switchEvent.detail
+	if (detail == null) return
+	isPaidDraft.value = detail.value
+}
+
+function handlePaidAmountInput(event: any) { paidAmountDraft.value = readEventValue(event) }
+function handlePaidAtInput(event: any) { paidAtDraft.value = readEventValue(event) }
+function handlePaymentNoteInput(event: any) { paymentNoteDraft.value = readEventValue(event) }
+function handleRemarkInput(event: any) { remarkDraft.value = readEventValue(event) }
+
+function fillPaidNow() {
+	isPaidDraft.value = true
+	if (invoice.value != null) {
+		paidAmountDraft.value = invoice.value.amount_due == '' ? invoice.value.gross_amount : invoice.value.amount_due
+	}
+	paidAtDraft.value = nowText()
+}
+
+async function savePayment() {
+	if (invoiceId.value == '' || saving.value) return
+	saving.value = true
+	try {
+		const data = await updateKsefInvoicePayment(invoiceId.value, {
+			is_paid: isPaidDraft.value,
+			paid_amount: paidAmountDraft.value,
+			paid_at: paidAtDraft.value == '' ? null : paidAtDraft.value,
+			payment_note: paymentNoteDraft.value,
+			remark: remarkDraft.value,
+		})
+		invoice.value = data
+		applyDraft(data)
+		uni.setStorageSync(refreshStorageKey, '1')
+		uni.showToast({ title: takeLatestResponseMessage('付款已保存'), icon: 'success' })
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '付款保存失败'), icon: 'none' })
+	} finally {
+		saving.value = false
+	}
+}
+
+async function persistSupplierLink(nextSupplierId: string | null) {
+	if (invoiceId.value == '' || supplierSaving.value) return
+	supplierSaving.value = true
+	try {
+		const data = await linkKsefInvoiceSupplier(invoiceId.value, nextSupplierId)
+		invoice.value = data
+		applyDraft(data)
+		uni.setStorageSync(refreshStorageKey, '1')
+		uni.showToast({ title: takeLatestResponseMessage('供应商已保存'), icon: 'success' })
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '供应商保存失败'), icon: 'none' })
+	} finally {
+		supplierSaving.value = false
+	}
+}
+
+function saveSupplierLink() {
+	if (supplierDraftValue.value == '') {
+		uni.showToast({ title: '请选择供应商', icon: 'none' })
+		return
+	}
+	persistSupplierLink(supplierDraftValue.value)
+}
+
+function clearSupplierLink() {
+	persistSupplierLink(null)
+}
+
+const pageTitle = computed((): string => {
+	if (invoice.value == null || invoice.value.invoice_number == '') return 'KSeF 付款'
+	return invoice.value.invoice_number
+})
+
+const invoiceNumberText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.invoice_number)
+})
+
+const sellerNameText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.seller_name)
+})
+
+const sellerNipText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.seller_nip)
+})
+
+const supplierLinkNote = computed((): string => {
+	if (invoice.value == null) return ''
+	return invoice.value.supplier > 0 ? '已关联' : '未关联'
+})
+
+const isInvoicePaid = computed((): boolean => {
+	if (invoice.value == null) return false
+	return invoice.value.is_paid
+})
+
+const bankNameText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.bank_name)
+})
+
+const paymentMethodText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.payment_method)
+})
+
+const paymentDueText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return compactDate(invoice.value.payment_due_date)
+})
+
+const normalizedAccount = computed((): string => {
+	return normalizedAccountText()
+})
+
+const transferAmount = computed((): string => {
+	return transferAmountText()
+})
+
+const amountDueText = computed((): string => {
+	return amountDueDisplayText()
+})
+
+const taxText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return displayText(invoice.value.tax_amount) + ' ' + displayText(invoice.value.currency)
+})
+
+const transferTitle = computed((): string => {
+	return transferTitleText()
+})
+
+const transferSummary = computed((): string => {
+	return transferSummaryText()
+})
+
+const paymentQrPayload = computed((): string => {
+	if (invoice.value == null) return ''
+	if (invoice.value.currency != '' && invoice.value.currency != 'PLN') return ''
+	if (normalizedAccount.value.length < 26) return ''
+	const amount = amountNumber(transferAmount.value)
+	if (amount <= 0) return ''
+	const receiverId = invoice.value.seller_nip == '' ? '0000000000' : invoice.value.seller_nip
+	return sanitizeQrPart(receiverId) + '|PL|' + normalizedAccount.value + '|' + centsText(amount) + '|' + sanitizeQrPart(invoice.value.seller_name) + '|' + sanitizeQrPart(transferTitle.value) + '|||'
+})
+
+function refreshQrCode() {
+	qrImageSrc.value = ''
+	const payload = paymentQrPayload.value
+	if (payload == '') {
+		qrGenerating.value = false
+		return
+	}
+	qrGenerating.value = true
+	// #ifdef APP-ANDROID || APP-IOS
+	createQRCode({
+		width: 280,
+		height: 280,
+		content: payload,
+		success(src: string) {
+			qrImageSrc.value = src
+			qrGenerating.value = false
+		},
+		fail(error: any) {
+			console.log('KSeF QR生成失败', error)
+			qrImageSrc.value = ''
+			qrGenerating.value = false
+		}
+	} as CreateQRCodeOptions)
+	// #endif
+	// #ifndef APP-ANDROID || APP-IOS
+	qrGenerating.value = false
+	// #endif
+}
+
+const paymentQrUrl = computed((): string => {
+	return qrImageSrc.value
+})
+
+const qrNote = computed((): string => {
+	if (qrGenerating.value) return '正在生成二维码'
+	if (paymentQrPayload.value == '') return '缺少 PLN 金额或银行账号'
+	return '本机生成，Santander 等银行 App 可尝试扫码'
+})
+
+const qrUnavailableText = computed((): string => {
+	if (invoice.value == null) return '暂无发票数据'
+	if (invoice.value.currency != '' && invoice.value.currency != 'PLN') return '当前币种不是 PLN，暂不生成波兰转账二维码'
+	if (normalizedAccount.value.length < 26) return '缺少有效银行账号，无法生成二维码'
+	if (qrGenerating.value) return '二维码生成中'
+	if (paymentQrPayload.value != '') return '当前平台未返回二维码图片'
+	return '缺少付款金额，无法生成二维码'
+})
+
+const invoiceRows = computed((): UTSJSONObject[] => {
+	if (invoice.value == null) return [] as UTSJSONObject[]
+	return [
+		{ key: 'ksef', label: 'KSeF号', value: displayText(invoice.value.ksef_number) } as UTSJSONObject,
+		{ key: 'seller_nip', label: '卖方NIP', value: displayText(invoice.value.seller_nip) } as UTSJSONObject,
+		{ key: 'supplier', label: '供应商', value: invoice.value.supplier_name == '' ? '未关联供应商' : invoice.value.supplier_name } as UTSJSONObject,
+		{ key: 'buyer', label: '买方', value: displayText(invoice.value.buyer_name) } as UTSJSONObject,
+		{ key: 'buyer_nip', label: '买方NIP', value: displayText(invoice.value.buyer_nip) } as UTSJSONObject,
+		{ key: 'issue', label: '开票日期', value: compactDate(invoice.value.issue_date) } as UTSJSONObject,
+		{ key: 'sale', label: '销售日期', value: compactDate(invoice.value.sale_date) } as UTSJSONObject,
+		{ key: 'net', label: '净额', value: displayText(invoice.value.net_amount) + ' ' + displayText(invoice.value.currency) } as UTSJSONObject,
+		{ key: 'gross', label: '总额', value: displayText(invoice.value.gross_amount) + ' ' + displayText(invoice.value.currency) } as UTSJSONObject,
+		{ key: 'files', label: '附件数', value: invoice.value.files_count.toString() } as UTSJSONObject,
+		{ key: 'sync', label: '详情状态', value: invoice.value.raw_xml_downloaded_at == '' ? '未下载XML' : compactDate(invoice.value.raw_xml_downloaded_at) } as UTSJSONObject,
+	]
+})
+
+const mediaRows = computed((): UTSJSONObject[] => {
+	if (invoice.value == null) return [] as UTSJSONObject[]
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < invoice.value.media_files.length; index += 1) {
+		const file = invoice.value.media_files[index]
+		const name = objectStringValue(file, 'original_filename')
+		const typeText = objectStringValue(file, 'file_type_display')
+		const sizeText = objectStringValue(file, 'file_size_display')
+		let url = objectStringValue(file, 'signed_url')
+		if (url == '') url = objectStringValue(file, 'file_url')
+		result.push({
+			key: objectStringValue(file, 'id') == '' ? index.toString() : objectStringValue(file, 'id'),
+			name: name == '' ? '未命名文件' : name,
+			meta: (typeText == '' ? '文件' : typeText) + (sizeText == '' ? '' : ' · ' + sizeText),
+			url: url,
+		} as UTSJSONObject)
+	}
+	return result
+})
+
+watch(paymentQrPayload, () => {
+	refreshQrCode()
+})
+
+onLoad((event: OnLoadOptions) => {
+	const idValue = event['id']
+	invoiceId.value = stringValue(idValue)
+	loadInvoice()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding: 10px;
+	padding-bottom: 96px;
+}
+
+.summary-card,
+.section,
+.error-card,
+.loading-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	padding: 14px;
+	margin-bottom: 10px;
+}
+
+.summary-head,
+.amount-row,
+.section-head,
+.copy-grid,
+.form-actions,
+.switch-line {
+	flex-direction: row;
+	align-items: center;
+}
+
+.summary-head {
+	justify-content: space-between;
+}
+
+.summary-main {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.summary-title {
+	font-size: 20px;
+	line-height: 26px;
+	font-weight: bold;
+	color: #0F172A;
+}
+
+.summary-subtitle {
+	font-size: 13px;
+	line-height: 18px;
+	color: #475569;
+	margin-top: 4px;
+}
+
+.status-pill {
+	height: 30px;
+	border-radius: 8px;
+	padding-left: 10px;
+	padding-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.status-pill-paid {
+	background-color: #DCFCE7;
+}
+
+.status-pill-open {
+	background-color: #FEF3C7;
+}
+
+.status-pill-text {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: bold;
+}
+
+.status-pill-text-paid {
+	color: #166534;
+}
+
+.status-pill-text-open {
+	color: #92400E;
+}
+
+.amount-row {
+	margin-top: 14px;
+}
+
+.amount-cell {
+	flex: 1;
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 10px;
+	margin-right: 8px;
+}
+
+.amount-label,
+.info-label,
+.field-label,
+.section-note {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.amount-value {
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-top: 4px;
+}
+
+.small {
+	font-size: 15px;
+}
+
+.section-title {
+	font-size: 16px;
+	line-height: 22px;
+	font-weight: bold;
+	color: #0F172A;
+}
+
+.section-head {
+	justify-content: space-between;
+	margin-bottom: 10px;
+}
+
+.info-row {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #EEF2F7;
+}
+
+.clickable {
+	background-color: #FBFDFF;
+}
+
+.info-label {
+	width: 92px;
+}
+
+.info-value {
+	flex: 1;
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+	text-align: right;
+}
+
+.copy-grid {
+	margin-top: 12px;
+}
+
+.supplier-context {
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 10px;
+	margin-top: 10px;
+}
+
+.supplier-context-label {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.supplier-context-value {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-top: 4px;
+}
+
+.supplier-picker {
+	margin-top: 12px;
+}
+
+.copy-btn,
+.qr-action,
+.retry-btn {
+	height: 38px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+	padding-left: 14px;
+	padding-right: 14px;
+	margin-right: 8px;
+}
+
+.copy-btn {
+	flex: 1;
+}
+
+.copy-btn-text,
+.qr-action-text,
+.retry-btn-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #FFFFFF;
+}
+
+.qr-box {
+	align-items: center;
+	padding-top: 4px;
+}
+
+.qr-image {
+	width: 220px;
+	height: 220px;
+	background-color: #F8FAFC;
+}
+
+.qr-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-top: 10px;
+}
+
+.qr-desc,
+.switch-desc {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 4px;
+}
+
+.qr-action {
+	margin-top: 12px;
+	margin-right: 0;
+}
+
+.qr-empty {
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 18px;
+	align-items: center;
+}
+
+.qr-empty-text,
+.loading-text,
+.attachment-empty-text {
+	font-size: 13px;
+	line-height: 19px;
+	color: #64748B;
+	text-align: center;
+}
+
+.attachment-empty {
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 14px;
+	margin-top: 10px;
+	align-items: center;
+}
+
+.attachment-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #EEF2F7;
+}
+
+.attachment-main {
+	flex: 1;
+	padding-right: 12px;
+}
+
+.attachment-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.attachment-meta {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+	margin-top: 3px;
+}
+
+.attachment-open {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.switch-line {
+	justify-content: space-between;
+	padding-top: 10px;
+	padding-bottom: 12px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #EEF2F7;
+}
+
+.switch-copy {
+	flex: 1;
+	padding-right: 12px;
+}
+
+.switch-title {
+	font-size: 14px;
+	line-height: 20px;
+	font-weight: bold;
+	color: #0F172A;
+}
+
+.field-block {
+	margin-top: 12px;
+}
+
+.field-input,
+.field-textarea {
+	margin-top: 6px;
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5E1;
+	background-color: #F8FAFC;
+	padding-left: 10px;
+	padding-right: 10px;
+	font-size: 14px;
+	color: #0F172A;
+}
+
+.field-input {
+	height: 42px;
+}
+
+.field-textarea {
+	height: 96px;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	line-height: 20px;
+}
+
+.form-actions {
+	margin-top: 14px;
+}
+
+.form-btn {
+	flex: 1;
+	height: 42px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.form-btn-light {
+	background-color: #F3F6FA;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	margin-right: 8px;
+}
+
+.form-btn-primary {
+	background-color: #0F172A;
+}
+
+.form-btn-light-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #475569;
+}
+
+.form-btn-primary-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+
+.error-card {
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	margin-right: 0;
+}
+</style>

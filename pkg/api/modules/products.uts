@@ -142,6 +142,7 @@ export type ProductPricingFormulaListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	is_active: string | null
 }
 
 export type ProductPricingFormulaListResponse = {
@@ -282,6 +283,9 @@ function buildPricingFormulaListQuery(data: ProductPricingFormulaListQuery): UTS
 
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
+	}
+	if (data.is_active != null && data.is_active != '') {
+		query['is_active'] = data.is_active
 	}
 
 	return query

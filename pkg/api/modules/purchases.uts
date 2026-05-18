@@ -92,6 +92,8 @@ export type PurchaseDetailItem = {
 	product_barcode: string
 	product_image: string
 	product_images: string[]
+	product_preview_images: string[]
+	product_media_ids: string[]
 	quantity: number
 	unit_price: string
 	amount: string
@@ -210,6 +212,15 @@ export type PurchaseProductCheckResult = {
 	unit_price: string
 }
 
+export type PurchaseAutoPriceResponse = {
+	formula: UTSJSONObject
+	total_count: number
+	updated_count: number
+	skipped_existing_count: number
+	skipped_error_count: number
+	updated_products: UTSJSONObject[]
+}
+
 function stringValue(value: any | null): string {
 	if (value == null) return ''
 	return '' + value
@@ -313,10 +324,32 @@ function mediaImageUrl(rawObject: UTSJSONObject): string {
 	return imageUrl
 }
 
+function mediaFullImageUrl(rawObject: UTSJSONObject): string {
+	let imageUrl = stringValue(rawObject['signed_url'])
+	if (imageUrl == '') imageUrl = stringValue(rawObject['file_url'])
+	if (imageUrl == '') imageUrl = mediaImageUrl(rawObject)
+	return imageUrl
+}
+
 function appendMediaImages(images: string[], value: any | null) {
 	const mediaFiles = parseObjectArray(value)
 	for (let index = 0; index < mediaFiles.length; index += 1) {
 		pushImageUrl(images, mediaImageUrl(mediaFiles[index]))
+	}
+}
+
+function appendMediaPreviewImages(images: string[], value: any | null) {
+	const mediaFiles = parseObjectArray(value)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		pushImageUrl(images, mediaFullImageUrl(mediaFiles[index]))
+	}
+}
+
+function appendMediaIds(ids: string[], value: any | null) {
+	const mediaFiles = parseObjectArray(value)
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		const mediaId = stringValue(mediaFiles[index]['id'])
+		if (mediaId != '' && ids.indexOf(mediaId) < 0) ids.push(mediaId)
 	}
 }
 
@@ -338,6 +371,30 @@ function buildProductImages(rawObject: UTSJSONObject, productObject: UTSJSONObje
 		appendMediaImages(images, productObject!['media_files'])
 	}
 	return images
+}
+
+function buildProductPreviewImages(rawObject: UTSJSONObject, productObject: UTSJSONObject | null): string[] {
+	const images: string[] = []
+	appendMediaPreviewImages(images, rawObject['product_media_files'])
+	if (productObject != null) {
+		appendMediaPreviewImages(images, productObject!['media_files'])
+		pushImageUrl(images, stringValue(productObject!['image']))
+		appendStringImages(images, productObject!['images'])
+	}
+	if (images.length == 0) {
+		pushImageUrl(images, stringValue(rawObject['product_image']))
+		appendStringImages(images, rawObject['product_images'])
+	}
+	return images
+}
+
+function buildProductMediaIds(rawObject: UTSJSONObject, productObject: UTSJSONObject | null): string[] {
+	const ids: string[] = []
+	appendMediaIds(ids, rawObject['product_media_files'])
+	if (productObject != null) {
+		appendMediaIds(ids, productObject!['media_files'])
+	}
+	return ids
 }
 
 function buildQuery(data: PurchaseListQuery): UTSJSONObject {
@@ -418,6 +475,8 @@ function buildPurchaseDetailItem(rawObject: UTSJSONObject): PurchaseDetailItem {
 	let productBarcode = stringValue(rawObject['product_barcode'])
 	if (productBarcode == '' && productObject != null) productBarcode = stringValue(productObject!['barcode'])
 	const productImages = buildProductImages(rawObject, productObject)
+	const productPreviewImages = buildProductPreviewImages(rawObject, productObject)
+	const productMediaIds = buildProductMediaIds(rawObject, productObject)
 
 	return {
 		id: intValue(rawObject['id']),
@@ -429,6 +488,8 @@ function buildPurchaseDetailItem(rawObject: UTSJSONObject): PurchaseDetailItem {
 		product_barcode: productBarcode,
 		product_image: productImages.length > 0 ? productImages[0] : '',
 		product_images: productImages,
+		product_preview_images: productPreviewImages,
+		product_media_ids: productMediaIds,
 		quantity: intValue(rawObject['quantity']),
 		unit_price: stringValue(rawObject['unit_price']),
 		amount: stringValue(rawObject['amount']),
@@ -1000,6 +1061,25 @@ export function runPurchaseAction(id: number | string, actionName: string): Prom
 	const body = { action: actionName } as UTSJSONObject
 	if (actionName == 'cancel') body['reason'] = '前端取消采购单'
 	return request(detailPath(id) + 'action_purchase/', 'POST', body, true)
+}
+
+export async function autoGeneratePurchasePrices(id: number | string, formulaId: number | string): Promise<PurchaseAutoPriceResponse> {
+	const raw = await request(
+		detailPath(id) + 'auto_generate_prices/',
+		'POST',
+		{ formula_id: formulaId } as UTSJSONObject,
+		true
+	)
+	const data = rawDataObject(raw)
+	const formula = parseObject(data['formula'])
+	return {
+		formula: formula == null ? ({} as UTSJSONObject) : formula!,
+		total_count: intValue(data['total_count']),
+		updated_count: intValue(data['updated_count']),
+		skipped_existing_count: intValue(data['skipped_existing_count']),
+		skipped_error_count: intValue(data['skipped_error_count']),
+		updated_products: parseObjectArray(data['updated_products']),
+	} as PurchaseAutoPriceResponse
 }
 
 export function receivePurchaseDetail(id: number | string, quantity: number, notes: string = ''): Promise<any> {

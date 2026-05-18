@@ -115,7 +115,7 @@ function formatDateText(value: string): string {
 	return value
 }
 
-function filePreviewUrl(file: ShopMediaFile): string {
+function fileThumbnailUrl(file: ShopMediaFile): string {
 	if (file.signed_thumbnail_url != '') {
 		return file.signed_thumbnail_url
 	}
@@ -128,12 +128,44 @@ function filePreviewUrl(file: ShopMediaFile): string {
 	return file.file_url
 }
 
+function fileFullUrl(file: ShopMediaFile): string {
+	if (file.signed_url != '') {
+		return file.signed_url
+	}
+	if (file.file_url != '') {
+		return file.file_url
+	}
+	return fileThumbnailUrl(file)
+}
+
 function buildImages(files: ShopMediaFile[]): string[] {
 	const result: string[] = []
 	for (let index = 0; index < files.length; index += 1) {
-		const previewUrl = filePreviewUrl(files[index])
+		const previewUrl = fileThumbnailUrl(files[index])
 		if (previewUrl != '') {
 			result.push(previewUrl)
+		}
+	}
+	return result
+}
+
+function buildPreviewImages(files: ShopMediaFile[]): string[] {
+	const result: string[] = []
+	for (let index = 0; index < files.length; index += 1) {
+		const previewUrl = fileFullUrl(files[index])
+		if (previewUrl != '') {
+			result.push(previewUrl)
+		}
+	}
+	return result
+}
+
+function buildMediaIds(files: ShopMediaFile[]): string[] {
+	const result: string[] = []
+	for (let index = 0; index < files.length; index += 1) {
+		const mediaId = files[index].id
+		if (mediaId != '') {
+			result.push(mediaId)
 		}
 	}
 	return result
@@ -143,11 +175,12 @@ function buildCover(files: ShopMediaFile[]): string {
 	if (files.length == 0) {
 		return ''
 	}
-	return filePreviewUrl(files[0])
+	return fileThumbnailUrl(files[0])
 }
 
 function mediaRecordToListItem(item: ShopMediaItem): UTSJSONObject {
 	const images = buildImages(item.media_files)
+	const previewImages = buildPreviewImages(item.media_files)
 	const expirationText = formatDateText(item.expiration_date)
 	const recordTypeText = item.expiration_date == ''
 		? ('类型：' + getDisplayText(item.record_type_display))
@@ -165,6 +198,9 @@ function mediaRecordToListItem(item: ShopMediaItem): UTSJSONObject {
 		updated_at: formatDateText(item.updated_at),
 		cover: buildCover(item.media_files),
 		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item.media_files),
 		rawId: item.id.toString(),
 	} as UTSJSONObject
 }
@@ -258,7 +294,7 @@ function handleMenu(payload: UTSJSONObject): void {
 function handleCreateMedia(): void {
 	const url = shopId.value == ''
 		? '/pages/shop/from'
-		: ('/pages/shop/from?shop_id=' + shopId.value + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:321"))
+		: ('/pages/shop/from?shop_id=' + shopId.value + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:357"))
 	uni.navigateTo({
 		url: url,
 	})
@@ -354,7 +390,7 @@ const emptyText = computed((): string => {
 onLoad((event: OnLoadOptions) => {
 	shopId.value = stringValue(event['shop_id'])
 	const rawShopName = stringValue(event['shop_name'])
-	shopName.value = rawShopName == '' ? '' : stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:417"))
+	shopName.value = rawShopName == '' ? '' : stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:453"))
 	loadShopMedia()
 })
 

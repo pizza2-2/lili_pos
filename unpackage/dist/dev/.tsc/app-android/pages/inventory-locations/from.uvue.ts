@@ -49,13 +49,11 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) continue
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
 		result.push({ value: option.value, text: option.text } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject

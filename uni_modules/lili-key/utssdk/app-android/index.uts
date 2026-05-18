@@ -35,6 +35,7 @@ const nativeExtraActionCode = 'lili.volume.EXTRA_ACTION_CODE'
 const debugEnabled = false
 
 let volumeReceiver: VolumeKeyReceiver | null = null
+let volumeReceiverContext: Context | null = null
 let volumeCallback: ((event: VolumeKeyEvent) => void) | null = null
 let latestEvent: VolumeKeyEvent | null = null
 let listening = false
@@ -162,6 +163,9 @@ class InstallKeyListenerRunnable implements Runnable {
 		const activity = getActivity()
 		const decorView = activity.getWindow().getDecorView()
 		volumeLog('install view listener activity=' + activity.toString() + ' decor=' + decorView.toString())
+		if (volumeKeyView != null && volumeKeyView != decorView) {
+			volumeKeyView!.setOnKeyListener(null)
+		}
 		volumeKeyView = decorView
 		volumeKeyListener = new VolumeKeyViewListener()
 		decorView.setFocusable(true)
@@ -314,6 +318,20 @@ class VolumeKeyReceiver extends BroadcastReceiver() {
 	}
 }
 
+function unregisterVolumeReceiver() {
+	if (volumeReceiver == null) {
+		volumeReceiverContext = null
+		return
+	}
+	try {
+		const context = volumeReceiverContext == null ? getActivity().getApplicationContext() : volumeReceiverContext!
+		context.unregisterReceiver(volumeReceiver)
+		volumeLog('broadcast receiver unregistered')
+	} catch (error) {}
+	volumeReceiver = null
+	volumeReceiverContext = null
+}
+
 export function startVolumeKeyListener(callback: (event: VolumeKeyEvent) => void): VolumeKeyResult {
 	volumeLog('start requested listening=' + listening.toString())
 	volumeCallback = callback
@@ -339,14 +357,16 @@ export function startVolumeKeyListener(callback: (event: VolumeKeyEvent) => void
 		const filter = new IntentFilter()
 		filter.addAction(volumeChangedAction)
 		filter.addAction(nativeKeyEventAction)
+		unregisterVolumeReceiver()
 		volumeReceiver = new VolumeKeyReceiver()
-		activity.registerReceiver(volumeReceiver, filter)
+		volumeReceiverContext = activity.getApplicationContext()
+		volumeReceiverContext!.registerReceiver(volumeReceiver, filter)
 		listening = true
 		volumeLog('broadcast receiver registered')
 		return makeResult(true, 'LISTENING', '音量键监听已启动', null)
 	} catch (error) {
 		volumeLog('start failed ' + JSON.stringify(error))
-		volumeReceiver = null
+		unregisterVolumeReceiver()
 		try {
 			VolumeKeyNative.uninstall(getActivity())
 		} catch (error) {}
@@ -369,13 +389,7 @@ export function stopVolumeKeyListener(): VolumeKeyResult {
 		volumeCallback = null
 		return makeResult(true, 'NOT_LISTENING', '音量键监听未启动', null)
 	}
-	if (volumeReceiver != null) {
-		try {
-			getActivity().unregisterReceiver(volumeReceiver)
-			volumeLog('broadcast receiver unregistered')
-		} catch (error) {}
-	}
-	volumeReceiver = null
+	unregisterVolumeReceiver()
 	try {
 		const nativeUninstalled = VolumeKeyNative.uninstall(getActivity())
 		volumeLog('native kt interceptor uninstall=' + nativeUninstalled.toString())

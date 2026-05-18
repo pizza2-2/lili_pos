@@ -1,3 +1,10 @@
+import _easycom_lili_print_copies_stepper from '@/uni_modules/lili-print-copies-stepper/components/lili-print-copies-stepper/lili-print-copies-stepper.uvue'
+import {
+	scanCode,
+	type GeneralCallbackResult,
+	type ScanCodeOption,
+	type ScanCodeSuccessCallbackResult,
+} from '@/uni_modules/lime-scan'
 import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
@@ -5,13 +12,18 @@ import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 186, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 242, 6>;
 	mode?: string
 	formSections?: UTSJSONObject[]
 	initialData?: UTSJSONObject
 	showFooter?: boolean
 	enableBackConfirm?: boolean
+	leaveConfirmTitle?: string
+	leaveConfirmContent?: string
+	leaveConfirmCancelText?: string
+	leaveConfirmConfirmText?: string
 	leaveSignal?: number
+	dirtySignal?: number
 	uploadContentTypeModel?: string
 	showFloatingAction?: boolean
 	floatingActionText?: string
@@ -29,13 +41,18 @@ const __sfc__ = defineComponent({
 	} },
     showFooter: { type: Boolean, required: false, default: true },
     enableBackConfirm: { type: Boolean, required: false, default: true },
+    leaveConfirmTitle: { type: String, required: false, default: '提示' },
+    leaveConfirmContent: { type: String, required: false, default: '页面内容已修改，是否先保存？' },
+    leaveConfirmCancelText: { type: String, required: false, default: '直接离开' },
+    leaveConfirmConfirmText: { type: String, required: false, default: '去保存' },
     leaveSignal: { type: Number, required: false, default: 0 },
+    dirtySignal: { type: Number, required: false, default: 0 },
     uploadContentTypeModel: { type: String, required: false, default: '' },
     showFloatingAction: { type: Boolean, required: false, default: false },
     floatingActionText: { type: String, required: false, default: '快捷' },
     floatingActionDisabled: { type: Boolean, required: false, default: false }
   },
-  emits: ["submit", "cancel", "field-change", "form-change", "dirty-change", "save-request", "discard-leave", "upload", "upload-delete", "upload-error", "bottom-select-add", "bottom-select-edit", "floating-action", "input-scan", "input-add"],
+  emits: ["submit", "cancel", "field-change", "form-change", "dirty-change", "save-request", "discard-leave", "upload", "upload-delete", "upload-error", "bottom-select-add", "bottom-select-edit", "floating-action", "input-scan", "input-add", "input-action"],
   setup(__props, __setupCtx: SetupContext) {
 const __expose = __setupCtx.expose
 const __ins = getCurrentInstance()!;
@@ -62,7 +79,7 @@ function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
 }
 
 function cloneObject(source: UTSJSONObject) : UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 246, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 313, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -155,6 +172,35 @@ function isNumberField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'number'
 }
 
+function getNumberShowStepper(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showStepper', false)
+}
+
+function getNumberStep(field: UTSJSONObject) : number {
+	const step = getNumberField(field, 'step', 1)
+	if (step <= 0) return 1
+	return step
+}
+
+function getNumberMin(field: UTSJSONObject) : number {
+	return getNumberField(field, 'min', -999999)
+}
+
+function getNumberMax(field: UTSJSONObject) : number {
+	return getNumberField(field, 'max', 999999)
+}
+
+function getNumberFallback(field: UTSJSONObject) : number {
+	return getNumberField(field, 'fallback', 0)
+}
+
+function getNumberInputType(field: UTSJSONObject) : string {
+	const inputType = getStringField(field, 'inputType')
+	if (inputType != '') return inputType
+	if (getBooleanField(field, 'decimal', false)) return 'digit'
+	return 'number'
+}
+
 function isDatetimeField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'datetime'
 }
@@ -172,12 +218,54 @@ function isUploadField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'upload'
 }
 
+function isCustomField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'custom'
+}
+
+function getFieldSlotName(field: UTSJSONObject) : string {
+	const key = getFieldKey(field)
+	if (key == '') return 'field'
+	return 'field-' + key
+}
+
 function getFieldShowScan(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showScan', false)
 }
 
+function getFieldScanOnlyFromCamera(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'scanOnlyFromCamera', true)
+}
+
 function getFieldShowAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAdd', false)
+}
+
+function getFieldAddText(field: UTSJSONObject) : string {
+	return getStringField(field, 'addText')
+}
+
+function getInputActionPrefix(position: string) : string {
+	if (position == 'left') return 'leftAction'
+	return 'rightAction'
+}
+
+function getInputActionKey(field: UTSJSONObject, position: string) : string {
+	const prefix = getInputActionPrefix(position)
+	const actionKey = getStringField(field, prefix + 'Key')
+	if (actionKey != '') return actionKey
+	return getStringField(field, prefix)
+}
+
+function getInputActionIcon(field: UTSJSONObject, position: string) : string {
+	return getStringField(field, getInputActionPrefix(position) + 'Icon')
+}
+
+function getInputActionText(field: UTSJSONObject, position: string) : string {
+	return getStringField(field, getInputActionPrefix(position) + 'Text')
+}
+
+function hasInputAction(field: UTSJSONObject, position: string) : boolean {
+	return getInputActionKey(field, position) != '' || getInputActionIcon(field, position) != '' || getInputActionText(field, position) != ''
 }
 
 function isRequired(field: UTSJSONObject) : boolean {
@@ -317,14 +405,34 @@ function getBottomSelectValueKey(field: UTSJSONObject) : string {
 	return 'value'
 }
 
+function getBottomSelectImageKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'imageKey')
+}
+
+function getBottomSelectSubtitleKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'subtitleKey')
+}
+
 function getBottomSelectTextKey(field: UTSJSONObject) : string {
 	return getStringField(field, 'textKey')
+}
+
+function getBottomSelectImageValueKey(field: UTSJSONObject) : string {
+	return getStringField(field, 'imageValueKey')
 }
 
 function getBottomSelectValueText(field: UTSJSONObject) : string {
 	const textKey = getBottomSelectTextKey(field)
 	if (textKey == '') return ''
 	const value = formData.value[textKey]
+	if (value == null) return ''
+	return '' + value
+}
+
+function getBottomSelectValueImage(field: UTSJSONObject) : string {
+	const imageValueKey = getBottomSelectImageValueKey(field)
+	if (imageValueKey == '') return ''
+	const value = formData.value[imageValueKey]
 	if (value == null) return ''
 	return '' + value
 }
@@ -394,6 +502,14 @@ function showBottomSelectEdit(field: UTSJSONObject) : boolean {
 
 function showBottomSelectAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAddAction', true)
+}
+
+function showBottomSelectScan(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showScan', false)
+}
+
+function getBottomSelectScanOnlyFromCamera(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'scanOnlyFromCamera', true)
 }
 
 function getFieldTree(field: UTSJSONObject) : boolean {
@@ -498,7 +614,7 @@ function clearFieldError(key: string) {
 }
 
 function emitFieldChange(field: UTSJSONObject, value: any) {
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 682, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 848, 8), 
 		field: field,
 		key: getFieldKey(field),
 		value: value,
@@ -510,7 +626,7 @@ function emitFieldChange(field: UTSJSONObject, value: any) {
 }
 
 function serializeState() : string {
-	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 694, 8), 
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 860, 8), 
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject
@@ -533,8 +649,15 @@ function markSnapshot() {
 	}
 }
 
+function markDirty() {
+	if (!dirty.value) {
+		dirty.value = true
+		emit('dirty-change', true)
+	}
+}
+
 function applyInitialValues() {
-	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 718, 8), } as UTSJSONObject
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 891, 8), } as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
 		for (let j = 0; j < fields.length; j++) {
@@ -551,6 +674,11 @@ function applyInitialValues() {
 			if (textKey != '') {
 				const incomingText = props.initialData[textKey]
 				nextData[textKey] = incomingText == null ? '' : incomingText
+			}
+			const imageValueKey = getBottomSelectImageValueKey(field)
+			if (imageValueKey != '') {
+				const incomingImage = props.initialData[imageValueKey]
+				nextData[imageValueKey] = incomingImage == null ? '' : incomingImage
 			}
 			if (isUploadField(field)) {
 				const itemsKey = getUploadFileItemsKey(field)
@@ -614,6 +742,17 @@ function handleNumberInput(field: UTSJSONObject, event: any) {
 	emitFieldChange(field, value)
 }
 
+function handleNumberStepperChange(field: UTSJSONObject, eventValue: any) {
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = eventValue == null ? '' : ('' + eventValue)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
 function handleDatetimeChange(field: UTSJSONObject, payload: any) {
 	const key = getFieldKey(field)
 	if (key == '') return
@@ -647,6 +786,10 @@ function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
 	const textKey = getBottomSelectTextKey(field)
 	if (textKey != '') {
 		setFieldValueByKey(textKey, getStringField(payloadObject, 'text'))
+	}
+	const imageValueKey = getBottomSelectImageValueKey(field)
+	if (imageValueKey != '') {
+		setFieldValueByKey(imageValueKey, getStringField(payloadObject, 'image'))
 	}
 	clearFieldError(key)
 	refreshDirtyState()
@@ -710,7 +853,7 @@ function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
 	const nextItems: UTSJSONObject[] = []
 	for (let index = 0; index < sourceItems.length; index++) {
 		const sourceItem = sourceItems[index]
-		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 894, 9), } as UTSJSONObject
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1087, 9), } as UTSJSONObject
 		for (const key in sourceItem) {
 			clonedItem[key] = sourceItem[key]
 		}
@@ -782,7 +925,7 @@ function validateField(field: UTSJSONObject) : string {
 }
 
 function validate() : boolean {
-	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 966, 8), } as UTSJSONObject
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1159, 8), } as UTSJSONObject
 	let hasError = false
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
@@ -816,10 +959,10 @@ function discardAndLeave() {
 
 function confirmLeave() {
 	uni.showModal({
-		title: '提示',
-		content: '页面内容已修改，是否先保存？',
-		cancelText: '直接离开',
-		confirmText: '去保存',
+		title: props.leaveConfirmTitle,
+		content: props.leaveConfirmContent,
+		cancelText: props.leaveConfirmCancelText,
+		confirmText: props.leaveConfirmConfirmText,
 		success: (res) => {
 			if (res.confirm) {
 				emit('save-request', buildSubmitPayload())
@@ -861,18 +1004,63 @@ function handleFloatingActionClick() {
 }
 
 function handleScanClick(field: UTSJSONObject) {
-	emit('input-scan', {
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	scanCode({
+		onlyFromCamera: getFieldScanOnlyFromCamera(field),
+		success: (res: ScanCodeSuccessCallbackResult) => {
+			const scanResult = res.result
+			if (scanResult == '') return
+			setFieldValueByKey(key, scanResult)
+			clearFieldError(key)
+			refreshDirtyState()
+			emitFieldChange(field, scanResult)
+			emit('input-scan', {
+				field: field,
+				key: key,
+				value: scanResult,
+				scanType: res.scanType,
+				mode: props.mode,
+				formData: formData.value,
+			} as UTSJSONObject)
+		},
+		fail: (res: GeneralCallbackResult) => {
+			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
+			uni.showToast({
+				title: message,
+				icon: 'none',
+			})
+		},
+	} as ScanCodeOption)
+}
+
+function handleAddClick(field: UTSJSONObject) {
+	const key = getFieldKey(field)
+	const fillFromKey = getStringField(field, 'fillFromKey')
+	if (key != '' && fillFromKey != '') {
+		const sourceValue = formData.value[fillFromKey]
+		const nextValue = sourceValue == null ? '' : sourceValue
+		setFieldValueByKey(key, nextValue)
+		clearFieldError(key)
+		refreshDirtyState()
+		emitFieldChange(field, nextValue)
+	}
+	emit('input-add', {
 		field: field,
-		key: getFieldKey(field),
+		key: key,
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject)
 }
 
-function handleAddClick(field: UTSJSONObject) {
-	emit('input-add', {
+function handleInputActionClick(field: UTSJSONObject, position: string) {
+	const key = getFieldKey(field)
+	emit('input-action', {
 		field: field,
-		key: getFieldKey(field),
+		key: key,
+		position: position,
+		action: getInputActionKey(field, position),
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject)
@@ -911,6 +1099,13 @@ watch(
 	}
 )
 
+watch(
+	() : number => props.dirtySignal,
+	() => {
+		markDirty()
+	}
+)
+
 onBackPress(() : boolean | null => {
 	if (!props.enableBackConfirm) return null
 	if (allowNativeBackOnce.value) {
@@ -919,10 +1114,10 @@ onBackPress(() : boolean | null => {
 	}
 	if (!dirty.value) return null
 	uni.showModal({
-		title: '提示',
-		content: '当前页面有未保存内容，是否保存？',
-		cancelText: '直接离开',
-		confirmText: '保存',
+		title: props.leaveConfirmTitle,
+		content: props.leaveConfirmContent,
+		cancelText: props.leaveConfirmCancelText,
+		confirmText: props.leaveConfirmConfirmText,
 		success: (res) => {
 			if (res.confirm) {
 				emit('save-request', buildSubmitPayload())
@@ -939,6 +1134,11 @@ onBackPress(() : boolean | null => {
 __expose({
 	validate,
 	getFormData: () : UTSJSONObject => formData.value,
+	setFieldValue: (key: string, value: any) => {
+		setFieldValueByKey(key, value)
+		clearFieldError(key)
+		refreshDirtyState()
+	},
 	setFormData: (data: UTSJSONObject) => {
 		formData.value = data
 		refreshDirtyState()
@@ -956,6 +1156,7 @@ __expose({
 
 return (): any | null => {
 
+const _component_lili_print_copies_stepper = resolveEasyComponent("lili-print-copies-stepper",_easycom_lili_print_copies_stepper)
 const _component_switch = resolveComponent("switch")
 
   return _cE("view", _uM({ class: "uf-root" }), [
@@ -1038,9 +1239,28 @@ const _component_switch = resolveComponent("switch")
                                   key: 0,
                                   class: "uf-input-wrap"
                                 }), [
-                                  isTrue(getFieldShowScan(field))
+                                  isTrue(hasInputAction(field, 'left'))
                                     ? _cE("view", _uM({
                                         key: 0,
+                                        class: "uf-input-icon-btn uf-input-action-left",
+                                        onClick: () => {handleInputActionClick(field, 'left')}
+                                      }), [
+                                        getInputActionIcon(field, 'left') != ''
+                                          ? _cE("image", _uM({
+                                              key: 0,
+                                              class: "uf-input-icon uf-input-action-icon",
+                                              src: getInputActionIcon(field, 'left'),
+                                              mode: "aspectFit"
+                                            }), null, 8 /* PROPS */, ["src"])
+                                          : _cE("text", _uM({
+                                              key: 1,
+                                              class: "uf-input-action-text"
+                                            }), _tD(getInputActionText(field, 'left')), 1 /* TEXT */)
+                                      ], 8 /* PROPS */, ["onClick"])
+                                    : _cC("v-if", true),
+                                  isTrue(getFieldShowScan(field))
+                                    ? _cE("view", _uM({
+                                        key: 1,
                                         class: "uf-input-icon-btn",
                                         onClick: () => {handleScanClick(field)}
                                       }), [
@@ -1057,17 +1277,42 @@ const _component_switch = resolveComponent("switch")
                                     disabled: isReadonly(field),
                                     onInput: ($event: UniInputEvent) => {handleTextInput(field, $event)}
                                   }), null, 40 /* PROPS, NEED_HYDRATION */, ["value", "placeholder", "disabled", "onInput"]),
+                                  isTrue(hasInputAction(field, 'right'))
+                                    ? _cE("view", _uM({
+                                        key: 2,
+                                        class: "uf-input-icon-btn uf-input-action-right",
+                                        onClick: () => {handleInputActionClick(field, 'right')}
+                                      }), [
+                                        getInputActionIcon(field, 'right') != ''
+                                          ? _cE("image", _uM({
+                                              key: 0,
+                                              class: "uf-input-icon uf-input-action-icon",
+                                              src: getInputActionIcon(field, 'right'),
+                                              mode: "aspectFit"
+                                            }), null, 8 /* PROPS */, ["src"])
+                                          : _cE("text", _uM({
+                                              key: 1,
+                                              class: "uf-input-action-text"
+                                            }), _tD(getInputActionText(field, 'right')), 1 /* TEXT */)
+                                      ], 8 /* PROPS */, ["onClick"])
+                                    : _cC("v-if", true),
                                   isTrue(getFieldShowAdd(field))
                                     ? _cE("view", _uM({
-                                        key: 1,
-                                        class: "uf-input-icon-btn",
+                                        key: 3,
+                                        class: _nC(["uf-input-icon-btn", getFieldAddText(field) != '' ? 'uf-input-text-btn' : '']),
                                         onClick: () => {handleAddClick(field)}
                                       }), [
-                                        _cE("image", _uM({
-                                          class: "uf-input-icon",
-                                          src: "/static/icon/加.png"
-                                        }))
-                                      ], 8 /* PROPS */, ["onClick"])
+                                        getFieldAddText(field) != ''
+                                          ? _cE("text", _uM({
+                                              key: 0,
+                                              class: "uf-input-action-text"
+                                            }), _tD(getFieldAddText(field)), 1 /* TEXT */)
+                                          : _cE("image", _uM({
+                                              key: 1,
+                                              class: "uf-input-icon",
+                                              src: "/static/icon/加.png"
+                                            }))
+                                      ], 10 /* CLASS, PROPS */, ["onClick"])
                                     : _cC("v-if", true)
                                 ])
                               : isTrue(isTextareaField(field))
@@ -1082,40 +1327,101 @@ const _component_switch = resolveComponent("switch")
                                 : isTrue(isNumberField(field))
                                   ? _cE("view", _uM({
                                       key: 2,
-                                      class: "uf-input-wrap"
+                                      class: "uf-number-control"
                                     }), [
-                                      isTrue(getFieldShowScan(field))
-                                        ? _cE("view", _uM({
+                                      isTrue(getNumberShowStepper(field))
+                                        ? _cV(_component_lili_print_copies_stepper, _uM({
                                             key: 0,
-                                            class: "uf-input-icon-btn",
-                                            onClick: () => {handleScanClick(field)}
-                                          }), [
-                                            _cE("image", _uM({
-                                              class: "uf-input-icon",
-                                              src: "/static/icon/扫码.png"
-                                            }))
-                                          ], 8 /* PROPS */, ["onClick"])
-                                        : _cC("v-if", true),
-                                      _cE("input", _uM({
-                                        class: "uf-input",
-                                        type: "number",
-                                        value: getStringFieldValue(field),
-                                        placeholder: getFieldPlaceholder(field),
-                                        disabled: isReadonly(field),
-                                        onInput: ($event: UniInputEvent) => {handleNumberInput(field, $event)}
-                                      }), null, 40 /* PROPS, NEED_HYDRATION */, ["value", "placeholder", "disabled", "onInput"]),
-                                      isTrue(getFieldShowAdd(field))
-                                        ? _cE("view", _uM({
+                                            value: getStringFieldValue(field),
+                                            min: getNumberMin(field),
+                                            max: getNumberMax(field),
+                                            step: getNumberStep(field),
+                                            fallback: getNumberFallback(field),
+                                            showQuick: false,
+                                            compact: true,
+                                            onChange: ($event: any) => {handleNumberStepperChange(field, $event)}
+                                          }), null, 8 /* PROPS */, ["value", "min", "max", "step", "fallback", "onChange"])
+                                        : _cE("view", _uM({
                                             key: 1,
-                                            class: "uf-input-icon-btn",
-                                            onClick: () => {handleAddClick(field)}
+                                            class: "uf-input-wrap"
                                           }), [
-                                            _cE("image", _uM({
-                                              class: "uf-input-icon",
-                                              src: "/static/icon/加.png"
-                                            }))
-                                          ], 8 /* PROPS */, ["onClick"])
-                                        : _cC("v-if", true)
+                                            isTrue(hasInputAction(field, 'left'))
+                                              ? _cE("view", _uM({
+                                                  key: 0,
+                                                  class: "uf-input-icon-btn uf-input-action-left",
+                                                  onClick: () => {handleInputActionClick(field, 'left')}
+                                                }), [
+                                                  getInputActionIcon(field, 'left') != ''
+                                                    ? _cE("image", _uM({
+                                                        key: 0,
+                                                        class: "uf-input-icon uf-input-action-icon",
+                                                        src: getInputActionIcon(field, 'left'),
+                                                        mode: "aspectFit"
+                                                      }), null, 8 /* PROPS */, ["src"])
+                                                    : _cE("text", _uM({
+                                                        key: 1,
+                                                        class: "uf-input-action-text"
+                                                      }), _tD(getInputActionText(field, 'left')), 1 /* TEXT */)
+                                                ], 8 /* PROPS */, ["onClick"])
+                                              : _cC("v-if", true),
+                                            isTrue(getFieldShowScan(field))
+                                              ? _cE("view", _uM({
+                                                  key: 1,
+                                                  class: "uf-input-icon-btn",
+                                                  onClick: () => {handleScanClick(field)}
+                                                }), [
+                                                  _cE("image", _uM({
+                                                    class: "uf-input-icon",
+                                                    src: "/static/icon/扫码.png"
+                                                  }))
+                                                ], 8 /* PROPS */, ["onClick"])
+                                              : _cC("v-if", true),
+                                            _cE("input", _uM({
+                                              class: "uf-input",
+                                              type: getNumberInputType(field),
+                                              value: getStringFieldValue(field),
+                                              placeholder: getFieldPlaceholder(field),
+                                              disabled: isReadonly(field),
+                                              onInput: ($event: UniInputEvent) => {handleNumberInput(field, $event)}
+                                            }), null, 40 /* PROPS, NEED_HYDRATION */, ["type", "value", "placeholder", "disabled", "onInput"]),
+                                            isTrue(hasInputAction(field, 'right'))
+                                              ? _cE("view", _uM({
+                                                  key: 2,
+                                                  class: "uf-input-icon-btn uf-input-action-right",
+                                                  onClick: () => {handleInputActionClick(field, 'right')}
+                                                }), [
+                                                  getInputActionIcon(field, 'right') != ''
+                                                    ? _cE("image", _uM({
+                                                        key: 0,
+                                                        class: "uf-input-icon uf-input-action-icon",
+                                                        src: getInputActionIcon(field, 'right'),
+                                                        mode: "aspectFit"
+                                                      }), null, 8 /* PROPS */, ["src"])
+                                                    : _cE("text", _uM({
+                                                        key: 1,
+                                                        class: "uf-input-action-text"
+                                                      }), _tD(getInputActionText(field, 'right')), 1 /* TEXT */)
+                                                ], 8 /* PROPS */, ["onClick"])
+                                              : _cC("v-if", true),
+                                            isTrue(getFieldShowAdd(field))
+                                              ? _cE("view", _uM({
+                                                  key: 3,
+                                                  class: _nC(["uf-input-icon-btn", getFieldAddText(field) != '' ? 'uf-input-text-btn' : '']),
+                                                  onClick: () => {handleAddClick(field)}
+                                                }), [
+                                                  getFieldAddText(field) != ''
+                                                    ? _cE("text", _uM({
+                                                        key: 0,
+                                                        class: "uf-input-action-text"
+                                                      }), _tD(getFieldAddText(field)), 1 /* TEXT */)
+                                                    : _cE("image", _uM({
+                                                        key: 1,
+                                                        class: "uf-input-icon",
+                                                        src: "/static/icon/加.png"
+                                                      }))
+                                                ], 10 /* CLASS, PROPS */, ["onClick"])
+                                              : _cC("v-if", true)
+                                          ])
                                     ])
                                   : isTrue(isDatetimeField(field))
                                     ? _cE("view", _uM({
@@ -1157,6 +1463,9 @@ const _component_switch = resolveComponent("switch")
                                               disabled: isReadonly(field),
                                               labelKey: getBottomSelectLabelKey(field),
                                               valueKey: getBottomSelectValueKey(field),
+                                              imageKey: getBottomSelectImageKey(field),
+                                              subtitleKey: getBottomSelectSubtitleKey(field),
+                                              valueImage: getBottomSelectValueImage(field),
                                               pageSize: getBottomSelectPageSize(field),
                                               searchDelay: getBottomSelectSearchDelay(field),
                                               tree: getFieldTree(field),
@@ -1166,6 +1475,8 @@ const _component_switch = resolveComponent("switch")
                                               selectableLevelMessage: getFieldSelectableLevelMessage(field),
                                               showEditAction: showBottomSelectEdit(field),
                                               showAddAction: showBottomSelectAdd(field),
+                                              showScan: showBottomSelectScan(field),
+                                              scanOnlyFromCamera: getBottomSelectScanOnlyFromCamera(field),
                                               addPath: getBottomSelectAddPath(field),
                                               editPath: getBottomSelectEditPath(field),
                                               editQueryKey: getBottomSelectEditQueryKey(field),
@@ -1173,7 +1484,7 @@ const _component_switch = resolveComponent("switch")
                                               onChange: ($event: any) => {handleBottomSelectChange(field, $event)},
                                               onEdit: () => {handleBottomSelectEdit(field)},
                                               onAdd: () => {handleBottomSelectAdd(field)}
-                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
+                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "imageKey", "subtitleKey", "valueImage", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "showScan", "scanOnlyFromCamera", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
                                           ])
                                         : isTrue(isUploadField(field))
                                           ? _cE("view", _uM({
@@ -1182,6 +1493,7 @@ const _component_switch = resolveComponent("switch")
                                             }), [
                                               _cV(unref(liliUpload), _uM({
                                                 modelValue: getUploadValue(field),
+                                                fileItems: getUploadFileItems(field),
                                                 action: getUploadAction(field),
                                                 name: getUploadName(field),
                                                 headers: getUploadHeaders(field),
@@ -1194,14 +1506,29 @@ const _component_switch = resolveComponent("switch")
                                                 onUpload: ($event: any) => {handleUploadSuccess(field, $event)},
                                                 onDelete: ($event: any) => {handleUploadDelete(field, $event)},
                                                 onError: ($event: any) => {handleUploadError(field, $event)}
-                                              }), null, 8 /* PROPS */, ["modelValue", "action", "name", "headers", "formData", "max", "disabled", "uploadText", "onUpdate:modelValue", "onUpdate:fileItems", "onUpload", "onDelete", "onError"])
+                                              }), null, 8 /* PROPS */, ["modelValue", "fileItems", "action", "name", "headers", "formData", "max", "disabled", "uploadText", "onUpdate:modelValue", "onUpdate:fileItems", "onUpload", "onDelete", "onError"])
                                             ])
-                                          : _cE("view", _uM({
-                                              key: 7,
-                                              class: "uf-plain-value"
-                                            }), [
-                                              _cE("text", _uM({ class: "uf-plain-value-text" }), _tD(getStringFieldValue(field)), 1 /* TEXT */)
-                                            ])
+                                          : isTrue(isCustomField(field))
+                                            ? _cE("view", _uM({
+                                                key: 7,
+                                                class: "uf-custom-field"
+                                              }), [
+                                                renderSlot(_ctx.$slots, getFieldSlotName(field), _uM({
+                                                  field: field,
+                                                  value: getStringFieldValue(field),
+                                                  readonly: isReadonly(field)
+                                                }), (): any[] => [
+                                                  _cE("view", _uM({ class: "uf-plain-value" }), [
+                                                    _cE("text", _uM({ class: "uf-plain-value-text" }), _tD(getStringFieldValue(field)), 1 /* TEXT */)
+                                                  ])
+                                                ])
+                                              ])
+                                            : _cE("view", _uM({
+                                                key: 8,
+                                                class: "uf-plain-value"
+                                              }), [
+                                                _cE("text", _uM({ class: "uf-plain-value-text" }), _tD(getStringFieldValue(field)), 1 /* TEXT */)
+                                              ])
                           ]),
                           getFieldError(field) != ''
                             ? _cE("text", _uM({
@@ -1249,4 +1576,4 @@ const _component_switch = resolveComponent("switch")
 })
 export default __sfc__
 export type LiliUniversaFormComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["height", 44], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-datetime-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-input-wrap", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-input-icon-btn", _pS(_uM([["width", 44], ["height", 44], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"]]))], ["uf-input-icon", _pS(_uM([["width", 24], ["height", 24]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))], ["uf-floating-action", _pS(_uM([["position", "absolute"], ["left", 12], ["bottom", 84], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(37,99,235,0.92)"]]))], ["uf-floating-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]
+const GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormStyles = [_uM([["uf-root", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F5F7FB"]]))], ["uf-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingTop", 8], ["paddingRight", 8], ["paddingBottom", 96], ["paddingLeft", 8]]))], ["uf-section", _pS(_uM([["marginBottom", 8], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"]]))], ["uf-section-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingRight", 16], ["paddingBottom", 14], ["paddingLeft", 16]]))], ["uf-section-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["uf-section-title", _pS(_uM([["fontSize", 16], ["fontWeight", "600"], ["color", "#1F2937"], ["lineHeight", "20px"]]))], ["uf-section-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#9CA3AF"], ["lineHeight", "16px"]]))], ["uf-section-arrow", _pS(_uM([["fontSize", 18], ["color", "#9CA3AF"], ["lineHeight", "18px"]]))], ["uf-section-body", _pS(_uM([["paddingTop", 0], ["paddingRight", 16], ["paddingBottom", 12], ["paddingLeft", 16]]))], ["uf-field", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#F1F5F9"]]))], ["uf-field-head", _pS(_uM([["marginBottom", 8]]))], ["uf-field-title-line", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["uf-field-label", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "18px"]]))], ["uf-required", _pS(_uM([["marginLeft", 4], ["fontSize", 14], ["color", "#DC2626"], ["lineHeight", "18px"]]))], ["uf-mode-tag", _pS(_uM([["marginLeft", 8], ["paddingTop", 2], ["paddingRight", 8], ["paddingBottom", 2], ["paddingLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["fontSize", 11], ["color", "#92400E"], ["lineHeight", "14px"], ["backgroundColor", "#FEF3C7"]]))], ["uf-field-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["color", "#6B7280"], ["lineHeight", "16px"]]))], ["uf-control", _pS(_uM([["minHeight", 44]]))], ["uf-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 0], ["borderTopRightRadius", 0], ["borderBottomRightRadius", 0], ["borderBottomLeftRadius", 0], ["backgroundColor", "rgba(0,0,0,0)"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-textarea", _pS(_uM([["height", 96], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"], ["fontSize", 14], ["color", "#111827"]]))], ["uf-datetime-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-bottom-select-wrap", _pS(_uM([["minHeight", 44]]))], ["uf-upload-wrap", _pS(_uM([["paddingTop", 4]]))], ["uf-input-wrap", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["height", 44], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["paddingLeft", 6], ["paddingRight", 6]]))], ["uf-number-control", _pS(_uM([["minHeight", 44]]))], ["uf-input-icon-btn", _pS(_uM([["width", 36], ["height", 36], ["flexShrink", 0], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18]]))], ["uf-input-text-btn", _pS(_uM([["width", 88], ["paddingLeft", 8], ["paddingRight", 8], ["borderLeftWidth", 1], ["borderLeftStyle", "solid"], ["borderLeftColor", "#E2E8F0"]]))], ["uf-input-action-left", _pS(_uM([["marginRight", 4]]))], ["uf-input-action-right", _pS(_uM([["marginLeft", 4], ["backgroundColor", "#F1F5F9"]]))], ["uf-input-action-text", _pS(_uM([["fontSize", 13], ["color", "#2563EB"], ["fontWeight", "600"], ["lineHeight", "18px"]]))], ["uf-input-icon", _pS(_uM([["width", 24], ["height", 24]]))], ["uf-input-action-icon", _pS(_uM([["width", 26], ["height", 26]]))], ["uf-plain-value", _pS(_uM([["minHeight", 44], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["backgroundColor", "#F8FAFC"]]))], ["uf-plain-value-text", _pS(_uM([["fontSize", 14], ["color", "#111827"], ["lineHeight", "20px"]]))], ["uf-error-text", _pS(_uM([["marginTop", 6], ["fontSize", 12], ["color", "#DC2626"], ["lineHeight", "16px"]]))], ["uf-footer", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "#E5E7EB"]]))], ["uf-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 44], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["fontSize", 15], ["lineHeight", "44px"]]))], ["uf-btn-light", _pS(_uM([["marginRight", 10], ["color", "#374151"], ["backgroundColor", "#E5E7EB"]]))], ["uf-btn-primary", _pS(_uM([["color", "#FFFFFF"], ["backgroundColor", "#2563EB"]]))], ["uf-floating-action", _pS(_uM([["position", "absolute"], ["left", 12], ["bottom", 84], ["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 17], ["borderTopRightRadius", 17], ["borderBottomRightRadius", 17], ["borderBottomLeftRadius", 17], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(37,99,235,0.92)"]]))], ["uf-floating-action-text", _pS(_uM([["fontSize", 12], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])]

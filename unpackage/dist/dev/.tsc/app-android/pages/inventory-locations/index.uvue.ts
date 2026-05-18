@@ -46,8 +46,23 @@ function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): st
 
 function parseErrorMessage(error: any, fallback: string): string {
 	if (error == null) return fallback
+	const directMessage = (error as Error).message
+	if (directMessage != null && directMessage != '') return directMessage
 	const text = JSON.stringify(error)
-	if (text == null || text == '') return fallback
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:156")
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+			const detail = stringField(parsed!, 'detail')
+			if (detail != '') return detail
+			const errors = stringField(parsed!, 'errors')
+			if (errors != '') return errors
+		}
+	} catch (parseError) {
+		return text
+	}
 	return text
 }
 
@@ -94,7 +109,9 @@ async function loadItems() {
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
-		errorMessage.value = parseErrorMessage(error, '库存位置加载失败')
+		const message = parseErrorMessage(error, '库存位置加载失败')
+		errorMessage.value = message
+		uni.showToast({ title: message, icon: 'none' })
 	} finally {
 		isLoading.value = false
 	}
@@ -165,7 +182,7 @@ function handleMenu(payload: UTSJSONObject) {
 	else if (actionKey == 'edit' && item != null) uni.navigateTo({ url: '/pages/inventory-locations/from?id=' + stringField(item as UTSJSONObject, 'rawId') })
 }
 
-function handleCreate(payload: UTSJSONObject) {
+function handleCreate() {
 	uni.navigateTo({ url: '/pages/inventory-locations/from' })
 }
 

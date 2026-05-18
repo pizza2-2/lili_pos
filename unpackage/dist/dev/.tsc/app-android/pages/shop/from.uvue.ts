@@ -5,8 +5,9 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createShopMedia, getShopDetail, getShopMediaDetail, ShopMediaItem, ShopMediaMutationData, updateShopMedia } from '@/pkg/api/modules/shops'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/shop/from.uvue", 49, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/shop/from.uvue", 50, 6>;
 	value: string
 	text: string
 }
@@ -27,6 +28,7 @@ const leaveSignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 
 const initialData = ref<UTSJSONObject>({
 	shop_id: '',
@@ -69,7 +71,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:102")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:104")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -85,7 +87,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildUploadHeaders(): UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/shop/from.uvue", 118, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/shop/from.uvue", 120, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -93,15 +95,11 @@ function buildUploadHeaders(): UTSJSONObject {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -283,7 +281,12 @@ function buildShopMediaMutationPayload(formDataObject: UTSJSONObject): ShopMedia
 	} as ShopMediaMutationData
 }
 
-function goBackToList(): void {
+function goBackToList(markLeaving: boolean = true): void {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({
@@ -373,6 +376,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		return
 	}
 
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	const isEditing = formMode.value == 'edit' && mediaId.value != ''
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
@@ -405,20 +409,28 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 			}
 		}
 		markShopMediaRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: successMessage,
 			icon: 'success',
 		})
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: parseErrorMessage(error, isEditing ? '资料保存失败' : '资料创建失败'),
 			icon: 'none',
 		})
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -507,7 +519,7 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 	const initialShopId = shopIdValue == null ? '' : (shopIdValue as string)
 	let initialShopName = ''
 	if (shopNameValue != null) {
-		const decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as string), " at pages/shop/from.uvue:540")
+		const decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as string), " at pages/shop/from.uvue:552")
 		initialShopName = decodedShopName == null ? '' : ('' + decodedShopName)
 	}
 	if (initialShopName == '' && initialShopId != '') {
@@ -543,7 +555,13 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 }
 
 onLoad((event: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	initializeForm(event)
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 return (): any | null => {

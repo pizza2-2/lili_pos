@@ -37,6 +37,8 @@ export type ProfileResponse = {
 	permissions: string[]
 }
 
+const useMockLogin = false
+
 // 登录接口外层返回格式示例：
 // {
 //   "success": true,
@@ -55,6 +57,14 @@ export type ProfileResponse = {
 
 // 账号登录
 export async function accountLogin(data: LoginData): Promise<LoginResponse> {
+	if (useMockLogin) {
+		return {
+			access_token: 'debug-access-token',
+			refresh_token: 'debug-refresh-token',
+			token_type: 'Bearer',
+			expires_in: 86400
+		} as LoginResponse
+	}
 	const body = {
 		username: data.username,
 		password: data.password
@@ -106,6 +116,33 @@ export async function accountLogin(data: LoginData): Promise<LoginResponse> {
 
 // 获取当前登录用户信息
 export async function getProfile(): Promise<ProfileResponse> {
+	if (useMockLogin) {
+		return {
+			id: 1,
+			username: 'debug',
+			email: '',
+			first_name: 'Debug',
+			last_name: 'User',
+			is_active: true,
+			date_joined: '2026-05-13T00:00:00+02:00',
+			is_platform_admin: true,
+			company_id: 1,
+			company_name: 'DEBUG',
+			name: '调试账号',
+			cashier_account: '',
+			cashier_id: null,
+			shop_ids: [1],
+			permissions: [
+				'approve',
+				'export',
+				'manage_inventory',
+				'manage_purchase',
+				'manage_users',
+				'view_cost',
+				'void'
+			]
+		} as ProfileResponse
+	}
 	const raw = await request(
 		'/api/accounts/auth/me/',
 		'GET',

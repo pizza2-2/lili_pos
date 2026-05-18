@@ -6,6 +6,7 @@ export type OrderListQuery = {
 	page_size: number
 	status: string | null
 	payment_method: string | null
+	cashier_id: string | null
 	inventory_deducted: string | null
 	date_from: string | null
 	date_to: string | null
@@ -55,6 +56,32 @@ export type OrderStatistics = {
 	failed_count: number
 }
 
+export type OrderSelectedFilter = {
+	param: string
+	value: string
+}
+
+export type OrderFilterOption = {
+	value: string
+	label: string
+}
+
+export type OrderFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: OrderFilterOption[]
+}
+
+export type OrderFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: OrderFilterDefinition[]
+}
+
 function stringValue(value: any | null): string {
 	if (value == null) return ''
 	return '' + value
@@ -69,6 +96,17 @@ function intValue(value: any | null): number {
 function boolValue(value: any | null): boolean {
 	const text = stringValue(value).toLowerCase()
 	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) return [] as string[]
+	const rawArray = JSON.parseArray<any>(JSON.stringify(value))
+	if (rawArray == null) return [] as string[]
+	const result: string[] = []
+	for (let index = 0; index < rawArray.length; index += 1) {
+		result.push(stringValue(rawArray[index]))
+	}
+	return result
 }
 
 function parseObject(value: any | null): UTSJSONObject | null {
@@ -100,6 +138,7 @@ function buildQuery(data: OrderListQuery): UTSJSONObject {
 	if (data.search != null && data.search != '') query['search'] = data.search
 	if (data.status != null && data.status != '') query['status'] = data.status
 	if (data.payment_method != null && data.payment_method != '') query['payment_method'] = data.payment_method
+	if (data.cashier_id != null && data.cashier_id != '') query['cashier_id'] = data.cashier_id
 	if (data.inventory_deducted != null && data.inventory_deducted != '') query['inventory_deducted'] = data.inventory_deducted
 	if (data.date_from != null && data.date_from != '') query['date_from'] = data.date_from
 	if (data.date_to != null && data.date_to != '') query['date_to'] = data.date_to
@@ -201,6 +240,52 @@ function buildStatistics(raw: any): OrderStatistics {
 	} as OrderStatistics
 }
 
+function buildOrderFilterOptionsResponse(raw: any): OrderFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: OrderFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filterObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters))
+		if (filterObjects != null) {
+			const nextFilters: OrderFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+				const filterObject = filterObjects[filterIndex]
+				let options: OrderFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions))
+					if (optionObjects != null) {
+						const nextOptions: OrderFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+							const optionObject = optionObjects[optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as OrderFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: stringValue(filterObject['multiple']) == 'true',
+					options: options,
+				} as OrderFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as OrderFilterOptionsResponse
+}
+
 function detailPath(id: number | string): string {
 	return '/api/orders/orders/' + stringValue(id) + '/'
 }
@@ -213,6 +298,11 @@ export async function getOrderList(data: OrderListQuery): Promise<OrderListRespo
 export async function getOrderDetail(id: number | string): Promise<OrderItem> {
 	const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true)
 	return buildOrderItem(rawDataObject(raw))
+}
+
+export async function getOrderFilterOptions(): Promise<OrderFilterOptionsResponse> {
+	const raw = await request('/api/orders/orders/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildOrderFilterOptionsResponse(raw)
 }
 
 export async function getOrderStatistics(data: OrderListQuery): Promise<OrderStatistics> {

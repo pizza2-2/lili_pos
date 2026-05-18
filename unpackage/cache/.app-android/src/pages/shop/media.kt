@@ -133,7 +133,7 @@ open class GenPagesShopMedia : BasePage {
                 return value
             }
             val formatDateText = ::gen_formatDateText_fn
-            fun gen_filePreviewUrl_fn(file: ShopMediaFile): String {
+            fun gen_fileThumbnailUrl_fn(file: ShopMediaFile): String {
                 if (file.signed_thumbnail_url != "") {
                     return file.signed_thumbnail_url
                 }
@@ -145,13 +145,23 @@ open class GenPagesShopMedia : BasePage {
                 }
                 return file.file_url
             }
-            val filePreviewUrl = ::gen_filePreviewUrl_fn
+            val fileThumbnailUrl = ::gen_fileThumbnailUrl_fn
+            fun gen_fileFullUrl_fn(file: ShopMediaFile): String {
+                if (file.signed_url != "") {
+                    return file.signed_url
+                }
+                if (file.file_url != "") {
+                    return file.file_url
+                }
+                return fileThumbnailUrl(file)
+            }
+            val fileFullUrl = ::gen_fileFullUrl_fn
             fun gen_buildImages_fn(files: UTSArray<ShopMediaFile>): UTSArray<String> {
                 val result: UTSArray<String> = _uA()
                 run {
                     var index: Number = 0
                     while(index < files.length){
-                        val previewUrl = filePreviewUrl(files[index])
+                        val previewUrl = fileThumbnailUrl(files[index])
                         if (previewUrl != "") {
                             result.push(previewUrl)
                         }
@@ -161,15 +171,46 @@ open class GenPagesShopMedia : BasePage {
                 return result
             }
             val buildImages = ::gen_buildImages_fn
+            fun gen_buildPreviewImages_fn(files: UTSArray<ShopMediaFile>): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < files.length){
+                        val previewUrl = fileFullUrl(files[index])
+                        if (previewUrl != "") {
+                            result.push(previewUrl)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildPreviewImages = ::gen_buildPreviewImages_fn
+            fun gen_buildMediaIds_fn(files: UTSArray<ShopMediaFile>): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < files.length){
+                        val mediaId = files[index].id
+                        if (mediaId != "") {
+                            result.push(mediaId)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildMediaIds = ::gen_buildMediaIds_fn
             fun gen_buildCover_fn(files: UTSArray<ShopMediaFile>): String {
                 if (files.length == 0) {
                     return ""
                 }
-                return filePreviewUrl(files[0])
+                return fileThumbnailUrl(files[0])
             }
             val buildCover = ::gen_buildCover_fn
             fun gen_mediaRecordToListItem_fn(item: ShopMediaItem): UTSJSONObject {
                 val images = buildImages(item.media_files)
+                val previewImages = buildPreviewImages(item.media_files)
                 val expirationText = formatDateText(item.expiration_date)
                 val recordTypeText = if (item.expiration_date == "") {
                     ("类型：" + getDisplayText(item.record_type_display))
@@ -186,7 +227,12 @@ open class GenPagesShopMedia : BasePage {
                 } else {
                     expirationText
                 }
-                , "notes" to getDisplayText(item.notes), "files_count" to item.files_count.toString(10), "updated_at" to formatDateText(item.updated_at), "cover" to buildCover(item.media_files), "images" to images, "rawId" to item.id.toString(10))
+                , "notes" to getDisplayText(item.notes), "files_count" to item.files_count.toString(10), "updated_at" to formatDateText(item.updated_at), "cover" to buildCover(item.media_files), "images" to images, "previewCover" to if (previewImages.length > 0) {
+                    previewImages[0]
+                } else {
+                    ""
+                }
+                , "previewImages" to previewImages, "mediaIds" to buildMediaIds(item.media_files), "rawId" to item.id.toString(10))
             }
             val mediaRecordToListItem = ::gen_mediaRecordToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String): Unit {
@@ -266,7 +312,7 @@ open class GenPagesShopMedia : BasePage {
                 val url = if (shopId.value == "") {
                     "/pages/shop/from"
                 } else {
-                    ("/pages/shop/from?shop_id=" + shopId.value + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:321"))
+                    ("/pages/shop/from?shop_id=" + shopId.value + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:357"))
                 }
                 uni_navigateTo(NavigateToOptions(url = url))
             }
@@ -364,7 +410,7 @@ open class GenPagesShopMedia : BasePage {
                 shopName.value = if (rawShopName == "") {
                     ""
                 } else {
-                    stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:417"))
+                    stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:453"))
                 }
                 loadShopMedia()
             }

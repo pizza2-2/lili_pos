@@ -5,8 +5,9 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { SupplierItem, SupplierMutationData, createSupplier, getSupplierDetail, updateSupplier } from '@/pkg/api/modules/suppliers'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 49, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/suppliers/from.uvue", 50, 6>;
 	value: string
 	text: string
 }
@@ -27,6 +28,7 @@ const leaveSignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 const initialData = ref<UTSJSONObject>({
 	code: '',
 	name: '',
@@ -103,7 +105,7 @@ function buildInitialDataFromSupplier(item: SupplierItem) : UTSJSONObject {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 136, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 138, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -119,7 +121,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:152")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:154")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -135,15 +137,11 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject) : UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) {
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -260,7 +258,7 @@ async function loadSupplierDetailData(idText: string) {
 	}
 	try {
 		const detail = await getSupplierDetail(idText)
-		console.log(detail, " at pages/suppliers/from.uvue:293")
+		console.log(detail, " at pages/suppliers/from.uvue:291")
 		initialData.value = buildInitialDataFromSupplier(detail)
 	} catch (error) {
 		uni.showToast({
@@ -270,7 +268,12 @@ async function loadSupplierDetailData(idText: string) {
 	}
 }
 
-function goBackToList() {
+function goBackToList(markLeaving: boolean = true) {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({
@@ -375,6 +378,7 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 	const data = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
 	const actionText = formMode.value == 'edit' ? '保存修改' : '创建供应商'
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	savingText.value = actionText + '中...'
 	savingVisible.value = true
@@ -405,20 +409,28 @@ async function persistForm(payload: UTSJSONObject, fromPrompt: boolean) {
 		}
 		clearDraftStorage()
 		markSupplierListRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: successMessage,
 			icon: 'success',
 		})
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) {
+			return
+		}
 		uni.showToast({
 			title: parseErrorMessage(error, actionText + '失败'),
 			icon: 'none',
 		})
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -495,6 +507,7 @@ function handleUploadError(payload: UTSJSONObject) {
 }
 
 onLoad((event : OnLoadOptions) => {
+	pageTaskGuard.reset()
 	leaveSignal.value = 0
 	const idValue = event['id']
 	supplierId.value = idValue == null ? '' : (idValue as string)
@@ -504,6 +517,11 @@ onLoad((event : OnLoadOptions) => {
 		return
 	}
 	clearDraftStorage()
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 return (): any | null => {

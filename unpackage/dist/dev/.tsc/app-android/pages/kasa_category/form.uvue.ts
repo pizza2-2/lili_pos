@@ -197,7 +197,6 @@ async function loadTaxRateOptions() {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = stringValue(params['keyword']).toLowerCase()
 	const id = stringValue(params['id'])
 	const normalizedId = normalizeTaxRateToken(id)
 	const result: UTSJSONObject[] = []
@@ -213,9 +212,6 @@ function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTS
 				value: id,
 				text: option.text,
 			} as UTSJSONObject)
-			continue
-		}
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) {
 			continue
 		}
 		result.push({
@@ -261,7 +257,7 @@ async function loadDetailData(idText: string) {
 	try {
 		await loadTaxRateOptions()
 		const detail = await getKasaCategoryDetail(idText)
-		console.log(detail, " at pages/kasa_category/form.uvue:290")
+		console.log(detail, " at pages/kasa_category/form.uvue:286")
 		initialData.value = buildInitialDataFromDetail(detail)
 	} catch (error) {
 		uni.showToast({

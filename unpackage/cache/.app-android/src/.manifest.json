@@ -4,229 +4,301 @@
     "compiler_version": "5.07"
   },
   "files": {
-    "pages/kasa_category/index.kt": {
-      "md5": "1df13760b96f53d863faf24c4cc6a86053eadd7c",
-      "class": "GenPagesKasaCategoryIndex"
-    },
-    "pages/expenses/from.kt": {
-      "class": "GenPagesExpensesFrom",
-      "md5": "964438cf7694762d09d6b09cae32b85641aba861"
-    },
-    "pages/products/pricing-formula/from.kt": {
-      "md5": "47be1de7d74e133555b54b5abea6bcf9667e683f",
-      "class": "GenPagesProductsPricingFormulaFrom"
-    },
-    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
-      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup",
-      "md5": "6868a2f6ce9ab8691365790f413eec55b5663922"
-    },
-    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
-      "md5": "6be290990f00b3cded425b958d4b6a13490f27c1",
-      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
-    },
-    "pages/shop/from.kt": {
-      "class": "GenPagesShopFrom",
-      "md5": "d3b3b1c958be4608fea4d7a1d7a8b2ab08d79407"
-    },
-    "pages/inventory-management/from.kt": {
-      "class": "GenPagesInventoryManagementFrom",
-      "md5": "3bc45d0affc2f96aabf256b018bdc00e1d36c1fd"
-    },
-    "pages/inventory-management/index.kt": {
-      "class": "GenPagesInventoryManagementIndex",
-      "md5": "d4cbcf321d7b41cc1e93cf8154b4cfb95a6a42cc"
-    },
-    "pages/orders/from.kt": {
-      "class": "GenPagesOrdersFrom",
-      "md5": "2ea54eeecf82f6e47a7374aa8d11723808126fb2"
-    },
-    "index.kt": {
-      "class": "",
-      "md5": "d8e28ccee10676f4c23feb301250ad70920ef5c2"
-    },
-    "pages/products/from.kt": {
-      "md5": "4dab5afbf452563af95e4f19308895d812a1b137",
-      "class": "GenPagesProductsFrom"
-    },
-    "pages/tabbar/settings.kt": {
-      "class": "GenPagesTabbarSettings",
-      "md5": "86d2cd581e4c86960c8314d7e98b767550b76a0f"
-    },
-    "pages/tabbar/products.kt": {
-      "class": "GenPagesTabbarProducts",
-      "md5": "1309268b8f3479c70247675e11977c296db723c6"
-    },
-    "pages/ksef/index.kt": {
-      "md5": "8f1ad3c0190001b70b22c2aa3b556f5c96901be8",
-      "class": "GenPagesKsefIndex"
-    },
-    "pages/tabbar/mine.kt": {
-      "md5": "03428cd13f0152c775caa5db9881229cc4c42a41",
-      "class": "GenPagesTabbarMine"
-    },
-    "pages/purchases/details/index.kt": {
-      "md5": "94408758cf392d0f7a5662c73dd3746261e394e6",
-      "class": "GenPagesPurchasesDetailsIndex"
-    },
-    "pages/shop/media.kt": {
-      "class": "GenPagesShopMedia",
-      "md5": "52a5ae898481b69f8165b2c35375836f14731afd"
-    },
-    "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
-      "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect",
-      "md5": "215aedd0934e50b4f4f2628f8b6c1eb9eaa1fb83"
-    },
-    "pages/webview/webview.kt": {
-      "md5": "138888d18d6368b3e324680ed4b11da16956b725",
-      "class": "GenPagesWebviewWebview"
-    },
-    "pages/inventory-transfers/index.kt": {
-      "class": "GenPagesInventoryTransfersIndex",
-      "md5": "41df634359d5cea6b289e3d8b399bd6b6d48f0a2"
+    "uni_modules/lili-print-copies-stepper/components/lili-print-copies-stepper/lili-print-copies-stepper.kt": {
+      "class": "GenUniModulesLiliPrintCopiesStepperComponentsLiliPrintCopiesStepperLiliPrintCopiesStepper",
+      "md5": "0564c7f3fd5e8bcc6c93ccc34f9d92e48a65345d"
     },
     "pages/inventory-checks/index.kt": {
       "class": "GenPagesInventoryChecksIndex",
-      "md5": "7742c9304955a6959dee8e72e4f957cf0134fd0d"
+      "md5": "71da98402fec428adea4de0474013430d5d082ee"
+    },
+    "pages/transactions/index.kt": {
+      "md5": "8a0c69653924ebd6544923986dba3cb779c20867",
+      "class": "GenPagesTransactionsIndex"
+    },
+    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
+      "md5": "b947db631262dab89008e0f7ed047ace59aff5d5",
+      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm"
+    },
+    "pages/suppliers_procure/index.kt": {
+      "md5": "5836cf2e44443baf72a481e319ff899fe413f5a7",
+      "class": "GenPagesSuppliersProcureIndex"
+    },
+    "pages/purchases/details/from.kt": {
+      "class": "GenPagesPurchasesDetailsFrom",
+      "md5": "0e73315bcdd392554db9f560bc3f5463e47c9193"
+    },
+    "pages/inventory-management/index.kt": {
+      "md5": "3e96687dffe8638596d7ed41001275bc5518f390",
+      "class": "GenPagesInventoryManagementIndex"
+    },
+    "pages/label-templates/details/index.kt": {
+      "class": "GenPagesLabelTemplatesDetailsIndex",
+      "md5": "34f56ec12d1f97328417835c349b23f4aa8cc42b"
+    },
+    "pages/inventory-management/from.kt": {
+      "md5": "e74a56866dbdba1c9e676c0d54d9183cf73244e7",
+      "class": "GenPagesInventoryManagementFrom"
+    },
+    "pages/inventory-transfers/from.kt": {
+      "md5": "ee10a48e1732db63b1c0bb3bf52a51f292c3a35b",
+      "class": "GenPagesInventoryTransfersFrom"
+    },
+    "pages/tabbar/settings.kt": {
+      "class": "GenPagesTabbarSettings",
+      "md5": "de57a2abcbb4266e55a03f3f665a3ff35d41335c"
+    },
+    "pages/purchases/details/quick-input.kt": {
+      "class": "GenPagesPurchasesDetailsQuickInput",
+      "md5": "1a7c6d26f1fb69893ec35980ad37e21a961382d2"
+    },
+    "pages/inventory-transfers/details/index.kt": {
+      "md5": "9df461357e49de97ef741a414715ab38f2c990d0",
+      "class": "GenPagesInventoryTransfersDetailsIndex"
+    },
+    "uni_modules/lili-popup/components/lili-popup/lili-popup.kt": {
+      "md5": "c8e952ed84c7c4ce54c602c0ac3e50f03bdcd51d",
+      "class": "GenUniModulesLiliPopupComponentsLiliPopupLiliPopup"
+    },
+    "pages/inventory-checks/create.kt": {
+      "md5": "87cf5d7d162a4e794621960813bd407048fafb74",
+      "class": "GenPagesInventoryChecksCreate"
+    },
+    "pages/inventory/index.kt": {
+      "class": "GenPagesInventoryIndex",
+      "md5": "8689dfa3e5767dc3c2562c1da5c0a610b0388cdc"
+    },
+    "pages/orders/from.kt": {
+      "class": "GenPagesOrdersFrom",
+      "md5": "81e4d1bd0f754e3b1dc3b4e306f2828186baa8fe"
+    },
+    "pages/inventory-transfers/create.kt": {
+      "md5": "e7bfd19273c1d830eca313b1c71eca995550db91",
+      "class": "GenPagesInventoryTransfersCreate"
+    },
+    "pages/expenses/index.kt": {
+      "class": "GenPagesExpensesIndex",
+      "md5": "414231ada61029067fa57730d866c0e1b0686497"
+    },
+    "pages/suppliers/index.kt": {
+      "class": "GenPagesSuppliersIndex",
+      "md5": "86a2dda993aefce47746672547f53495fbcd3302"
+    },
+    "pages/label-templates/from.kt": {
+      "md5": "93db2a924f3d678bcb9e2304743ff75f4981843d",
+      "class": "GenPagesLabelTemplatesFrom"
+    },
+    "pages/products/price-calculator.kt": {
+      "md5": "edc2284d38c3ae22207affa995c9688b28adc3fd",
+      "class": "GenPagesProductsPriceCalculator"
+    },
+    "pages/shop/detail.kt": {
+      "class": "GenPagesShopDetail",
+      "md5": "f72366013dbc4437f77864a5e186f33cb639093c"
+    },
+    "pages/kasa_category/index.kt": {
+      "class": "GenPagesKasaCategoryIndex",
+      "md5": "1df13760b96f53d863faf24c4cc6a86053eadd7c"
     },
     "pages/inventory/locations.kt": {
       "class": "GenPagesInventoryLocations",
       "md5": "c3f287e7b75f3342580b51d331f93b27554e9eaa"
     },
-    "pages/privacy/privacy.kt": {
-      "md5": "dd937ccdef05b0913c68db2008109433b48cac44",
-      "class": "GenPagesPrivacyPrivacy"
+    "pages/purchases/details/excel-upload.kt": {
+      "class": "GenPagesPurchasesDetailsExcelUpload",
+      "md5": "d74af7a2359e3c47457164fef0b86bfde54acd50"
     },
-    "pages/inventory/transfers.kt": {
-      "class": "GenPagesInventoryTransfers",
-      "md5": "83180e70fa39365dc9320d74588574029d57364b"
+    "pages/ksef/index.kt": {
+      "class": "GenPagesKsefIndex",
+      "md5": "cec70596164839e47acd22a3efe5933117de24e7"
     },
-    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
-      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0",
-      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup"
+    "pages/purchases/from.kt": {
+      "md5": "7e81bb75d0a14aee50891b28e64edf88cada574d",
+      "class": "GenPagesPurchasesFrom"
     },
-    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
-      "md5": "730244a48a560051890270ac41646cf4cd916525",
-      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList"
+    "pages/category/index.kt": {
+      "md5": "a0614a23291320bc09837ff25dde06744e653c9e",
+      "class": "GenPagesCategoryIndex"
+    },
+    "pages/webview/webview.kt": {
+      "class": "GenPagesWebviewWebview",
+      "md5": "138888d18d6368b3e324680ed4b11da16956b725"
+    },
+    "pages/purchases/index.kt": {
+      "md5": "7202ea7e7aa407b6f9226aff5511e9b16ab234b7",
+      "class": "GenPagesPurchasesIndex"
+    },
+    "pages/tabbar/reports.kt": {
+      "class": "GenPagesTabbarReports",
+      "md5": "5fd54471e467f615de216f5c755d73dff1399b75"
+    },
+    "pages/orders/index.kt": {
+      "class": "GenPagesOrdersIndex",
+      "md5": "342cb1ce30996bb450451dab6f97d227b324786f"
+    },
+    "pages/transactions/from.kt": {
+      "md5": "24a31be73fa1a348ede38ae55de4009725c187fc",
+      "class": "GenPagesTransactionsFrom"
+    },
+    "pages/products/pricing-formula/index.kt": {
+      "md5": "764ca110b9770b0a9501f7513ddcdd9b457e91e1",
+      "class": "GenPagesProductsPricingFormulaIndex"
     },
     "uni_modules/lili-data/components/lili-data/lili-data.kt": {
       "md5": "21923130043ff547bc8d94b7954fc5900b55eb72",
       "class": "GenUniModulesLiliDataComponentsLiliDataLiliData"
     },
-    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
-      "md5": "32d63ad1babb12fd1ae831eba4e4173714122d0e",
-      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
+    "pages/purchases/details/index.kt": {
+      "class": "GenPagesPurchasesDetailsIndex",
+      "md5": "f6ccac3dac795ddd34b8456981b760ec62969cbb"
     },
-    "pages/transactions/index.kt": {
-      "md5": "b28b21dac04948d5d5536b981bd1c77d39ab0545",
-      "class": "GenPagesTransactionsIndex"
+    "pages/products/pricing-formula/from.kt": {
+      "md5": "47be1de7d74e133555b54b5abea6bcf9667e683f",
+      "class": "GenPagesProductsPricingFormulaFrom"
     },
-    "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.kt": {
-      "class": "GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaForm",
-      "md5": "898feff10273fa96d5db9a3642ba035c270fe0dd"
+    "pages/printer-settings/index.kt": {
+      "class": "GenPagesPrinterSettingsIndex",
+      "md5": "c1f3cfc661b08382db098f427fa1d32127c46c37"
     },
-    "pages/purchases/details/from.kt": {
-      "class": "GenPagesPurchasesDetailsFrom",
-      "md5": "cfb9b8c92e00046ba199d89dfced4aa2d3bfb22f"
-    },
-    "pages/inventory-transfers/from.kt": {
-      "md5": "bf6e17e80b25f1df51cd683a4523cc7f07bd3868",
-      "class": "GenPagesInventoryTransfersFrom"
-    },
-    "pages/category/from.kt": {
-      "md5": "dec7dbf51277afa6cc8ec8071528d23a48f4baeb",
-      "class": "GenPagesCategoryFrom"
-    },
-    "pages/inventory/index.kt": {
-      "md5": "8689dfa3e5767dc3c2562c1da5c0a610b0388cdc",
-      "class": "GenPagesInventoryIndex"
-    },
-    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
-      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview",
-      "md5": "13564f5d79a0e2a24f43c74e362bc440017fd1b3"
-    },
-    "pages/transactions/from.kt": {
-      "md5": "c38e6c3a5d5aa02f8fe3d4b17639e3a2db557f51",
-      "class": "GenPagesTransactionsFrom"
-    },
-    "pages/inventory-locations/index.kt": {
-      "md5": "36717b1e08375384c26fbbced03bf560243dda3c",
-      "class": "GenPagesInventoryLocationsIndex"
-    },
-    "pages/purchases/from.kt": {
-      "md5": "f9e71c38e7c76e05d44207a79fd0643c377a434c",
-      "class": "GenPagesPurchasesFrom"
-    },
-    "pages/inventory/checks.kt": {
-      "class": "GenPagesInventoryChecks",
-      "md5": "658cce43ced2d0648ef1c4d9990f903de73b568c"
+    "pages/shop/from.kt": {
+      "class": "GenPagesShopFrom",
+      "md5": "69ca11d9673885866a0734bf7131850c02e62af3"
     },
     "pages/products/pricing-formula.kt": {
-      "class": "GenPagesProductsPricingFormula",
-      "md5": "1b919337a1a37d3240fbdb29bd5508c55be13958"
+      "md5": "1b919337a1a37d3240fbdb29bd5508c55be13958",
+      "class": "GenPagesProductsPricingFormula"
     },
-    "pages/category/index.kt": {
-      "class": "GenPagesCategoryIndex",
-      "md5": "a0614a23291320bc09837ff25dde06744e653c9e"
+    "pages/label-print/index.kt": {
+      "md5": "31dfcb1f414962eeacc464341b2726b308314d3d",
+      "class": "GenPagesLabelPrintIndex"
     },
-    "pages/expenses/index.kt": {
-      "md5": "29dc38df3856959319b0dcb0f9c42b10073afae4",
-      "class": "GenPagesExpensesIndex"
-    },
-    "pages/shop/detail.kt": {
-      "md5": "f72366013dbc4437f77864a5e186f33cb639093c",
-      "class": "GenPagesShopDetail"
+    "pages/kasa_category/form.kt": {
+      "md5": "a89b1bddfa687b9f4f67293c9e83513b0a073ac6",
+      "class": "GenPagesKasaCategoryForm"
     },
     "pages/products/config-model/index.kt": {
       "class": "GenPagesProductsConfigModelIndex",
-      "md5": "ba6de279ef7d371f3114ce870e32a1f1a72d27cc"
+      "md5": "accbe736fb7b7590ac0a454ed55d827ed5619e37"
     },
-    "pages/orders/index.kt": {
-      "md5": "eb2f19064eca5d36001eae16396bf4b50a29b1d5",
-      "class": "GenPagesOrdersIndex"
+    "pages/login/login.kt": {
+      "class": "GenPagesLoginLogin",
+      "md5": "840dc1478f8a3f301d1378ba193b8e5e0ff7b0bf"
+    },
+    "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.kt": {
+      "class": "GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect",
+      "md5": "8ec46ac7ffe712114895ca426b7572d4481c9ee4"
+    },
+    "pages/products/discount-selector.kt": {
+      "class": "GenPagesProductsDiscountSelector",
+      "md5": "f7d088aaf7ad63eccf0919b7a5898ea9831d93b2"
+    },
+    "pages/privacy/privacy.kt": {
+      "class": "GenPagesPrivacyPrivacy",
+      "md5": "dd937ccdef05b0913c68db2008109433b48cac44"
     },
     "pages/shop/index.kt": {
-      "class": "GenPagesShopIndex",
-      "md5": "530cfee9bbc438fd44d157433e9ce0e5300973f5"
+      "md5": "530cfee9bbc438fd44d157433e9ce0e5300973f5",
+      "class": "GenPagesShopIndex"
     },
-    "pages/purchases/index.kt": {
-      "md5": "6ba674d283aa11194a7d9875812745441daff17b",
-      "class": "GenPagesPurchasesIndex"
+    "pages/tabbar/mine.kt": {
+      "md5": "03428cd13f0152c775caa5db9881229cc4c42a41",
+      "class": "GenPagesTabbarMine"
     },
-    "pages/kasa_category/form.kt": {
-      "class": "GenPagesKasaCategoryForm",
-      "md5": "60bd10f9cffb0f5ec23fda5a8399cb0737888406"
+    "index.kt": {
+      "class": "",
+      "md5": "90efca549e0953c3c268570fffc555aec317b637"
     },
-    "pages/suppliers/index.kt": {
-      "md5": "c14c875a9b7dfbbcbf1cfbd93925c96611a220f4",
-      "class": "GenPagesSuppliersIndex"
+    "pages/suppliers/from.kt": {
+      "class": "GenPagesSuppliersFrom",
+      "md5": "bcb1da19aaba9ff85a2da174ebde893da0920b37"
+    },
+    "uni_modules/lili-upload/components/lili-upload/lili-upload.kt": {
+      "md5": "013f0921dd358d6691e6aeb41756488885a2a589",
+      "class": "GenUniModulesLiliUploadComponentsLiliUploadLiliUpload"
+    },
+    "pages/inventory-locations/index.kt": {
+      "class": "GenPagesInventoryLocationsIndex",
+      "md5": "99262b1d497c1331430794e33721d527a2b8b830"
+    },
+    "uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.kt": {
+      "md5": "d0cdcc2e5f4bbee77548b87ca85bc1b7ea607aa0",
+      "class": "GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList"
+    },
+    "pages/shop/media.kt": {
+      "md5": "a5de5bdf03b97126a2e9a2fcf5562ed5de0cf8eb",
+      "class": "GenPagesShopMedia"
+    },
+    "pages/expenses/from.kt": {
+      "class": "GenPagesExpensesFrom",
+      "md5": "791ae75e4c6a74b6377401d3e3aa783f76b00b47"
+    },
+    "pages/inventory/transfers.kt": {
+      "md5": "83180e70fa39365dc9320d74588574029d57364b",
+      "class": "GenPagesInventoryTransfers"
+    },
+    "uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.kt": {
+      "md5": "72ecfe955faed62604827d268cd81b8400bde4cb",
+      "class": "GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter"
+    },
+    "uni_modules/lili-label-template-editor/components/lili-label-template-editor/lili-label-template-editor.kt": {
+      "md5": "d68555fd7894acdead96676b966366ec58d833e1",
+      "class": "GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor"
+    },
+    "uni_modules/lili-preview/components/lili-preview/lili-preview.kt": {
+      "class": "GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview",
+      "md5": "b55de4da302e3f1740f6e630ada9bf606d6248ab"
+    },
+    "pages/inventory/checks.kt": {
+      "md5": "658cce43ced2d0648ef1c4d9990f903de73b568c",
+      "class": "GenPagesInventoryChecks"
+    },
+    "pages/test/scan.kt": {
+      "class": "GenPagesTestScan",
+      "md5": "243c7cc67a3e8c8c48fc66cd42c9944bfa169654"
+    },
+    "pages/inventory-locations/from.kt": {
+      "md5": "48852de826c2ecd6dbf95402167cbf3d44e5caaf",
+      "class": "GenPagesInventoryLocationsFrom"
+    },
+    "pages/ksef/detail.kt": {
+      "class": "GenPagesKsefDetail",
+      "md5": "f5b827be820ce038737b270cde1e04d062323b26"
+    },
+    "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup.kt": {
+      "md5": "9b3a024538e486677057057e4ad7b90cf36e21b0",
+      "class": "GenUniModulesUniUpgradeCenterAppPagesUniAppXUpgradePopup"
+    },
+    "pages/inventory-checks/details/index.kt": {
+      "md5": "2c12b00d4795a9f8a0b8eb2b9ccb7e3474d1a77d",
+      "class": "GenPagesInventoryChecksDetailsIndex"
+    },
+    "pages/tabbar/products.kt": {
+      "md5": "75764ab460f158c0b1911b383249b3a5fc8da9f8",
+      "class": "GenPagesTabbarProducts"
+    },
+    "pages/label-templates/index.kt": {
+      "md5": "ff4e4ea5330a5df0003909aa231a90b9369c1e67",
+      "class": "GenPagesLabelTemplatesIndex"
+    },
+    "pages/inventory-checks/from.kt": {
+      "class": "GenPagesInventoryChecksFrom",
+      "md5": "695423c8e6fd774877868e41dd96cc2886ca7b07"
+    },
+    "pages/category/from.kt": {
+      "class": "GenPagesCategoryFrom",
+      "md5": "96d6bb8cf2c870896ac7d743df36f22b343f2172"
+    },
+    "pages/products/from.kt": {
+      "class": "GenPagesProductsFrom",
+      "md5": "069a39a03d1a75d5a20a5fb9aba259a40c2f01b6"
+    },
+    "pages/inventory-transfers/index.kt": {
+      "md5": "54c19fbbe5a0cf1f506e3f44381e3a90fb715c87",
+      "class": "GenPagesInventoryTransfersIndex"
     },
     "pages/products/config-model/from.kt": {
       "md5": "28da3dcbca0d5b24a78ac525c9d32cd9069023d7",
       "class": "GenPagesProductsConfigModelFrom"
-    },
-    "pages/suppliers/from.kt": {
-      "md5": "1af1d4e0882d8c1a6c0b81295a02e8ea7b380698",
-      "class": "GenPagesSuppliersFrom"
-    },
-    "pages/products/pricing-formula/index.kt": {
-      "md5": "deb278e062e04cc45344fb403dbdc67c7691f80f",
-      "class": "GenPagesProductsPricingFormulaIndex"
-    },
-    "pages/tabbar/reports.kt": {
-      "class": "GenPagesTabbarReports",
-      "md5": "0e2376042fd92b96703135f5d12b7189e926985e"
-    },
-    "pages/login/login.kt": {
-      "class": "GenPagesLoginLogin",
-      "md5": "a909b3af7b084bd2a37dac5cbb194bd3e7f504ae"
-    },
-    "pages/inventory-locations/from.kt": {
-      "md5": "7c01f251585ebf29925a208c1c11c3e8b0628578",
-      "class": "GenPagesInventoryLocationsFrom"
-    },
-    "pages/inventory-checks/from.kt": {
-      "class": "GenPagesInventoryChecksFrom",
-      "md5": "d68684d8630f5dc8aa22cf13348c22266139e394"
     }
   }
 }

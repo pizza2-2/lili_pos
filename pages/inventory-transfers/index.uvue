@@ -1,6 +1,91 @@
 <template>
 	<view class="page">
-		<lili-universal-filter title="调拨单" searchPlaceholder="调拨单号、备注" :searchValue="keyword" :filterVisible="false" :showBack="true" :showSearch="true" :showFilter="false" :showHome="true" homePath="/pages/tabbar/settings" @searchInput="handleSearchInput" @searchConfirm="handleSearchConfirm" @searchClear="handleSearchClear" />
+		<lili-universal-filter
+			title="调拨单"
+			searchPlaceholder="调拨单号、备注"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:showHome="true"
+			:filterActive="hasActiveFilter"
+			filterText="重置"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="transfer-filter-panel" :style="filterPanelStyle">
+					<scroll-view scroll-y="true" class="transfer-filter-content-scroll" :style="filterContentScrollStyle">
+						<view class="transfer-filter-scroll-inner">
+							<view class="transfer-filter-select-group">
+								<text class="transfer-filter-select-title">调出位置</text>
+								<view class="transfer-filter-select-wrap">
+									<liliBottomSelect
+										:value="draftFromLocationValue"
+										:valueText="draftFromLocationText"
+										title="选择调出位置"
+										placeholder="全部调出位置"
+										searchPlaceholder="搜索库存位置"
+										emptyText="暂无库存位置"
+										:fetchData="fetchLocationFilterOptions"
+										:showAddAction="false"
+										:showEditAction="false"
+										@change="handleFromLocationFilterChange"
+									/>
+								</view>
+							</view>
+
+							<view class="transfer-filter-select-group">
+								<text class="transfer-filter-select-title">调入位置</text>
+								<view class="transfer-filter-select-wrap">
+									<liliBottomSelect
+										:value="draftToLocationValue"
+										:valueText="draftToLocationText"
+										title="选择调入位置"
+										placeholder="全部调入位置"
+										searchPlaceholder="搜索库存位置"
+										emptyText="暂无库存位置"
+										:fetchData="fetchLocationFilterOptions"
+										:showAddAction="false"
+										:showEditAction="false"
+										@change="handleToLocationFilterChange"
+									/>
+								</view>
+							</view>
+
+							<view class="transfer-filter-group">
+								<text class="transfer-filter-group-title">调拨状态</text>
+								<view class="transfer-filter-options">
+									<view
+										v-for="option in statusOptions"
+										:key="'status-' + option.value"
+										:class="draftStatus == option.value ? 'transfer-filter-option transfer-filter-option-active' : 'transfer-filter-option'"
+										@click="selectStatus(option.value)"
+									>
+										<text :class="draftStatus == option.value ? 'transfer-filter-option-text transfer-filter-option-text-active' : 'transfer-filter-option-text'">{{ option.label }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+					</scroll-view>
+
+					<view class="transfer-filter-actions">
+						<view class="transfer-filter-btn transfer-filter-btn-light" @click="handleFilterReset">
+							<text class="transfer-filter-btn-light-text">重置</text>
+						</view>
+						<view class="transfer-filter-btn transfer-filter-btn-primary" @click="applySelectedFilters">
+							<text class="transfer-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
@@ -10,7 +95,41 @@
 					<text class="error-desc">{{ errorMessage }}</text>
 					<view class="retry-btn" @click="loadItems"><text class="retry-btn-text">重新加载</text></view>
 				</view>
-				<lili-UniversalList :items="listItems" keyField="id" titleField="name" subtitleField="subtitle" metaField="meta" tagField="tags" :fields="fieldConfig" :loading="isLoading" loadingText="正在加载调拨单" :emptyText="emptyText" emptyIcon="◎" :showMenu="true" :menuActions="menuActions" :showPagination="true" :currentPage="currentPage" :totalPages="totalPages" :totalCount="totalCount" summaryTitle="调拨概览" :summaryItems="summaryItems" :showFloatingAdd="true" floatingAddText="新增" @menu="handleMenu" @page-change="handlePageChange" @floating-add="handleCreate" />
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="meta"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载调拨单"
+					:keepContentOnLoading="true"
+					inlineLoadingText="调拨单刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="调拨概览"
+					:summaryItems="summaryItems"
+					:showFloatingAdd="true"
+					floatingAddText="新增调拨"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@subtitle-click="handleSubtitleClick"
+					@field-click="handleFieldClick"
+					@meta-click="handleMetaClick"
+					@floating-add="handleCreate"
+				/>
 			</view>
 		<!-- #ifdef APP -->
 		</scroll-view>
@@ -20,11 +139,18 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { approveInventoryTransfer, cancelInventoryTransfer, completeInventoryTransfer, getInventoryTransfers, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
 
-const keyword = ref('')
+type SelectOption = {
+	value: string
+	label: string
+}
+
 const refreshStorageKey = 'refresh:pages:inventory-transfers:index'
+const keyword = ref('')
+const filterVisible = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref('')
 const items = ref<UTSJSONObject[]>([])
@@ -32,39 +158,243 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
+const pageTotalQuantity = ref('0')
+const pageTransferredQuantity = ref('0')
+const statusFilter = ref('')
+const fromLocationFilterValue = ref('')
+const fromLocationFilterText = ref('')
+const toLocationFilterValue = ref('')
+const toLocationFilterText = ref('')
+const draftStatus = ref('')
+const draftFromLocationValue = ref('')
+const draftFromLocationText = ref('')
+const draftToLocationValue = ref('')
+const draftToLocationText = ref('')
+const filterPanelHeight = ref(380)
+const filterContentHeight = ref(316)
+
+const statusOptions = [
+	{ value: '', label: '全部' } as SelectOption,
+	{ value: 'DRAFT', label: '草稿' } as SelectOption,
+	{ value: 'APPROVED', label: '已审核' } as SelectOption,
+	{ value: 'COMPLETED', label: '已完成' } as SelectOption,
+	{ value: 'CANCELLED', label: '已取消' } as SelectOption,
+]
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'status_display', label: '状态' } as UTSJSONObject,
-	{ key: 'total_quantity', label: '总数' } as UTSJSONObject,
-	{ key: 'transferred_quantity', label: '已调拨' } as UTSJSONObject,
+	{ key: 'dateText', label: '日期:' } as UTSJSONObject,
+	{ key: 'itemsCountText', label: '明细:' } as UTSJSONObject,
+	{ key: 'totalQuantityText', label: '总数:' } as UTSJSONObject,
+	{ key: 'transferredQuantityText', label: '已调拨:' } as UTSJSONObject,
 ])
+
 const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'details', text: '明细' } as UTSJSONObject,
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
-	{ key: 'approve-transfer', text: '审核' } as UTSJSONObject,
-	{ key: 'complete-transfer', text: '完成' } as UTSJSONObject,
-	{ key: 'cancel-transfer', text: '取消' } as UTSJSONObject,
+	{ key: 'approve', text: '审核' } as UTSJSONObject,
+	{ key: 'complete', text: '完成' } as UTSJSONObject,
+	{ key: 'cancel', text: '取消' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
 
-function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
-	const value = obj[key]
+const tagColorMap = ref<UTSJSONObject>({
+	草稿: 'muted',
+	已审核: 'info',
+	已完成: 'success',
+	已取消: 'danger',
+	DRAFT: 'muted',
+	APPROVED: 'info',
+	COMPLETED: 'success',
+	CANCELLED: 'danger',
+} as UTSJSONObject)
+
+function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
 	const text = '' + value
 	if (text == '') return fallback
 	return text
 }
 
+function intValue(value: any | null): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
 function parseErrorMessage(error: any, fallback: string): string {
-	if (error == null) return fallback
-	const text = JSON.stringify(error)
-	if (text == null || text == '') return fallback
-	return text
+	let message = fallback
+	if (error != null) {
+		const directMessage = (error as Error).message
+		if (directMessage != null && directMessage != '') message = directMessage
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback && errorText != '{}') message = errorText
+		}
+	}
+	return message
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	const trimmedText = text.trim()
+	if (trimmedText == '' || trimmedText.substring(0, 1) != '{') return null
+	try {
+		return JSON.parseObject<UTSJSONObject>(trimmedText)
+	} catch (error) {
+		return null
+	}
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const trimmedText = text.trim()
+	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as UTSJSONObject[]
+	let parsed: UTSJSONObject[] | null = null
+	try {
+		parsed = JSON.parseArray<UTSJSONObject>(trimmedText)
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function firstStringField(obj: UTSJSONObject, keys: string[]): string {
+	for (let index = 0; index < keys.length; index += 1) {
+		const value = stringValue(obj[keys[index]])
+		if (value != '') return value
+	}
+	return ''
+}
+
+function extractRows(raw: any | null): UTSJSONObject[] {
+	const directArray = parseObjectArray(raw)
+	if (directArray.length > 0) return directArray
+	const rawObject = parseObject(raw)
+	if (rawObject == null) return [] as UTSJSONObject[]
+	const dataArray = parseObjectArray(rawObject!['data'])
+	if (dataArray.length > 0) return dataArray
+	const resultsArray = parseObjectArray(rawObject!['results'])
+	if (resultsArray.length > 0) return resultsArray
+	const itemsArray = parseObjectArray(rawObject!['items'])
+	if (itemsArray.length > 0) return itemsArray
+	const dataObject = parseObject(rawObject!['data'])
+	if (dataObject != null) {
+		const nestedResults = parseObjectArray(dataObject!['results'])
+		if (nestedResults.length > 0) return nestedResults
+	}
+	return [] as UTSJSONObject[]
+}
+
+function normalizeOptionNode(item: UTSJSONObject): UTSJSONObject {
+	const value = firstStringField(item, ['value', 'id', 'pk'])
+	let text = firstStringField(item, ['text', 'label', 'name', 'name_cn', 'title'])
+	if (text == '') text = value
+	return {
+		value: value,
+		text: text,
+	} as UTSJSONObject
+}
+
+function buildBottomSelectResponse(raw: any | null): UTSJSONObject {
+	const rows = extractRows(raw)
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < rows.length; index += 1) result.push(normalizeOptionNode(rows[index]))
+	return {
+		data: result,
+		results: result,
+		total: result.length,
+		total_count: result.length,
+	} as UTSJSONObject
+}
+
+function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
+	const pageValue = intValue(params['page'])
+	const pageSizeValue = intValue(params['pageSize'])
+	const query = {
+		page: pageValue <= 0 ? 1 : pageValue,
+		page_size: pageSizeValue <= 0 ? 50 : pageSizeValue,
+	} as UTSJSONObject
+	const keywordValue = stringValue(params['keyword'])
+	if (keywordValue != '') {
+		query['search'] = keywordValue
+		query['keyword'] = keywordValue
+	}
+	return query
+}
+
+async function fetchLocationFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request('/api/inventory/locations/', 'GET', buildOptionQuery(params), true)
+	return buildBottomSelectResponse(raw)
+}
+
+function statusText(status: string, display: string): string {
+	if (display != '') return display
+	if (status == 'DRAFT') return '草稿'
+	if (status == 'APPROVED') return '已审核'
+	if (status == 'COMPLETED') return '已完成'
+	if (status == 'CANCELLED') return '已取消'
+	return status == '' ? '-' : status
 }
 
 function compactDate(value: string): string {
 	if (value == '') return '-'
-	if (value.length >= 16) return value.substring(0, 16)
+	if (value.length >= 10) return value.substring(0, 10)
 	return value
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none' })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function updateFilterPanelLayout() {
+	const info = uni.getWindowInfo()
+	let nextPanelHeight = info.windowHeight - 168
+	if (nextPanelHeight > 420) nextPanelHeight = 420
+	if (nextPanelHeight < 300) nextPanelHeight = 300
+	let nextContentHeight = nextPanelHeight - 64
+	if (nextContentHeight < 220) nextContentHeight = 220
+	filterPanelHeight.value = nextPanelHeight
+	filterContentHeight.value = nextContentHeight
+}
+
+function closeFilterDrawer() {
+	filterVisible.value = false
+}
+
+function buildQuery(): InventoryListQuery {
+	return {
+		search: keyword.value == '' ? null : keyword.value,
+		page: currentPage.value,
+		page_size: pageSize.value,
+		status: statusFilter.value == '' ? null : statusFilter.value,
+		alert_status: null,
+		supplier: null,
+		category: null,
+		is_listed: null,
+		location: null,
+		from_location: fromLocationFilterValue.value == '' ? null : fromLocationFilterValue.value,
+		to_location: toLocationFilterValue.value == '' ? null : toLocationFilterValue.value,
+		transaction_type: null,
+		location_type: null,
+		is_active: null,
+	} as InventoryListQuery
 }
 
 function applyListResponse(response: InventoryListResponse) {
@@ -73,6 +403,15 @@ function applyListResponse(response: InventoryListResponse) {
 	totalPages.value = response.total_pages
 	totalCount.value = response.total_count
 	pageSize.value = response.page_size
+	let total = 0
+	let transferred = 0
+	for (let index = 0; index < response.results.length; index += 1) {
+		const row = response.results[index]
+		total = total + intValue(row['total_quantity'])
+		transferred = transferred + intValue(row['transferred_quantity'])
+	}
+	pageTotalQuantity.value = total.toString()
+	pageTransferredQuantity.value = transferred.toString()
 }
 
 async function loadItems() {
@@ -80,13 +419,14 @@ async function loadItems() {
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
-		const query = { search: keyword.value == '' ? null : keyword.value, page: currentPage.value, page_size: pageSize.value, status: null, alert_status: null, transaction_type: null, location_type: null, is_active: null } as InventoryListQuery
-		applyListResponse(await getInventoryTransfers(query))
+		applyListResponse(await getInventoryTransfers(buildQuery()))
 	} catch (error) {
 		items.value = [] as UTSJSONObject[]
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
+		pageTotalQuantity.value = '0'
+		pageTransferredQuantity.value = '0'
 		errorMessage.value = parseErrorMessage(error, '调拨单加载失败')
 	} finally {
 		isLoading.value = false
@@ -96,6 +436,58 @@ async function loadItems() {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadItems() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadItems() }
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+
+function handleFilterOpen() {
+	updateFilterPanelLayout()
+	draftStatus.value = statusFilter.value
+	draftFromLocationValue.value = fromLocationFilterValue.value
+	draftFromLocationText.value = fromLocationFilterText.value
+	draftToLocationValue.value = toLocationFilterValue.value
+	draftToLocationText.value = toLocationFilterText.value
+}
+
+function handleFromLocationFilterChange(payload: UTSJSONObject) {
+	draftFromLocationValue.value = stringValue(payload['value'])
+	draftFromLocationText.value = stringValue(payload['text'])
+}
+
+function handleToLocationFilterChange(payload: UTSJSONObject) {
+	draftToLocationValue.value = stringValue(payload['value'])
+	draftToLocationText.value = stringValue(payload['text'])
+}
+
+function selectStatus(value: string) {
+	draftStatus.value = value
+}
+
+function handleFilterReset() {
+	statusFilter.value = ''
+	fromLocationFilterValue.value = ''
+	fromLocationFilterText.value = ''
+	toLocationFilterValue.value = ''
+	toLocationFilterText.value = ''
+	draftStatus.value = ''
+	draftFromLocationValue.value = ''
+	draftFromLocationText.value = ''
+	draftToLocationValue.value = ''
+	draftToLocationText.value = ''
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadItems()
+}
+
+function applySelectedFilters() {
+	statusFilter.value = draftStatus.value
+	fromLocationFilterValue.value = draftFromLocationValue.value
+	fromLocationFilterText.value = draftFromLocationText.value
+	toLocationFilterValue.value = draftToLocationValue.value
+	toLocationFilterText.value = draftToLocationText.value
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadItems()
+}
 
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
@@ -107,24 +499,45 @@ function handlePageChange(payload: UTSJSONObject) {
 }
 
 function transferItem(item: UTSJSONObject): UTSJSONObject {
+	const status = statusText(stringValue(item['status']), stringValue(item['status_display']))
+	const fromName = stringValue(item['from_location_name'], '-')
+	const toName = stringValue(item['to_location_name'], '-')
+	const dateText = compactDate(stringValue(item['transfer_date']))
 	return {
-		id: stringField(item, 'id'),
-		rawId: stringField(item, 'id'),
-		name: stringField(item, 'transfer_number', '调拨单'),
-		subtitle: stringField(item, 'from_location_name', '-') + ' -> ' + stringField(item, 'to_location_name', '-'),
-		meta: compactDate(stringField(item, 'transfer_date')),
-		status_display: stringField(item, 'status_display', stringField(item, 'status')),
-		total_quantity: stringField(item, 'total_quantity', '0'),
-		transferred_quantity: stringField(item, 'transferred_quantity', '0'),
-		tags: [stringField(item, 'status_display', stringField(item, 'status'))] as string[],
+		id: stringValue(item['id']),
+		rawId: stringValue(item['id']),
+		title: stringValue(item['transfer_number'], '调拨单'),
+		subtitle: fromName + ' -> ' + toName,
+		meta: dateText,
+		statusText: status,
+		dateText: dateText,
+		itemsCountText: stringValue(item['items_count'], '0'),
+		totalQuantityText: stringValue(item['total_quantity'], '0'),
+		transferredQuantityText: stringValue(item['transferred_quantity'], '0'),
+		remarkText: stringValue(item['remark'], '-'),
+		tags: [status] as string[],
 	} as UTSJSONObject
+}
+
+function navigateToEdit(id: string) {
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/inventory-transfers/from?id=' + id })
+}
+
+function navigateToDetails(id: string) {
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/inventory-transfers/details/index?transfer=' + id })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	navigateToEdit(stringValue(payload['rawId'], stringValue(payload['id'])))
 }
 
 async function runAction(actionName: string, id: string) {
 	try {
-		if (actionName == 'approve-transfer') await approveInventoryTransfer(id)
-		else if (actionName == 'complete-transfer') await completeInventoryTransfer(id)
-		else if (actionName == 'cancel-transfer') await cancelInventoryTransfer(id)
+		if (actionName == 'approve') await approveInventoryTransfer(id)
+		else if (actionName == 'complete') await completeInventoryTransfer(id)
+		else if (actionName == 'cancel') await cancelInventoryTransfer(id)
 		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
 		loadItems()
 	} catch (error) {
@@ -140,17 +553,39 @@ function handleMenu(payload: UTSJSONObject) {
 	const action = payload['action']
 	const item = payload['item']
 	if (action == null || item == null) return
-	const actionKey = stringField(action as UTSJSONObject, 'key')
-	const id = stringField(item as UTSJSONObject, 'rawId')
-	if (actionKey == 'edit') uni.navigateTo({ url: '/pages/inventory-transfers/from?id=' + id })
-	else if (actionKey == 'approve-transfer') confirmRunAction(actionKey, id, '审核调拨', '确定审核通过这张调拨单吗？')
-	else if (actionKey == 'complete-transfer') confirmRunAction(actionKey, id, '完成调拨', '确定完成这张调拨单吗？')
-	else if (actionKey == 'cancel-transfer') confirmRunAction(actionKey, id, '取消调拨', '确定取消这张调拨单吗？')
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const id = stringValue((item as UTSJSONObject)['rawId'])
+	if (actionKey == 'details') navigateToDetails(id)
+	else if (actionKey == 'edit') navigateToEdit(id)
+	else if (actionKey == 'approve') confirmRunAction(actionKey, id, '审核调拨', '确定审核通过这张调拨单吗？')
+	else if (actionKey == 'complete') confirmRunAction(actionKey, id, '完成调拨', '确定完成这张调拨单吗？')
+	else if (actionKey == 'cancel') confirmRunAction(actionKey, id, '取消调拨', '确定取消这张调拨单吗？')
 	else if (actionKey == 'reload') loadItems()
 }
 
+function handleSubtitleClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '调拨路线已复制', '暂无调拨路线')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '调拨日期已复制', '暂无调拨日期')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const value = stringValue(payload['value'])
+	const label = stringValue(payload['label'], '内容')
+	copyText(value, label.replace(':', '') + '已复制', '暂无内容')
+}
+
 function handleCreate() {
-	uni.navigateTo({ url: '/pages/inventory-transfers/from' })
+	uni.navigateTo({ url: '/pages/inventory-transfers/create' })
+}
+
+function consumeRefresh(): boolean {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag == null || ('' + flag) == '') return false
+	uni.removeStorageSync(refreshStorageKey)
+	return true
 }
 
 const listItems = computed((): UTSJSONObject[] => {
@@ -159,26 +594,41 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || statusFilter.value != '' || fromLocationFilterValue.value != '' || toLocationFilterValue.value != ''
+})
+
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
-	if (keyword.value != '') return '没有匹配的调拨单'
+	if (hasActiveFilter.value) return '没有匹配的调拨单'
 	return '暂无调拨单'
 })
 
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '调拨单数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'quantity', label: '本页数量', value: pageTotalQuantity.value } as UTSJSONObject,
+		{ key: 'transferred', label: '本页已调拨', value: pageTransferredQuantity.value } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })
 
-onLoad(() => { loadItems() })
+const filterPanelStyle = computed((): string => {
+	return 'height:' + filterPanelHeight.value.toString() + 'px;'
+})
+
+const filterContentScrollStyle = computed((): string => {
+	return 'height:' + filterContentHeight.value.toString() + 'px;'
+})
+
+onLoad(() => {
+	updateFilterPanelLayout()
+	loadItems()
+})
+
 onShow(() => {
-	const flag = uni.getStorageSync(refreshStorageKey)
-	if (flag != null && flag != '') {
-		uni.removeStorageSync(refreshStorageKey)
-		loadItems()
-	}
+	updateFilterPanelLayout()
+	if (consumeRefresh()) loadItems()
 })
 </script>
 
@@ -191,4 +641,23 @@ onShow(() => {
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.transfer-filter-panel { position: relative; padding-top: 2px; }
+.transfer-filter-content-scroll { padding-right: 2px; }
+.transfer-filter-scroll-inner { padding-bottom: 58px; }
+.transfer-filter-select-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.transfer-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.transfer-filter-select-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.transfer-filter-group-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.transfer-filter-select-wrap { margin-top: 8px; }
+.transfer-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.transfer-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.transfer-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.transfer-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.transfer-filter-option-text-active { color: #FFFFFF; }
+.transfer-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.transfer-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.transfer-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.transfer-filter-btn-primary { background-color: #0F172A; }
+.transfer-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.transfer-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
 </style>

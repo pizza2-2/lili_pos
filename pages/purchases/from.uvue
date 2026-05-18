@@ -68,13 +68,11 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) continue
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
 		result.push({ value: option.value, text: option.text } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
@@ -91,7 +89,7 @@ async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObjec
 	const keyword = getStringField(params, 'keyword')
 	const id = getStringField(params, 'id')
 	const options = await getPurchaseOptionList('/api/procurement/suppliers/', keyword == '' ? null : keyword, 'name', 'phone')
-	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+	return buildSelectResponse(options, { keyword: '', id: id } as UTSJSONObject)
 }
 
 function initialCreateData(): UTSJSONObject {

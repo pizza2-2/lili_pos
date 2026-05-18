@@ -5,8 +5,9 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { createExpense, ExpenseItem, ExpenseMutationData, ExpenseOptionGroup, getExpenseDetail, getExpenseOptions, updateExpense } from '@/pkg/api/modules/expenses.uts'
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/expenses/from.uvue", 40, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/expenses/from.uvue", 41, 6>;
 	value: string
 	text: string
 }
@@ -26,6 +27,7 @@ const leaveSignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const pageTaskGuard = createAsyncGuard()
 const initialData = ref<UTSJSONObject>({
 	expenditure_type_id: '',
 	expenditure_type_text: '',
@@ -53,7 +55,7 @@ function getArrayField(obj: UTSJSONObject, key: string): string[] {
 }
 
 function buildUploadHeaders(): UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 79, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 81, 8), } as UTSJSONObject
 	if (authState.token != '') headers['Authorization'] = authState.token
 	return headers
 }
@@ -78,7 +80,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:104")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:106")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -92,13 +94,11 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) continue
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
 		result.push({ value: option.value, text: option.text } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
@@ -139,7 +139,7 @@ async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObjec
 	const id = getStringField(params, 'id')
 	const response = await getExpenseOptions('supplier', keyword == '' ? null : keyword, 50)
 	const options = buildOptionsFromGroup(findOptionGroup(response.groups, 'supplier'))
-	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+	return buildSelectResponse(options, { keyword: '', id: id } as UTSJSONObject)
 }
 
 function buildInitialDataFromExpense(item: ExpenseItem): UTSJSONObject {
@@ -197,7 +197,12 @@ function markExpenseListRefreshNeeded() {
 	uni.setStorageSync(expenseListRefreshStorageKey, '1')
 }
 
-function goBackToList() {
+function goBackToList(markLeaving: boolean = true) {
+	if (markLeaving) {
+		pageTaskGuard.leave()
+		savingVisible.value = false
+		uni.hideLoading()
+	}
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => {
 		uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/expenses/index' }) } })
@@ -276,6 +281,7 @@ async function persistForm(payload: UTSJSONObject) {
 	}
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
 	const actionText = formMode.value == 'edit' ? '保存支出记录' : '创建支出记录'
+	const taskToken = pageTaskGuard.begin()
 	submitting.value = true
 	savingText.value = actionText + '中...'
 	savingVisible.value = true
@@ -299,14 +305,18 @@ async function persistForm(payload: UTSJSONObject) {
 			}
 		}
 		markExpenseListRefreshNeeded()
+		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: successMessage, icon: 'success' })
-		goBackToList()
+		goBackToList(false)
 	} catch (error) {
+		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
 	} finally {
-		savingVisible.value = false
-		uni.hideLoading()
-		submitting.value = false
+		if (pageTaskGuard.canApply(taskToken)) {
+			savingVisible.value = false
+			uni.hideLoading()
+			submitting.value = false
+		}
 	}
 }
 
@@ -322,6 +332,7 @@ function handleUploadDelete(payload: UTSJSONObject) { uni.showToast({ title: '�
 function handleUploadError(payload: UTSJSONObject) { uni.showToast({ title: '凭证上传失败', icon: 'none' }) }
 
 onLoad((event: OnLoadOptions) => {
+	pageTaskGuard.reset()
 	const idValue = event['id']
 	expenseId.value = idValue == null ? '' : (idValue as string)
 	formMode.value = expenseId.value == '' ? 'create' : 'edit'
@@ -339,6 +350,11 @@ onLoad((event: OnLoadOptions) => {
 		imageItems: [] as UTSJSONObject[],
 	} as UTSJSONObject
 	if (formMode.value == 'edit') loadExpenseDetailData(expenseId.value)
+})
+
+onUnload(() => {
+	pageTaskGuard.leave()
+	uni.hideLoading()
 })
 
 return (): any | null => {

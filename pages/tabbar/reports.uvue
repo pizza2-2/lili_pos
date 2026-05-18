@@ -55,6 +55,107 @@
 			</view>
 
 			<view class="section surface-animate">
+				<text class="section-title">最佳概览</text>
+				<view class="best-grid">
+					<view class="best-tile">
+						<text class="best-label">最佳商品</text>
+						<text class="best-title">{{ bestProductTitle }}</text>
+						<text class="best-value">{{ bestProductValue }}</text>
+					</view>
+					<view class="best-tile best-tile-right">
+						<text class="best-label">最佳分类</text>
+						<text class="best-title">{{ bestCategoryTitle }}</text>
+						<text class="best-value">{{ bestCategoryValue }}</text>
+					</view>
+					<view class="best-tile">
+						<text class="best-label">最佳 Kasa 分类</text>
+						<text class="best-title">{{ bestKasaCategoryTitle }}</text>
+						<text class="best-value">{{ bestKasaCategoryValue }}</text>
+					</view>
+					<view class="best-tile best-tile-right">
+						<text class="best-label">库存价值</text>
+						<text class="best-title">{{ moneyText(inventory.inventory_value) }}</text>
+						<text class="best-value">可用库存 {{ inventory.available_quantity.toString() }}</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<view class="section-header">
+					<text class="section-title">最佳商品</text>
+					<text class="section-meta">按销售额</text>
+				</view>
+				<view v-if="topProducts.length == 0" class="empty-row">
+					<text class="empty-text">暂无商品排行</text>
+				</view>
+				<view v-for="(item, index) in topProducts" :key="item.key" class="rank-row">
+					<view :class="index == 0 ? 'rank-index rank-index-top' : 'rank-index'">
+						<text :class="index == 0 ? 'rank-index-text rank-index-text-top' : 'rank-index-text'">{{ (index + 1).toString() }}</text>
+					</view>
+					<view class="rank-main">
+						<view class="rank-title-line">
+							<text class="rank-title">{{ item.label }}</text>
+							<text class="rank-amount">{{ moneyText(item.amount) }}</text>
+						</view>
+						<text class="rank-subtitle">{{ rankSubtitle(item) }}</text>
+						<view class="rank-bar-track">
+							<view class="rank-bar rank-bar-product" :style="'width:' + rankWidth(item.amount, maxProductAmount) + '%'"></view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<view class="section-header">
+					<text class="section-title">最佳分类</text>
+					<text class="section-meta">商品分类</text>
+				</view>
+				<view v-if="topCategories.length == 0" class="empty-row">
+					<text class="empty-text">暂无分类排行</text>
+				</view>
+				<view v-for="(item, index) in topCategories" :key="item.key" class="rank-row">
+					<view :class="index == 0 ? 'rank-index rank-index-top' : 'rank-index'">
+						<text :class="index == 0 ? 'rank-index-text rank-index-text-top' : 'rank-index-text'">{{ (index + 1).toString() }}</text>
+					</view>
+					<view class="rank-main">
+						<view class="rank-title-line">
+							<text class="rank-title">{{ item.label }}</text>
+							<text class="rank-amount">{{ moneyText(item.amount) }}</text>
+						</view>
+						<text class="rank-subtitle">{{ rankSubtitle(item) }}</text>
+						<view class="rank-bar-track">
+							<view class="rank-bar rank-bar-category" :style="'width:' + rankWidth(item.amount, maxCategoryAmount) + '%'"></view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
+				<view class="section-header">
+					<text class="section-title">最佳 Kasa 分类</text>
+					<text class="section-meta">收银分类</text>
+				</view>
+				<view v-if="topKasaCategories.length == 0" class="empty-row">
+					<text class="empty-text">暂无 Kasa 分类排行</text>
+				</view>
+				<view v-for="(item, index) in topKasaCategories" :key="item.key" class="rank-row">
+					<view :class="index == 0 ? 'rank-index rank-index-top' : 'rank-index'">
+						<text :class="index == 0 ? 'rank-index-text rank-index-text-top' : 'rank-index-text'">{{ (index + 1).toString() }}</text>
+					</view>
+					<view class="rank-main">
+						<view class="rank-title-line">
+							<text class="rank-title">{{ item.label }}</text>
+							<text class="rank-amount">{{ moneyText(item.amount) }}</text>
+						</view>
+						<text class="rank-subtitle">{{ rankSubtitle(item) }}</text>
+						<view class="rank-bar-track">
+							<view class="rank-bar rank-bar-kasa" :style="'width:' + rankWidth(item.amount, maxKasaCategoryAmount) + '%'"></view>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view class="section surface-animate">
 				<text class="section-title">销售趋势</text>
 				<view v-if="salesTrend.length == 0" class="empty-row">
 					<text class="empty-text">暂无销售数据</text>
@@ -121,7 +222,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { DashboardReport, ReportAlert, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportTrendItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
+import { DashboardReport, ReportAlert, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
 
 type PeriodOption = {
 	key: ReportPeriod
@@ -148,6 +249,9 @@ const overview = ref<ReportOverview>({
 } as ReportOverview)
 const salesTrend = ref<ReportTrendItem[]>([] as ReportTrendItem[])
 const paymentMethods = ref<ReportPaymentMethod[]>([] as ReportPaymentMethod[])
+const topProducts = ref<ReportRankItem[]>([] as ReportRankItem[])
+const topCategories = ref<ReportRankItem[]>([] as ReportRankItem[])
+const topKasaCategories = ref<ReportRankItem[]>([] as ReportRankItem[])
 const inventory = ref<ReportInventory>({
 	stock_item_count: 0,
 	total_quantity: 0,
@@ -158,6 +262,32 @@ const inventory = ref<ReportInventory>({
 	inventory_value: '0.00',
 } as ReportInventory)
 const alerts = ref<ReportAlert[]>([] as ReportAlert[])
+
+function amountNumber(value: string): number {
+	const parsed = parseFloat(value)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+function moneyText(value: string): string {
+	if (value == '') {
+		return '¥ 0.00'
+	}
+	return '¥ ' + value
+}
+
+function rankMaxAmount(items: ReportRankItem[]): number {
+	let maxValue = 0
+	for (let index = 0; index < items.length; index += 1) {
+		const parsed = amountNumber(items[index].amount)
+		if (parsed > maxValue) {
+			maxValue = parsed
+		}
+	}
+	return maxValue
+}
 
 const currentPeriodLabel = computed(() : string => {
 	for (let index = 0; index < periodOptions.length; index += 1) {
@@ -179,12 +309,47 @@ const maxTrendAmount = computed(() : number => {
 	return maxValue
 })
 
-function moneyText(value: string): string {
-	if (value == '') {
-		return '¥ 0.00'
-	}
-	return '¥ ' + value
-}
+const maxProductAmount = computed(() : number => {
+	return rankMaxAmount(topProducts.value)
+})
+
+const maxCategoryAmount = computed(() : number => {
+	return rankMaxAmount(topCategories.value)
+})
+
+const maxKasaCategoryAmount = computed(() : number => {
+	return rankMaxAmount(topKasaCategories.value)
+})
+
+const bestProductTitle = computed(() : string => {
+	if (topProducts.value.length == 0) return '-'
+	return topProducts.value[0].label
+})
+
+const bestProductValue = computed(() : string => {
+	if (topProducts.value.length == 0) return '暂无销售'
+	return moneyText(topProducts.value[0].amount) + ' / ' + topProducts.value[0].quantity + ' 件'
+})
+
+const bestCategoryTitle = computed(() : string => {
+	if (topCategories.value.length == 0) return '-'
+	return topCategories.value[0].label
+})
+
+const bestCategoryValue = computed(() : string => {
+	if (topCategories.value.length == 0) return '暂无销售'
+	return moneyText(topCategories.value[0].amount) + ' / ' + topCategories.value[0].share + '%'
+})
+
+const bestKasaCategoryTitle = computed(() : string => {
+	if (topKasaCategories.value.length == 0) return '-'
+	return topKasaCategories.value[0].label
+})
+
+const bestKasaCategoryValue = computed(() : string => {
+	if (topKasaCategories.value.length == 0) return '暂无销售'
+	return moneyText(topKasaCategories.value[0].amount) + ' / ' + topKasaCategories.value[0].share + '%'
+})
 
 function compactDate(value: string): string {
 	if (value.length >= 10) {
@@ -209,10 +374,36 @@ function trendWidth(value: string): number {
 	return width
 }
 
+function rankWidth(value: string, maxValue: number): number {
+	if (maxValue <= 0) {
+		return 0
+	}
+	const parsed = amountNumber(value)
+	if (parsed <= 0) {
+		return 0
+	}
+	const width = Math.round((parsed / maxValue) * 100)
+	if (width < 10) {
+		return 10
+	}
+	return width
+}
+
+function rankSubtitle(item: ReportRankItem): string {
+	let text = item.quantity + ' 件 / ' + item.order_count.toString() + ' 单 / 占比 ' + item.share + '%'
+	if (item.subtitle != '') {
+		text = item.subtitle + ' · ' + text
+	}
+	return text
+}
+
 function applyReport(data: DashboardReport) {
 	overview.value = data.overview
 	salesTrend.value = data.sales_trend
 	paymentMethods.value = data.payment_methods
+	topProducts.value = data.top_products
+	topCategories.value = data.top_categories
+	topKasaCategories.value = data.top_kasa_categories
 	inventory.value = data.inventory
 	alerts.value = data.alerts
 }
@@ -460,6 +651,142 @@ onShow(() => {
 	line-height: 20px;
 	font-weight: 700;
 	color: #111827;
+}
+
+.section-header,
+.rank-title-line {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.section-meta {
+	font-size: 11px;
+	color: #94A3B8;
+}
+
+.best-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 8px;
+}
+
+.best-tile {
+	width: 48%;
+	margin-top: 8px;
+	padding: 10px;
+	border-radius: 8px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+}
+
+.best-tile-right {
+	margin-left: 4%;
+}
+
+.best-label {
+	font-size: 11px;
+	color: #64748B;
+}
+
+.best-title {
+	margin-top: 5px;
+	font-size: 14px;
+	line-height: 20px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.best-value {
+	margin-top: 4px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.rank-row {
+	flex-direction: row;
+	align-items: flex-start;
+	margin-top: 12px;
+}
+
+.rank-index {
+	width: 24px;
+	height: 24px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #EEF2F7;
+}
+
+.rank-index-top {
+	background-color: #111827;
+}
+
+.rank-index-text {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: 700;
+	color: #475569;
+}
+
+.rank-index-text-top {
+	color: #FFFFFF;
+}
+
+.rank-main {
+	flex: 1;
+	margin-left: 9px;
+}
+
+.rank-title {
+	flex: 1;
+	padding-right: 8px;
+	font-size: 13px;
+	line-height: 18px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.rank-amount {
+	font-size: 12px;
+	line-height: 18px;
+	font-weight: 700;
+	color: #0F766E;
+}
+
+.rank-subtitle {
+	margin-top: 2px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.rank-bar-track {
+	margin-top: 7px;
+	height: 6px;
+	border-radius: 3px;
+	background-color: #E5E7EB;
+	overflow: hidden;
+}
+
+.rank-bar {
+	height: 6px;
+	border-radius: 3px;
+}
+
+.rank-bar-product {
+	background-color: #2563EB;
+}
+
+.rank-bar-category {
+	background-color: #16A34A;
+}
+
+.rank-bar-kasa {
+	background-color: #EA580C;
 }
 
 .empty-row {

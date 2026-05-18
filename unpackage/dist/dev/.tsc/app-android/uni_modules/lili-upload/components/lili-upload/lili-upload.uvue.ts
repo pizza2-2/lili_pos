@@ -83,9 +83,28 @@ function buildFileItem(path: string, id: string = '') : UTSJSONObject {
 	return {
 		path: path,
 		url: path,
+		previewUrl: path,
 		id: id,
 		isRemote: id != '',
 	} as UTSJSONObject
+}
+
+function buildSyncedFileItem(path: string, metaItem: UTSJSONObject) : UTSJSONObject {
+	const item = { __$originalPosition: new UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 131, 8), } as UTSJSONObject
+	for (const key in metaItem) {
+		item[key] = metaItem[key]
+	}
+	item['path'] = path
+	item['url'] = path
+	const itemId = getStringField(item, 'id')
+	item['id'] = itemId
+	if (item['previewUrl'] == null || getStringField(item, 'previewUrl') == '') {
+		item['previewUrl'] = getStringField(metaItem, 'preview_url', path)
+	}
+	if (item['isRemote'] == null) {
+		item['isRemote'] = itemId != ''
+	}
+	return item
 }
 
 function syncModelValue(list: string[], metaItems: UTSJSONObject[]) {
@@ -103,7 +122,7 @@ function syncModelValue(list: string[], metaItems: UTSJSONObject[]) {
 			}
 		}
 		if (matchedItem != null) {
-			nextItems.push(buildFileItem(currentPath, getStringField(matchedItem, 'id')))
+			nextItems.push(buildSyncedFileItem(currentPath, matchedItem!))
 			continue
 		}
 		nextItems.push(buildFileItem(currentPath))
@@ -130,11 +149,42 @@ function buildDeletePayload(index: number, path: string, item: UTSJSONObject, ap
 	} as UTSJSONObject
 }
 
+function getPreviewImagePath(index: number) : string {
+	if (index < 0 || index >= imageList.value.length) {
+		return ''
+	}
+	if (index < imageItems.value.length) {
+		const item = imageItems.value[index]
+		const previewUrl = getStringField(item, 'previewUrl', getStringField(item, 'preview_url'))
+		if (previewUrl != '') {
+			return previewUrl
+		}
+		const signedUrl = getStringField(item, 'signed_url')
+		if (signedUrl != '') {
+			return signedUrl
+		}
+		const fileUrl = getStringField(item, 'file_url')
+		if (fileUrl != '') {
+			return fileUrl
+		}
+	}
+	return imageList.value[index]
+}
+
+function buildPreviewImageList() : string[] {
+	const result: string[] = []
+	for (let index = 0; index < imageList.value.length; index++) {
+		result.push(getPreviewImagePath(index))
+	}
+	return result
+}
+
 function buildPreviewPayload(index: number, path: string) : UTSJSONObject {
 	return {
 		index: index,
 		path: path,
 		list: cloneStringArray(imageList.value),
+		previewList: buildPreviewImageList(),
 	} as UTSJSONObject
 }
 
@@ -151,7 +201,7 @@ function tryParseResponse(text: string) : UTSJSONObject | null {
 		return null
 	}
 	try {
-		return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:192") as UTSJSONObject
+		return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:242") as UTSJSONObject
 	} catch (e) {
 		return null
 	}
@@ -194,7 +244,7 @@ function endUploading() {
 }
 
 function uploadImage(path: string, index: number) {
-	console.log('lili-upload uploadImage start:', index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:235")
+	console.log('lili-upload uploadImage start:', index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:285")
 	beginUploading()
 	try {
 		uni.uploadFile({
@@ -204,13 +254,13 @@ function uploadImage(path: string, index: number) {
 			header: props.headers,
 			formData: props.formData,
 			success: (res) => {
-				console.log('lili-upload uploadImage success:', index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:245")
+				console.log('lili-upload uploadImage success:', index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:295")
 				emit('upload', buildUploadPayload(index, path, res.data))
 				endUploading()
 			},
 			fail: (err) => {
 				const message = err.errMsg
-				console.log('lili-upload uploadImage fail:', index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:251")
+				console.log('lili-upload uploadImage fail:', index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:301")
 				emitError('upload', path, message)
 				endUploading()
 			},
@@ -284,12 +334,12 @@ function handlePreview(index: number) {
 		return
 	}
 
-	const currentPath = imageList.value[index]
+	const currentPath = getPreviewImagePath(index)
 	emit('preview', buildPreviewPayload(index, currentPath))
 
 	uni.previewImage({
 		current: currentPath,
-		urls: cloneStringArray(imageList.value),
+		urls: buildPreviewImageList(),
 	})
 }
 

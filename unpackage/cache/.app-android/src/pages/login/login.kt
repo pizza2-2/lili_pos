@@ -59,7 +59,7 @@ open class GenPagesLoginLogin : BasePage {
                             setAuthToken(loginRes.token_type + " " + loginRes.access_token)
                             val profile = await(getProfile())
                             setAuthUserInfo(UserInfoState(id = profile.id, name = buildDisplayName(profile), avatar = ""))
-                            uni_switchTab(SwitchTabOptions(url = "/pages/tabbar/products"))
+                            uni_switchTab(SwitchTabOptions(url = "/pages/tabbar/settings"))
                         }
                          catch (error: Throwable) {
                             clearAuthState()

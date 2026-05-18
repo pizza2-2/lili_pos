@@ -40,6 +40,8 @@ export type MediaFileListResponse = {
 
 export type MediaShareResponse = {
 	url: string
+	signed_url: string
+	signed_thumbnail_url: string
 }
 
 export type MediaStatisticsResponse = {
@@ -249,8 +251,14 @@ function buildMediaShareResponse(raw: any): MediaShareResponse {
 	if (rawObject == null) {
 		throw new Error('媒体分享链接解析失败')
 	}
+	let signedUrl = normalizeServerUrl(stringValue(rawObject!['signed_url']))
+	if (signedUrl == '') {
+		signedUrl = normalizeServerUrl(stringValue(rawObject!['url']))
+	}
 	return {
-		url: normalizeServerUrl(stringValue(rawObject!['url'])),
+		url: signedUrl,
+		signed_url: signedUrl,
+		signed_thumbnail_url: normalizeServerUrl(stringValue(rawObject!['signed_thumbnail_url'])),
 	} as MediaShareResponse
 }
 

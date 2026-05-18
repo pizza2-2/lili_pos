@@ -1,6 +1,6 @@
 <template>
 	<view class="pcs-root">
-		<view class="pcs-head">
+		<view v-if="!compact" class="pcs-head">
 			<view class="pcs-copy">
 				<text class="pcs-title">{{ title }}</text>
 				<text class="pcs-desc">{{ desc }}</text>
@@ -15,7 +15,16 @@
 				</view>
 			</view>
 		</view>
-		<view class="pcs-quick-row">
+		<view v-else class="pcs-stepper pcs-stepper-compact">
+			<view :class="canDecrease ? 'pcs-step-btn' : 'pcs-step-btn pcs-step-btn-disabled'" @click="decrease">
+				<text class="pcs-step-text">-</text>
+			</view>
+			<input class="pcs-input pcs-input-compact" type="number" :value="displayValue" @input="handleInput" @blur="handleBlur" />
+			<view :class="canIncrease ? 'pcs-step-btn' : 'pcs-step-btn pcs-step-btn-disabled'" @click="increase">
+				<text class="pcs-step-text">+</text>
+			</view>
+		</view>
+		<view v-if="showQuick" class="pcs-quick-row">
 			<view :class="quickActive(1) ? 'pcs-quick pcs-quick-active' : 'pcs-quick'" @click="setQuick(1)">
 				<text :class="quickActive(1) ? 'pcs-quick-text pcs-quick-text-active' : 'pcs-quick-text'">X1</text>
 			</view>
@@ -42,6 +51,10 @@ type Props = {
 	desc?: string
 	min?: number
 	max?: number
+	step?: number
+	fallback?: number
+	showQuick?: boolean
+	compact?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -50,6 +63,10 @@ const props = withDefaults(defineProps<Props>(), {
 	desc: '一个商品可一次打印多张价签',
 	min: 1,
 	max: 999,
+	step: 1,
+	fallback: 1,
+	showQuick: true,
+	compact: false,
 })
 
 const emit = defineEmits<{
@@ -69,7 +86,7 @@ function intValue(value: any | null, fallback: number): number {
 }
 
 function normalized(value: any | null): number {
-	let next = intValue(value, props.min)
+	let next = intValue(value, props.fallback)
 	if (next < props.min) next = props.min
 	if (next > props.max) next = props.max
 	return next
@@ -99,12 +116,12 @@ function commitValue(value: number) {
 
 function decrease() {
 	if (!canDecrease.value) return
-	commitValue(currentValue() - 1)
+	commitValue(currentValue() - props.step)
 }
 
 function increase() {
 	if (!canIncrease.value) return
-	commitValue(currentValue() + 1)
+	commitValue(currentValue() + props.step)
 }
 
 function setQuick(value: number) {
@@ -145,10 +162,12 @@ watch(
 .pcs-title { font-size: 14px; color: #0F172A; font-weight: bold; line-height: 20px; }
 .pcs-desc { font-size: 12px; color: #64748B; line-height: 17px; margin-top: 2px; }
 .pcs-stepper { flex-direction: row; align-items: center; height: 40px; }
+.pcs-stepper-compact { justify-content: center; }
 .pcs-step-btn { width: 40px; height: 40px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
 .pcs-step-btn-disabled { background-color: #CBD5E1; }
 .pcs-step-text { font-size: 22px; color: #FFFFFF; font-weight: bold; line-height: 28px; }
 .pcs-input { width: 70px; height: 40px; margin-left: 6px; margin-right: 6px; border-radius: 8px; border-width: 1px; border-color: #CBD5E1; background-color: #F8FAFC; text-align: center; font-size: 16px; color: #0F172A; font-weight: bold; }
+.pcs-input-compact { flex: 1; }
 .pcs-quick-row { flex-direction: row; margin-top: 10px; }
 .pcs-quick { flex: 1; height: 34px; border-radius: 8px; border-width: 1px; border-color: #CBD5E1; background-color: #F8FAFC; align-items: center; justify-content: center; margin-right: 6px; }
 .pcs-quick-active { border-color: #0F766E; background-color: #CCFBF1; }

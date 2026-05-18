@@ -10,21 +10,88 @@ export type KsefInvoiceListQuery = {
 
 export type KsefInvoiceItem = {
 	id: number
+	company: number
+	subject_type: string
 	ksef_number: string
 	invoice_number: string
+	invoice_type: string
 	seller_name: string
 	seller_nip: string
 	buyer_name: string
 	buyer_nip: string
+	supplier: number
+	supplier_name: string
 	issue_date: string
+	sale_date: string
 	currency: string
+	net_amount: string
+	tax_amount: string
 	gross_amount: string
 	amount_due: string
+	payment_due_date: string
+	payment_method: string
+	bank_account_number: string
+	bank_name: string
 	is_paid: boolean
+	paid_amount: string
+	paid_at: string
+	remark: string
 	sync_status: string
 	raw_xml_downloaded_at: string
+	files_count: number
+	pdf_download_url: string
 	created_at: string
 	updated_at: string
+}
+
+export type KsefInvoiceDetail = {
+	id: number
+	company: number
+	subject_type: string
+	ksef_number: string
+	invoice_number: string
+	invoice_type: string
+	seller_name: string
+	seller_nip: string
+	buyer_name: string
+	buyer_nip: string
+	supplier: number
+	supplier_name: string
+	issue_date: string
+	sale_date: string
+	currency: string
+	net_amount: string
+	tax_amount: string
+	gross_amount: string
+	amount_due: string
+	payment_due_date: string
+	payment_method: string
+	bank_account_number: string
+	bank_name: string
+	is_paid: boolean
+	paid_amount: string
+	paid_at: string
+	remark: string
+	sync_status: string
+	raw_xml_downloaded_at: string
+	files_count: number
+	pdf_download_url: string
+	created_at: string
+	updated_at: string
+	metadata: UTSJSONObject
+	raw_xml: string
+	last_error: string
+	payment_note: string
+	xml_summary: UTSJSONObject
+	media_files: UTSJSONObject[]
+}
+
+export type KsefPaymentUpdateData = {
+	is_paid: boolean
+	paid_amount: string
+	paid_at: string | null
+	payment_note: string
+	remark: string
 }
 
 export type KsefInvoiceListResponse = {
@@ -87,6 +154,30 @@ function boolValue(value: any | null): boolean {
 	return text == 'true' || text == '1'
 }
 
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	if (parsed == null) {
+		return {} as UTSJSONObject
+	}
+	return parsed!
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) {
+		return [] as UTSJSONObject[]
+	}
+	return parsed!
+}
+
 function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 	const query = {
 		page: data.page,
@@ -107,22 +198,89 @@ function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 function buildInvoiceItem(rawObject: UTSJSONObject): KsefInvoiceItem {
 	return {
 		id: intValue(rawObject['id']),
+		company: intValue(rawObject['company']),
+		subject_type: stringValue(rawObject['subject_type']),
 		ksef_number: stringValue(rawObject['ksef_number']),
 		invoice_number: stringValue(rawObject['invoice_number']),
+		invoice_type: stringValue(rawObject['invoice_type']),
 		seller_name: stringValue(rawObject['seller_name']),
 		seller_nip: stringValue(rawObject['seller_nip']),
 		buyer_name: stringValue(rawObject['buyer_name']),
 		buyer_nip: stringValue(rawObject['buyer_nip']),
+		supplier: intValue(rawObject['supplier']),
+		supplier_name: stringValue(rawObject['supplier_name']),
 		issue_date: stringValue(rawObject['issue_date']),
+		sale_date: stringValue(rawObject['sale_date']),
 		currency: stringValue(rawObject['currency']),
+		net_amount: stringValue(rawObject['net_amount']),
+		tax_amount: stringValue(rawObject['tax_amount']),
 		gross_amount: stringValue(rawObject['gross_amount']),
 		amount_due: stringValue(rawObject['amount_due']),
+		payment_due_date: stringValue(rawObject['payment_due_date']),
+		payment_method: stringValue(rawObject['payment_method']),
+		bank_account_number: stringValue(rawObject['bank_account_number']),
+		bank_name: stringValue(rawObject['bank_name']),
 		is_paid: boolValue(rawObject['is_paid']),
+		paid_amount: stringValue(rawObject['paid_amount']),
+		paid_at: stringValue(rawObject['paid_at']),
+		remark: stringValue(rawObject['remark']),
 		sync_status: stringValue(rawObject['sync_status']),
 		raw_xml_downloaded_at: stringValue(rawObject['raw_xml_downloaded_at']),
+		files_count: intValue(rawObject['files_count']),
+		pdf_download_url: stringValue(rawObject['pdf_download_url']),
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
 	} as KsefInvoiceItem
+}
+
+function buildInvoiceDetail(raw: any): KsefInvoiceDetail {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('KSeF 发票详情解析失败')
+	}
+	const item = buildInvoiceItem(rawObject!)
+	return {
+		id: item.id,
+		company: item.company,
+		subject_type: item.subject_type,
+		ksef_number: item.ksef_number,
+		invoice_number: item.invoice_number,
+		invoice_type: item.invoice_type,
+		seller_name: item.seller_name,
+		seller_nip: item.seller_nip,
+		buyer_name: item.buyer_name,
+		buyer_nip: item.buyer_nip,
+		supplier: item.supplier,
+		supplier_name: item.supplier_name,
+		issue_date: item.issue_date,
+		sale_date: item.sale_date,
+		currency: item.currency,
+		net_amount: item.net_amount,
+		tax_amount: item.tax_amount,
+		gross_amount: item.gross_amount,
+		amount_due: item.amount_due,
+		payment_due_date: item.payment_due_date,
+		payment_method: item.payment_method,
+		bank_account_number: item.bank_account_number,
+		bank_name: item.bank_name,
+		is_paid: item.is_paid,
+		paid_amount: item.paid_amount,
+		paid_at: item.paid_at,
+		remark: item.remark,
+		sync_status: item.sync_status,
+		raw_xml_downloaded_at: item.raw_xml_downloaded_at,
+		files_count: item.files_count,
+		pdf_download_url: item.pdf_download_url,
+		created_at: item.created_at,
+		updated_at: item.updated_at,
+		metadata: objectValue(rawObject!['metadata']),
+		raw_xml: stringValue(rawObject!['raw_xml']),
+		last_error: stringValue(rawObject!['last_error']),
+		payment_note: stringValue(rawObject!['payment_note']),
+		xml_summary: objectValue(rawObject!['xml_summary']),
+		media_files: objectArrayValue(rawObject!['media_files']),
+	} as KsefInvoiceDetail
 }
 
 function buildInvoiceItems(value: any | null): KsefInvoiceItem[] {
@@ -220,6 +378,34 @@ function buildAutoSyncStatus(raw: any): KsefAutoSyncStatus {
 export async function getKsefInvoiceList(data: KsefInvoiceListQuery): Promise<KsefInvoiceListResponse> {
 	const raw = await request('/api/procurement/ksef-invoices/', 'GET', buildListQuery(data), true)
 	return buildListResponse(raw, data)
+}
+
+export async function getKsefInvoiceDetail(id: number | string): Promise<KsefInvoiceDetail> {
+	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/', 'GET', {} as UTSJSONObject, true)
+	return buildInvoiceDetail(raw)
+}
+
+export async function updateKsefInvoicePayment(id: number | string, data: KsefPaymentUpdateData): Promise<KsefInvoiceDetail> {
+	const payload = {
+		is_paid: data.is_paid,
+		paid_amount: data.paid_amount,
+		paid_at: data.paid_at,
+		payment_note: data.payment_note,
+		remark: data.remark,
+	} as UTSJSONObject
+	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/update_payment/', 'PATCH', payload, true)
+	return buildInvoiceDetail(raw)
+}
+
+export async function linkKsefInvoiceSupplier(id: number | string, supplierId: string | null): Promise<KsefInvoiceDetail> {
+	const payload = {} as UTSJSONObject
+	if (supplierId == null || supplierId == '') {
+		payload['supplier_id'] = null
+	} else {
+		payload['supplier_id'] = supplierId
+	}
+	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/link-supplier/', 'POST', payload, true)
+	return buildInvoiceDetail(raw)
 }
 
 export async function getKsefAutoSyncStatus(): Promise<KsefAutoSyncStatus> {

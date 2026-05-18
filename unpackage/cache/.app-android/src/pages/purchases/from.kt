@@ -15,6 +15,7 @@ import kotlin.properties.Delegates
 import io.dcloud.uniapp.extapi.hideLoading as uni_hideLoading
 import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
+import io.dcloud.uniapp.extapi.redirectTo as uni_redirectTo
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
@@ -76,7 +77,6 @@ open class GenPagesPurchasesFrom : BasePage {
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<PurchaseOptionItem>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = getStringField(params, "keyword").toLowerCase()
                 val id = getStringField(params, "id")
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -84,10 +84,6 @@ open class GenPagesPurchasesFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -122,7 +118,7 @@ open class GenPagesPurchasesFrom : BasePage {
                             keyword
                         }
                         , "name", "phone"))
-                        return@w1 buildSelectResponse(options, _uO("keyword" to keyword, "id" to id))
+                        return@w1 buildSelectResponse(options, _uO("keyword" to "", "id" to id))
                 })
             }
             val fetchSupplierOptions = ::gen_fetchSupplierOptions_fn
@@ -158,6 +154,18 @@ open class GenPagesPurchasesFrom : BasePage {
                 , 16)
             }
             val goBackToList = ::gen_goBackToList_fn
+            fun gen_goToCreatedPurchaseDetail_fn(id: String) {
+                leaveSignal.value = leaveSignal.value + 1
+                initialData.value = initialCreateData()
+                setTimeout(fun(){
+                    uni_redirectTo(RedirectToOptions(url = "/pages/purchases/details/index?purchase=" + id, fail = fun(_){
+                        uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/index?purchase=" + id))
+                    }
+                    ))
+                }
+                , 16)
+            }
+            val goToCreatedPurchaseDetail = ::gen_goToCreatedPurchaseDetail_fn
             fun gen_loadDetail_fn(idText: String): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (idText == "") {
@@ -225,7 +233,7 @@ open class GenPagesPurchasesFrom : BasePage {
                             if (formMode.value == "edit") {
                                 goBackToList()
                             } else {
-                                uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/index?purchase=" + savedPurchaseId))
+                                goToCreatedPurchaseDetail(savedPurchaseId)
                             }
                         }
                          catch (error: Throwable) {

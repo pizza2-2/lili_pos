@@ -24,6 +24,7 @@ import { computed, ref, watch } from 'vue'
 
 type Props = {
 	images?: string[]
+	previewImages?: string[]
 	initialIndex?: number
 	visible?: boolean
 	thumbSize?: number
@@ -35,6 +36,7 @@ type Props = {
 
 const props = withDefaults(defineProps<Props>(), {
 	images: () : string[] => [],
+	previewImages: () : string[] => [],
 	initialIndex: 0,
 	visible: false,
 	thumbSize: 72,
@@ -52,6 +54,7 @@ const emit = defineEmits<{
 }>()
 
 const imageList = ref<string[]>([])
+const previewImageList = ref<string[]>([])
 const currentIndex = ref<number>(0)
 
 const itemStyle = computed<string>(() : string => {
@@ -88,23 +91,40 @@ function syncImages(list: string[]) {
 	currentIndex.value = clampIndex(currentIndex.value, imageList.value.length)
 }
 
+function syncPreviewImages(list: string[]) {
+	if (list.length == 0) {
+		previewImageList.value = cloneStringArray(imageList.value)
+		return
+	}
+	const result: string[] = []
+	for (let index = 0; index < imageList.value.length; index++) {
+		if (index < list.length && list[index] != '') {
+			result.push(list[index])
+		} else {
+			result.push(imageList.value[index])
+		}
+	}
+	previewImageList.value = result
+}
+
 function buildPayload(action: string, path: string) : UTSJSONObject {
 	return {
 		action: action,
 		index: currentIndex.value,
 		path: path,
 		list: cloneStringArray(imageList.value),
+		previewList: cloneStringArray(previewImageList.value),
 	} as UTSJSONObject
 }
 
 function getCurrentImagePath() : string {
-	if (imageList.value.length == 0) {
+	if (previewImageList.value.length == 0) {
 		return ''
 	}
-	if (currentIndex.value < 0 || currentIndex.value >= imageList.value.length) {
+	if (currentIndex.value < 0 || currentIndex.value >= previewImageList.value.length) {
 		return ''
 	}
-	return imageList.value[currentIndex.value]
+	return previewImageList.value[currentIndex.value]
 }
 
 function openPreview(index: number) {
@@ -118,7 +138,7 @@ function openPreview(index: number) {
 	emit('preview', buildPayload('preview', currentPath))
 	uni.previewImage({
 		current: currentPath,
-		urls: cloneStringArray(imageList.value),
+		urls: cloneStringArray(previewImageList.value),
 		complete: () => {
 			emit('update:visible', false)
 			emit('close', buildPayload('close', getCurrentImagePath()))
@@ -136,6 +156,17 @@ watch(
 	() : string[] => props.images,
 	(newVal: string[]) => {
 		syncImages(newVal)
+		syncPreviewImages(props.previewImages)
+	},
+	{
+		immediate: true,
+	}
+)
+
+watch(
+	() : string[] => props.previewImages,
+	(newVal: string[]) => {
+		syncPreviewImages(newVal)
 	},
 	{
 		immediate: true,

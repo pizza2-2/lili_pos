@@ -59,6 +59,7 @@ const groups = ref<MenuGroup[]>([
 		items: [
 			{ label: '商店', icon: '', iconPath: '/static/menu-icons/shop.svg', path: '/pages/shop/index', action: 'navigateTo', disabled: false },
 			{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+			{ label: '采购汇总', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/suppliers_procure/index', action: 'navigateTo', disabled: false },
 			{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
 			{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false },
 			{ label: '支出管理', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/expenses/index', action: 'navigateTo', disabled: false },

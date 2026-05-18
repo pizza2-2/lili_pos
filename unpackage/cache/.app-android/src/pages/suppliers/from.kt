@@ -33,6 +33,7 @@ open class GenPagesSuppliersFrom : BasePage {
             val submitting = ref(false)
             val savingVisible = ref(false)
             val savingText = ref("处理中...")
+            val pageTaskGuard = createAsyncGuard()
             val initialData = ref<UTSJSONObject>(_uO("code" to "", "name" to "", "contact" to "", "phone" to "", "address" to "", "description" to "", "is_active" to "true", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
             val statusOptions = ref(_uA<SelectOption>(SelectOption(value = "true", text = "启用"), SelectOption(value = "false", text = "停用")))
             fun getStringField(obj: UTSJSONObject, key: String, fallback: String = ""): String {
@@ -100,7 +101,7 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val buildInitialDataFromSupplier = ::gen_buildInitialDataFromSupplier_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 136, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 138, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -116,7 +117,7 @@ open class GenPagesSuppliersFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:152")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:154")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -132,7 +133,6 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = getStringField(params, "keyword").toLowerCase()
                 val id = getStringField(params, "id")
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -140,10 +140,6 @@ open class GenPagesSuppliersFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -178,7 +174,7 @@ open class GenPagesSuppliersFrom : BasePage {
                         }
                         try {
                             val detail = await(getSupplierDetail(idText))
-                            console.log(detail, " at pages/suppliers/from.uvue:293")
+                            console.log(detail, " at pages/suppliers/from.uvue:291")
                             initialData.value = buildInitialDataFromSupplier(detail)
                         }
                          catch (error: Throwable) {
@@ -187,7 +183,12 @@ open class GenPagesSuppliersFrom : BasePage {
                 })
             }
             val loadSupplierDetailData = ::gen_loadSupplierDetailData_fn
-            fun gen_goBackToList_fn() {
+            fun goBackToList(markLeaving: Boolean = true) {
+                if (markLeaving) {
+                    pageTaskGuard.leave()
+                    savingVisible.value = false
+                    uni_hideLoading(null)
+                }
                 leaveSignal.value = leaveSignal.value + 1
                 setTimeout(fun(){
                     uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
@@ -197,7 +198,6 @@ open class GenPagesSuppliersFrom : BasePage {
                 }
                 , 16)
             }
-            val goBackToList = ::gen_goBackToList_fn
             fun gen_markSupplierListRefreshNeeded_fn() {
                 uni_setStorageSync(supplierListRefreshStorageKey, "1")
             }
@@ -321,6 +321,7 @@ open class GenPagesSuppliersFrom : BasePage {
                         } else {
                             "创建供应商"
                         }
+                        val taskToken = pageTaskGuard.begin()
                         submitting.value = true
                         savingText.value = actionText + "中..."
                         savingVisible.value = true
@@ -349,16 +350,24 @@ open class GenPagesSuppliersFrom : BasePage {
                             }
                             clearDraftStorage()
                             markSupplierListRefreshNeeded()
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
-                            goBackToList()
+                            goBackToList(false)
                         }
                          catch (error: Throwable) {
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
                         }
                          finally {
-                            savingVisible.value = false
-                            uni_hideLoading(null)
-                            submitting.value = false
+                            if (pageTaskGuard.canApply(taskToken)) {
+                                savingVisible.value = false
+                                uni_hideLoading(null)
+                                submitting.value = false
+                            }
                         }
                 })
             }
@@ -421,6 +430,7 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val handleUploadError = ::gen_handleUploadError_fn
             onLoad(fun(event: OnLoadOptions){
+                pageTaskGuard.reset()
                 leaveSignal.value = 0
                 val idValue = event["id"]
                 supplierId.value = if (idValue == null) {
@@ -438,6 +448,11 @@ open class GenPagesSuppliersFrom : BasePage {
                     return
                 }
                 clearDraftStorage()
+            }
+            )
+            onUnload(fun(){
+                pageTaskGuard.leave()
+                uni_hideLoading(null)
             }
             )
             return fun(): Any? {

@@ -1,0 +1,47 @@
+{
+	"id": "lili-async-guard",
+	"displayName": "lili-async-guard",
+	"version": "1.0.0",
+	"description": "Guard async page tasks from applying results after the page has left.",
+	"keywords": [
+		"lili",
+		"async",
+		"guard"
+	],
+	"uni_modules": {
+		"dependencies": [],
+		"encrypt": [],
+		"platforms": {
+			"cloud": {
+				"tcb": "u",
+				"aliyun": "u"
+			},
+			"client": {
+				"App": {
+					"app-vue": "u",
+					"app-nvue": "u"
+				},
+				"H5-mobile": {
+					"Safari": "u",
+					"Android Browser": "u",
+					"微信浏览器(Android)": "u",
+					"QQ浏览器(Android)": "u"
+				},
+				"H5-pc": {
+					"Chrome": "u",
+					"IE": "u",
+					"Edge": "u",
+					"Firefox": "u",
+					"Safari": "u"
+				},
+				"小程序": {
+					"微信": "u",
+					"阿里": "u",
+					"百度": "u",
+					"字节跳动": "u",
+					"QQ": "u"
+				}
+			}
+		}
+	}
+}

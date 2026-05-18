@@ -16,6 +16,7 @@ import io.dcloud.uniapp.extapi.previewImage as uni_previewImage
 open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueComponent {
     constructor(__ins: ComponentInternalInstance) : super(__ins) {}
     open var images: UTSArray<String> by `$props`
+    open var previewImages: UTSArray<String> by `$props`
     open var initialIndex: Number by `$props`
     open var visible: Boolean by `$props`
     open var thumbSize: Number by `$props`
@@ -34,6 +35,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 __ins.emit(event, *do_not_transform_spread)
             }
             val imageList = ref(_uA<String>())
+            val previewImageList = ref(_uA<String>())
             val currentIndex = ref<Number>(0)
             val itemStyle = computed<String>(fun(): String {
                 return "width:" + props.thumbSize + "px;height:" + props.thumbSize + "px;margin-right:" + props.gap + "px;margin-bottom:" + props.gap + "px;border-radius:" + props.radius + "px;"
@@ -73,18 +75,38 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 currentIndex.value = clampIndex(currentIndex.value, imageList.value.length)
             }
             val syncImages = ::gen_syncImages_fn
+            fun gen_syncPreviewImages_fn(list: UTSArray<String>) {
+                if (list.length == 0) {
+                    previewImageList.value = cloneStringArray(imageList.value)
+                    return
+                }
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < imageList.value.length){
+                        if (index < list.length && list[index] != "") {
+                            result.push(list[index])
+                        } else {
+                            result.push(imageList.value[index])
+                        }
+                        index++
+                    }
+                }
+                previewImageList.value = result
+            }
+            val syncPreviewImages = ::gen_syncPreviewImages_fn
             fun gen_buildPayload_fn(action: String, path: String): UTSJSONObject {
-                return _uO("action" to action, "index" to currentIndex.value, "path" to path, "list" to cloneStringArray(imageList.value))
+                return _uO("action" to action, "index" to currentIndex.value, "path" to path, "list" to cloneStringArray(imageList.value), "previewList" to cloneStringArray(previewImageList.value))
             }
             val buildPayload = ::gen_buildPayload_fn
             fun gen_getCurrentImagePath_fn(): String {
-                if (imageList.value.length == 0) {
+                if (previewImageList.value.length == 0) {
                     return ""
                 }
-                if (currentIndex.value < 0 || currentIndex.value >= imageList.value.length) {
+                if (currentIndex.value < 0 || currentIndex.value >= previewImageList.value.length) {
                     return ""
                 }
-                return imageList.value[currentIndex.value]
+                return previewImageList.value[currentIndex.value]
             }
             val getCurrentImagePath = ::gen_getCurrentImagePath_fn
             fun gen_openPreview_fn(index: Number) {
@@ -96,7 +118,7 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
                 emit("update:visible", true)
                 val currentPath = getCurrentImagePath()
                 emit("preview", buildPayload("preview", currentPath))
-                uni_previewImage(PreviewImageOptions(current = currentPath, urls = cloneStringArray(imageList.value), complete = fun(_){
+                uni_previewImage(PreviewImageOptions(current = currentPath, urls = cloneStringArray(previewImageList.value), complete = fun(_){
                     emit("update:visible", false)
                     emit("close", buildPayload("close", getCurrentImagePath()))
                 }
@@ -114,6 +136,14 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
             }
             , fun(newVal: UTSArray<String>){
                 syncImages(newVal)
+                syncPreviewImages(props.previewImages)
+            }
+            , WatchOptions(immediate = true))
+            watch(fun(): UTSArray<String> {
+                return props.previewImages
+            }
+            , fun(newVal: UTSArray<String>){
+                syncPreviewImages(newVal)
             }
             , WatchOptions(immediate = true))
             watch(fun(): Number {
@@ -175,9 +205,13 @@ open class GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview : VueCompone
         var props = _nP(_uM("images" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
             return _uA()
         }
+        ), "previewImages" to _uM("type" to "Array", "required" to false, "default" to fun(): UTSArray<String> {
+            return _uA()
+        }
         ), "initialIndex" to _uM("type" to "Number", "required" to false, "default" to 0), "visible" to _uM("type" to "Boolean", "required" to false, "default" to false), "thumbSize" to _uM("type" to "Number", "required" to false, "default" to 72), "radius" to _uM("type" to "Number", "required" to false, "default" to 12), "gap" to _uM("type" to "Number", "required" to false, "default" to 12), "emptyText" to _uM("type" to "String", "required" to false, "default" to "暂无图片"), "showList" to _uM("type" to "Boolean", "required" to false, "default" to true)))
         var propsNeedCastKeys = _uA(
             "images",
+            "previewImages",
             "initialIndex",
             "visible",
             "thumbSize",

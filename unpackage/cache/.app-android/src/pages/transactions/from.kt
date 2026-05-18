@@ -34,6 +34,7 @@ open class GenPagesTransactionsFrom : BasePage {
             val submitting = ref(false)
             val savingVisible = ref(false)
             val savingText = ref("处理中...")
+            val pageTaskGuard = createAsyncGuard()
             val initialData = ref<UTSJSONObject>(_uO("supplier_id" to "", "supplier_name" to "", "transaction_number" to "", "transaction_type" to "", "amount" to "", "transaction_date" to "", "note" to "", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
             fun getStringField(obj: UTSJSONObject, key: String, fallback: String = ""): String {
                 val value = obj[key]
@@ -51,7 +52,7 @@ open class GenPagesTransactionsFrom : BasePage {
             }
             val getArrayField = ::gen_getArrayField_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 91, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 93, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -67,7 +68,7 @@ open class GenPagesTransactionsFrom : BasePage {
                     }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:107")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:109")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -115,7 +116,6 @@ open class GenPagesTransactionsFrom : BasePage {
             }
             val buildInitialDataFromTransaction = ::gen_buildInitialDataFromTransaction_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__1>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = getStringField(params, "keyword").toLowerCase()
                 val id = getStringField(params, "id")
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -123,10 +123,6 @@ open class GenPagesTransactionsFrom : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (id != "" && option.value != id) {
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -260,7 +256,12 @@ open class GenPagesTransactionsFrom : BasePage {
                 })
             }
             val loadTransactionDetailData = ::gen_loadTransactionDetailData_fn
-            fun gen_goBackToList_fn() {
+            fun goBackToList(markLeaving: Boolean = true) {
+                if (markLeaving) {
+                    pageTaskGuard.leave()
+                    savingVisible.value = false
+                    uni_hideLoading(null)
+                }
                 leaveSignal.value = leaveSignal.value + 1
                 setTimeout(fun(){
                     uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
@@ -274,7 +275,6 @@ open class GenPagesTransactionsFrom : BasePage {
                 }
                 , 16)
             }
-            val goBackToList = ::gen_goBackToList_fn
             fun gen_buildTransactionMutationPayload_fn(formDataObject: UTSJSONObject): TransactionMutationData {
                 val supplierValue = getStringField(formDataObject, "supplier_id")
                 val transactionTypeValue = getStringField(formDataObject, "transaction_type")
@@ -370,6 +370,7 @@ open class GenPagesTransactionsFrom : BasePage {
                         } else {
                             "创建采购记录"
                         }
+                        val taskToken = pageTaskGuard.begin()
                         submitting.value = true
                         savingText.value = actionText + "中..."
                         savingVisible.value = true
@@ -402,16 +403,24 @@ open class GenPagesTransactionsFrom : BasePage {
                             }
                             clearDraftStorage()
                             markTransactionListRefreshNeeded()
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = successMessage, icon = "success"))
-                            goBackToList()
+                            goBackToList(false)
                         }
                          catch (error: Throwable) {
+                            if (!pageTaskGuard.canApply(taskToken)) {
+                                return@w1
+                            }
                             uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
                         }
                          finally {
-                            savingVisible.value = false
-                            uni_hideLoading(null)
-                            submitting.value = false
+                            if (pageTaskGuard.canApply(taskToken)) {
+                                savingVisible.value = false
+                                uni_hideLoading(null)
+                                submitting.value = false
+                            }
                         }
                 })
             }
@@ -474,6 +483,7 @@ open class GenPagesTransactionsFrom : BasePage {
             }
             val handleUploadError = ::gen_handleUploadError_fn
             onLoad(fun(event: OnLoadOptions){
+                pageTaskGuard.reset()
                 leaveSignal.value = 0
                 val idValue = event["id"]
                 transactionId.value = if (idValue == null) {
@@ -499,6 +509,11 @@ open class GenPagesTransactionsFrom : BasePage {
                 }
                 loadSupplierName()
                 clearDraftStorage()
+            }
+            )
+            onUnload(fun(){
+                pageTaskGuard.leave()
+                uni_hideLoading(null)
             }
             )
             return fun(): Any? {

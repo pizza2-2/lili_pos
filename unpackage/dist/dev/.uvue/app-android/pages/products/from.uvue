@@ -2,11 +2,12 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue';
 import { computed } from 'vue';
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts';
-import { ProductItem, ProductMutationData, createProduct, getProductDetail, updateProduct } from '@/pkg/api/modules/products.uts';
+import { ProductItem, ProductMutationData, createProduct, getProductConfigList, getProductDetail, productDiscountsPath, removeProductDiscountFromProduct, updateProduct } from '@/pkg/api/modules/products.uts';
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts';
 import { authState } from '@/store/auth';
+import { createAsyncGuard } from '@/uni_modules/lili-async-guard';
 type SelectOption = {
-    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/products/from.uvue", 49, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/products/from.uvue", 125, 6>;
     value: string;
     text: string;
 };
@@ -17,25 +18,35 @@ const __sfc__ = defineComponent({
         const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
         const _cache = __ins.renderCache;
         const productListRefreshStorageKey = 'refresh:pages:products:index';
+        const productDiscountSelectionStorageKey = 'selected_discount_for_product:';
         const formMode = ref('create');
         const productId = ref('');
         const leaveSignal = ref(0);
+        const dirtySignal = ref(0);
         const submitting = ref(false);
         const savingVisible = ref(false);
         const savingText = ref('处理中...');
+        const pageTaskGuard = createAsyncGuard();
+        const discountCards = ref<UTSJSONObject[]>([]);
+        const discountCardsLoading = ref(false);
         const initialData = ref<UTSJSONObject>({
             sku: '',
             barcode: '',
             name_cn: '',
             name_en: '',
+            name_other: '',
             description: '',
             category_id: '',
             category_text: '',
             supplier_id: '',
             supplier_name: '',
             purchase_price: '0.00',
+            net_purchase_price: '0.00',
             cost_price: '0.00',
             base_sales_price: '0.00',
+            discount_rule: '',
+            discount_rule_id: '',
+            discounted_base_sales_price: '0.00',
             status: 'ACTIVE',
             is_featured: false,
             is_new: false,
@@ -67,6 +78,25 @@ const __sfc__ = defineComponent({
             }
             return parsed;
         }
+        function openProductPrintPage() {
+            if (productId.value == '') {
+                return;
+            }
+            uni.navigateTo({
+                url: '/pages/label-templates/index?mode=print&product=' + productId.value,
+            });
+        }
+        function floatValue(value: any | null, fallback: number = 0): number {
+            const text = stringValue(value);
+            if (text == '') {
+                return fallback;
+            }
+            const parsed = parseFloat(text);
+            if (isNaN(parsed)) {
+                return fallback;
+            }
+            return parsed;
+        }
         function booleanValue(value: any | null): boolean {
             if (value == null) {
                 return false;
@@ -76,6 +106,35 @@ const __sfc__ = defineComponent({
         }
         function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
             return stringValue(obj[key], fallback);
+        }
+        function formatMoneyText(value: string, fallback: string = '0.00'): string {
+            const numberValue = floatValue(value, -1);
+            if (numberValue < 0) {
+                return fallback;
+            }
+            return numberValue.toFixed(2);
+        }
+        function calculateDiscountedPriceText(productSalesPriceText: string, discountRule: UTSJSONObject): string {
+            const basePrice = floatValue(productSalesPriceText, 0);
+            if (basePrice <= 0) {
+                return '0.00';
+            }
+            const discountType = getStringField(discountRule, 'discount_type');
+            let percentValue = floatValue(discountRule['discount_percentage']);
+            if (percentValue > 0 && discountType == 'PERCENTAGE') {
+                return formatMoneyText((basePrice * (1 - percentValue / 100)).toString(10));
+            }
+            let amountValue = floatValue(discountRule['discount_amount']);
+            if (amountValue <= 0 && discountRule['discount_amount_fixed'] != null) {
+                amountValue = floatValue(discountRule['discount_amount_fixed']);
+            }
+            if (amountValue > 0 && (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED')) {
+                const nextPrice = basePrice - amountValue;
+                if (nextPrice <= 0)
+                    return '0.00';
+                return formatMoneyText(nextPrice.toString(10));
+            }
+            return basePrice.toFixed(2);
         }
         function getArrayField(obj: UTSJSONObject, key: string): string[] {
             const value = obj[key];
@@ -92,7 +151,7 @@ const __sfc__ = defineComponent({
             if (text == null || text == '') {
                 return null;
             }
-            return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:137");
+            return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:274");
         }
         function parseObjectArray(value: any | null): UTSJSONObject[] {
             if (value == null) {
@@ -102,7 +161,7 @@ const __sfc__ = defineComponent({
             if (text == null || text == '') {
                 return [] as UTSJSONObject[];
             }
-            const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:148");
+            const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:285");
             if (parsed == null) {
                 return [] as UTSJSONObject[];
             }
@@ -117,7 +176,7 @@ const __sfc__ = defineComponent({
                 }
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:164");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:301");
                     if (parsedError != null) {
                         const rawMessage = parsedError['message'];
                         if (rawMessage != null) {
@@ -132,22 +191,18 @@ const __sfc__ = defineComponent({
             return message;
         }
         function buildUploadHeaders(): UTSJSONObject {
-            const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/products/from.uvue", 180, 8), } as UTSJSONObject;
+            const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/products/from.uvue", 317, 8), } as UTSJSONObject;
             if (authState.token != '') {
                 headers['Authorization'] = authState.token;
             }
             return headers;
         }
         function buildSelectResponse(source: SelectOption[], params: UTSJSONObject): UTSJSONObject {
-            const keyword = getStringField(params, 'keyword').toLowerCase();
             const id = getStringField(params, 'id');
             const result: UTSJSONObject[] = [];
             for (let index = 0; index < source.length; index += 1) {
                 const option = source[index];
                 if (id != '' && option.value != id) {
-                    continue;
-                }
-                if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0 && option.value.toLowerCase().indexOf(keyword) < 0) {
                     continue;
                 }
                 result.push({
@@ -258,9 +313,21 @@ const __sfc__ = defineComponent({
         async function fetchStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
             return buildSelectResponse(statusOptions.value, params);
         }
+        function buildSupplierOptionQuery(params: UTSJSONObject): UTSJSONObject {
+            const keywordValue = stringValue(params['keyword']);
+            const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/products/from.uvue", 439, 8),
+                key: 'supplier',
+                limit: 50,
+            } as UTSJSONObject;
+            if (keywordValue != '') {
+                query['search'] = keywordValue;
+                query['keyword'] = keywordValue;
+            }
+            return query;
+        }
         async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
-            const raw = await request('/api/procurement/suppliers/options/', 'GET', {} as UTSJSONObject, true);
-            return buildSelectResponse(buildSelectOptions(raw), params);
+            const raw = await request('/api/procurement/suppliers/options/', 'GET', buildSupplierOptionQuery(params), true);
+            return buildSelectResponse(buildSelectOptions(raw), { keyword: '', id: stringValue(params['id']) } as UTSJSONObject);
         }
         function convertCategoryTreeItems(items: UTSJSONObject[]): UTSJSONObject[] {
             const result: UTSJSONObject[] = [];
@@ -269,7 +336,7 @@ const __sfc__ = defineComponent({
                 const children = parseObjectArray(item['children']);
                 const treeChildren = convertCategoryTreeItems(children);
                 const label = buildOptionText(item);
-                const option: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("option", "pages/products/from.uvue", 321, 9),
+                const option: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("option", "pages/products/from.uvue", 467, 9),
                     value: buildOptionValue(item),
                     text: label,
                     label: label,
@@ -316,7 +383,7 @@ const __sfc__ = defineComponent({
             const parentValue = getStringField(params, 'parent');
             const pageValue = getStringField(params, 'page', '1');
             const pageSizeValue = getStringField(params, 'pageSize', '20');
-            const queryParams = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 373, 8),
+            const queryParams = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 519, 8),
                 key: 'parent',
                 page: intValue(pageValue, 1),
                 page_size: intValue(pageSizeValue, 20),
@@ -391,6 +458,7 @@ const __sfc__ = defineComponent({
             for (let index = 0; index < item.media_files.length; index += 1) {
                 const mediaFile = item.media_files[index];
                 let imageUrl = '';
+                let previewUrl = '';
                 if (mediaFile.signed_thumbnail_url != '') {
                     imageUrl = mediaFile.signed_thumbnail_url;
                 }
@@ -403,12 +471,24 @@ const __sfc__ = defineComponent({
                 else if (mediaFile.file_url != '') {
                     imageUrl = mediaFile.file_url;
                 }
+                if (mediaFile.signed_url != '') {
+                    previewUrl = mediaFile.signed_url;
+                }
+                else if (mediaFile.file_url != '') {
+                    previewUrl = mediaFile.file_url;
+                }
+                else {
+                    previewUrl = imageUrl;
+                }
                 if (imageUrl != '') {
                     images.push(imageUrl);
                     imageItems.push({
                         id: mediaFile.id,
                         path: imageUrl,
                         url: imageUrl,
+                        previewUrl: previewUrl,
+                        signed_url: mediaFile.signed_url,
+                        file_url: mediaFile.file_url,
                         isRemote: true,
                     } as UTSJSONObject);
                 }
@@ -429,19 +509,26 @@ const __sfc__ = defineComponent({
                 categoryText = categoryTextOverride;
             }
             const supplierId = item.supplier == null ? '' : stringValue(item.supplier);
+            const discountRuleText = item.discount_info == null || !item.discount_info!.has_discount ? '' : item.discount_info!.discount_name;
+            const discountedBaseSalesPrice = item.discount_info == null || !item.discount_info!.has_discount ? '' : item.discount_info!.final_price;
             return {
                 sku: item.sku,
                 barcode: item.barcode,
                 name_cn: item.name_cn,
                 name_en: item.name_en,
+                name_other: item.name_other,
                 description: item.description,
                 category_id: categoryId,
                 category_text: categoryText,
                 supplier_id: supplierId,
                 supplier_name: item.supplier_name,
                 purchase_price: item.purchase_price == '' ? '0.00' : item.purchase_price,
+                net_purchase_price: item.net_purchase_price == '' ? '0.00' : item.net_purchase_price,
                 cost_price: item.cost_price == '' ? '0.00' : item.cost_price,
                 base_sales_price: item.base_sales_price == '' ? '0.00' : item.base_sales_price,
+                discount_rule: discountRuleText,
+                discount_rule_id: item.discount_info == null ? '' : stringValue(item.discount_info!.discount_id),
+                discounted_base_sales_price: discountedBaseSalesPrice,
                 status: item.status == '' ? 'ACTIVE' : item.status,
                 is_featured: item.is_featured,
                 is_new: item.is_new,
@@ -456,7 +543,7 @@ const __sfc__ = defineComponent({
                 key: 'base',
                 title: '基础信息',
                 description: '',
-                defaultOpen: true,
+                defaultOpen: false,
                 fields: [
                     {
                         key: 'name_cn',
@@ -467,9 +554,15 @@ const __sfc__ = defineComponent({
                     } as UTSJSONObject,
                     {
                         key: 'name_en',
-                        label: '外文名称',
+                        label: '波兰名称',
                         type: 'input',
-                        placeholder: '请输入外文名称',
+                        placeholder: '请输入波兰名称',
+                    } as UTSJSONObject,
+                    {
+                        key: 'name_other',
+                        label: '其他名称',
+                        type: 'input',
+                        placeholder: '请输入其他名称',
                     } as UTSJSONObject,
                     {
                         key: 'sku',
@@ -528,20 +621,30 @@ const __sfc__ = defineComponent({
                 key: 'price',
                 title: '价格信息',
                 description: '',
-                defaultOpen: true,
+                defaultOpen: false,
                 fields: [
                     {
                         key: 'purchase_price',
-                        label: '采购价',
+                        label: '含税采购价',
                         type: 'number',
                         required: true,
-                        placeholder: '请输入采购价',
+                        decimal: true,
+                        placeholder: '请输入含税采购价',
+                    } as UTSJSONObject,
+                    {
+                        key: 'net_purchase_price',
+                        label: '不含税采购价',
+                        type: 'number',
+                        required: true,
+                        decimal: true,
+                        placeholder: '请输入不含税采购价',
                     } as UTSJSONObject,
                     {
                         key: 'cost_price',
                         label: '成本价',
                         type: 'number',
                         required: true,
+                        decimal: true,
                         placeholder: '请输入成本价',
                     } as UTSJSONObject,
                     {
@@ -549,7 +652,14 @@ const __sfc__ = defineComponent({
                         label: '基础售价',
                         type: 'number',
                         required: true,
+                        decimal: true,
                         placeholder: '请输入基础售价',
+                    } as UTSJSONObject,
+                    {
+                        key: 'discount_rule',
+                        label: '折扣规则',
+                        type: 'custom',
+                        readonly: true,
                     } as UTSJSONObject,
                 ] as UTSJSONObject[],
             } as UTSJSONObject,
@@ -619,6 +729,36 @@ const __sfc__ = defineComponent({
         function markProductListRefreshNeeded(): void {
             uni.setStorageSync(productListRefreshStorageKey, '1');
         }
+        async function loadProductDiscountCards(): Promise<void> {
+            if (productId.value == '') {
+                discountCards.value = [] as UTSJSONObject[];
+                return;
+            }
+            if (discountCardsLoading.value) {
+                return;
+            }
+            discountCardsLoading.value = true;
+            try {
+                const response = await getProductConfigList(productDiscountsPath(), null, 1, 100, { product: productId.value } as UTSJSONObject);
+                const rawResults = response['results'];
+                if (rawResults == null) {
+                    discountCards.value = [] as UTSJSONObject[];
+                }
+                else {
+                    discountCards.value = rawResults as UTSJSONObject[];
+                }
+            }
+            catch (error: any) {
+                discountCards.value = [] as UTSJSONObject[];
+                uni.showToast({
+                    title: parseErrorMessage(error, '折扣规则加载失败'),
+                    icon: 'none',
+                });
+            }
+            finally {
+                discountCardsLoading.value = false;
+            }
+        }
         async function loadProductDetailData(idText: string): Promise<void> {
             if (idText == '') {
                 return;
@@ -631,6 +771,7 @@ const __sfc__ = defineComponent({
                     categoryText = await resolveCategoryOptionText(categoryId);
                 }
                 initialData.value = buildInitialDataFromProduct(detail, categoryText);
+                await loadProductDiscountCards();
             }
             catch (error: any) {
                 uni.showToast({
@@ -639,7 +780,219 @@ const __sfc__ = defineComponent({
                 });
             }
         }
-        function goBackToList(): void {
+        function discountCardKey(discount: UTSJSONObject, index: number): string {
+            const id = getStringField(discount, 'id');
+            if (id != '')
+                return id;
+            return 'discount-' + index.toString(10);
+        }
+        function discountCardName(discount: UTSJSONObject): string {
+            return getStringField(discount, 'name', getStringField(discount, 'discount_name', '未命名折扣'));
+        }
+        function discountRuleText(discount: UTSJSONObject): string {
+            const display = getStringField(discount, 'discount_display');
+            if (display != '')
+                return display;
+            const discountType = getStringField(discount, 'discount_type');
+            const percentValue = getStringField(discount, 'discount_percentage');
+            if (discountType == 'PERCENTAGE' && percentValue != '') {
+                return percentValue + '% 折扣';
+            }
+            const amount = getStringField(discount, 'discount_amount', getStringField(discount, 'discount_amount_fixed'));
+            if (amount != '') {
+                return '减 ' + amount;
+            }
+            return '未设置规则';
+        }
+        function discountTypeText(discount: UTSJSONObject): string {
+            const discountType = getStringField(discount, 'discount_type');
+            if (discountType == 'PERCENTAGE')
+                return '百分比';
+            if (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED')
+                return '固定金额';
+            return discountType == '' ? '-' : discountType;
+        }
+        function discountFinalPriceText(discount: UTSJSONObject): string {
+            const directValue = getStringField(discount, 'final_price');
+            if (directValue != '') {
+                return formatMoneyText(directValue, directValue);
+            }
+            return calculateDiscountedPriceText(getStringField(initialData.value, 'base_sales_price', '0.00'), discount);
+        }
+        function upsertDiscountCardFromSelection(selected: UTSJSONObject): void {
+            const discountId = getStringField(selected, 'discount_id');
+            if (discountId == '') {
+                return;
+            }
+            const nextCard = { __$originalPosition: new UTSSourceMapPosition("nextCard", "pages/products/from.uvue", 973, 8),
+                id: discountId,
+                name: getStringField(selected, 'discount_name', getStringField(selected, 'name', '未命名折扣')),
+                discount_type: getStringField(selected, 'discount_type'),
+                discount_percentage: getStringField(selected, 'discount_percentage'),
+                discount_amount: getStringField(selected, 'discount_amount', getStringField(selected, 'discount_amount_fixed')),
+                discount_amount_fixed: getStringField(selected, 'discount_amount_fixed'),
+                min_quantity: getStringField(selected, 'min_quantity', '1'),
+                priority: '-',
+                final_price: getStringField(selected, 'final_price'),
+            } as UTSJSONObject;
+            const nextCards: UTSJSONObject[] = [];
+            let replaced = false;
+            for (let index = 0; index < discountCards.value.length; index += 1) {
+                const currentCard = discountCards.value[index];
+                if (getStringField(currentCard, 'id') == discountId) {
+                    nextCards.push(nextCard);
+                    replaced = true;
+                }
+                else {
+                    nextCards.push(currentCard);
+                }
+            }
+            if (!replaced) {
+                nextCards.unshift(nextCard);
+            }
+            discountCards.value = nextCards;
+        }
+        async function removeDiscountFromProduct(discountId: string): Promise<void> {
+            if (productId.value == '' || discountId == '') {
+                return;
+            }
+            try {
+                uni.showLoading({
+                    title: '删除中',
+                    mask: true,
+                });
+                await removeProductDiscountFromProduct(productId.value, discountId);
+                await loadProductDetailData(productId.value);
+                uni.showToast({
+                    title: '折扣已删除',
+                    icon: 'success',
+                });
+            }
+            catch (error: any) {
+                uni.showToast({
+                    title: parseErrorMessage(error, '折扣删除失败'),
+                    icon: 'none',
+                });
+            }
+            finally {
+                uni.hideLoading();
+            }
+        }
+        function confirmRemoveDiscount(discount: UTSJSONObject): void {
+            const discountId = getStringField(discount, 'id');
+            if (discountId == '') {
+                return;
+            }
+            uni.showModal({
+                title: '删除折扣',
+                content: '确定移除这个折扣规则吗？',
+                success: (res) => {
+                    if (res.confirm) {
+                        removeDiscountFromProduct(discountId);
+                    }
+                },
+            });
+        }
+        function buildDiscountSelectionStorageKey(): string {
+            return productDiscountSelectionStorageKey + productId.value;
+        }
+        function readStorageText(key: string): string {
+            const rawValue = uni.getStorageSync(key);
+            if (rawValue == null) {
+                return '';
+            }
+            const text = '' + rawValue;
+            return text == null ? '' : text;
+        }
+        function parseStoredJson(value: any): UTSJSONObject | null {
+            const rawText = '' + value;
+            if (rawText == '') {
+                return null;
+            }
+            const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pages/products/from.uvue:1060");
+            if (parsed != null) {
+                return parsed;
+            }
+            return null;
+        }
+        function cloneInitialData(): UTSJSONObject {
+            const source = initialData.value;
+            const result = { __$originalPosition: new UTSSourceMapPosition("result", "pages/products/from.uvue", 1069, 8), } as UTSJSONObject;
+            for (const key in source) {
+                result[key] = source[key];
+            }
+            return result;
+        }
+        function applySelectedDiscount() {
+            if (productId.value == '') {
+                return;
+            }
+            const selectedStorageText = readStorageText(buildDiscountSelectionStorageKey());
+            if (selectedStorageText == '') {
+                return;
+            }
+            const selected = parseStoredJson(selectedStorageText);
+            if (selected == null) {
+                return;
+            }
+            const selectedProductId = getStringField(selected, 'product_id');
+            if (selectedProductId != '' && selectedProductId != productId.value) {
+                return;
+            }
+            const nextData = cloneInitialData();
+            const currentBaseSalesPrice = getStringField(nextData, 'base_sales_price', '0.00');
+            const baseSalesPriceFromSelection = getStringField(selected, 'original_price', currentBaseSalesPrice);
+            const discountPriceFromSelection = getStringField(selected, 'final_price');
+            let finalPrice = '';
+            if (discountPriceFromSelection == '') {
+                finalPrice = calculateDiscountedPriceText(baseSalesPriceFromSelection, selected);
+            }
+            else {
+                finalPrice = discountPriceFromSelection;
+            }
+            nextData['discount_rule'] = getStringField(selected, 'discount_name', getStringField(selected, 'name'));
+            nextData['discount_rule_id'] = getStringField(selected, 'discount_id');
+            nextData['discounted_base_sales_price'] = formatMoneyText(finalPrice, '');
+            nextData['base_sales_price'] = baseSalesPriceFromSelection;
+            initialData.value = nextData;
+            upsertDiscountCardFromSelection(selected);
+            loadProductDiscountCards();
+            uni.removeStorageSync(buildDiscountSelectionStorageKey());
+            uni.showToast({
+                title: '折扣已添加',
+                icon: 'success',
+            });
+        }
+        function openDiscountSelector() {
+            const safeProductId = '' + productId.value;
+            if (safeProductId == '') {
+                uni.showToast({
+                    title: '请先保存商品后再选择折扣',
+                    icon: 'none',
+                });
+                return;
+            }
+            let baseSalesPrice = getStringField(initialData.value, 'base_sales_price', '0.00');
+            if (baseSalesPrice == '') {
+                baseSalesPrice = '0.00';
+            }
+            uni.navigateTo({
+                url: '/pages/products/config-model/index?resource=discount&mode=select&product_id=' + safeProductId + '&base_sales_price=' + UTSAndroid.consoleDebugError(encodeURIComponent(baseSalesPrice), " at pages/products/from.uvue:1130"),
+            });
+        }
+        function handleInputAdd(payload: UTSJSONObject) {
+            const keyValue = getStringField(payload, 'key');
+            if (keyValue == 'discount_rule') {
+                openDiscountSelector();
+                return;
+            }
+        }
+        function goBackToList(markLeaving: boolean = true): void {
+            if (markLeaving) {
+                pageTaskGuard.leave();
+                savingVisible.value = false;
+                uni.hideLoading();
+            }
             leaveSignal.value = leaveSignal.value + 1;
             setTimeout(() => {
                 uni.navigateBack({
@@ -657,10 +1010,12 @@ const __sfc__ = defineComponent({
             const barcode = getStringField(formDataObject, 'barcode').trim();
             const nameCn = getStringField(formDataObject, 'name_cn').trim();
             const nameEn = getStringField(formDataObject, 'name_en').trim();
+            const nameOther = getStringField(formDataObject, 'name_other').trim();
             const description = getStringField(formDataObject, 'description').trim();
             const categoryId = getStringField(formDataObject, 'category_id').trim();
             const supplierId = getStringField(formDataObject, 'supplier_id').trim();
             const purchasePrice = getStringField(formDataObject, 'purchase_price', '0.00').trim();
+            const netPurchasePrice = getStringField(formDataObject, 'net_purchase_price', '0.00').trim();
             const costPrice = getStringField(formDataObject, 'cost_price', '0.00').trim();
             const baseSalesPrice = getStringField(formDataObject, 'base_sales_price', '0.00').trim();
             const status = getStringField(formDataObject, 'status', 'ACTIVE').trim();
@@ -669,10 +1024,12 @@ const __sfc__ = defineComponent({
                 barcode: barcode == '' ? null : barcode,
                 name_cn: nameCn,
                 name_en: nameEn == '' ? null : nameEn,
+                name_other: nameOther == '' ? null : nameOther,
                 description: description == '' ? null : description,
                 category: categoryId == '' ? null : categoryId,
                 supplier: supplierId == '' ? null : supplierId,
                 purchase_price: purchasePrice == '' ? '0.00' : purchasePrice,
+                net_purchase_price: netPurchasePrice == '' ? '0.00' : netPurchasePrice,
                 cost_price: costPrice == '' ? '0.00' : costPrice,
                 base_sales_price: baseSalesPrice == '' ? '0.00' : baseSalesPrice,
                 status: status == '' ? 'ACTIVE' : status,
@@ -746,6 +1103,7 @@ const __sfc__ = defineComponent({
                 });
                 return;
             }
+            const taskToken = pageTaskGuard.begin();
             submitting.value = true;
             const isEditing = formMode.value == 'edit' && productId.value != '';
             const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim();
@@ -779,22 +1137,30 @@ const __sfc__ = defineComponent({
                     }
                 }
                 markProductListRefreshNeeded();
+                if (!pageTaskGuard.canApply(taskToken)) {
+                    return;
+                }
                 uni.showToast({
                     title: successMessage,
                     icon: 'success',
                 });
-                goBackToList();
+                goBackToList(false);
             }
             catch (error: any) {
+                if (!pageTaskGuard.canApply(taskToken)) {
+                    return;
+                }
                 uni.showToast({
                     title: parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'),
                     icon: 'none',
                 });
             }
             finally {
-                savingVisible.value = false;
-                uni.hideLoading();
-                submitting.value = false;
+                if (pageTaskGuard.canApply(taskToken)) {
+                    savingVisible.value = false;
+                    uni.hideLoading();
+                    submitting.value = false;
+                }
             }
         }
         async function handleSubmit(payload: UTSJSONObject): Promise<void> {
@@ -858,7 +1224,40 @@ const __sfc__ = defineComponent({
                 icon: 'none',
             });
         }
+        function openPriceCalculator() {
+            if (productId.value == '') {
+                uni.showToast({
+                    title: '请先保存商品后再计算',
+                    icon: 'none',
+                });
+                return;
+            }
+            uni.navigateTo({
+                url: '/pages/products/price-calculator?id=' + productId.value,
+            });
+        }
+        function applyCalculatedPrice() {
+            if (productId.value == '') {
+                return;
+            }
+            const storageKey = 'calc_result:' + productId.value;
+            const calculatedPrice = readStorageText(storageKey);
+            if (calculatedPrice == '') {
+                return;
+            }
+            uni.removeStorageSync(storageKey);
+            const currentData = cloneInitialData();
+            const nextBaseSalesPrice = calculatedPrice.trim();
+            currentData['base_sales_price'] = nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice;
+            initialData.value = currentData;
+            dirtySignal.value = dirtySignal.value + 1;
+            uni.showToast({
+                title: '基础售价已填入计算结果',
+                icon: 'success',
+            });
+        }
         onLoad((event: OnLoadOptions) => {
+            pageTaskGuard.reset();
             leaveSignal.value = 0;
             const idValue = event['id'];
             productId.value = idValue == null ? '' : (idValue as string);
@@ -866,6 +1265,14 @@ const __sfc__ = defineComponent({
             if (formMode.value == 'edit') {
                 loadProductDetailData(productId.value);
             }
+        });
+        onUnload(() => {
+            pageTaskGuard.leave();
+            uni.hideLoading();
+        });
+        onShow(() => {
+            applyCalculatedPrice();
+            applySelectedDiscount();
         });
         return (): any | null => {
             const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", _easycom_lili_universal_filter);
@@ -876,15 +1283,19 @@ const __sfc__ = defineComponent({
                     showBack: true,
                     showSearch: false,
                     showHome: true,
+                    showRightText: unref(formMode) == 'edit' && unref(productId) != '',
+                    rightText: "打印",
                     homePath: "/pages/tabbar/products",
-                    backgroundColor: "#EEF2F7"
-                }), null, 8 /* PROPS */, ["title"]),
+                    backgroundColor: "#EEF2F7",
+                    onRight: openProductPrintPage
+                }), null, 8 /* PROPS */, ["title", "showRightText"]),
                 _cE("view", _uM({ class: "page-content" }), [
                     _cV(_component_lili_UniversaForm, _uM({
                         mode: unref(formMode),
                         formSections: unref(formSections),
                         initialData: unref(initialData),
                         leaveSignal: unref(leaveSignal),
+                        dirtySignal: unref(dirtySignal),
                         uploadContentTypeModel: "product",
                         onSubmit: handleSubmit,
                         onCancel: handleCancel,
@@ -893,14 +1304,99 @@ const __sfc__ = defineComponent({
                         onDirtyChange: handleDirtyChange,
                         onBottomSelectAdd: handleBottomSelectAdd,
                         onBottomSelectEdit: handleBottomSelectEdit,
+                        onInputAdd: handleInputAdd,
                         onUpload: handleUpload,
                         onUploadDelete: handleUploadDelete,
                         onUploadError: handleUploadError
-                    }), null, 8 /* PROPS */, ["mode", "formSections", "initialData", "leaveSignal"])
+                    }), _uM({
+                        "field-discount_rule": withScopedSlotCtx((slotProps: Record<string, any | null>): any[] => {
+                            const value = slotProps["value"];
+                            return [
+                                _cE("view", _uM({ class: "discount-card-section" }), [
+                                    isTrue(unref(discountCards).length == 0 && !unref(discountCardsLoading))
+                                        ? _cE("view", _uM({
+                                            key: 0,
+                                            class: "discount-empty-card"
+                                        }), [
+                                            _cE("text", _uM({ class: "discount-empty-title" }), "暂无折扣规则"),
+                                            _cE("text", _uM({ class: "discount-empty-desc" }), "可以为当前商品添加一个或多个折扣规则")
+                                        ])
+                                        : _cC("v-if", true),
+                                    _cE(Fragment, null, RenderHelpers.renderList(unref(discountCards), (discount, discountIndex, __index, _cached): any => {
+                                        return _cE("view", _uM({
+                                            key: discountCardKey(discount, discountIndex),
+                                            class: "discount-card"
+                                        }), [
+                                            _cE("view", _uM({ class: "discount-card-head" }), [
+                                                _cE("view", _uM({ class: "discount-card-title-wrap" }), [
+                                                    _cE("text", _uM({ class: "discount-card-title" }), _tD(discountCardName(discount)), 1 /* TEXT */),
+                                                    _cE("text", _uM({ class: "discount-card-rule" }), _tD(discountRuleText(discount)), 1 /* TEXT */)
+                                                ]),
+                                                _cE("view", _uM({
+                                                    class: "discount-delete-btn",
+                                                    onClick: withModifiers(() => { confirmRemoveDiscount(discount); }, ["stop"])
+                                                }), [
+                                                    _cE("text", _uM({ class: "discount-delete-text" }), "删除")
+                                                ], 8 /* PROPS */, ["onClick"])
+                                            ]),
+                                            _cE("view", _uM({ class: "discount-card-grid" }), [
+                                                _cE("view", _uM({ class: "discount-card-cell" }), [
+                                                    _cE("text", _uM({ class: "discount-card-label" }), "折后价"),
+                                                    _cE("text", _uM({ class: "discount-card-value discount-card-price" }), _tD(discountFinalPriceText(discount)), 1 /* TEXT */)
+                                                ]),
+                                                _cE("view", _uM({ class: "discount-card-cell" }), [
+                                                    _cE("text", _uM({ class: "discount-card-label" }), "类型"),
+                                                    _cE("text", _uM({ class: "discount-card-value" }), _tD(discountTypeText(discount)), 1 /* TEXT */)
+                                                ]),
+                                                _cE("view", _uM({ class: "discount-card-cell" }), [
+                                                    _cE("text", _uM({ class: "discount-card-label" }), "最低数量"),
+                                                    _cE("text", _uM({ class: "discount-card-value" }), _tD(getStringField(discount, 'min_quantity', '1')), 1 /* TEXT */)
+                                                ]),
+                                                _cE("view", _uM({ class: "discount-card-cell" }), [
+                                                    _cE("text", _uM({ class: "discount-card-label" }), "优先级"),
+                                                    _cE("text", _uM({ class: "discount-card-value" }), _tD(getStringField(discount, 'priority', '-')), 1 /* TEXT */)
+                                                ])
+                                            ])
+                                        ]);
+                                    }), 128 /* KEYED_FRAGMENT */),
+                                    isTrue(unref(discountCardsLoading))
+                                        ? _cE("view", _uM({
+                                            key: 1,
+                                            class: "discount-loading-card"
+                                        }), [
+                                            _cE("text", _uM({ class: "discount-loading-text" }), "正在加载折扣规则...")
+                                        ])
+                                        : _cC("v-if", true),
+                                    isTrue(value != '' && value != '0.00')
+                                        ? _cE("text", _uM({
+                                            key: 2,
+                                            class: "discount-active-price"
+                                        }), " 当前折后售价：" + _tD(value), 1 /* TEXT */)
+                                        : _cC("v-if", true),
+                                    _cE("view", _uM({
+                                        class: "discount-action-btn",
+                                        onClick: openDiscountSelector
+                                    }), [
+                                        _cE("text", _uM({ class: "discount-action-btn-text" }), "添加折扣")
+                                    ])
+                                ])
+                            ];
+                        }),
+                        _: 1 /* STABLE */
+                    }), 8 /* PROPS */, ["mode", "formSections", "initialData", "leaveSignal", "dirtySignal"])
                 ]),
-                isTrue(unref(savingVisible))
+                isTrue(unref(formMode) == 'edit' && unref(productId) != '')
                     ? _cE("view", _uM({
                         key: 0,
+                        class: "float-btn",
+                        onClick: openPriceCalculator
+                    }), [
+                        _cE("text", _uM({ class: "float-btn-text" }), "计算价格")
+                    ])
+                    : _cC("v-if", true),
+                isTrue(unref(savingVisible))
+                    ? _cE("view", _uM({
+                        key: 1,
                         class: "page-saving-mask"
                     }), [
                         _cE("view", _uM({ class: "page-saving-card" }), [
@@ -913,5 +1409,5 @@ const __sfc__ = defineComponent({
     }
 });
 export default __sfc__;
-const GenPagesProductsFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-content", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingLeft", 0], ["paddingRight", 0], ["paddingBottom", 0]]))], ["page-saving-mask", _pS(_uM([["position", "absolute"], ["left", 0], ["top", 0], ["right", 0], ["bottom", 0], ["zIndex", 9999], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.28)"]]))], ["page-saving-card", _pS(_uM([["height", 44], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.86)"]]))], ["page-saving-text", _pS(_uM([["fontSize", 13], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])];
+const GenPagesProductsFromStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["position", "relative"], ["backgroundColor", "#EEF2F7"]]))], ["page-content", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingLeft", 0], ["paddingRight", 0], ["paddingBottom", 0]]))], ["page-saving-mask", _pS(_uM([["position", "absolute"], ["left", 0], ["top", 0], ["right", 0], ["bottom", 0], ["zIndex", 9999], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.28)"]]))], ["page-saving-card", _pS(_uM([["height", 44], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 22], ["borderBottomLeftRadius", 22], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "rgba(15,23,42,0.86)"]]))], ["page-saving-text", _pS(_uM([["fontSize", 13], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))], ["float-btn", _pS(_uM([["position", "absolute"], ["right", 14], ["bottom", 112], ["height", 32], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["alignItems", "center"], ["justifyContent", "center"], ["flexDirection", "row"], ["backgroundColor", "#111827"], ["zIndex", 9998]]))], ["float-btn-text", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#FFFFFF"], ["textAlign", "center"]]))], ["discount-card-section", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8]]))], ["discount-empty-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["backgroundColor", "#F8FAFC"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["marginBottom", 10]]))], ["discount-loading-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["backgroundColor", "#F8FAFC"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["marginBottom", 10]]))], ["discount-empty-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["discount-empty-desc", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#64748B"]]))], ["discount-loading-text", _pS(_uM([["marginTop", 4], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#64748B"]]))], ["discount-card", _pS(_uM([["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#CBD5E1"], ["borderRightColor", "#CBD5E1"], ["borderBottomColor", "#CBD5E1"], ["borderLeftColor", "#CBD5E1"], ["backgroundColor", "#FFFFFF"], ["paddingTop", 12], ["paddingRight", 12], ["paddingBottom", 12], ["paddingLeft", 12], ["marginBottom", 10]]))], ["discount-card-head", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"]]))], ["discount-card-title-wrap", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["paddingRight", 10]]))], ["discount-card-title", _pS(_uM([["fontSize", 15], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["discount-card-rule", _pS(_uM([["marginTop", 3], ["fontSize", 12], ["lineHeight", "16px"], ["color", "#475569"]]))], ["discount-delete-btn", _pS(_uM([["height", 28], ["borderTopLeftRadius", 6], ["borderTopRightRadius", 6], ["borderBottomRightRadius", 6], ["borderBottomLeftRadius", 6], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FCA5A5"], ["borderRightColor", "#FCA5A5"], ["borderBottomColor", "#FCA5A5"], ["borderLeftColor", "#FCA5A5"], ["backgroundColor", "#FEF2F2"], ["paddingLeft", 10], ["paddingRight", 10], ["alignItems", "center"], ["justifyContent", "center"]]))], ["discount-delete-text", _pS(_uM([["fontSize", 12], ["lineHeight", "14px"], ["color", "#B91C1C"]]))], ["discount-card-grid", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["discount-card-cell", _pS(_uM([["width", "50%"], ["paddingTop", 6], ["paddingBottom", 6]]))], ["discount-card-label", _pS(_uM([["fontSize", 11], ["lineHeight", "14px"], ["color", "#94A3B8"]]))], ["discount-card-value", _pS(_uM([["marginTop", 2], ["fontSize", 13], ["lineHeight", "17px"], ["color", "#334155"]]))], ["discount-card-price", _pS(_uM([["color", "#0F766E"], ["fontSize", 15], ["fontWeight", "bold"]]))], ["discount-active-price", _pS(_uM([["marginBottom", 10], ["fontSize", 13], ["lineHeight", "18px"], ["color", "#0F766E"]]))], ["discount-action-btn", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["height", 38], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 12], ["paddingRight", 12]]))], ["discount-action-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "16px"], ["color", "#FFFFFF"]]))]])];
 //# sourceMappingURL=from.uvue.map

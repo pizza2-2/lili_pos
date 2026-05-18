@@ -56,13 +56,11 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildSelectResponse(source: PurchaseOptionItem[], params: UTSJSONObject): UTSJSONObject {
-	const keyword = getStringField(params, 'keyword').toLowerCase()
 	const id = getStringField(params, 'id')
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < source.length; index += 1) {
 		const option = source[index]
 		if (id != '' && option.value != id) continue
-		if (keyword != '' && option.text.toLowerCase().indexOf(keyword) < 0) continue
 		result.push({ value: option.value, text: option.text } as UTSJSONObject)
 	}
 	return { data: result, results: result, total: result.length, total_count: result.length } as UTSJSONObject
@@ -79,7 +77,7 @@ async function fetchSupplierOptions(params: UTSJSONObject): Promise<UTSJSONObjec
 	const keyword = getStringField(params, 'keyword')
 	const id = getStringField(params, 'id')
 	const options = await getPurchaseOptionList('/api/procurement/suppliers/', keyword == '' ? null : keyword, 'name', 'phone')
-	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+	return buildSelectResponse(options, { keyword: '', id: id } as UTSJSONObject)
 }
 
 function initialCreateData(): UTSJSONObject {
@@ -125,6 +123,19 @@ function markRefresh() { uni.setStorageSync(refreshStorageKey, '1') }
 function goBackToList() {
 	leaveSignal.value = leaveSignal.value + 1
 	setTimeout(() => { uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/purchases/index' }) } }) }, 16)
+}
+
+function goToCreatedPurchaseDetail(id: string) {
+	leaveSignal.value = leaveSignal.value + 1
+	initialData.value = initialCreateData()
+	setTimeout(() => {
+		uni.redirectTo({
+			url: '/pages/purchases/details/index?purchase=' + id,
+			fail: () => {
+				uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + id })
+			},
+		})
+	}, 16)
 }
 
 async function loadDetail(idText: string) {
@@ -176,7 +187,7 @@ async function persistForm(payload: UTSJSONObject) {
 		markRefresh()
 		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
 		if (formMode.value == 'edit') goBackToList()
-		else uni.navigateTo({ url: '/pages/purchases/details/index?purchase=' + savedPurchaseId })
+		else goToCreatedPurchaseDetail(savedPurchaseId)
 	} catch (error) {
 		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
 	} finally {

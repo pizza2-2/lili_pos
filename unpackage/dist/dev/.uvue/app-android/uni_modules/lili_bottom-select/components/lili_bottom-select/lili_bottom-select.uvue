@@ -1,17 +1,19 @@
+import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult, } from '@/uni_modules/lime-scan';
 type SelectChangePayload = {
-    __$originalPosition?: UTSSourceMapPosition<"SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 170, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 184, 6>;
     value: string;
     text: string;
+    image: string;
     item: UTSJSONObject;
 };
 type MultiSelectChangePayload = {
-    __$originalPosition?: UTSSourceMapPosition<"MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 176, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 191, 6>;
     values: string[];
     texts: string[];
     items: UTSJSONObject[];
 };
 type TreeDisplayRow = {
-    __$originalPosition?: UTSSourceMapPosition<"TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 182, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 197, 6>;
     key: string;
     item: UTSJSONObject;
     level: number;
@@ -19,7 +21,7 @@ type TreeDisplayRow = {
     expanded: boolean;
 };
 type Props = {
-    __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 190, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 205, 6>;
     fetchData: (params: UTSJSONObject) => Promise<UTSJSONObject>;
     /**
      * 单选值
@@ -29,6 +31,10 @@ type Props = {
      * 单选显示文本
      */
     valueText?: string;
+    /**
+     * 单选显示图片
+     */
+    valueImage?: string;
     /**
      * 多选值
      */
@@ -78,11 +84,15 @@ type Props = {
     disabled?: boolean;
     labelKey?: string;
     valueKey?: string;
+    imageKey?: string;
+    subtitleKey?: string;
     pageSize?: number;
     searchDelay?: number;
     closeOnOverlay?: boolean;
     showEditAction?: boolean;
     showAddAction?: boolean;
+    showScan?: boolean;
+    scanOnlyFromCamera?: boolean;
     editActionText?: string;
     addActionText?: string;
     editPath?: string;
@@ -95,6 +105,7 @@ const __sfc__ = defineComponent({
         fetchData: { type: Function as PropType<(params: UTSJSONObject) => Promise<UTSJSONObject>>, required: true },
         value: { type: String, required: false, default: '' },
         valueText: { type: String, required: false, default: '' },
+        valueImage: { type: String, required: false, default: '' },
         values: { type: Array as PropType<string[]>, required: false, default: (): string[] => [] },
         multiple: { type: Boolean, required: false, default: false },
         tree: { type: Boolean, required: false, default: false },
@@ -112,11 +123,15 @@ const __sfc__ = defineComponent({
         disabled: { type: Boolean, required: false, default: false },
         labelKey: { type: String, required: false, default: 'text' },
         valueKey: { type: String, required: false, default: 'value' },
+        imageKey: { type: String, required: false, default: '' },
+        subtitleKey: { type: String, required: false, default: '' },
         pageSize: { type: Number, required: false, default: 20 },
         searchDelay: { type: Number, required: false, default: 300 },
         closeOnOverlay: { type: Boolean, required: false, default: true },
         showEditAction: { type: Boolean, required: false, default: true },
         showAddAction: { type: Boolean, required: false, default: true },
+        showScan: { type: Boolean, required: false, default: false },
+        scanOnlyFromCamera: { type: Boolean, required: false, default: true },
         editActionText: { type: String, required: false, default: '编辑' },
         addActionText: { type: String, required: false, default: '新增' },
         editPath: { type: String, required: false, default: '' },
@@ -138,6 +153,7 @@ const __sfc__ = defineComponent({
         const panelVisible = ref<boolean>(false);
         const internalValue = ref<string>(props.value ?? '');
         const internalText = ref<string>(props.valueText ?? '');
+        const internalImage = ref<string>(props.valueImage ?? '');
         const textInitialized = ref<boolean>((props.valueText ?? '') != '');
         const selectedItems = ref<UTSJSONObject[]>([]);
         const keyword = ref<string>('');
@@ -172,6 +188,18 @@ const __sfc__ = defineComponent({
         }
         function getItemLabel(item: UTSJSONObject): string {
             return fieldLabel(item, props.labelKey);
+        }
+        function getItemImage(item: UTSJSONObject): string {
+            const key = props.imageKey ?? '';
+            if (key == '')
+                return '';
+            return fieldLabel(item, key);
+        }
+        function getItemSubtitle(item: UTSJSONObject): string {
+            const key = props.subtitleKey ?? '';
+            if (key == '')
+                return '';
+            return fieldLabel(item, key);
         }
         function getNumberField(obj: UTSJSONObject, key: string): number {
             const value = obj[key];
@@ -226,7 +254,7 @@ const __sfc__ = defineComponent({
             return text == 'true' || text == '1' || text == 'yes';
         }
         function cloneItem(item: UTSJSONObject): UTSJSONObject {
-            const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 415, 8), } as UTSJSONObject;
+            const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 457, 8), } as UTSJSONObject;
             for (const key in item) {
                 next[key] = item[key];
             }
@@ -242,7 +270,7 @@ const __sfc__ = defineComponent({
             return itemHasChildren(item);
         }
         function buildFetchParams(page: number, keywordValue: string, id: string, parent: string = ''): UTSJSONObject {
-            const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 434, 8),
+            const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 476, 8),
                 page: page,
                 pageSize: props.pageSize,
                 keyword: keywordValue,
@@ -526,7 +554,7 @@ const __sfc__ = defineComponent({
                 displayList.value = replaceTreeChildren(displayList.value, parentValue, children);
             }
             catch (e: any) {
-                console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:750");
+                console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:792");
                 uni.showToast({ title: '子节点加载失败', icon: 'none' });
             }
             finally {
@@ -684,7 +712,7 @@ const __sfc__ = defineComponent({
             catch (e: any) {
                 if (seq != requestSeq)
                     return;
-                console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:927");
+                console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:969");
                 uni.showToast({ title: '数据加载失败', icon: 'none' });
             }
             finally {
@@ -702,11 +730,12 @@ const __sfc__ = defineComponent({
                 const item = findItemByValueInList(data, value);
                 if (item != null) {
                     internalText.value = getItemLabel(item);
+                    internalImage.value = getItemImage(item);
                     textInitialized.value = true;
                 }
             }
             catch (e: any) {
-                console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:949");
+                console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:992");
             }
         }
         function syncMultiValuesFromProps(vals: string[]) {
@@ -731,6 +760,7 @@ const __sfc__ = defineComponent({
                 if (newVal != '') {
                     if (props.valueText != '') {
                         internalText.value = props.valueText;
+                        internalImage.value = props.valueImage ?? '';
                         textInitialized.value = true;
                     }
                     else {
@@ -752,8 +782,12 @@ const __sfc__ = defineComponent({
             }
             if (internalValue.value == '') {
                 internalText.value = '';
+                internalImage.value = '';
                 textInitialized.value = false;
             }
+        });
+        watch((): string => props.valueImage ?? '', (newImage: string) => {
+            internalImage.value = newImage;
         });
         watch((): string[] => props.values ?? [], (newVals: string[]) => {
             if (props.multiple) {
@@ -775,6 +809,7 @@ const __sfc__ = defineComponent({
             if (!props.multiple && internalValue.value != '') {
                 if (props.valueText != '') {
                     internalText.value = props.valueText;
+                    internalImage.value = props.valueImage ?? '';
                     textInitialized.value = true;
                 }
                 else {
@@ -955,11 +990,36 @@ const __sfc__ = defineComponent({
         function confirmSingleItem(item: UTSJSONObject) {
             const value = getItemValue(item);
             const text = getItemLabel(item);
+            const image = getItemImage(item);
             internalValue.value = value;
             internalText.value = text;
+            internalImage.value = image;
             textInitialized.value = true;
-            emit('change', { value: value, text: text, item: item } as UTSJSONObject);
+            emit('change', { value: value, text: text, image: image, item: item } as UTSJSONObject);
             close();
+        }
+        async function applyScanKeyword(scanResult: string): Promise<void> {
+            if (scanResult == '')
+                return;
+            keyword.value = scanResult;
+            await triggerSearch();
+        }
+        function handleScanSearch() {
+            if (props.disabled)
+                return;
+            scanCode({
+                onlyFromCamera: props.scanOnlyFromCamera,
+                success: (res: ScanCodeSuccessCallbackResult) => {
+                    applyScanKeyword(res.result);
+                },
+                fail: (res: GeneralCallbackResult) => {
+                    const message = res.errMsg == '' ? '扫码失败' : res.errMsg;
+                    uni.showToast({
+                        title: message,
+                        icon: 'none',
+                    });
+                },
+            } as ScanCodeOption);
         }
         function toggleMultiItem(item: UTSJSONObject) {
             if (props.tree && !props.checkStrictly) {
@@ -1060,6 +1120,7 @@ const __sfc__ = defineComponent({
             }
             else {
                 internalText.value = '';
+                internalImage.value = '';
                 textInitialized.value = false;
             }
         }
@@ -1070,6 +1131,7 @@ const __sfc__ = defineComponent({
             return {
                 value: internalValue.value,
                 text: internalText.value,
+                image: internalImage.value,
                 item: {} as UTSJSONObject,
             } as SelectChangePayload;
         }
@@ -1085,6 +1147,7 @@ const __sfc__ = defineComponent({
         function clearValue() {
             internalValue.value = '';
             internalText.value = '';
+            internalImage.value = '';
             textInitialized.value = false;
         }
         function clearValues() {
@@ -1157,6 +1220,14 @@ const __sfc__ = defineComponent({
                 }), [
                     renderSlot(_ctx.$slots, "trigger", {}, (): any[] => [
                         _cE("view", _uM({ class: "bs-trigger-default" }), [
+                            unref(internalImage) != ''
+                                ? _cE("image", _uM({
+                                    key: 0,
+                                    class: "bs-trigger-image",
+                                    src: unref(internalImage),
+                                    mode: "aspectFill"
+                                }), null, 8 /* PROPS */, ["src"])
+                                : _cC("v-if", true),
                             _cE("text", _uM({
                                 class: _nC(unref(displayText) != '' ? 'bs-trigger-text' : 'bs-trigger-placeholder')
                             }), _tD(unref(displayText) != '' ? unref(displayText) : _ctx.placeholder), 3 /* TEXT, CLASS */),
@@ -1213,7 +1284,19 @@ const __sfc__ = defineComponent({
                         ]),
                         _cE("view", _uM({ class: "bs-search-bar" }), [
                             _cE("view", _uM({ class: "bs-search-inner" }), [
-                                _cE("text", _uM({ class: "bs-search-icon" }), "🔍"),
+                                isTrue(_ctx.showScan)
+                                    ? _cE("view", _uM({
+                                        key: 0,
+                                        class: "bs-search-scan",
+                                        onClick: handleScanSearch
+                                    }), [
+                                        _cE("image", _uM({
+                                            class: "bs-search-scan-image",
+                                            src: "/static/icon/扫码.png",
+                                            mode: "aspectFit"
+                                        }))
+                                    ])
+                                    : _cC("v-if", true),
                                 _cE("input", _uM({
                                     class: "bs-search-input",
                                     modelValue: unref(keyword),
@@ -1225,7 +1308,7 @@ const __sfc__ = defineComponent({
                                 }), null, 40 /* PROPS, NEED_HYDRATION */, ["modelValue", "placeholder", "disabled"]),
                                 unref(keyword) != ''
                                     ? _cE("view", _uM({
-                                        key: 0,
+                                        key: 1,
                                         class: "bs-search-clear",
                                         onClick: clearSearch
                                     }), [
@@ -1313,9 +1396,25 @@ const __sfc__ = defineComponent({
                                                                 }))
                                                         ])
                                                         : _cC("v-if", true),
-                                                    _cE("text", _uM({
-                                                        class: _nC(isItemSelected(row.item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label')
-                                                    }), _tD(fieldLabel(row.item, _ctx.labelKey)), 3 /* TEXT, CLASS */)
+                                                    getItemImage(row.item) != ''
+                                                        ? _cE("image", _uM({
+                                                            key: 1,
+                                                            class: "bs-item-image",
+                                                            src: getItemImage(row.item),
+                                                            mode: "aspectFill"
+                                                        }), null, 8 /* PROPS */, ["src"])
+                                                        : _cC("v-if", true),
+                                                    _cE("view", _uM({ class: "bs-item-texts" }), [
+                                                        _cE("text", _uM({
+                                                            class: _nC(isItemSelected(row.item) ? 'bs-item-label bs-item-label-selected' : 'bs-item-label')
+                                                        }), _tD(fieldLabel(row.item, _ctx.labelKey)), 3 /* TEXT, CLASS */),
+                                                        getItemSubtitle(row.item) != ''
+                                                            ? _cE("text", _uM({
+                                                                key: 0,
+                                                                class: "bs-item-subtitle"
+                                                            }), _tD(getItemSubtitle(row.item)), 1 /* TEXT */)
+                                                            : _cC("v-if", true)
+                                                    ])
                                                 ]),
                                                 isTrue(isItemSelected(row.item) || isItemHalfSelected(row.item))
                                                     ? _cE("view", _uM({
@@ -1381,5 +1480,5 @@ const __sfc__ = defineComponent({
 });
 export default __sfc__;
 export type Lili_bottomSelectComponentPublicInstance = InstanceType<typeof __sfc__>;
-const GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectStyles = [_uM([["bs-trigger-wrapper", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-trigger-default", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 20], ["paddingBottom", 20], ["borderBottomWidth", 1], ["borderBottomColor", "#E5E5E5"], ["borderBottomStyle", "solid"]]))], ["bs-trigger-text", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"]]))], ["bs-trigger-placeholder", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#999999"]]))], ["bs-trigger-actions", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-trigger-action", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["width", 28], ["height", 28], ["marginLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#F5F7FA"]]))], ["bs-trigger-action-icon", _pS(_uM([["fontSize", 14], ["color", "#666666"], ["lineHeight", "14px"]]))], ["bs-trigger-arrow", _pS(_uM([["width", 20], ["height", 20], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 8]]))], ["bs-arrow-icon", _pS(_uM([["fontSize", 20], ["color", "#CCCCCC"], ["lineHeight", "20px"]]))], ["bs-overlay", _pS(_uM([["position", "fixed"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "rgba(0,0,0,0)"], ["zIndex", 998], ["opacity", 0], ["pointerEvents", "none"], ["transitionProperty", "opacity,backgroundColor"], ["transitionDuration", "320ms"], ["transitionTimingFunction", "ease"]]))], ["bs-overlay-active", _pS(_uM([["backgroundColor", "rgba(10,18,30,0.32)"], ["opacity", 1], ["pointerEvents", "auto"]]))], ["bs-panel", _pS(_uM([["position", "fixed"], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 0], ["borderBottomLeftRadius", 0], ["zIndex", 999], ["flexDirection", "column"], ["opacity", 0], ["transform", "translateY(48px)"], ["pointerEvents", "none"], ["boxShadow", "0 -18px 44px rgba(15, 23, 42, 0.14)"], ["transitionProperty", "transform,opacity"], ["transitionDuration", "340ms"], ["transitionTimingFunction", "ease"]]))], ["bs-panel-active", _pS(_uM([["opacity", 1], ["transform", "translateY(0px)"], ["pointerEvents", "auto"]]))], ["bs-handle-wrap", _pS(_uM([["alignItems", "center"], ["paddingTop", 10], ["paddingBottom", 4]]))], ["bs-handle", _pS(_uM([["width", 44], ["height", 5], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#D9DEE7"]]))], ["bs-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 10], ["paddingBottom", 16], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-header-title", _pS(_uM([["fontSize", 16], ["fontWeight", "bold"], ["color", "#333333"]]))], ["bs-header-close", _pS(_uM([["width", 32], ["height", 32], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-close-icon", _pS(_uM([["fontSize", 16], ["color", "#999999"]]))], ["bs-search-bar", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-search-inner", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["backgroundColor", "#F5F5F5"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["paddingLeft", 12], ["paddingRight", 12], ["height", 36]]))], ["bs-search-icon", _pS(_uM([["fontSize", 14], ["color", "#999999"], ["marginRight", 6]]))], ["bs-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"], ["height", 36]]))], ["bs-search-clear", _pS(_uM([["width", 20], ["height", 20], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 4]]))], ["bs-clear-icon", _pS(_uM([["fontSize", 12], ["color", "#999999"]]))], ["bs-tags-bar", _pS(_uM([["flexDirection", "row"], ["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-tags-inner", _pS(_uM([["flexDirection", "row"], ["flexWrap", "nowrap"]]))], ["bs-tag", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["backgroundColor", "#E8F0FE"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["paddingTop", 4], ["paddingBottom", 4], ["paddingLeft", 10], ["paddingRight", 10], ["marginRight", 8]]))], ["bs-tag-text", _pS(_uM([["fontSize", 12], ["color", "#4A90E2"]]))], ["bs-tag-remove", _pS(_uM([["width", 16], ["height", 16], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 4]]))], ["bs-tag-remove-icon", _pS(_uM([["fontSize", 10], ["color", "#4A90E2"]]))], ["bs-list-item", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingBottom", 14], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F5F5F5"], ["borderBottomStyle", "solid"]]))], ["bs-list-item-selected", _pS(_uM([["backgroundColor", "#F0F5FF"]]))], ["bs-item-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["flexDirection", "row"], ["alignItems", "center"], ["marginRight", 12]]))], ["bs-tree-prefix", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["flexShrink", 0]]))], ["bs-tree-indent", _pS(_uM([["height", 1], ["flexShrink", 0]]))], ["bs-tree-toggle", _pS(_uM([["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 4], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F7F8FA"]]))], ["bs-tree-toggle-placeholder", _pS(_uM([["width", 24], ["height", 24], ["marginRight", 4]]))], ["bs-tree-toggle-icon", _pS(_uM([["fontSize", 18], ["color", "#8A8F99"], ["lineHeight", "18px"]]))], ["bs-item-label", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"]]))], ["bs-item-label-selected", _pS(_uM([["color", "#4A90E2"]]))], ["bs-check-icon-wrapper", _pS(_uM([["width", 22], ["height", 22], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["backgroundColor", "#E8F0FE"]]))], ["bs-check-icon", _pS(_uM([["fontSize", 15], ["color", "#4A90E2"], ["lineHeight", "15px"]]))], ["bs-state-wrapper", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["paddingTop", 60], ["paddingBottom", 60]]))], ["bs-state-text", _pS(_uM([["fontSize", 14], ["color", "#999999"]]))], ["bs-load-more", _pS(_uM([["alignItems", "center"], ["paddingTop", 16], ["paddingBottom", 16]]))], ["bs-load-more-text", _pS(_uM([["fontSize", 12], ["color", "#BBBBBB"]]))], ["bs-confirm-bar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 12], ["paddingBottom", 12], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopWidth", 1], ["borderTopColor", "#F0F0F0"], ["borderTopStyle", "solid"]]))], ["bs-confirm-info", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["bs-confirm-count", _pS(_uM([["fontSize", 13], ["color", "#666666"]]))], ["bs-confirm-btns", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-btn-clear", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopColor", "#DDDDDD"], ["borderRightColor", "#DDDDDD"], ["borderBottomColor", "#DDDDDD"], ["borderLeftColor", "#DDDDDD"], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["marginRight", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-btn-clear-text", _pS(_uM([["fontSize", 14], ["color", "#666666"]]))], ["bs-btn-confirm", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 24], ["paddingRight", 24], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["backgroundColor", "#4A90E2"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-btn-confirm-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["@TRANSITION", _uM([["bs-overlay", _uM([["property", "opacity,backgroundColor"], ["duration", "320ms"], ["timingFunction", "ease"]])], ["bs-panel", _uM([["property", "transform,opacity"], ["duration", "340ms"], ["timingFunction", "ease"]])]])]])];
+const GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectStyles = [_uM([["bs-trigger-wrapper", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-trigger-default", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 20], ["paddingBottom", 20], ["borderBottomWidth", 1], ["borderBottomColor", "#E5E5E5"], ["borderBottomStyle", "solid"]]))], ["bs-trigger-image", _pS(_uM([["width", 34], ["height", 34], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["marginRight", 10], ["backgroundColor", "#EEF2F7"], ["flexShrink", 0]]))], ["bs-trigger-text", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"]]))], ["bs-trigger-placeholder", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#999999"]]))], ["bs-trigger-actions", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-trigger-action", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["width", 28], ["height", 28], ["marginLeft", 8], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#F5F7FA"]]))], ["bs-trigger-action-icon", _pS(_uM([["fontSize", 14], ["color", "#666666"], ["lineHeight", "14px"]]))], ["bs-trigger-arrow", _pS(_uM([["width", 20], ["height", 20], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 8]]))], ["bs-arrow-icon", _pS(_uM([["fontSize", 20], ["color", "#CCCCCC"], ["lineHeight", "20px"]]))], ["bs-overlay", _pS(_uM([["position", "fixed"], ["top", 0], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "rgba(0,0,0,0)"], ["zIndex", 998], ["opacity", 0], ["pointerEvents", "none"], ["transitionProperty", "opacity,backgroundColor"], ["transitionDuration", "320ms"], ["transitionTimingFunction", "ease"]]))], ["bs-overlay-active", _pS(_uM([["backgroundColor", "rgba(10,18,30,0.32)"], ["opacity", 1], ["pointerEvents", "auto"]]))], ["bs-panel", _pS(_uM([["position", "fixed"], ["left", 0], ["right", 0], ["bottom", 0], ["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 22], ["borderTopRightRadius", 22], ["borderBottomRightRadius", 0], ["borderBottomLeftRadius", 0], ["zIndex", 999], ["flexDirection", "column"], ["opacity", 0], ["transform", "translateY(48px)"], ["pointerEvents", "none"], ["boxShadow", "0 -18px 44px rgba(15, 23, 42, 0.14)"], ["transitionProperty", "transform,opacity"], ["transitionDuration", "340ms"], ["transitionTimingFunction", "ease"]]))], ["bs-panel-active", _pS(_uM([["opacity", 1], ["transform", "translateY(0px)"], ["pointerEvents", "auto"]]))], ["bs-handle-wrap", _pS(_uM([["alignItems", "center"], ["paddingTop", 10], ["paddingBottom", 4]]))], ["bs-handle", _pS(_uM([["width", 44], ["height", 5], ["borderTopLeftRadius", 999], ["borderTopRightRadius", 999], ["borderBottomRightRadius", 999], ["borderBottomLeftRadius", 999], ["backgroundColor", "#D9DEE7"]]))], ["bs-header", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 10], ["paddingBottom", 16], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-header-title", _pS(_uM([["fontSize", 16], ["fontWeight", "bold"], ["color", "#333333"]]))], ["bs-header-close", _pS(_uM([["width", 32], ["height", 32], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-close-icon", _pS(_uM([["fontSize", 16], ["color", "#999999"]]))], ["bs-search-bar", _pS(_uM([["paddingTop", 12], ["paddingBottom", 12], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-search-inner", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["backgroundColor", "#F5F5F5"], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["paddingLeft", 12], ["paddingRight", 12], ["height", 36]]))], ["bs-search-scan", _pS(_uM([["width", 36], ["height", 36], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 4]]))], ["bs-search-scan-image", _pS(_uM([["width", 24], ["height", 24]]))], ["bs-search-input", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["color", "#333333"], ["height", 36]]))], ["bs-search-clear", _pS(_uM([["width", 20], ["height", 20], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 4]]))], ["bs-clear-icon", _pS(_uM([["fontSize", 12], ["color", "#999999"]]))], ["bs-tags-bar", _pS(_uM([["flexDirection", "row"], ["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F0F0F0"], ["borderBottomStyle", "solid"]]))], ["bs-tags-inner", _pS(_uM([["flexDirection", "row"], ["flexWrap", "nowrap"]]))], ["bs-tag", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["backgroundColor", "#E8F0FE"], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["paddingTop", 4], ["paddingBottom", 4], ["paddingLeft", 10], ["paddingRight", 10], ["marginRight", 8]]))], ["bs-tag-text", _pS(_uM([["fontSize", 12], ["color", "#4A90E2"]]))], ["bs-tag-remove", _pS(_uM([["width", 16], ["height", 16], ["alignItems", "center"], ["justifyContent", "center"], ["marginLeft", 4]]))], ["bs-tag-remove-icon", _pS(_uM([["fontSize", 10], ["color", "#4A90E2"]]))], ["bs-list-item", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 14], ["paddingBottom", 14], ["paddingLeft", 16], ["paddingRight", 16], ["borderBottomWidth", 1], ["borderBottomColor", "#F5F5F5"], ["borderBottomStyle", "solid"]]))], ["bs-list-item-selected", _pS(_uM([["backgroundColor", "#F0F5FF"]]))], ["bs-item-main", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["flexDirection", "row"], ["alignItems", "center"], ["marginRight", 12]]))], ["bs-item-image", _pS(_uM([["width", 42], ["height", 42], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["marginRight", 10], ["backgroundColor", "#EEF2F7"], ["flexShrink", 0]]))], ["bs-item-texts", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["flexDirection", "column"], ["minWidth", 0]]))], ["bs-tree-prefix", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["flexShrink", 0]]))], ["bs-tree-indent", _pS(_uM([["height", 1], ["flexShrink", 0]]))], ["bs-tree-toggle", _pS(_uM([["width", 24], ["height", 24], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 4], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F7F8FA"]]))], ["bs-tree-toggle-placeholder", _pS(_uM([["width", 24], ["height", 24], ["marginRight", 4]]))], ["bs-tree-toggle-icon", _pS(_uM([["fontSize", 18], ["color", "#8A8F99"], ["lineHeight", "18px"]]))], ["bs-item-label", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["fontSize", 14], ["lineHeight", "20px"], ["color", "#333333"]]))], ["bs-item-label-selected", _pS(_uM([["color", "#4A90E2"]]))], ["bs-item-subtitle", _pS(_uM([["marginTop", 2], ["fontSize", 12], ["lineHeight", "17px"], ["color", "#7B8796"]]))], ["bs-check-icon-wrapper", _pS(_uM([["width", 22], ["height", 22], ["alignItems", "center"], ["justifyContent", "center"], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["backgroundColor", "#E8F0FE"]]))], ["bs-check-icon", _pS(_uM([["fontSize", 15], ["color", "#4A90E2"], ["lineHeight", "15px"]]))], ["bs-state-wrapper", _pS(_uM([["alignItems", "center"], ["justifyContent", "center"], ["paddingTop", 60], ["paddingBottom", 60]]))], ["bs-state-text", _pS(_uM([["fontSize", 14], ["color", "#999999"]]))], ["bs-load-more", _pS(_uM([["alignItems", "center"], ["paddingTop", 16], ["paddingBottom", 16]]))], ["bs-load-more-text", _pS(_uM([["fontSize", 12], ["color", "#BBBBBB"]]))], ["bs-confirm-bar", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"], ["justifyContent", "space-between"], ["paddingTop", 12], ["paddingBottom", 12], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopWidth", 1], ["borderTopColor", "#F0F0F0"], ["borderTopStyle", "solid"]]))], ["bs-confirm-info", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"]]))], ["bs-confirm-count", _pS(_uM([["fontSize", 13], ["color", "#666666"]]))], ["bs-confirm-btns", _pS(_uM([["flexDirection", "row"], ["alignItems", "center"]]))], ["bs-btn-clear", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 16], ["paddingRight", 16], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopColor", "#DDDDDD"], ["borderRightColor", "#DDDDDD"], ["borderBottomColor", "#DDDDDD"], ["borderLeftColor", "#DDDDDD"], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["marginRight", 12], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-btn-clear-text", _pS(_uM([["fontSize", 14], ["color", "#666666"]]))], ["bs-btn-confirm", _pS(_uM([["paddingTop", 8], ["paddingBottom", 8], ["paddingLeft", 24], ["paddingRight", 24], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["backgroundColor", "#4A90E2"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["bs-btn-confirm-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["@TRANSITION", _uM([["bs-overlay", _uM([["property", "opacity,backgroundColor"], ["duration", "320ms"], ["timingFunction", "ease"]])], ["bs-panel", _uM([["property", "transform,opacity"], ["duration", "340ms"], ["timingFunction", "ease"]])]])]])];
 //# sourceMappingURL=lili_bottom-select.uvue.map

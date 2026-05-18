@@ -83,8 +83,26 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                 return "" + value
             }
             fun buildFileItem(path: String, id: String = ""): UTSJSONObject {
-                return _uO("path" to path, "url" to path, "id" to id, "isRemote" to (id != ""))
+                return _uO("path" to path, "url" to path, "previewUrl" to path, "id" to id, "isRemote" to (id != ""))
             }
+            fun gen_buildSyncedFileItem_fn(path: String, metaItem: UTSJSONObject): UTSJSONObject {
+                val item: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 131, 8))
+                for(key in resolveUTSKeyIterator(metaItem)){
+                    item[key] = metaItem[key]
+                }
+                item["path"] = path
+                item["url"] = path
+                val itemId = getStringField(item, "id")
+                item["id"] = itemId
+                if (item["previewUrl"] == null || getStringField(item, "previewUrl") == "") {
+                    item["previewUrl"] = getStringField(metaItem, "preview_url", path)
+                }
+                if (item["isRemote"] == null) {
+                    item["isRemote"] = itemId != ""
+                }
+                return item
+            }
+            val buildSyncedFileItem = ::gen_buildSyncedFileItem_fn
             fun gen_syncModelValue_fn(list: UTSArray<String>, metaItems: UTSArray<UTSJSONObject>) {
                 imageList.value = cloneStringArray(list)
                 val nextItems: UTSArray<UTSJSONObject> = _uA()
@@ -106,7 +124,7 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                             }
                         }
                         if (matchedItem != null) {
-                            nextItems.push(buildFileItem(currentPath, getStringField(matchedItem, "id")))
+                            nextItems.push(buildSyncedFileItem(currentPath, matchedItem!!))
                             index++
                             continue
                         }
@@ -129,8 +147,42 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                 return _uO("index" to index, "path" to path, "id" to getStringField(item, "id"), "apiDeleted" to apiDeleted, "list" to cloneStringArray(imageList.value), "fileItems" to cloneObjectArray(imageItems.value))
             }
             val buildDeletePayload = ::gen_buildDeletePayload_fn
+            fun gen_getPreviewImagePath_fn(index: Number): String {
+                if (index < 0 || index >= imageList.value.length) {
+                    return ""
+                }
+                if (index < imageItems.value.length) {
+                    val item = imageItems.value[index]
+                    val previewUrl = getStringField(item, "previewUrl", getStringField(item, "preview_url"))
+                    if (previewUrl != "") {
+                        return previewUrl
+                    }
+                    val signedUrl = getStringField(item, "signed_url")
+                    if (signedUrl != "") {
+                        return signedUrl
+                    }
+                    val fileUrl = getStringField(item, "file_url")
+                    if (fileUrl != "") {
+                        return fileUrl
+                    }
+                }
+                return imageList.value[index]
+            }
+            val getPreviewImagePath = ::gen_getPreviewImagePath_fn
+            fun gen_buildPreviewImageList_fn(): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < imageList.value.length){
+                        result.push(getPreviewImagePath(index))
+                        index++
+                    }
+                }
+                return result
+            }
+            val buildPreviewImageList = ::gen_buildPreviewImageList_fn
             fun gen_buildPreviewPayload_fn(index: Number, path: String): UTSJSONObject {
-                return _uO("index" to index, "path" to path, "list" to cloneStringArray(imageList.value))
+                return _uO("index" to index, "path" to path, "list" to cloneStringArray(imageList.value), "previewList" to buildPreviewImageList())
             }
             val buildPreviewPayload = ::gen_buildPreviewPayload_fn
             fun gen_buildErrorPayload_fn(type: String, path: String, message: String): UTSJSONObject {
@@ -142,7 +194,7 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:192") as UTSJSONObject
+                    return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:242") as UTSJSONObject
                 }
                  catch (e: Throwable) {
                     return null
@@ -178,17 +230,17 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
             }
             val endUploading = ::gen_endUploading_fn
             fun gen_uploadImage_fn(path: String, index: Number) {
-                console.log("lili-upload uploadImage start:", index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:235")
+                console.log("lili-upload uploadImage start:", index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:285")
                 beginUploading()
                 try {
                     uni_uploadFile(UploadFileOptions(url = props.action, filePath = path, name = props.name, header = props.headers, formData = props.formData, success = fun(res){
-                        console.log("lili-upload uploadImage success:", index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:245")
+                        console.log("lili-upload uploadImage success:", index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:295")
                         emit("upload", buildUploadPayload(index, path, res.data))
                         endUploading()
                     }
                     , fail = fun(err){
                         val message = err.errMsg
-                        console.log("lili-upload uploadImage fail:", index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:251")
+                        console.log("lili-upload uploadImage fail:", index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:301")
                         emitError("upload", path, message)
                         endUploading()
                     }
@@ -272,9 +324,9 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                 if (index < 0 || index >= imageList.value.length) {
                     return
                 }
-                val currentPath = imageList.value[index]
+                val currentPath = getPreviewImagePath(index)
                 emit("preview", buildPreviewPayload(index, currentPath))
-                uni_previewImage(PreviewImageOptions(current = currentPath, urls = cloneStringArray(imageList.value)))
+                uni_previewImage(PreviewImageOptions(current = currentPath, urls = buildPreviewImageList()))
             }
             val handlePreview = ::gen_handlePreview_fn
             fun gen_handleDeletePopupVisibleChange_fn(value: Boolean) {

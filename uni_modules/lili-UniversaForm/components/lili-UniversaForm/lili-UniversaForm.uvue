@@ -36,6 +36,10 @@
 
 						<view class="uf-control">
 							<view v-if="isInputField(field)" class="uf-input-wrap">
+								<view v-if="hasInputAction(field, 'left')" class="uf-input-icon-btn uf-input-action-left" @click="handleInputActionClick(field, 'left')">
+									<image v-if="getInputActionIcon(field, 'left') != ''" class="uf-input-icon uf-input-action-icon" :src="getInputActionIcon(field, 'left')" mode="aspectFit" />
+									<text v-else class="uf-input-action-text">{{ getInputActionText(field, 'left') }}</text>
+								</view>
 								<view v-if="getFieldShowScan(field)" class="uf-input-icon-btn" @click="handleScanClick(field)">
 									<image class="uf-input-icon" src="/static/icon/扫码.png" />
 								</view>
@@ -46,8 +50,13 @@
 									:disabled="isReadonly(field)"
 									@input="handleTextInput(field, $event)"
 								/>
-								<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" @click="handleAddClick(field)">
-									<image class="uf-input-icon" src="/static/icon/加.png" />
+								<view v-if="hasInputAction(field, 'right')" class="uf-input-icon-btn uf-input-action-right" @click="handleInputActionClick(field, 'right')">
+									<image v-if="getInputActionIcon(field, 'right') != ''" class="uf-input-icon uf-input-action-icon" :src="getInputActionIcon(field, 'right')" mode="aspectFit" />
+									<text v-else class="uf-input-action-text">{{ getInputActionText(field, 'right') }}</text>
+								</view>
+								<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" :class="getFieldAddText(field) != '' ? 'uf-input-text-btn' : ''" @click="handleAddClick(field)">
+									<text v-if="getFieldAddText(field) != ''" class="uf-input-action-text">{{ getFieldAddText(field) }}</text>
+									<image v-else class="uf-input-icon" src="/static/icon/加.png" />
 								</view>
 							</view>
 
@@ -60,20 +69,42 @@
 								@input="handleTextInput(field, $event)"
 							></textarea>
 
-							<view v-else-if="isNumberField(field)" class="uf-input-wrap">
-								<view v-if="getFieldShowScan(field)" class="uf-input-icon-btn" @click="handleScanClick(field)">
-									<image class="uf-input-icon" src="/static/icon/扫码.png" />
-								</view>
-								<input
-									class="uf-input"
-									type="number"
+							<view v-else-if="isNumberField(field)" class="uf-number-control">
+								<lili-print-copies-stepper
+									v-if="getNumberShowStepper(field)"
 									:value="getStringFieldValue(field)"
-									:placeholder="getFieldPlaceholder(field)"
-									:disabled="isReadonly(field)"
-									@input="handleNumberInput(field, $event)"
+									:min="getNumberMin(field)"
+									:max="getNumberMax(field)"
+									:step="getNumberStep(field)"
+									:fallback="getNumberFallback(field)"
+									:showQuick="false"
+									:compact="true"
+									@change="handleNumberStepperChange(field, $event)"
 								/>
-								<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" @click="handleAddClick(field)">
-									<image class="uf-input-icon" src="/static/icon/加.png" />
+								<view v-else class="uf-input-wrap">
+									<view v-if="hasInputAction(field, 'left')" class="uf-input-icon-btn uf-input-action-left" @click="handleInputActionClick(field, 'left')">
+										<image v-if="getInputActionIcon(field, 'left') != ''" class="uf-input-icon uf-input-action-icon" :src="getInputActionIcon(field, 'left')" mode="aspectFit" />
+										<text v-else class="uf-input-action-text">{{ getInputActionText(field, 'left') }}</text>
+									</view>
+									<view v-if="getFieldShowScan(field)" class="uf-input-icon-btn" @click="handleScanClick(field)">
+										<image class="uf-input-icon" src="/static/icon/扫码.png" />
+									</view>
+									<input
+										class="uf-input"
+										:type="getNumberInputType(field)"
+										:value="getStringFieldValue(field)"
+										:placeholder="getFieldPlaceholder(field)"
+										:disabled="isReadonly(field)"
+										@input="handleNumberInput(field, $event)"
+									/>
+									<view v-if="hasInputAction(field, 'right')" class="uf-input-icon-btn uf-input-action-right" @click="handleInputActionClick(field, 'right')">
+										<image v-if="getInputActionIcon(field, 'right') != ''" class="uf-input-icon uf-input-action-icon" :src="getInputActionIcon(field, 'right')" mode="aspectFit" />
+										<text v-else class="uf-input-action-text">{{ getInputActionText(field, 'right') }}</text>
+									</view>
+									<view v-if="getFieldShowAdd(field)" class="uf-input-icon-btn" :class="getFieldAddText(field) != '' ? 'uf-input-text-btn' : ''" @click="handleAddClick(field)">
+										<text v-if="getFieldAddText(field) != ''" class="uf-input-action-text">{{ getFieldAddText(field) }}</text>
+										<image v-else class="uf-input-icon" src="/static/icon/加.png" />
+									</view>
 								</view>
 							</view>
 
@@ -137,6 +168,7 @@
 							<view v-else-if="isUploadField(field)" class="uf-upload-wrap">
 								<liliUpload
 									:modelValue="getUploadValue(field)"
+									:fileItems="getUploadFileItems(field)"
 									:action="getUploadAction(field)"
 									:name="getUploadName(field)"
 									:headers="getUploadHeaders(field)"
@@ -213,6 +245,10 @@ type Props = {
 	initialData?: UTSJSONObject
 	showFooter?: boolean
 	enableBackConfirm?: boolean
+	leaveConfirmTitle?: string
+	leaveConfirmContent?: string
+	leaveConfirmCancelText?: string
+	leaveConfirmConfirmText?: string
 	leaveSignal?: number
 	dirtySignal?: number
 	uploadContentTypeModel?: string
@@ -229,6 +265,10 @@ const props = withDefaults(defineProps<Props>(), {
 	},
 	showFooter: true,
 	enableBackConfirm: true,
+	leaveConfirmTitle: '提示',
+	leaveConfirmContent: '页面内容已修改，是否先保存？',
+	leaveConfirmCancelText: '直接离开',
+	leaveConfirmConfirmText: '去保存',
 	leaveSignal: 0,
 	dirtySignal: 0,
 	uploadContentTypeModel: '',
@@ -253,6 +293,7 @@ const emit = defineEmits<{
 	(e: 'floating-action', payload: UTSJSONObject): void
 	(e: 'input-scan', payload: UTSJSONObject): void
 	(e: 'input-add', payload: UTSJSONObject): void
+	(e: 'input-action', payload: UTSJSONObject): void
 }>()
 
 const formData = ref<UTSJSONObject>({} as UTSJSONObject)
@@ -362,6 +403,35 @@ function isNumberField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'number'
 }
 
+function getNumberShowStepper(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'showStepper', false)
+}
+
+function getNumberStep(field: UTSJSONObject) : number {
+	const step = getNumberField(field, 'step', 1)
+	if (step <= 0) return 1
+	return step
+}
+
+function getNumberMin(field: UTSJSONObject) : number {
+	return getNumberField(field, 'min', -999999)
+}
+
+function getNumberMax(field: UTSJSONObject) : number {
+	return getNumberField(field, 'max', 999999)
+}
+
+function getNumberFallback(field: UTSJSONObject) : number {
+	return getNumberField(field, 'fallback', 0)
+}
+
+function getNumberInputType(field: UTSJSONObject) : string {
+	const inputType = getStringField(field, 'inputType')
+	if (inputType != '') return inputType
+	if (getBooleanField(field, 'decimal', false)) return 'digit'
+	return 'number'
+}
+
 function isDatetimeField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'datetime'
 }
@@ -399,6 +469,34 @@ function getFieldScanOnlyFromCamera(field: UTSJSONObject) : boolean {
 
 function getFieldShowAdd(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showAdd', false)
+}
+
+function getFieldAddText(field: UTSJSONObject) : string {
+	return getStringField(field, 'addText')
+}
+
+function getInputActionPrefix(position: string) : string {
+	if (position == 'left') return 'leftAction'
+	return 'rightAction'
+}
+
+function getInputActionKey(field: UTSJSONObject, position: string) : string {
+	const prefix = getInputActionPrefix(position)
+	const actionKey = getStringField(field, prefix + 'Key')
+	if (actionKey != '') return actionKey
+	return getStringField(field, prefix)
+}
+
+function getInputActionIcon(field: UTSJSONObject, position: string) : string {
+	return getStringField(field, getInputActionPrefix(position) + 'Icon')
+}
+
+function getInputActionText(field: UTSJSONObject, position: string) : string {
+	return getStringField(field, getInputActionPrefix(position) + 'Text')
+}
+
+function hasInputAction(field: UTSJSONObject, position: string) : boolean {
+	return getInputActionKey(field, position) != '' || getInputActionIcon(field, position) != '' || getInputActionText(field, position) != ''
 }
 
 function isRequired(field: UTSJSONObject) : boolean {
@@ -875,6 +973,17 @@ function handleNumberInput(field: UTSJSONObject, event: any) {
 	emitFieldChange(field, value)
 }
 
+function handleNumberStepperChange(field: UTSJSONObject, eventValue: any) {
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	const value = eventValue == null ? '' : ('' + eventValue)
+	setFieldValueByKey(key, value)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, value)
+}
+
 function handleDatetimeChange(field: UTSJSONObject, payload: any) {
 	const key = getFieldKey(field)
 	if (key == '') return
@@ -1081,10 +1190,10 @@ function discardAndLeave() {
 
 function confirmLeave() {
 	uni.showModal({
-		title: '提示',
-		content: '页面内容已修改，是否先保存？',
-		cancelText: '直接离开',
-		confirmText: '去保存',
+		title: props.leaveConfirmTitle,
+		content: props.leaveConfirmContent,
+		cancelText: props.leaveConfirmCancelText,
+		confirmText: props.leaveConfirmConfirmText,
 		success: (res) => {
 			if (res.confirm) {
 				emit('save-request', buildSubmitPayload())
@@ -1158,9 +1267,31 @@ function handleScanClick(field: UTSJSONObject) {
 }
 
 function handleAddClick(field: UTSJSONObject) {
+	const key = getFieldKey(field)
+	const fillFromKey = getStringField(field, 'fillFromKey')
+	if (key != '' && fillFromKey != '') {
+		const sourceValue = formData.value[fillFromKey]
+		const nextValue = sourceValue == null ? '' : sourceValue
+		setFieldValueByKey(key, nextValue)
+		clearFieldError(key)
+		refreshDirtyState()
+		emitFieldChange(field, nextValue)
+	}
 	emit('input-add', {
 		field: field,
-		key: getFieldKey(field),
+		key: key,
+		mode: props.mode,
+		formData: formData.value,
+	} as UTSJSONObject)
+}
+
+function handleInputActionClick(field: UTSJSONObject, position: string) {
+	const key = getFieldKey(field)
+	emit('input-action', {
+		field: field,
+		key: key,
+		position: position,
+		action: getInputActionKey(field, position),
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject)
@@ -1214,10 +1345,10 @@ onBackPress(() : boolean | null => {
 	}
 	if (!dirty.value) return null
 	uni.showModal({
-		title: '提示',
-		content: '当前页面有未保存内容，是否保存？',
-		cancelText: '直接离开',
-		confirmText: '保存',
+		title: props.leaveConfirmTitle,
+		content: props.leaveConfirmContent,
+		cancelText: props.leaveConfirmCancelText,
+		confirmText: props.leaveConfirmConfirmText,
 		success: (res) => {
 			if (res.confirm) {
 				emit('save-request', buildSubmitPayload())
@@ -1234,6 +1365,11 @@ onBackPress(() : boolean | null => {
 defineExpose({
 	validate,
 	getFormData: () : UTSJSONObject => formData.value,
+	setFieldValue: (key: string, value: any) => {
+		setFieldValueByKey(key, value)
+		clearFieldError(key)
+		refreshDirtyState()
+	},
 	setFormData: (data: UTSJSONObject) => {
 		formData.value = data
 		refreshDirtyState()
@@ -1355,11 +1491,12 @@ defineExpose({
 }
 
 .uf-input {
-	height: 44px;
-	padding-left: 12px;
-	padding-right: 12px;
-	border-radius: 10px;
-	background-color: #F8FAFC;
+	flex: 1;
+	height: 40px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 0;
+	background-color: transparent;
 	font-size: 14px;
 	color: #111827;
 }
@@ -1389,21 +1526,61 @@ defineExpose({
 	flex-direction: row;
 	align-items: center;
 	height: 44px;
-	border-radius: 10px;
-	background-color: #F8FAFC;
+	border-radius: 22px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding-left: 6px;
+	padding-right: 6px;
+}
+
+.uf-number-control {
+	min-height: 44px;
 }
 
 .uf-input-icon-btn {
-	width: 44px;
-	height: 44px;
+	width: 36px;
+	height: 36px;
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
+	border-radius: 18px;
+}
+
+.uf-input-text-btn {
+	width: 88px;
+	padding-left: 8px;
+	padding-right: 8px;
+	border-left-width: 1px;
+	border-left-style: solid;
+	border-left-color: #E2E8F0;
+}
+
+.uf-input-action-left {
+	margin-right: 4px;
+}
+
+.uf-input-action-right {
+	margin-left: 4px;
+	background-color: #F1F5F9;
+}
+
+.uf-input-action-text {
+	font-size: 13px;
+	color: #2563EB;
+	font-weight: 600;
+	line-height: 18px;
 }
 
 .uf-input-icon {
 	width: 24px;
 	height: 24px;
+}
+
+.uf-input-action-icon {
+	width: 26px;
+	height: 26px;
 }
 
 .uf-plain-value {

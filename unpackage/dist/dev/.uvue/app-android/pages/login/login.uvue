@@ -50,7 +50,7 @@ const __sfc__ = defineComponent({
                     avatar: ''
                 } as UserInfoState);
                 uni.switchTab({
-                    url: '/pages/tabbar/products'
+                    url: '/pages/tabbar/settings'
                 });
             }
             catch (error: any) {

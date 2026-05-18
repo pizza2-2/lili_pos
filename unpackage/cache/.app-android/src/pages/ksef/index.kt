@@ -12,6 +12,9 @@ import io.dcloud.uts.Map
 import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
 import kotlin.properties.Delegates
+import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
+import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
+import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesKsefIndex : BasePage {
@@ -22,6 +25,7 @@ open class GenPagesKsefIndex : BasePage {
             val __ins = getCurrentInstance()!!
             val _ctx = __ins.proxy as GenPagesKsefIndex
             val _cache = __ins.renderCache
+            val refreshStorageKey = "refresh:pages:ksef:index"
             val keyword = ref("")
             val filterVisible = ref(false)
             val isLoading = ref(false)
@@ -34,8 +38,9 @@ open class GenPagesKsefIndex : BasePage {
             val totalCount = ref(0)
             val pageSize = ref(20)
             val selectedSyncStatus = ref<String?>(null)
-            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "seller_nip", "label" to "卖方NIP"), _uO("key" to "gross_amount_text", "label" to "金额"), _uO("key" to "sync_status_text", "label" to "详情状态")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "download_xml", "text" to "同步详情"), _uO("key" to "copy_ksef", "text" to "复制KSeF号")))
+            val selectedPaymentStatus = ref<String?>(null)
+            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "seller_name", "label" to "卖方"), _uO("key" to "supplier_name", "label" to "供应商"), _uO("key" to "seller_nip", "label" to "卖方NIP"), _uO("key" to "gross_amount_text", "label" to "总额"), _uO("key" to "amount_due_text", "label" to "待付"), _uO("key" to "payment_due_text", "label" to "到期日"), _uO("key" to "bank_account_text", "label" to "银行账号"), _uO("key" to "sync_status_text", "label" to "详情状态")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "view_detail", "text" to "付款详情"), _uO("key" to "download_xml", "text" to "同步详情"), _uO("key" to "copy_account", "text" to "复制账号"), _uO("key" to "copy_ksef", "text" to "复制KSeF号")))
             fun parseErrorMessage(error: Any, fallback: String = "操作失败"): String {
                 var message = fallback
                 if (error != null) {
@@ -67,7 +72,7 @@ open class GenPagesKsefIndex : BasePage {
                             } else {
                                 keyword.value
                             }
-                            , page = currentPage.value, page_size = pageSize.value, sync_status = selectedSyncStatus.value, is_paid = null)))
+                            , page = currentPage.value, page_size = pageSize.value, sync_status = selectedSyncStatus.value, is_paid = selectedPaymentStatus.value)))
                             applyListResponse(response)
                         }
                          catch (error: Throwable) {
@@ -117,8 +122,13 @@ open class GenPagesKsefIndex : BasePage {
                 selectedSyncStatus.value = value
             }
             val selectSyncStatus = ::gen_selectSyncStatus_fn
+            fun gen_selectPaymentStatus_fn(value: String?) {
+                selectedPaymentStatus.value = value
+            }
+            val selectPaymentStatus = ::gen_selectPaymentStatus_fn
             fun gen_handleFilterReset_fn() {
                 selectedSyncStatus.value = null
+                selectedPaymentStatus.value = null
                 keyword.value = ""
                 currentPage.value = 1
                 filterVisible.value = false
@@ -164,6 +174,21 @@ open class GenPagesKsefIndex : BasePage {
                 return "待详情"
             }
             val statusTag = ::gen_statusTag_fn
+            fun gen_paidText_fn(value: Boolean): String {
+                return if (value) {
+                    "已付款"
+                } else {
+                    "未付款"
+                }
+            }
+            val paidText = ::gen_paidText_fn
+            fun gen_supplierText_fn(item: KsefInvoiceItem): String {
+                if (item.supplier_name != "") {
+                    return item.supplier_name
+                }
+                return "未关联供应商"
+            }
+            val supplierText = ::gen_supplierText_fn
             fun gen_compactDate_fn(value: String): String {
                 if (value == "") {
                     return "-"
@@ -181,8 +206,35 @@ open class GenPagesKsefIndex : BasePage {
                 return value
             }
             val displayText = ::gen_displayText_fn
+            fun gen_normalizeAccount_fn(value: String): String {
+                if (value == "") {
+                    return ""
+                }
+                var result = ""
+                run {
+                    var index: Number = 0
+                    while(index < value.length){
+                        val char = value.substring(index, index + 1)
+                        if (char >= "0" && char <= "9") {
+                            result += char
+                        }
+                        index += 1
+                    }
+                }
+                return if (result == "") {
+                    value
+                } else {
+                    result
+                }
+            }
+            val normalizeAccount = ::gen_normalizeAccount_fn
             fun gen_invoiceToListItem_fn(item: KsefInvoiceItem): UTSJSONObject {
-                return _uO("id" to item.id.toString(10), "name" to displayText(item.invoice_number), "codeText" to ("KSeF：" + displayText(item.ksef_number)), "metaText" to compactDate(item.issue_date), "seller_name" to displayText(item.seller_name), "seller_nip" to displayText(item.seller_nip), "gross_amount_text" to (displayText(item.gross_amount) + " " + displayText(item.currency)), "sync_status_text" to statusText(item.sync_status), "rawId" to item.id.toString(10), "rawKsefNumber" to item.ksef_number, "tags" to _uA<String>(statusTag(item.sync_status)))
+                return _uO("id" to item.id.toString(10), "name" to displayText(item.invoice_number), "codeText" to displayText(item.seller_name), "metaText" to (displayText(item.amount_due) + " " + displayText(item.currency) + " / " + paidText(item.is_paid)), "seller_name" to displayText(item.seller_name), "supplier_name" to supplierText(item), "seller_nip" to displayText(item.seller_nip), "gross_amount_text" to (displayText(item.gross_amount) + " " + displayText(item.currency)), "amount_due_text" to (displayText(item.amount_due) + " " + displayText(item.currency)), "payment_due_text" to compactDate(item.payment_due_date), "bank_account_text" to displayText(normalizeAccount(item.bank_account_number)), "sync_status_text" to statusText(item.sync_status), "rawId" to item.id.toString(10), "rawKsefNumber" to item.ksef_number, "rawBankAccount" to normalizeAccount(item.bank_account_number), "tags" to _uA<String>(if (item.supplier > 0) {
+                    "已关联供应商"
+                } else {
+                    "未关联供应商"
+                }
+                , paidText(item.is_paid), statusTag(item.sync_status)))
             }
             val invoiceToListItem = ::gen_invoiceToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
@@ -223,6 +275,23 @@ open class GenPagesKsefIndex : BasePage {
                 })
             }
             val handleDownloadXml = ::gen_handleDownloadXml_fn
+            fun gen_openInvoiceDetail_fn(invoiceId: String) {
+                if (invoiceId == "") {
+                    return
+                }
+                uni_navigateTo(NavigateToOptions(url = "/pages/ksef/detail?id=" + invoiceId))
+            }
+            val openInvoiceDetail = ::gen_openInvoiceDetail_fn
+            fun gen_handleItemClick_fn(payload: UTSJSONObject) {
+                val idValue = payload["rawId"]
+                val invoiceId = if (idValue == null) {
+                    ""
+                } else {
+                    (idValue as String)
+                }
+                openInvoiceDetail(invoiceId)
+            }
+            val handleItemClick = ::gen_handleItemClick_fn
             fun gen_handleMenu_fn(payload: UTSJSONObject) {
                 val action = payload["action"]
                 val item = payload["item"]
@@ -242,8 +311,22 @@ open class GenPagesKsefIndex : BasePage {
                 } else {
                     (idValue as String)
                 }
+                if (key == "view_detail") {
+                    openInvoiceDetail(invoiceId)
+                    return
+                }
                 if (key == "download_xml") {
                     handleDownloadXml(invoiceId)
+                    return
+                }
+                if (key == "copy_account") {
+                    val accountValue = itemObject["rawBankAccount"]
+                    val accountText = if (accountValue == null) {
+                        ""
+                    } else {
+                        (accountValue as String)
+                    }
+                    copyText(accountText, "账号已复制", "暂无银行账号")
                     return
                 }
                 if (key == "copy_ksef") {
@@ -280,14 +363,28 @@ open class GenPagesKsefIndex : BasePage {
                 }
                 val key = keyValue as String
                 val itemObject = item as UTSJSONObject
-                if (key == "seller_nip") {
-                    val value = itemObject["seller_nip"]
+                if (key == "seller_nip" || key == "bank_account_text") {
+                    val value = if (key == "seller_nip") {
+                        itemObject["seller_nip"]
+                    } else {
+                        itemObject["rawBankAccount"]
+                    }
                     val text = if (value == null) {
                         ""
                     } else {
                         (value as String)
                     }
-                    copyText(text, "卖方NIP已复制", "暂无卖方NIP")
+                    copyText(text, if (key == "seller_nip") {
+                        "卖方NIP已复制"
+                    } else {
+                        "账号已复制"
+                    }
+                    , if (key == "seller_nip") {
+                        "暂无卖方NIP"
+                    } else {
+                        "暂无银行账号"
+                    }
+                    )
                 }
             }
             val handleFieldClick = ::gen_handleFieldClick_fn
@@ -304,7 +401,7 @@ open class GenPagesKsefIndex : BasePage {
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
-                return keyword.value != "" || selectedSyncStatus.value != null
+                return keyword.value != "" || selectedSyncStatus.value != null || selectedPaymentStatus.value != null
             }
             )
             val emptyText = computed(fun(): String {
@@ -352,6 +449,16 @@ open class GenPagesKsefIndex : BasePage {
                 return _uA(
                     _uO("key" to "total", "label" to "发票总数", "value" to totalCount.value.toString(10)),
                     _uO("key" to "pending", "label" to "待详情", "value" to pendingXmlText.value),
+                    _uO("key" to "payment", "label" to "付款筛选", "value" to if (selectedPaymentStatus.value == null) {
+                        "全部"
+                    } else {
+                        if (selectedPaymentStatus.value == "true") {
+                            "已付款"
+                        } else {
+                            "未付款"
+                        }
+                    }
+                    ),
                     _uO("key" to "last", "label" to "最近成功", "value" to lastSuccessText.value)
                 )
             }
@@ -363,6 +470,11 @@ open class GenPagesKsefIndex : BasePage {
             )
             onShow(fun(){
                 loadAutoSyncStatus()
+                val flag = uni_getStorageSync(refreshStorageKey)
+                if (flag != null && ("" + flag) != "") {
+                    uni_removeStorageSync(refreshStorageKey)
+                    loadInvoices()
+                }
             }
             )
             return fun(): Any? {
@@ -447,6 +559,63 @@ open class GenPagesKsefIndex : BasePage {
                                         "onClick"
                                     ))
                                 )),
+                                _cE("text", _uM("class" to "filter-title filter-title-spaced"), "付款状态"),
+                                _cE("view", _uM("class" to "filter-row"), _uA(
+                                    _cE("view", _uM("class" to _nC(if (unref(selectedPaymentStatus) == null) {
+                                        "filter-chip filter-chip-active"
+                                    } else {
+                                        "filter-chip"
+                                    }
+                                    ), "onClick" to fun(){
+                                        selectPaymentStatus(null)
+                                    }
+                                    ), _uA(
+                                        _cE("text", _uM("class" to _nC(if (unref(selectedPaymentStatus) == null) {
+                                            "filter-chip-text filter-chip-text-active"
+                                        } else {
+                                            "filter-chip-text"
+                                        }
+                                        )), "全部", 2)
+                                    ), 10, _uA(
+                                        "onClick"
+                                    )),
+                                    _cE("view", _uM("class" to _nC(if (unref(selectedPaymentStatus) == "false") {
+                                        "filter-chip filter-chip-active"
+                                    } else {
+                                        "filter-chip"
+                                    }
+                                    ), "onClick" to fun(){
+                                        selectPaymentStatus("false")
+                                    }
+                                    ), _uA(
+                                        _cE("text", _uM("class" to _nC(if (unref(selectedPaymentStatus) == "false") {
+                                            "filter-chip-text filter-chip-text-active"
+                                        } else {
+                                            "filter-chip-text"
+                                        }
+                                        )), "未付款", 2)
+                                    ), 10, _uA(
+                                        "onClick"
+                                    )),
+                                    _cE("view", _uM("class" to _nC(if (unref(selectedPaymentStatus) == "true") {
+                                        "filter-chip filter-chip-active"
+                                    } else {
+                                        "filter-chip"
+                                    }
+                                    ), "onClick" to fun(){
+                                        selectPaymentStatus("true")
+                                    }
+                                    ), _uA(
+                                        _cE("text", _uM("class" to _nC(if (unref(selectedPaymentStatus) == "true") {
+                                            "filter-chip-text filter-chip-text-active"
+                                        } else {
+                                            "filter-chip-text"
+                                        }
+                                        )), "已付款", 2)
+                                    ), 10, _uA(
+                                        "onClick"
+                                    ))
+                                )),
                                 _cE("view", _uM("class" to "filter-actions"), _uA(
                                     _cE("view", _uM("class" to "filter-btn filter-btn-light", "onClick" to handleFilterReset), _uA(
                                         _cE("text", _uM("class" to "filter-btn-light-text"), "重置")
@@ -507,7 +676,7 @@ open class GenPagesKsefIndex : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "metaText", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载 KSeF 发票", "keepContentOnLoading" to true, "inlineLoadingText" to "KSeF 发票刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "showFloatingAdd" to false, "summaryTitle" to "KSeF 汇总", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to false, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onSubtitleClick" to handleSubtitleClick, "onFieldClick" to handleFieldClick), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "codeText", "metaField" to "metaText", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载 KSeF 发票", "keepContentOnLoading" to true, "inlineLoadingText" to "KSeF 发票刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to true, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "showFloatingAdd" to false, "summaryTitle" to "KSeF 汇总", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to false, "onItemClick" to handleItemClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onSubtitleClick" to handleSubtitleClick, "onFieldClick" to handleFieldClick), null, 8, _uA(
                                 "items",
                                 "fields",
                                 "loading",
@@ -530,7 +699,7 @@ open class GenPagesKsefIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "status-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 14, "paddingRight" to 14, "paddingBottom" to 14, "paddingLeft" to 14, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1")), "status-head" to _pS(_uM("flexDirection" to "row", "justifyContent" to "space-between", "alignItems" to "center")), "status-title" to _pS(_uM("fontSize" to 17, "lineHeight" to "22px", "color" to "#0F172A", "fontWeight" to "bold")), "status-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B", "marginTop" to 2)), "sync-btn" to _pS(_uM("height" to 36, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "sync-btn-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#FFFFFF")), "status-grid" to _pS(_uM("flexDirection" to "row", "marginTop" to 12)), "status-cell" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F8FAFC", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 10, "paddingBottom" to 10, "paddingLeft" to 8, "paddingRight" to 8, "marginRight" to 6)), "status-value" to _pS(_uM("fontSize" to 15, "lineHeight" to "20px", "color" to "#0F172A", "fontWeight" to "bold")), "status-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "16px", "color" to "#64748B", "marginTop" to 2)), "status-error" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#B42318", "marginTop" to 8)), "filter-panel" to _pS(_uM("paddingBottom" to 8)), "filter-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold")), "filter-row" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "filter-chip" to _pS(_uM("height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "filter-chip-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "filter-chip-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "filter-chip-text-active" to _pS(_uM("color" to "#FFFFFF")), "filter-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 8)), "filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "alignItems" to "center", "justifyContent" to "center")), "filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#475569")), "filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "status-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 14, "paddingRight" to 14, "paddingBottom" to 14, "paddingLeft" to 14, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1")), "status-head" to _pS(_uM("flexDirection" to "row", "justifyContent" to "space-between", "alignItems" to "center")), "status-title" to _pS(_uM("fontSize" to 17, "lineHeight" to "22px", "color" to "#0F172A", "fontWeight" to "bold")), "status-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B", "marginTop" to 2)), "sync-btn" to _pS(_uM("height" to 36, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "sync-btn-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#FFFFFF")), "status-grid" to _pS(_uM("flexDirection" to "row", "marginTop" to 12)), "status-cell" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F8FAFC", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 10, "paddingBottom" to 10, "paddingLeft" to 8, "paddingRight" to 8, "marginRight" to 6)), "status-value" to _pS(_uM("fontSize" to 15, "lineHeight" to "20px", "color" to "#0F172A", "fontWeight" to "bold")), "status-label" to _pS(_uM("fontSize" to 11, "lineHeight" to "16px", "color" to "#64748B", "marginTop" to 2)), "status-error" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#B42318", "marginTop" to 8)), "filter-panel" to _pS(_uM("paddingBottom" to 8)), "filter-title" to _pS(_uM("fontSize" to 14, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold")), "filter-title-spaced" to _pS(_uM("marginTop" to 8)), "filter-row" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 10)), "filter-chip" to _pS(_uM("height" to 34, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "filter-chip-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "filter-chip-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "filter-chip-text-active" to _pS(_uM("color" to "#FFFFFF")), "filter-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 8)), "filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "alignItems" to "center", "justifyContent" to "center")), "filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "filter-btn-light-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#475569")), "filter-btn-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "14px", "color" to "#FFFFFF")), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

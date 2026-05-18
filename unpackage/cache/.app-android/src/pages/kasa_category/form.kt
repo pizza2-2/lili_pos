@@ -211,7 +211,6 @@ open class GenPagesKasaCategoryForm : BasePage {
             }
             val loadTaxRateOptions = ::gen_loadTaxRateOptions_fn
             fun gen_buildSelectResponse_fn(source: UTSArray<SelectOption__3>, params: UTSJSONObject): UTSJSONObject {
-                val keyword = stringValue(params["keyword"]).toLowerCase()
                 val id = stringValue(params["id"])
                 val normalizedId = normalizeTaxRateToken(id)
                 val result: UTSArray<UTSJSONObject> = _uA()
@@ -227,10 +226,6 @@ open class GenPagesKasaCategoryForm : BasePage {
                                 continue
                             }
                             result.push(_uO("value" to id, "text" to option.text))
-                            index += 1
-                            continue
-                        }
-                        if (keyword != "" && option.text.toLowerCase().indexOf(keyword) < 0) {
                             index += 1
                             continue
                         }
@@ -282,7 +277,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                         try {
                             await(loadTaxRateOptions())
                             val detail = await(getKasaCategoryDetail(idText))
-                            console.log(detail, " at pages/kasa_category/form.uvue:290")
+                            console.log(detail, " at pages/kasa_category/form.uvue:286")
                             initialData.value = buildInitialDataFromDetail(detail)
                         }
                          catch (error: Throwable) {

@@ -130,7 +130,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
+import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierMediaFile, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 
 const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
 
@@ -161,8 +161,8 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
-	{ key: 'Detail', text: '详情' } as UTSJSONObject,
-	{ key: 'add', text: '增加' } as UTSJSONObject,
+	{ key: 'Detail', text: '采购记录' } as UTSJSONObject,
+	{ key: 'add', text: '新增记录' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
 
@@ -495,35 +495,7 @@ function getDisplayText(value: string | null): string {
 	return value
 }
 
-function buildImages(item: SupplierItem): string[] {
-	const result: string[] = []
-	for (let index = 0; index < item.media_files.length; index += 1) {
-		const mediaFile = item.media_files[index]
-		if (mediaFile.signed_thumbnail_url != '') {
-			result.push(mediaFile.signed_thumbnail_url)
-			continue
-		}
-		if (mediaFile.thumbnail_url != '') {
-			result.push(mediaFile.thumbnail_url)
-			continue
-		}
-		if (mediaFile.signed_url != '') {
-			result.push(mediaFile.signed_url)
-			continue
-		}
-		if (mediaFile.file_url != '') {
-			result.push(mediaFile.file_url)
-		}
-	}
-	return result
-}
-
-function getSupplierImage(item: SupplierItem): string {
-	if (item.media_files.length == 0) {
-		return ''
-	}
-
-	const mediaFile = item.media_files[0]
+function supplierThumbnailUrl(mediaFile: SupplierMediaFile): string {
 	if (mediaFile.signed_thumbnail_url != '') {
 		return mediaFile.signed_thumbnail_url
 	}
@@ -534,6 +506,50 @@ function getSupplierImage(item: SupplierItem): string {
 		return mediaFile.signed_url
 	}
 	return mediaFile.file_url
+}
+
+function supplierFullUrl(mediaFile: SupplierMediaFile): string {
+	if (mediaFile.signed_url != '') {
+		return mediaFile.signed_url
+	}
+	if (mediaFile.file_url != '') {
+		return mediaFile.file_url
+	}
+	return supplierThumbnailUrl(mediaFile)
+}
+
+function buildImages(item: SupplierItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaFile = item.media_files[index]
+		const imageUrl = supplierThumbnailUrl(mediaFile)
+		if (imageUrl != '') {
+			result.push(imageUrl)
+		}
+	}
+	return result
+}
+
+function buildPreviewImages(item: SupplierItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const imageUrl = supplierFullUrl(item.media_files[index])
+		if (imageUrl != '') {
+			result.push(imageUrl)
+		}
+	}
+	return result
+}
+
+function buildMediaIds(item: SupplierItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.media_files.length; index += 1) {
+		const mediaId = item.media_files[index].id
+		if (mediaId != '') {
+			result.push(mediaId)
+		}
+	}
+	return result
 }
 
 function formatPaidAmount(value: number): string {
@@ -552,8 +568,8 @@ function formatDateText(value: string): string {
 
 
 function supplierToListItem(item: SupplierItem): UTSJSONObject {
-	const cover = getSupplierImage(item)
 	const images = buildImages(item)
+	const previewImages = buildPreviewImages(item)
 	return {
 		id: item.id.toString(),
 		name: item.name,
@@ -570,8 +586,11 @@ function supplierToListItem(item: SupplierItem): UTSJSONObject {
 		arrears_amount: item.arrears_amount,
 		updatedText: formatDateText(item.updated_at),
 		filesText: item.files_count.toString() + ' 个',
-		cover: cover,
+		cover: images.length > 0 ? images[0] : '',
 		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: buildMediaIds(item),
 		rawId: item.id.toString(),
 	} as UTSJSONObject
 }
@@ -773,7 +792,7 @@ async function confirmDeleteSupplier(supplierId: string) {
 	}
 }
 
-function navigateToTransactionsPage(pagePath: string, supplierId: string) {
+function navigateToTransactionsPage(pagePath: string, supplierId: string, supplierName: string = '') {
 	if (supplierId == '') {
 		uni.showToast({
 			title: '供应商ID缺失',
@@ -782,8 +801,13 @@ function navigateToTransactionsPage(pagePath: string, supplierId: string) {
 		return
 	}
 
+	let url = pagePath + '?supplier_id=' + supplierId
+	if (supplierName != '' && pagePath.indexOf('/pages/transactions/index') >= 0) {
+		url = url + '&supplier_name=' + encodeURIComponent(supplierName)
+	}
+
 	uni.navigateTo({
-		url: pagePath + '?supplier_id=' + supplierId,
+		url: url,
 	})
 }
 
@@ -804,6 +828,8 @@ function handleMenu(payload: UTSJSONObject) {
 	const key = actionKey as string
 	const supplierIdValue = itemObject['rawId']
 	const supplierId = supplierIdValue == null ? '' : (supplierIdValue as string)
+	const supplierNameValue = itemObject['name']
+	const supplierName = supplierNameValue == null ? '' : (supplierNameValue as string)
 
 	if (key == 'edit') {
 		uni.navigateTo({
@@ -813,7 +839,7 @@ function handleMenu(payload: UTSJSONObject) {
 	}
 
 	if (key == 'Detail') {
-		navigateToTransactionsPage('/pages/transactions/index', supplierId)
+		navigateToTransactionsPage('/pages/transactions/index', supplierId, supplierName)
 		return
 	}
 

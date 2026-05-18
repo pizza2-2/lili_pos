@@ -381,6 +381,23 @@ function buildTranslateBody(force: boolean): UTSJSONObject {
 	} as UTSJSONObject
 }
 
+function buildTranslateBodyWithMode(force: boolean, sync: boolean): UTSJSONObject {
+	return {
+		force: force,
+		sync: sync,
+		source_lang: 'zh',
+		target_lang: 'pl',
+	} as UTSJSONObject
+}
+
+function buildTranslateTextBody(text: string): UTSJSONObject {
+	return {
+		text: text,
+		source_lang: 'zh',
+		target_lang: 'pl',
+	} as UTSJSONObject
+}
+
 function buildBatchUpdateSortBody(sortData: CategorySortItem[]): UTSJSONObject {
 	return {
 		sort_data: sortData,
@@ -480,9 +497,14 @@ export async function batchUpdateCategoryProductsCount(): Promise<UTSJSONObject>
 	return buildObjectResponse(raw, '批量更新分类商品数量响应解析失败')
 }
 
-export async function translateCategory(id: number | string, force: boolean = false): Promise<UTSJSONObject> {
-	const raw = await request(categoryDetailPath(id) + 'translate/', 'POST', buildTranslateBody(force), true)
+export async function translateCategory(id: number | string, force: boolean = false, sync: boolean = false): Promise<UTSJSONObject> {
+	const raw = await request(categoryDetailPath(id) + 'translate/', 'POST', buildTranslateBodyWithMode(force, sync), true)
 	return buildObjectResponse(raw, '翻译分类响应解析失败')
+}
+
+export async function translateCategoryName(text: string): Promise<UTSJSONObject> {
+	const raw = await request(categoryBasePath + 'translate_text/', 'POST', buildTranslateTextBody(text), false)
+	return buildObjectResponse(raw, '分类名称翻译响应解析失败')
 }
 
 export async function batchTranslateCategories(force: boolean = false): Promise<UTSJSONObject> {

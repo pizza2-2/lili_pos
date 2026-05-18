@@ -16,8 +16,15 @@ import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
+import uts.sdk.modules.limeScan.scanCode
+import uts.sdk.modules.limeScan.GeneralCallbackResult
+import uts.sdk.modules.limeScan.ScanCodeOption
+import uts.sdk.modules.limeScan.ScanCodeSuccessCallbackResult
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
+import uts.sdk.modules.liliKey.startVolumeKeyListener
+import uts.sdk.modules.liliKey.stopVolumeKeyListener
+import uts.sdk.modules.liliKey.VolumeKeyEvent
 open class GenPagesTabbarProducts : BasePage {
     constructor(__ins: ComponentInternalInstance, __renderer: String?) : super(__ins, __renderer) {}
     companion object {
@@ -44,9 +51,10 @@ open class GenPagesTabbarProducts : BasePage {
             val categoryFilterValues = ref(_uA<String>())
             val filterPanelHeight = ref(456)
             val filterContentHeight = ref(392)
-            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "supplierText", "label" to "供应商"), _uO("key" to "purchasePriceText", "label" to "进价"), _uO("key" to "salesPriceText", "label" to "售价"), _uO("key" to "salesCountText", "label" to "销量")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "copy-sku", "text" to "复制SKU"), _uO("key" to "copy-barcode", "text" to "复制条码"), _uO("key" to "detail", "text" to "详情"), _uO("key" to "reload", "text" to "刷新")))
-            val tagColorMap = ref(_uO("ACTIVE" to "success", "INACTIVE" to "danger", "DRAFT" to "warning", "新品" to "violet", "精选" to "info", "热销" to "warning"))
+            val volumeScanLocked = ref(false)
+            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "supplierText", "label" to "供应商："), _uO("key" to "purchasePriceText", "label" to "含税进价："), _uO("key" to "salesPriceText", "label" to "售价："), _uO("key" to "salesCountText", "label" to "销量：")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "detail", "text" to "详情"), _uO("key" to "inventory", "text" to "查看库存"), _uO("key" to "reload", "text" to "刷新")))
+            val tagColorMap = ref(_uO("新品" to "violet", "精选" to "info", "热销" to "warning"))
             val productListRefreshStorageKey = "refresh:pages:products:index"
             fun gen_applyProductResponse_fn(response: ProductListResponse) {
                 products.value = response.results
@@ -69,7 +77,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:236")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:237")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -119,6 +127,7 @@ open class GenPagesTabbarProducts : BasePage {
                             }
                             , page = currentPage.value, page_size = pageSize.value, filters = selectedFilters.value)))
                             applyProductResponse(response)
+                            console.log("输出打印", response, " at pages/tabbar/products.uvue:290")
                         }
                          catch (error: Throwable) {
                             products.value = _uA()
@@ -159,7 +168,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:329")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:331")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -170,7 +179,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return _uA()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:342")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:344")
                 if (parsed == null) {
                     return _uA()
                 }
@@ -183,29 +192,38 @@ open class GenPagesTabbarProducts : BasePage {
                 }
                 return value
             }
+            fun gen_productThumbnailUrl_fn(mediaFile: ProductMediaFile): String {
+                if (mediaFile.signed_thumbnail_url != "") {
+                    return mediaFile.signed_thumbnail_url
+                }
+                if (mediaFile.thumbnail_url != "") {
+                    return mediaFile.thumbnail_url
+                }
+                if (mediaFile.signed_url != "") {
+                    return mediaFile.signed_url
+                }
+                return mediaFile.file_url
+            }
+            val productThumbnailUrl = ::gen_productThumbnailUrl_fn
+            fun gen_productFullUrl_fn(mediaFile: ProductMediaFile): String {
+                if (mediaFile.signed_url != "") {
+                    return mediaFile.signed_url
+                }
+                if (mediaFile.file_url != "") {
+                    return mediaFile.file_url
+                }
+                return productThumbnailUrl(mediaFile)
+            }
+            val productFullUrl = ::gen_productFullUrl_fn
             fun gen_buildImages_fn(item: ProductItem): UTSArray<String> {
                 val result: UTSArray<String> = _uA()
                 run {
                     var index: Number = 0
                     while(index < item.media_files.length){
                         val mediaFile = item.media_files[index]
-                        if (mediaFile.signed_thumbnail_url != "") {
-                            result.push(mediaFile.signed_thumbnail_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.thumbnail_url != "") {
-                            result.push(mediaFile.thumbnail_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.signed_url != "") {
-                            result.push(mediaFile.signed_url)
-                            index += 1
-                            continue
-                        }
-                        if (mediaFile.file_url != "") {
-                            result.push(mediaFile.file_url)
+                        val imageUrl = productThumbnailUrl(mediaFile)
+                        if (imageUrl != "") {
+                            result.push(imageUrl)
                         }
                         index += 1
                     }
@@ -213,6 +231,36 @@ open class GenPagesTabbarProducts : BasePage {
                 return result
             }
             val buildImages = ::gen_buildImages_fn
+            fun gen_buildPreviewImages_fn(item: ProductItem): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < item.media_files.length){
+                        val imageUrl = productFullUrl(item.media_files[index])
+                        if (imageUrl != "") {
+                            result.push(imageUrl)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildPreviewImages = ::gen_buildPreviewImages_fn
+            fun gen_buildMediaIds_fn(item: ProductItem): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < item.media_files.length){
+                        val mediaId = item.media_files[index].id
+                        if (mediaId != "") {
+                            result.push(mediaId)
+                        }
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val buildMediaIds = ::gen_buildMediaIds_fn
             fun gen_setSelectedFilterValue_fn(param: String, value: String) {
                 val nextFilters: UTSArray<ProductSelectedFilter> = _uA()
                 var updated = false
@@ -392,7 +440,6 @@ open class GenPagesTabbarProducts : BasePage {
             }
             val buildSelectOptions = ::gen_buildSelectOptions_fn
             fun gen_buildBottomSelectResponse_fn(source: UTSArray<ProductSelectOption>, params: UTSJSONObject): UTSJSONObject {
-                val keywordValue = stringValue(params["keyword"]).toLowerCase()
                 val idValue = stringValue(params["id"])
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -400,12 +447,6 @@ open class GenPagesTabbarProducts : BasePage {
                     while(index < source.length){
                         val option = source[index]
                         if (idValue != "" && option.value != idValue) {
-                            index += 1
-                            continue
-                        }
-                        val optionTextLowerCase = option.text.toLowerCase()
-                        val optionValueLowerCase = option.value.toLowerCase()
-                        if (keywordValue != "" && optionTextLowerCase.indexOf(keywordValue) < 0 && optionValueLowerCase.indexOf(keywordValue) < 0) {
                             index += 1
                             continue
                         }
@@ -464,8 +505,14 @@ open class GenPagesTabbarProducts : BasePage {
             val buildCategoryTreeResponse = ::gen_buildCategoryTreeResponse_fn
             fun gen_fetchSupplierFilterOptions_fn(params: UTSJSONObject): UTSPromise<UTSJSONObject> {
                 return wrapUTSPromise(suspend w1@{
-                        val raw = await(request("/api/procurement/suppliers/options/", "GET", _uO(), true))
-                        return@w1 buildBottomSelectResponse(buildSelectOptions(raw), params)
+                        val keywordValue = stringValue(params["keyword"])
+                        val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 674, 8), "key" to "supplier", "limit" to 50)
+                        if (keywordValue != "") {
+                            query["search"] = keywordValue
+                            query["keyword"] = keywordValue
+                        }
+                        val raw = await(request("/api/procurement/suppliers/options/", "GET", query, true))
+                        return@w1 buildBottomSelectResponse(buildSelectOptions(raw), _uO("keyword" to "", "id" to stringValue(params["id"])))
                 })
             }
             val fetchSupplierFilterOptions = ::gen_fetchSupplierFilterOptions_fn
@@ -475,7 +522,7 @@ open class GenPagesTabbarProducts : BasePage {
                         val pageValue = stringValue(params["page"], "1")
                         val parentValue = stringValue(params["parent"])
                         val pageSizeValue = stringValue(params["pageSize"], "20")
-                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 659, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
+                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 697, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
                             "1"
                         } else {
                             pageValue
@@ -492,29 +539,8 @@ open class GenPagesTabbarProducts : BasePage {
                 })
             }
             val fetchCategoryFilterOptions = ::gen_fetchCategoryFilterOptions_fn
-            fun gen_getProductImage_fn(item: ProductItem): String {
-                if (item.media_files.length == 0) {
-                    return ""
-                }
-                val mediaFile = item.media_files[0]
-                if (mediaFile.signed_thumbnail_url != "") {
-                    return mediaFile.signed_thumbnail_url
-                }
-                if (mediaFile.thumbnail_url != "") {
-                    return mediaFile.thumbnail_url
-                }
-                if (mediaFile.signed_url != "") {
-                    return mediaFile.signed_url
-                }
-                return mediaFile.file_url
-            }
-            val getProductImage = ::gen_getProductImage_fn
             fun gen_buildProductTags_fn(item: ProductItem): UTSArray<String> {
                 val result: UTSArray<String> = _uA()
-                val statusText = getDisplayText(item.status, "")
-                if (statusText != "") {
-                    result.push(statusText)
-                }
                 if (item.is_new) {
                     result.push("新品")
                 }
@@ -536,6 +562,10 @@ open class GenPagesTabbarProducts : BasePage {
                 if (englishName != "") {
                     return englishName
                 }
+                val otherName = getDisplayText(item.name_other, "")
+                if (otherName != "") {
+                    return otherName
+                }
                 return if (item.sku == "") {
                     ("商品 #" + item.id.toString(10))
                 } else {
@@ -544,7 +574,19 @@ open class GenPagesTabbarProducts : BasePage {
             }
             val productDisplayName = ::gen_productDisplayName_fn
             fun gen_productToListItem_fn(item: ProductItem): UTSJSONObject {
-                return _uO("id" to item.id.toString(10), "name" to productDisplayName(item), "name_en" to getDisplayText(item.name_en), "sku" to getDisplayText(item.sku), "skuText" to ("SKU：" + getDisplayText(item.sku)), "barcode" to getDisplayText(item.barcode), "barcodeText" to ("条码：" + getDisplayText(item.barcode)), "supplierText" to getDisplayText(item.supplier_name), "purchasePriceText" to getDisplayText(item.purchase_price), "salesPriceText" to getDisplayText(item.base_sales_price), "salesCountText" to item.total_sales_quantity.toString(10), "variantCountText" to item.variant_count.toString(10), "updatedText" to getDisplayText(item.updated_at), "cover" to getProductImage(item), "images" to buildImages(item), "tags" to buildProductTags(item), "rawId" to item.id.toString(10))
+                val images = buildImages(item)
+                val previewImages = buildPreviewImages(item)
+                return _uO("id" to item.id.toString(10), "name" to productDisplayName(item), "name_en" to getDisplayText(item.name_en), "name_other" to getDisplayText(item.name_other), "sku" to getDisplayText(item.sku), "skuText" to ("SKU：" + getDisplayText(item.sku)), "barcode" to getDisplayText(item.barcode), "barcodeText" to ("条码：" + getDisplayText(item.barcode)), "foreignNameText" to getDisplayText(item.name_en), "otherNameText" to getDisplayText(item.name_other), "supplierText" to getDisplayText(item.supplier_name), "purchasePriceText" to getDisplayText(item.purchase_price), "netPurchasePriceText" to getDisplayText(item.net_purchase_price), "costPriceText" to getDisplayText(item.cost_price), "salesPriceText" to getDisplayText(item.base_sales_price), "salesCountText" to item.total_sales_quantity.toString(10), "variantCountText" to item.variant_count.toString(10), "updatedText" to getDisplayText(item.updated_at), "cover" to if (images.length > 0) {
+                    images[0]
+                } else {
+                    ""
+                }
+                , "images" to images, "previewCover" to if (previewImages.length > 0) {
+                    previewImages[0]
+                } else {
+                    ""
+                }
+                , "previewImages" to previewImages, "mediaIds" to buildMediaIds(item), "tags" to buildProductTags(item), "rawId" to item.id.toString(10))
             }
             val productToListItem = ::gen_productToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
@@ -574,6 +616,60 @@ open class GenPagesTabbarProducts : BasePage {
                 loadProducts()
             }
             val handleSearchClear = ::gen_handleSearchClear_fn
+            fun gen_handleScanSearch_fn() {
+                scanCode(ScanCodeOption(onlyFromCamera = true, success = fun(res: ScanCodeSuccessCallbackResult){
+                    val scanResult = res.result
+                    if (scanResult == "") {
+                        return
+                    }
+                    keyword.value = scanResult
+                    currentPage.value = 1
+                    closeFilterDrawer()
+                    loadProducts()
+                }
+                , fail = fun(res: GeneralCallbackResult){
+                    val message = if (res.errMsg == "") {
+                        "扫码失败"
+                    } else {
+                        res.errMsg
+                    }
+                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                }
+                ))
+            }
+            val handleScanSearch = ::gen_handleScanSearch_fn
+            fun gen_unlockVolumeScanSoon_fn() {
+                setTimeout(fun(){
+                    volumeScanLocked.value = false
+                }
+                , 1200)
+            }
+            val unlockVolumeScanSoon = ::gen_unlockVolumeScanSoon_fn
+            fun gen_handleVolumeKeyEvent_fn(event: VolumeKeyEvent) {
+                if (event.key != "VOLUME_UP" && event.key != "VOLUME_DOWN") {
+                    return
+                }
+                if (volumeScanLocked.value) {
+                    return
+                }
+                volumeScanLocked.value = true
+                closeFilterDrawer()
+                handleScanSearch()
+                unlockVolumeScanSoon()
+            }
+            val handleVolumeKeyEvent = ::gen_handleVolumeKeyEvent_fn
+            fun gen_startProductVolumeKeyListener_fn() {
+                startVolumeKeyListener(fun(event: VolumeKeyEvent){
+                    handleVolumeKeyEvent(event)
+                }
+                )
+            }
+            val startProductVolumeKeyListener = ::gen_startProductVolumeKeyListener_fn
+            fun gen_stopProductVolumeKeyListener_fn() {
+                stopVolumeKeyListener()
+                volumeScanLocked.value = false
+            }
+            val stopProductVolumeKeyListener = ::gen_stopProductVolumeKeyListener_fn
             fun gen_handleFilterOpen_fn(): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (filterOptions.value != null || filterOptionsLoading.value) {
@@ -733,8 +829,24 @@ open class GenPagesTabbarProducts : BasePage {
                     copyText(stringValue(item["supplierText"]), "供应商已复制", "暂无供应商")
                     return
                 }
+                if (key == "foreignNameText") {
+                    copyText(stringValue(item["foreignNameText"]), "波兰名已复制", "暂无波兰名")
+                    return
+                }
+                if (key == "otherNameText") {
+                    copyText(stringValue(item["otherNameText"]), "其他名已复制", "暂无其他名")
+                    return
+                }
                 if (key == "purchasePriceText") {
-                    copyText(stringValue(item["purchasePriceText"]), "进价已复制", "暂无进价")
+                    copyText(stringValue(item["purchasePriceText"]), "含税进价已复制", "暂无含税进价")
+                    return
+                }
+                if (key == "netPurchasePriceText") {
+                    copyText(stringValue(item["netPurchasePriceText"]), "不含税进价已复制", "暂无不含税进价")
+                    return
+                }
+                if (key == "costPriceText") {
+                    copyText(stringValue(item["costPriceText"]), "成本已复制", "暂无成本")
                     return
                 }
                 if (key == "salesPriceText") {
@@ -746,6 +858,20 @@ open class GenPagesTabbarProducts : BasePage {
                 }
             }
             val handleFieldClick = ::gen_handleFieldClick_fn
+            fun gen_navigateToProductInventory_fn(item: UTSJSONObject) {
+                val rawId = stringValue(item["rawId"], stringValue(item["id"]))
+                if (rawId == "") {
+                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none"))
+                    return
+                }
+                val productName = stringValue(item["name"])
+                var url = "/pages/inventory-management/from?product=" + rawId
+                if (productName != "") {
+                    url = url + "&productName=" + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1048")
+                }
+                uni_navigateTo(NavigateToOptions(url = url))
+            }
+            val navigateToProductInventory = ::gen_navigateToProductInventory_fn
             fun gen_handleMenu_fn(payload: UTSJSONObject) {
                 val actionValue = payload["action"]
                 val itemValue = payload["item"]
@@ -769,6 +895,10 @@ open class GenPagesTabbarProducts : BasePage {
                         return
                     }
                     uni_navigateTo(NavigateToOptions(url = "/pages/products/from?id=" + rawId))
+                    return
+                }
+                if (key == "inventory") {
+                    navigateToProductInventory(item)
                     return
                 }
                 if (key == "reload") {
@@ -877,6 +1007,7 @@ open class GenPagesTabbarProducts : BasePage {
             }
             )
             onShow(fun(){
+                startProductVolumeKeyListener()
                 updateFilterPanelLayout()
                 if (consumeProductListRefreshFlag()) {
                     loadProducts()
@@ -887,11 +1018,19 @@ open class GenPagesTabbarProducts : BasePage {
                 }
             }
             )
+            onHide(fun(){
+                stopProductVolumeKeyListener()
+            }
+            )
+            onUnload(fun(){
+                stopProductVolumeKeyListener()
+            }
+            )
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass)
                 return _cE("view", _uM("class" to "page"), _uA(
-                    _cV(_component_lili_universal_filter, _uM("title" to "商品", "searchPlaceholder" to "输入商品名称、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to false, "showSearch" to true, "showFilter" to true, "showHome" to false, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
+                    _cV(_component_lili_universal_filter, _uM("title" to "商品", "searchPlaceholder" to "输入商品名称、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to false, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to false, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
                         return _uA(
                             _cE("view", _uM("class" to "product-filter-panel", "style" to _nS(filterPanelStyle.value)), _uA(
                                 _cE("scroll-view", _uM("scroll-y" to "true", "class" to "product-filter-content-scroll", "style" to _nS(filterContentScrollStyle.value)), _uA(
@@ -979,7 +1118,7 @@ open class GenPagesTabbarProducts : BasePage {
                                 _cE("view", _uM("key" to 0, "class" to "error-card"), _uA(
                                     _cE("text", _uM("class" to "error-title"), "加载失败"),
                                     _cE("text", _uM("class" to "error-desc"), _tD(unref(errorMessage)), 1),
-                                    _cE("button", _uM("class" to "retry-btn", "onClick" to loadProducts), _uA(
+                                    _cE("view", _uM("class" to "retry-btn", "onClick" to loadProducts), _uA(
                                         _cE("text", _uM("class" to "retry-btn-text"), "重新加载")
                                     ))
                                 ))
@@ -1011,7 +1150,7 @@ open class GenPagesTabbarProducts : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "paddingLeft" to 18, "paddingRight" to 18, "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#B42318", "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")), "product-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "product-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "product-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "product-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "product-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "product-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "product-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "product-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#475569")), "product-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "13px", "color" to "#FFFFFF")), "product-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "product-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "product-filter-groups" to _pS(_uM("marginBottom" to 6)), "product-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "product-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "product-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "product-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "12px", "color" to "#334155")), "product-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "product-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "marginTop" to 0, "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "paddingLeft" to 18, "paddingRight" to 18, "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#B42318", "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")), "product-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "product-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "product-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "product-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "product-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "product-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "product-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "product-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "product-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "product-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "product-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "product-filter-groups" to _pS(_uM("marginBottom" to 6)), "product-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "product-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "product-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "product-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "product-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "product-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "marginTop" to 0, "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

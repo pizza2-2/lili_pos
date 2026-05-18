@@ -81,7 +81,7 @@ open class GenPagesProductsPricingFormulaIndex : BasePage {
                             } else {
                                 keyword.value
                             }
-                            , page = currentPage.value, page_size = pageSize.value)))
+                            , page = currentPage.value, page_size = pageSize.value, is_active = null)))
                             applyFormulaResponse(response)
                         }
                          catch (error: Throwable) {
