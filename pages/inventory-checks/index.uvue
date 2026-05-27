@@ -136,7 +136,8 @@
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { adjustInventoryCheck, approveInventoryCheck, getInventoryChecks, InventoryListQuery, InventoryListResponse, startInventoryCheck, submitInventoryCheck } from '@/pkg/api/modules/inventory'
+import { adjustInventoryCheck, approveInventoryCheck, completeInventoryCheck, deleteInventoryCheck, getInventoryChecks, InventoryListQuery, InventoryListResponse, startInventoryCheck } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type SelectOption = {
 	value: string
@@ -170,9 +171,7 @@ const statusOptions = [
 	{ value: '', label: '全部' } as SelectOption,
 	{ value: 'DRAFT', label: '草稿' } as SelectOption,
 	{ value: 'IN_PROGRESS', label: '盘点中' } as SelectOption,
-	{ value: 'PENDING_REVIEW', label: '待审核' } as SelectOption,
-	{ value: 'APPROVED', label: '已审核' } as SelectOption,
-	{ value: 'ADJUSTED', label: '已调整' } as SelectOption,
+	{ value: 'ADJUSTED', label: '已完成' } as SelectOption,
 	{ value: 'CANCELLED', label: '已取消' } as SelectOption,
 ]
 
@@ -185,20 +184,14 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'details', text: '明细' } as UTSJSONObject,
-	{ key: 'edit', text: '编辑' } as UTSJSONObject,
-	{ key: 'start-check', text: '开始' } as UTSJSONObject,
-	{ key: 'submit-check', text: '提交' } as UTSJSONObject,
-	{ key: 'approve-check', text: '审核' } as UTSJSONObject,
-	{ key: 'adjust-check', text: '调整库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
 	草稿: 'muted',
 	盘点中: 'warning',
-	待审核: 'info',
-	已审核: 'success',
-	已调整: 'success',
+	待完成: 'info',
+	已完成: 'success',
 	已取消: 'danger',
 	DRAFT: 'muted',
 	IN_PROGRESS: 'warning',
@@ -229,9 +222,13 @@ function booleanValue(value: any | null): boolean {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const errorText = JSON.stringify(error)
+		let errorText = ''
+		try {
+			const text = JSON.stringify(error)
+			if (text != null) errorText = text
+		} catch (stringifyError) {
+			errorText = ''
+		}
 		if (errorText != null && errorText != '') {
 			let parsedError: UTSJSONObject | null = null
 			try {
@@ -243,11 +240,15 @@ function parseErrorMessage(error: any, fallback: string): string {
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
+					const parsedMessage = stringValue(rawMessage)
 					if (parsedMessage != '') message = parsedMessage
 				}
 			}
-			if (message == fallback && errorText != '{}') message = errorText
+			if (message == fallback && errorText != '{}' && errorText != 'null') message = errorText
+		}
+		if (message == fallback) {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
 		}
 	}
 	return message
@@ -401,14 +402,29 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 }
 
 function statusText(status: string, display: string): string {
-	if (display != '') return display
 	if (status == 'DRAFT') return '草稿'
 	if (status == 'IN_PROGRESS') return '盘点中'
-	if (status == 'PENDING_REVIEW') return '待审核'
-	if (status == 'APPROVED') return '已审核'
-	if (status == 'ADJUSTED') return '已调整'
+	if (status == 'PENDING_REVIEW') return '待完成'
+	if (status == 'APPROVED') return '待完成'
+	if (status == 'ADJUSTED') return '已完成'
 	if (status == 'CANCELLED') return '已取消'
+	if (display != '') return display
 	return status == '' ? '-' : status
+}
+
+function menuActionsForStatus(status: string): UTSJSONObject[] {
+	const actions: UTSJSONObject[] = [
+		{ key: 'details', text: '明细' } as UTSJSONObject,
+	]
+	if (status == 'DRAFT') {
+		actions.push({ key: 'edit', text: '编辑' } as UTSJSONObject)
+		actions.push({ key: 'start-check', text: '开始盘点' } as UTSJSONObject)
+	} else if (status == 'IN_PROGRESS' || status == 'PENDING_REVIEW' || status == 'APPROVED') {
+		actions.push({ key: 'complete-check', text: '完成盘点' } as UTSJSONObject)
+	}
+	actions.push({ key: 'delete', text: '删除' } as UTSJSONObject)
+	actions.push({ key: 'reload', text: '刷新' } as UTSJSONObject)
+	return actions
 }
 
 function compactDate(value: string): string {
@@ -544,13 +560,15 @@ function handlePageChange(payload: UTSJSONObject) {
 }
 
 function checkItem(item: UTSJSONObject): UTSJSONObject {
-	const status = statusText(stringValue(item['status']), stringValue(item['status_display']))
+	const statusValue = stringValue(item['status'])
+	const status = statusText(statusValue, stringValue(item['status_display']))
 	const total = intValue(item['total_items'])
 	const checked = intValue(item['checked_items'])
 	const progress = total <= 0 ? '0%' : stringValue(item['progress_pct'], '0') + '%'
 	return {
 		id: stringValue(item['id']),
 		rawId: stringValue(item['id']),
+		statusValue: statusValue,
 		title: stringValue(item['check_number'], '盘点单'),
 		subtitle: stringValue(item['location_name'], '-'),
 		meta: compactDate(stringValue(item['planned_date'])),
@@ -560,6 +578,7 @@ function checkItem(item: UTSJSONObject): UTSJSONObject {
 		totalItemsText: total.toString(),
 		discrepancyText: stringValue(item['discrepancy_items'], '0'),
 		tags: [status] as string[],
+		menuActions: menuActionsForStatus(statusValue),
 	} as UTSJSONObject
 }
 
@@ -577,21 +596,63 @@ function handleItemClick(payload: UTSJSONObject) {
 	navigateToDetails(stringValue(payload['rawId'], stringValue(payload['id'])))
 }
 
-async function runAction(actionName: string, id: string) {
+function showCompleteNavigatePrompt() {
+	uni.showModal({
+		title: '盘点已完成',
+		content: '库存已按盘点差异更新，点击确定查看库存。',
+		showCancel: false,
+		confirmText: '查看库存',
+		success: (res) => {
+			if (res.confirm) uni.navigateTo({ url: '/pages/inventory-management/index' })
+		},
+	})
+}
+
+async function runDelete(id: string) {
 	try {
-		if (actionName == 'start-check') await startInventoryCheck(id)
-		else if (actionName == 'submit-check') await submitInventoryCheck(id)
-		else if (actionName == 'approve-check') await approveInventoryCheck(id)
-		else if (actionName == 'adjust-check') await adjustInventoryCheck(id)
-		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
+		await deleteInventoryCheck(id)
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '删除失败'))
 	}
 }
 
-function confirmRunAction(actionKey: string, id: string, title: string, content: string) {
-	uni.showModal({ title: title, content: content, success: (res) => { if (res.confirm) runAction(actionKey, id) } })
+async function runAction(actionName: string, id: string, statusValue: string) {
+	try {
+		if (actionName == 'start-check') {
+			await startInventoryCheck(id)
+			uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
+			loadItems()
+			return
+		}
+		if (actionName == 'complete-check') {
+			if (statusValue == 'PENDING_REVIEW') {
+				await approveInventoryCheck(id)
+				await adjustInventoryCheck(id)
+			} else if (statusValue == 'APPROVED') {
+				await adjustInventoryCheck(id)
+			} else {
+				await completeInventoryCheck(id)
+			}
+			uni.setStorageSync(refreshStorageKey, '1')
+			loadItems()
+			showCompleteNavigatePrompt()
+			return
+		}
+		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
+		loadItems()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '操作失败'))
+	}
+}
+
+function confirmRunAction(actionKey: string, id: string, statusValue: string, title: string, content: string) {
+	uni.showModal({ title: title, content: content, success: (res) => { if (res.confirm) runAction(actionKey, id, statusValue) } })
+}
+
+function confirmDelete(id: string) {
+	uni.showModal({ title: '删除盘点单', content: '确定删除这张盘点单吗？删除后盘点明细也会一起删除。', success: (res) => { if (res.confirm) runDelete(id) } })
 }
 
 function handleMenu(payload: UTSJSONObject) {
@@ -599,13 +660,14 @@ function handleMenu(payload: UTSJSONObject) {
 	const item = payload['item']
 	if (action == null || item == null) return
 	const actionKey = stringValue((action as UTSJSONObject)['key'])
-	const id = stringValue((item as UTSJSONObject)['rawId'])
+	const itemObject = item as UTSJSONObject
+	const id = stringValue(itemObject['rawId'])
+	const statusValue = stringValue(itemObject['statusValue'])
 	if (actionKey == 'details') navigateToDetails(id)
 	else if (actionKey == 'edit') navigateToEdit(id)
-	else if (actionKey == 'start-check') confirmRunAction(actionKey, id, '开始盘点', '确定开始这张盘点单吗？')
-	else if (actionKey == 'submit-check') confirmRunAction(actionKey, id, '提交盘点', '确定提交这张盘点单吗？')
-	else if (actionKey == 'approve-check') confirmRunAction(actionKey, id, '审核盘点', '确定审核通过这张盘点单吗？')
-	else if (actionKey == 'adjust-check') confirmRunAction(actionKey, id, '调整库存', '确定按盘点差异调整库存吗？')
+	else if (actionKey == 'start-check') confirmRunAction(actionKey, id, statusValue, '开始盘点', '确定开始这张盘点单吗？')
+	else if (actionKey == 'complete-check') confirmRunAction(actionKey, id, statusValue, '完成盘点', '完成后会直接按差异调整库存，并跳转到库存管理。确定继续吗？')
+	else if (actionKey == 'delete') confirmDelete(id)
 	else if (actionKey == 'reload') loadItems()
 }
 

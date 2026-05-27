@@ -141,6 +141,8 @@ const resizeStartWidth = ref(0)
 const resizeStartHeight = ref(0)
 const resizeStartFontSize = ref(0)
 const nextIndex = ref(1)
+const selectedElementSummaryText = ref('未选择字段')
+let moveDirty = false
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
@@ -200,6 +202,11 @@ function tsplTextScale(fontSize: number): number {
 	return 1
 }
 
+function previewDotsToPx(value: number): number {
+	const density = props.dotsPerMm <= 0 ? 8 : props.dotsPerMm
+	return value * previewScale.value / density
+}
+
 function barcodeCommandType(item: LabelElement): string {
 	if (item.barcodeType == 'EAN13') return 'EAN13'
 	return '128'
@@ -218,6 +225,49 @@ function normalizeBarcodeText(item: LabelElement): string {
 	return '5901234123457'
 }
 
+function onlyDigits(value: string): string {
+	let result = ''
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value.substring(index, index + 1)
+		if (char >= '0' && char <= '9') result = result + char
+	}
+	return result
+}
+
+function isValidEan13Input(value: string): boolean {
+	const digits = onlyDigits(value)
+	if (digits.length == 12) return true
+	if (digits.length != 13) return false
+	let sum = 0
+	for (let index = 0; index < 12; index += 1) {
+		const digit = parseInt(digits.substring(index, index + 1))
+		sum += index % 2 == 0 ? digit : digit * 3
+	}
+	const check = (10 - (sum % 10)) % 10
+	return check.toString() == digits.substring(12, 13)
+}
+
+function isBlankTemplateText(value: string): boolean {
+	return value.trim() == ''
+}
+
+function isValidCode128Text(value: string): boolean {
+	const text = value.trim()
+	if (text == '') return false
+	if (text.length > 80) return false
+	for (let index = 0; index < text.length; index += 1) {
+		const code = text.charCodeAt(index)!
+		if (code < 32 || code > 126) return false
+	}
+	return true
+}
+
+function validationElementName(item: LabelElement, index: number): string {
+	if (item.label != '') return item.label
+	if (item.key != '') return item.key
+	return '元素 ' + (index + 1).toString()
+}
+
 function buildPrintTspl(): string {
 	let command = ''
 	command = command + 'SIZE ' + labelWidthMm().toString() + ' mm,' + labelHeightMm().toString() + ' mm\r\n'
@@ -230,6 +280,19 @@ function buildPrintTspl(): string {
 		if (item.type == 'barcode') {
 			const humanReadable = item.showText ? 1 : 0
 			command = command + 'BARCODE ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',"' + barcodeCommandType(item) + '",' + dot(item.height).toString() + ',' + humanReadable.toString() + ',0,2,2,"' + safeText(normalizeBarcodeText(item)) + '"\r\n'
+		} else if (item.type == 'hline') {
+			const lineWidth = dot(item.lineWidth)
+			command = command + 'BAR ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',' + dot(item.width).toString() + ',' + Math.max(1, lineWidth).toString() + '\r\n'
+		} else if (item.type == 'vline') {
+			const lineWidth = dot(item.lineWidth)
+			command = command + 'BAR ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',' + Math.max(1, lineWidth).toString() + ',' + dot(item.height).toString() + '\r\n'
+		} else if (item.type == 'rect') {
+			const lineWidth = Math.max(1, dot(item.lineWidth))
+			const x = dot(item.x)
+			const y = dot(item.y)
+			const width = dot(item.width)
+			const height = dot(item.height)
+			command = command + 'BOX ' + x.toString() + ',' + y.toString() + ',' + (x + width).toString() + ',' + (y + height).toString() + ',' + lineWidth.toString() + '\r\n'
 		} else {
 			const scale = tsplTextScale(item.fontSize)
 			command = command + 'TEXT ' + dot(item.x).toString() + ',' + dot(item.y).toString() + ',"TSS24.BF2",0,' + scale.toString() + ',' + scale.toString() + ',"' + safeText(item.content) + '"\r\n'
@@ -249,7 +312,7 @@ function connectedPrinterAddress(): string {
 }
 
 function goPrinterSettings() {
-	uni.showToast({ title: '请先连接打印机', icon: 'none' })
+	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({
 			url: '/pages/printer-settings/index',
@@ -257,8 +320,53 @@ function goPrinterSettings() {
 	}, 450)
 }
 
+function elementKeyExists(key: string): boolean {
+	for (let index = 0; index < elements.value.length; index += 1) {
+		if (elements.value[index].key == key) return true
+	}
+	return false
+}
+
+function keyInList(key: string, keys: string[]): boolean {
+	for (let index = 0; index < keys.length; index += 1) {
+		if (keys[index] == key) return true
+	}
+	return false
+}
+
+function bumpNextIndexFromKey(key: string) {
+	const prefix = 'field-'
+	if (!key.startsWith(prefix)) return
+	const numberText = key.substring(prefix.length)
+	const parsed = parseInt(numberText)
+	if (!isNaN(parsed) && parsed >= nextIndex.value) {
+		nextIndex.value = parsed + 1
+	}
+}
+
 function makeKey(): string {
-	const key = 'field-' + nextIndex.value.toString()
+	let key = 'field-' + nextIndex.value.toString()
+	while (elementKeyExists(key)) {
+		nextIndex.value = nextIndex.value + 1
+		key = 'field-' + nextIndex.value.toString()
+	}
+	nextIndex.value = nextIndex.value + 1
+	return key
+}
+
+function reserveElementKey(preferred: string, usedKeys: string[]): string {
+	let key = preferred.trim()
+	if (key != '' && !keyInList(key, usedKeys)) {
+		usedKeys.push(key)
+		bumpNextIndexFromKey(key)
+		return key
+	}
+	key = 'field-' + nextIndex.value.toString()
+	while (keyInList(key, usedKeys)) {
+		nextIndex.value = nextIndex.value + 1
+		key = 'field-' + nextIndex.value.toString()
+	}
+	usedKeys.push(key)
 	nextIndex.value = nextIndex.value + 1
 	return key
 }
@@ -326,10 +434,20 @@ function getSelectedElement(): LabelElement | null {
 	return getElement(selectedKey.value)
 }
 
+function updateSelectedSummary() {
+	const item = getSelectedElement()
+	if (item == null) {
+		selectedElementSummaryText.value = '未选择字段'
+		return
+	}
+	const current = item as LabelElement
+	selectedElementSummaryText.value = current.type + ' · x ' + current.x.toString() + ' / y ' + current.y.toString()
+}
+
 function fitTextElement(item: LabelElement) {
 	const textLength = item.content.length > 0 ? item.content.length : item.label.length
 	const safeLength = textLength > 0 ? textLength : 1
-	const displayFontSize = Math.max(10, item.fontSize * previewScale.value / 8)
+	const displayFontSize = Math.max(10, previewDotsToPx(item.fontSize))
 	const widthPx = safeLength * displayFontSize * 0.62 + 6
 	const heightPx = displayFontSize + 4
 	item.width = Math.max(2, widthPx / previewScale.value)
@@ -363,7 +481,7 @@ function clampElement(item: LabelElement) {
 function drawCanvasText(context: DrawableContext, item: LabelElement) {
 	const x = item.x * previewScale.value
 	const y = item.y * previewScale.value
-	const displayFontSize = Math.max(10, item.fontSize * previewScale.value / 8)
+	const displayFontSize = Math.max(10, previewDotsToPx(item.fontSize))
 	context.fillStyle = '#111827'
 	context.strokeStyle = '#111827'
 	context.font = displayFontSize.toString() + 'px'
@@ -379,12 +497,12 @@ function drawCanvasBarcode(context: DrawableContext, item: LabelElement) {
 	context.fillStyle = '#111827'
 	const count = item.barcodeType == 'EAN13' ? 59 : 38
 	const barWidth = width / count
-	const bottomTextHeight = item.showText ? 14 : 0
+	const bottomTextHeight = item.showText ? previewDotsToPx(14) : 0
 	for (let index = 0; index < count; index += 1) {
 		if (index % 3 != 1) context.fillRect(x + index * barWidth, y + 4, Math.max(1, barWidth * 0.65), Math.max(4, height - 6 - bottomTextHeight))
 	}
 	if (item.showText) {
-		context.font = '10px'
+		context.font = Math.max(8, previewDotsToPx(12)).toString() + 'px'
 		context.textAlign = 'left'
 		context.fillText(item.content, x + 4, y + height - 4)
 	}
@@ -476,6 +594,15 @@ function initCanvas() {
 	renderCanvas()
 }
 
+function updateCanvasBounds() {
+	if (canvasRef.value == null) return
+	const canvas = canvasRef.value as UniElement
+	canvas.getBoundingClientRectAsync()?.then((rect) => {
+		canvasLeftPx = rect.left
+		canvasTopPx = rect.top
+	})
+}
+
 function updatePreviewScale() {
 	const info = uni.getSystemInfoSync()
 	const text = JSON.stringify(info)
@@ -505,13 +632,19 @@ function initCanvasSoon() {
 function loadElements(value: UTSJSONObject[]) {
 	const next: LabelElement[] = []
 	const previousKey = selectedKey.value
+	const usedKeys: string[] = []
+	let normalizedKeys = false
+	nextIndex.value = 1
 	for (let index = 0; index < value.length; index += 1) {
 		const item = elementFromObject(value[index], index)
+		const originalKey = item.key
+		item.key = reserveElementKey(originalKey, usedKeys)
+		if (item.key != originalKey) normalizedKeys = true
 		clampElement(item)
 		next.push(item)
 	}
 	if (next.length == 0) {
-		next.push({ key: 'name', label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, lineWidth: 1, x: 2, y: 2, width: 18, height: 4, fontSize: 18 } as LabelElement)
+		next.push({ key: reserveElementKey('field-1', usedKeys), label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, lineWidth: 1, x: 2, y: 2, width: 18, height: 4, fontSize: 18 } as LabelElement)
 	}
 	elements.value = next
 	let nextKey = next[0].key
@@ -519,6 +652,8 @@ function loadElements(value: UTSJSONObject[]) {
 		if (next[index].key == previousKey) nextKey = previousKey
 	}
 	selectedKey.value = nextKey
+	updateSelectedSummary()
+	if (normalizedKeys) emitChange()
 	renderSoon()
 }
 
@@ -526,12 +661,7 @@ const boardStyle = computed((): string => {
 	return 'width:' + canvasWidthPx().toString() + 'px;height:' + canvasHeightPx().toString() + 'px;'
 })
 
-const selectedElementSummary = computed((): string => {
-	const item = getSelectedElement()
-	if (item == null) return '未选择字段'
-	const current = item as LabelElement
-	return current.type + ' · x ' + current.x.toString() + ' / y ' + current.y.toString()
-})
+const selectedElementSummary = computed((): string => selectedElementSummaryText.value)
 
 const selectedContent = computed((): string => {
 	const item = getSelectedElement()
@@ -589,6 +719,7 @@ const selectedLineWidth = computed((): string => {
 
 function selectElement(key: any) {
 	selectedKey.value = stringValue(key)
+	updateSelectedSummary()
 	renderCanvas()
 }
 
@@ -599,6 +730,7 @@ function moveSelected(dx: number, dy: number) {
 	current.x = current.x + dx
 	current.y = current.y + dy
 	clampElement(current)
+	updateSelectedSummary()
 	emitChange()
 	renderCanvas()
 }
@@ -611,6 +743,7 @@ function resizeSelected(delta: number) {
 	current.height = current.height + delta
 	if (current.type == 'text') current.fontSize = current.fontSize + delta * 3
 	clampElement(current)
+	updateSelectedSummary()
 	emitChange()
 	renderCanvas()
 }
@@ -627,6 +760,7 @@ function addElement(item: LabelElement) {
 	clampElement(item)
 	elements.value.push(item)
 	selectedKey.value = item.key
+	updateSelectedSummary()
 	emitChange()
 	renderSoon()
 }
@@ -677,7 +811,7 @@ function addRectFrame() {
 
 function deleteSelectedElement() {
 	if (elements.value.length <= 1) {
-		uni.showToast({ title: '至少保留一个字段', icon: 'none' })
+		uni.showToast({ title: '至少保留一个字段', icon: 'none', duration: 3500 })
 		return
 	}
 	const next: LabelElement[] = []
@@ -686,6 +820,7 @@ function deleteSelectedElement() {
 	}
 	elements.value = next
 	selectedKey.value = next[0].key
+	updateSelectedSummary()
 	emitChange()
 	renderSoon()
 }
@@ -717,6 +852,7 @@ function handleLineWidthInput(event: any) {
 	const current = item as LabelElement
 	current.lineWidth = numberValue(inputEvent.detail.value, current.lineWidth)
 	clampElement(current)
+	updateSelectedSummary()
 	emitChange()
 	renderCanvas()
 }
@@ -750,7 +886,40 @@ function currentElementsPayload(): UTSJSONObject[] {
 	return payload
 }
 
+function validateCurrentElements(): string {
+	if (elements.value.length == 0) return '模板没有可打印元素'
+	const paperWidth = labelWidthMm()
+	const paperHeight = labelHeightMm()
+	if (paperWidth <= 0 || paperHeight <= 0) return '模板纸张尺寸无效'
+	if (props.dotsPerMm != 8 && props.dotsPerMm != 12) return '模板打印密度无效'
+	for (let index = 0; index < elements.value.length; index += 1) {
+		const item = elements.value[index]
+		const name = validationElementName(item, index)
+		if (item.x < 0 || item.y < 0) return name + ' 位置不能为负数'
+		if (item.width <= 0 || item.height <= 0) return name + ' 宽高必须大于 0'
+		if (item.x + item.width > paperWidth + 0.05) return name + ' 超出纸张宽度'
+		if (item.y + item.height > paperHeight + 0.05) return name + ' 超出纸张高度'
+		if (item.type == 'text' && isBlankTemplateText(item.content)) return name + ' 内容为空'
+		if (item.type == 'barcode' && isBlankTemplateText(item.content)) return name + ' 条码为空'
+		if ((item.type == 'hline' || item.type == 'vline' || item.type == 'rect') && item.lineWidth <= 0) return name + ' 线宽必须大于 0'
+		if (item.type == 'hline' && item.width < 0.5) return name + ' 横线长度过短'
+		if (item.type == 'vline' && item.height < 0.5) return name + ' 竖线长度过短'
+		if (item.type == 'barcode' && item.barcodeType == 'EAN13' && !isValidEan13Input(item.content)) {
+			return name + ' 不是有效 EAN13，请使用 12 位数字或正确校验位的 13 位数字'
+		}
+		if (item.type == 'barcode' && item.barcodeType != 'EAN13' && !isValidCode128Text(item.content)) {
+			return name + ' 不是有效 CODE128 内容'
+		}
+	}
+	return ''
+}
+
 function printTestLabel() {
+	const validationMessage = validateCurrentElements()
+	if (validationMessage != '') {
+		uni.showToast({ title: validationMessage, icon: 'none', duration: 3500 })
+		return
+	}
 	const address = connectedPrinterAddress()
 	if (address == '') {
 		goPrinterSettings()
@@ -768,6 +937,7 @@ function printTestLabel() {
 	uni.showToast({
 		title: response.success ? '测试打印已发送' : response.message,
 		icon: response.success ? 'success' : 'none',
+		duration: response.success ? 1500 : 3500,
 	})
 }
 
@@ -798,13 +968,6 @@ function canvasTouchPx(event: any): UTSJSONObject {
 	const point = touchPoint(event)
 	let x = numberValue(stringValue(point['x'], stringValue(point['clientX'], stringValue(point['pageX'], stringValue(point['offsetX'])))), 0)
 	let y = numberValue(stringValue(point['y'], stringValue(point['clientY'], stringValue(point['pageY'], stringValue(point['offsetY'])))), 0)
-	if (canvasRef.value != null) {
-		const canvas = canvasRef.value as UniElement
-		canvas.getBoundingClientRectAsync()?.then((rect) => {
-			canvasLeftPx = rect.left
-			canvasTopPx = rect.top
-		})
-	}
 	if (x > canvasWidthPx() || y > canvasHeightPx() || canvasLeftPx > 0 || canvasTopPx > 0) {
 		x = x - canvasLeftPx
 		y = y - canvasTopPx
@@ -830,6 +993,7 @@ function isResizeHandle(item: LabelElement, xMm: number, yMm: number): boolean {
 }
 
 function handleCanvasTouchStart(event: any) {
+	updateCanvasBounds()
 	const point = canvasTouchPx(event)
 	const xMm = numberValue(stringValue(point['x']), 0) / previewScale.value
 	const yMm = numberValue(stringValue(point['y']), 0) / previewScale.value
@@ -837,6 +1001,7 @@ function handleCanvasTouchStart(event: any) {
 	if (item == null) return
 	const current = item as LabelElement
 	selectedKey.value = current.key
+	updateSelectedSummary()
 	resizing.value = isResizeHandle(current, xMm, yMm)
 	dragging.value = !resizing.value
 	dragStartX.value = numberValue(stringValue(point['x']), 0)
@@ -846,6 +1011,7 @@ function handleCanvasTouchStart(event: any) {
 	resizeStartWidth.value = current.width
 	resizeStartHeight.value = current.height
 	resizeStartFontSize.value = current.fontSize
+	moveDirty = false
 	renderCanvas()
 }
 
@@ -868,13 +1034,18 @@ function handleCanvasTouchMove(event: any) {
 		current.y = dragElementY.value + dyMm
 	}
 	clampElement(current)
-	emitChange()
+	moveDirty = true
 	renderCanvas()
 }
 
 function handleCanvasTouchEnd(event: any) {
+	if ((dragging.value || resizing.value) && moveDirty) {
+		updateSelectedSummary()
+		emitChange()
+	}
 	dragging.value = false
 	resizing.value = false
+	moveDirty = false
 }
 
 loadElements(props.elements)

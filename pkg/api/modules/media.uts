@@ -81,6 +81,29 @@ function stringValue(value: any | null): string {
 	return '' + value
 }
 
+function safeErrorMessage(error: any | null): string {
+	if (error == null) return ''
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return ''
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const rawMessage = parsed!['message']
+			const message = stringValue(rawMessage)
+			if (message != '') return message
+			const rawDetail = parsed!['detail']
+			const detail = stringValue(rawDetail)
+			if (detail != '') return detail
+			const rawErrors = parsed!['errors']
+			const errors = stringValue(rawErrors)
+			if (errors != '') return errors
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
 function boolValue(value: any | null): boolean {
 	if (value == null) {
 		return false
@@ -618,7 +641,7 @@ function uploadSingleMediaFile(item: MediaBatchUploadItem): Promise<UTSJSONObjec
 				},
 			})
 		} catch (error) {
-			console.log('media upload throw:', resolvedFilePath, stringValue((error as Error).message))
+			console.log('media upload throw:', resolvedFilePath, safeErrorMessage(error))
 			reject(error)
 		}
 	})
@@ -748,7 +771,7 @@ export async function batchUploadMediaFiles(items: MediaBatchUploadItem[]): Prom
 			}
 		}
 	} catch (error) {
-		const message = stringValue((error as Error).message)
+		const message = safeErrorMessage(error)
 		for (let index = 0; index < items.length; index += 1) {
 			failItems.push({
 				filePath: items[index].filePath,

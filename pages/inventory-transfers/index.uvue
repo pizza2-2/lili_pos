@@ -142,6 +142,7 @@ import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { approveInventoryTransfer, cancelInventoryTransfer, completeInventoryTransfer, getInventoryTransfers, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type SelectOption = {
 	value: string
@@ -224,8 +225,6 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -357,7 +356,7 @@ function compactDate(value: string): string {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -541,7 +540,7 @@ async function runAction(actionName: string, id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '操作失败'))
 	}
 }
 

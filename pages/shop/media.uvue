@@ -105,10 +105,6 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any): string {
 	let message = '商店资料加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -269,7 +265,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string): void 
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -330,7 +326,7 @@ function handleItemClick(payload: UTSJSONObject): void {
 	const title = stringValue(payload['title'], '商店资料')
 	uni.showToast({
 		title: title,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 

@@ -113,6 +113,7 @@ import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { ProductItem, PrintTemplateItem, PrintTemplateListResponse, getProductDetail, getPrintTemplateList, setDefaultPrintTemplate } from '@/pkg/api/modules/products.uts'
 import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type PrintPreviewField = {
 	key: string
@@ -209,12 +210,18 @@ function activeProduct(): ProductItem | null {
 	return printProduct.value
 }
 
-function productNameText(): string {
+function productNameRawText(): string {
 	const product = activeProduct()
-	if (product == null) return '-'
+	if (product == null) return ''
 	if (product.name_cn != '') return product.name_cn
 	if (product.name_en != '') return product.name_en
 	if (product.name_other != '') return product.name_other
+	return ''
+}
+
+function productNameText(): string {
+	const name = productNameRawText()
+	if (name != '') return name
 	return '未命名商品'
 }
 
@@ -234,11 +241,28 @@ function productDiscountPriceText(): string {
 	return stringValue(product.base_sales_price, '0.00')
 }
 
-function productBarcodeText(): string {
+function productPriceRawText(source: string): string {
 	const product = activeProduct()
-	if (product == null) return '-'
+	if (product == null) return ''
+	if (source == 'discount_price') {
+		const discount = product.discount_info
+		if (discount != null && discount.has_discount && discount.final_price != '') return discount.final_price
+		return stringValue(product.base_sales_price)
+	}
+	return stringValue(product.base_sales_price)
+}
+
+function productBarcodeRawText(): string {
+	const product = activeProduct()
+	if (product == null) return ''
 	if (product.barcode != '') return product.barcode
 	if (product.sku != '') return product.sku
+	return ''
+}
+
+function productBarcodeText(): string {
+	const barcode = productBarcodeRawText()
+	if (barcode != '') return barcode
 	return '-'
 }
 
@@ -246,6 +270,112 @@ function productSkuText(): string {
 	const product = activeProduct()
 	if (product == null) return '-'
 	return product.sku == '' ? '-' : product.sku
+}
+
+function onlyDigits(value: string): string {
+	let result = ''
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value.substring(index, index + 1)
+		if (char >= '0' && char <= '9') result = result + char
+	}
+	return result
+}
+
+function isValidEan13Input(value: string): boolean {
+	const digits = onlyDigits(value)
+	if (digits.length == 12) return true
+	if (digits.length != 13) return false
+	let sum = 0
+	for (let index = 0; index < 12; index += 1) {
+		const digit = parseInt(digits.substring(index, index + 1))
+		sum += index % 2 == 0 ? digit : digit * 3
+	}
+	const check = (10 - (sum % 10)) % 10
+	return check.toString() == digits.substring(12, 13)
+}
+
+function isPriceSource(source: string): boolean {
+	return source == 'price' || source == 'base_sales_price' || source == 'discount_price'
+}
+
+function isGraphicElementType(type: string): boolean {
+	return type == 'hline' || type == 'vline' || type == 'rect'
+}
+
+function isSupportedPrintElementType(type: string): boolean {
+	return type == 'text' || type == 'barcode' || isGraphicElementType(type)
+}
+
+function isBlankPrintText(value: string): boolean {
+	const text = value.trim()
+	return text == '' || text == '-'
+}
+
+function isValidMoneyText(value: string): boolean {
+	const text = value.trim()
+	if (text == '') return false
+	const parsed = parseFloat(text)
+	return !isNaN(parsed) && parsed >= 0
+}
+
+function isValidCode128Text(value: string): boolean {
+	const text = value.trim()
+	if (text == '') return false
+	if (text.length > 80) return false
+	for (let index = 0; index < text.length; index += 1) {
+		const code = text.charCodeAt(index)!
+		if (code < 32 || code > 126) return false
+	}
+	return true
+}
+
+function elementDisplayName(source: UTSJSONObject, index: number): string {
+	const label = stringValue(source['label'])
+	if (label != '') return label
+	const key = stringValue(source['key'])
+	if (key != '') return key
+	return '元素 ' + (index + 1).toString()
+}
+
+function validateElementNumber(source: UTSJSONObject, index: number, key: string, minValue: number): string {
+	const raw = stringValue(source[key])
+	if (raw == '') return elementDisplayName(source, index) + ' 缺少 ' + key
+	const value = parseFloat(raw)
+	if (isNaN(value)) return elementDisplayName(source, index) + ' 的 ' + key + ' 必须是数字'
+	if (value < minValue) return elementDisplayName(source, index) + ' 的 ' + key + ' 不能小于 ' + minValue.toString()
+	return ''
+}
+
+function validateElementLayout(source: UTSJSONObject, index: number, paperWidth: number, paperHeight: number): string {
+	const type = stringValue(source['type'], 'text')
+	if (!isSupportedPrintElementType(type)) return elementDisplayName(source, index) + ' 类型不支持'
+	const numberKeys = ['x', 'y', 'width', 'height']
+	for (let numberIndex = 0; numberIndex < numberKeys.length; numberIndex += 1) {
+		const minValue = numberKeys[numberIndex] == 'x' || numberKeys[numberIndex] == 'y' ? 0 : 0.01
+		const error = validateElementNumber(source, index, numberKeys[numberIndex], minValue)
+		if (error != '') return error
+	}
+	const x = numberValue(source['x'], 0)
+	const y = numberValue(source['y'], 0)
+	const width = numberValue(source['width'], 0)
+	const height = numberValue(source['height'], 0)
+	if (x + width > paperWidth + 0.05) return elementDisplayName(source, index) + ' 超出纸张宽度'
+	if (y + height > paperHeight + 0.05) return elementDisplayName(source, index) + ' 超出纸张高度'
+	if (isGraphicElementType(type)) {
+		const lineWidth = numberValue(source['lineWidth'], numberValue(source['line_width'], 0.4))
+		if (lineWidth <= 0) return elementDisplayName(source, index) + ' 线宽必须大于 0'
+		if (type == 'hline' && width < 0.5) return elementDisplayName(source, index) + ' 横线长度过短'
+		if (type == 'vline' && height < 0.5) return elementDisplayName(source, index) + ' 竖线长度过短'
+	}
+	return ''
+}
+
+function productRequiredValueForSource(source: string): string {
+	if (source == 'name') return productNameRawText()
+	if (isPriceSource(source)) return productPriceRawText(source)
+	if (source == 'barcode') return productBarcodeRawText()
+	if (source == 'sku' || source == 'kod') return productSkuText()
+	return ''
 }
 
 function printValueForSource(source: string, fallback: string): string {
@@ -257,6 +387,37 @@ function printValueForSource(source: string, fallback: string): string {
 	if (source == 'sku') return productSkuText()
 	if (source == 'kod') return productSkuText()
 	return fallback
+}
+
+function validatePrintElements(item: PrintTemplateItem): string {
+	if (item.elements.length == 0) return '模板没有可打印元素'
+	const paperWidth = numberValue(item.paper_width_mm, 0)
+	const paperHeight = numberValue(item.paper_height_mm, 0)
+	if (paperWidth <= 0 || paperHeight <= 0) return '模板纸张尺寸无效'
+	if (item.dots_per_mm != 8 && item.dots_per_mm != 12) return '模板打印密度无效'
+	for (let index = 0; index < item.elements.length; index += 1) {
+		const source = item.elements[index]
+		const layoutError = validateElementLayout(source, index, paperWidth, paperHeight)
+		if (layoutError != '') return layoutError
+		const elementSource = stringValue(source['source'])
+		const type = stringValue(source['type'], 'text')
+		const fallbackContent = stringValue(source['content'])
+		if (!isGraphicElementType(type) && elementSource != '' && elementSource != 'custom') {
+			const requiredValue = productRequiredValueForSource(elementSource)
+			if (isBlankPrintText(requiredValue)) return elementDisplayName(source, index) + ' 缺失，无法打印'
+			if (isPriceSource(elementSource) && !isValidMoneyText(requiredValue)) return elementDisplayName(source, index) + ' 不是有效金额'
+		}
+		const content = printValueForSource(elementSource, fallbackContent)
+		if (!isGraphicElementType(type) && isBlankPrintText(content)) return elementDisplayName(source, index) + ' 内容为空'
+		const barcodeType = stringValue(source['barcodeType'], stringValue(source['barcode_type'], 'EAN13')).toUpperCase()
+		if (type == 'barcode' && barcodeType == 'EAN13' && !isValidEan13Input(content)) {
+			return elementDisplayName(source, index) + ' 不是有效 EAN13，请使用 12 位数字或正确校验位的 13 位数字'
+		}
+		if (type == 'barcode' && barcodeType != 'EAN13' && !isValidCode128Text(content)) {
+			return elementDisplayName(source, index) + ' 不是有效 CODE128 内容'
+		}
+	}
+	return ''
 }
 
 function printLabelForSource(source: UTSJSONObject, index: number): string {
@@ -468,7 +629,7 @@ async function loadPrintProduct() {
 	try {
 		printProduct.value = await getProductDetail(productId.value)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '商品信息加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '商品信息加载失败'))
 	}
 }
 
@@ -497,7 +658,7 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		fontSize: numberValue(source['fontSize'], 4),
 		content: printValueForSource(elementSource, fallbackContent),
 		source: elementSource,
-		barcodeType: stringValue(source['barcodeType'], 'EAN13'),
+		barcodeType: stringValue(source['barcodeType'], stringValue(source['barcode_type'], 'EAN13')),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
 	} as UTSJSONObject
@@ -532,7 +693,7 @@ function connectedPrinterAddress(): string {
 }
 
 function goPrinterSettings() {
-	uni.showToast({ title: '请先连接打印机', icon: 'none' })
+	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({
 			url: '/pages/printer-settings/index',
@@ -544,6 +705,11 @@ function confirmPrintProduct() {
 	if (printing.value) return
 	const item = selectedPrintTemplate.value
 	if (item == null) return
+	const validationMessage = validatePrintElements(item)
+	if (validationMessage != '') {
+		uni.showToast({ title: validationMessage, icon: 'none', duration: 3500 })
+		return
+	}
 	const address = connectedPrinterAddress()
 	if (address == '') {
 		closePrintPopup()
@@ -567,7 +733,7 @@ function confirmPrintProduct() {
 		closePrintPopup()
 		return
 	}
-	uni.showToast({ title: response.message == '' ? '打印失败' : response.message, icon: 'none' })
+	showErrorToast(response.message == '' ? '打印失败' : response.message)
 }
 
 function handleSearchInput(value: string) {
@@ -614,7 +780,7 @@ async function runSetDefault(id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('已设置默认模板'), icon: 'success' })
 		loadTemplates()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '设置默认模板失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '设置默认模板失败'))
 	}
 }
 

@@ -412,10 +412,6 @@ function parseErrorMessage(error: any): string {
 	if (error == null) {
 		return '报表加载失败'
 	}
-	const directMessage = (error as Error).message
-	if (directMessage != null && directMessage != '') {
-		return directMessage
-	}
 	const errorText = JSON.stringify(error)
 	if (errorText != null && errorText != '') {
 		return errorText

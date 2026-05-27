@@ -147,6 +147,7 @@ import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createInventoryTransferItem, getInventoryStocks, getInventoryTransferDetail, getInventoryTransferItems, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:inventory-transfers:index'
 const transferId = ref('')
@@ -199,8 +200,6 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			let parsedError: UTSJSONObject | null = null
@@ -487,17 +486,17 @@ function handleDraftNotesInput(event: any) {
 async function confirmAddItem() {
 	if (submitting.value) return
 	if (transferId.value == '') {
-		uni.showToast({ title: '缺少调拨单 ID', icon: 'none' })
+		uni.showToast({ title: '缺少调拨单 ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const productId = intValue(draftProductValue.value)
 	const quantity = intValue(draftQuantity.value)
 	if (productId <= 0) {
-		uni.showToast({ title: '请选择商品', icon: 'none' })
+		uni.showToast({ title: '请选择商品', icon: 'none', duration: 3500 })
 		return
 	}
 	if (quantity <= 0) {
-		uni.showToast({ title: '请输入有效数量', icon: 'none' })
+		uni.showToast({ title: '请输入有效数量', icon: 'none', duration: 3500 })
 		return
 	}
 	submitting.value = true
@@ -517,7 +516,7 @@ async function confirmAddItem() {
 		currentPage.value = 1
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '添加失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '添加失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -554,9 +553,9 @@ async function handleScannedBarcode(scanResult: string) {
 		}
 		resetDraft()
 		addPopupVisible.value = true
-		uni.showToast({ title: '未找到匹配商品', icon: 'none' })
+		uni.showToast({ title: '未找到匹配商品', icon: 'none', duration: 3500 })
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '扫码查询失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '扫码查询失败'))
 	} finally {
 		scanLookupRunning.value = false
 	}
@@ -572,7 +571,7 @@ function handleScanSearch() {
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
-			uni.showToast({ title: message, icon: 'none' })
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
 }

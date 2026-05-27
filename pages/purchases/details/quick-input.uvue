@@ -16,7 +16,19 @@
 						</view>
 						<view class="summary-item">
 							<text class="summary-value">¥ {{ totalAmountText }}</text>
-							<text class="summary-label">金额</text>
+							<text class="summary-label">{{ totalAmountLabel }}</text>
+						</view>
+					</view>
+
+					<view class="price-mode-row">
+						<text class="price-mode-label">录入价格</text>
+						<view class="price-mode-options">
+							<view :class="priceType == 'gross' ? 'price-mode-option price-mode-option-active' : 'price-mode-option'" @click="selectPriceType('gross')">
+								<text :class="priceType == 'gross' ? 'price-mode-option-text price-mode-option-text-active' : 'price-mode-option-text'">含税价</text>
+							</view>
+							<view :class="priceType == 'net' ? 'price-mode-option price-mode-option-active' : 'price-mode-option'" @click="selectPriceType('net')">
+								<text :class="priceType == 'net' ? 'price-mode-option-text price-mode-option-text-active' : 'price-mode-option-text'">不含税价</text>
+							</view>
 						</view>
 					</view>
 
@@ -25,7 +37,7 @@
 							class="quick-input"
 							:value="draftText"
 							:focus="draftFocus"
-							placeholder="商品名称 采购价 数量"
+							:placeholder="quickInputPlaceholder"
 							confirm-type="next"
 							@input="handleDraftInput"
 							@confirm="handleDraftConfirm"
@@ -122,7 +134,7 @@
 					<view v-if="aiParsedRows.length > 0" class="ai-preview">
 						<view class="ai-preview-head">
 							<text class="ai-preview-head-name">名称</text>
-							<text class="ai-preview-head-price">价格</text>
+							<text class="ai-preview-head-price">{{ priceModeText }}</text>
 							<text class="ai-preview-head-qty">数量</text>
 						</view>
 						<view v-for="(row, index) in aiParsedRows" :key="'ai-' + index.toString()" class="ai-preview-row">
@@ -153,6 +165,7 @@ import { computed } from 'vue'
 import { quickProcurement, QuickProcurementItem } from '@/pkg/api/modules/purchases.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type QuickDraftRow = {
 	key: string
@@ -178,9 +191,9 @@ const pageTaskGuard = createAsyncGuard()
 const nextRowId = ref(1)
 const aiModalVisible = ref(false)
 const aiResultText = ref('')
-const aiPromptText = ref('请识别这张手写采购单，只输出商品行，不要解释，不要表格，不要序号。每行必须使用格式：商品名称 采购价 数量。采购价只写数字，数量只写整数。示例：\nT恤 10 11\n裤子 11 23\n不要猜商品名称；如果商品名称看不清，但价格和数量看得清，商品名称请固定写“无名称”，例如：无名称 10 11。完全看不清的行请跳过。')
 const aiParsedRows = ref<AIParsedRow[]>([])
 const columnsSwapped = ref(false)
+const priceType = ref('gross')
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
@@ -196,8 +209,6 @@ function parseErrorMessage(error: any | null, fallback: string): string {
 	const latestMessage = takeLatestResponseMessage()
 	if (latestMessage != '') return latestMessage
 	if (error == null) return fallback
-	const directMessage = (error as Error).message
-	if (directMessage != null && directMessage != '') return directMessage
 	const text = stringValue(error)
 	return text == '' || text == '[object Object]' ? fallback : text
 }
@@ -207,6 +218,21 @@ function focusDraftSoon() {
 	setTimeout(() => {
 		draftFocus.value = true
 	}, 16)
+}
+
+function currentPriceModeText(): string {
+	return priceType.value == 'net' ? '不含税价' : '含税价'
+}
+
+function currentAIPromptText(): string {
+	const priceLabel = currentPriceModeText()
+	return '请识别这张手写采购单，只输出商品行，不要解释，不要表格，不要序号。每行必须使用格式：商品名称 ' + priceLabel + ' 数量。' + priceLabel + '只写数字，数量只写整数。示例：\nT恤 10 11\n裤子 11 23\n不要猜商品名称；如果商品名称看不清，但价格和数量看得清，商品名称请固定写“无名称”，例如：无名称 10 11。完全看不清的行请跳过。'
+}
+
+function selectPriceType(value: string) {
+	if (value != 'gross' && value != 'net') return
+	priceType.value = value
+	focusDraftSoon()
 }
 
 function normalizeLine(value: string): string {
@@ -390,7 +416,7 @@ function handleDraftInput(event: any) {
 function handleDraftConfirm() {
 	const parsed = parsedDraft(draftText.value)
 	if (stringValue(parsed['valid']) != 'true') {
-		uni.showToast({ title: stringValue(parsed['message'], '格式不完整'), icon: 'none' })
+		uni.showToast({ title: stringValue(parsed['message'], '格式不完整'), icon: 'none', duration: 3500 })
 		focusDraftSoon()
 		return
 	}
@@ -436,7 +462,7 @@ function closeAIModal() {
 
 function copyAIPrompt() {
 	uni.setClipboardData({
-		data: aiPromptText.value,
+		data: currentAIPromptText(),
 		success: () => {
 			uni.showToast({ title: '规则已复制', icon: 'success' })
 		},
@@ -455,7 +481,7 @@ function clearAIResult() {
 
 function applyAIResult() {
 	if (aiParsedRows.value.length == 0) {
-		uni.showToast({ title: '没有可加入的条目', icon: 'none' })
+		uni.showToast({ title: '没有可加入的条目', icon: 'none', duration: 3500 })
 		return
 	}
 	for (let index = 0; index < aiParsedRows.value.length; index += 1) {
@@ -510,7 +536,7 @@ function swapPriceQuantityColumns() {
 
 function openColumnSelector(columnKey: string) {
 	if (rows.value.length == 0) {
-		uni.showToast({ title: '请先加入条目', icon: 'none' })
+		uni.showToast({ title: '请先加入条目', icon: 'none', duration: 3500 })
 		return
 	}
 	const itemList = columnKey == 'price' ? ['此列是价格', '此列是数量'] : ['此列是数量', '此列是价格']
@@ -575,12 +601,12 @@ function goBack() {
 async function submitRows() {
 	if (submitting.value) return
 	if (purchaseId.value == '') {
-		uni.showToast({ title: '缺少采购单 ID', icon: 'none' })
+		uni.showToast({ title: '缺少采购单 ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const invalidMessage = firstInvalidMessage()
 	if (invalidMessage != '') {
-		uni.showToast({ title: invalidMessage, icon: 'none' })
+		uni.showToast({ title: invalidMessage, icon: 'none', duration: 3500 })
 		focusDraftSoon()
 		return
 	}
@@ -597,7 +623,7 @@ async function submitRows() {
 	submitting.value = true
 	uni.showLoading({ title: '上传中...', mask: true })
 	try {
-		await quickProcurement(purchaseId.value, items)
+		await quickProcurement(purchaseId.value, items, priceType.value)
 		markRefreshNeeded()
 		if (!pageTaskGuard.canApply(taskToken)) return
 		uni.showToast({ title: takeLatestResponseMessage('上传成功'), icon: 'success' })
@@ -607,7 +633,7 @@ async function submitRows() {
 		}, 600)
 	} catch (error) {
 		if (!pageTaskGuard.canApply(taskToken)) return
-		uni.showToast({ title: parseErrorMessage(error, '上传失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '上传失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			uni.hideLoading()
@@ -624,10 +650,26 @@ const pageTitle = computed((): string => {
 	return '手写采购单'
 })
 
+const priceModeText = computed((): string => {
+	return currentPriceModeText()
+})
+
+const quickInputPlaceholder = computed((): string => {
+	return '商品名称 ' + priceModeText.value + ' 数量'
+})
+
+const totalAmountLabel = computed((): string => {
+	return priceType.value == 'net' ? '不含税金额' : '含税金额'
+})
+
+const aiPromptText = computed((): string => {
+	return currentAIPromptText()
+})
+
 const previewText = computed((): string => {
 	const parsed = parsedDraft(draftText.value)
 	if (stringValue(parsed['valid']) != 'true') return ''
-	return stringValue(parsed['name']) + ' / ¥ ' + stringValue(parsed['price']) + ' / x ' + stringValue(parsed['quantity'])
+	return stringValue(parsed['name']) + ' / ' + priceModeText.value + ' ¥ ' + stringValue(parsed['price']) + ' / x ' + stringValue(parsed['quantity'])
 })
 
 const hasAIResultText = computed((): boolean => {
@@ -635,11 +677,11 @@ const hasAIResultText = computed((): boolean => {
 })
 
 const priceColumnTitle = computed((): string => {
-	return columnsSwapped.value ? '数量' : '价格'
+	return columnsSwapped.value ? '数量' : priceModeText.value
 })
 
 const quantityColumnTitle = computed((): string => {
-	return columnsSwapped.value ? '价格' : '数量'
+	return columnsSwapped.value ? priceModeText.value : '数量'
 })
 
 const totalQuantity = computed((): number => {
@@ -696,6 +738,13 @@ onShow(() => {
 .summary-item:last-child { margin-right: 0; }
 .summary-value { font-size: 17px; line-height: 22px; color: #0F172A; font-weight: bold; }
 .summary-label { font-size: 11px; line-height: 15px; color: #64748B; margin-top: 2px; }
+.price-mode-row { min-height: 42px; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.price-mode-label { font-size: 13px; line-height: 18px; color: #334155; font-weight: bold; }
+.price-mode-options { flex-direction: row; padding: 3px; border-radius: 8px; background-color: #F1F5F9; }
+.price-mode-option { height: 32px; min-width: 78px; border-radius: 7px; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.price-mode-option-active { background-color: #0F172A; }
+.price-mode-option-text { font-size: 12px; line-height: 17px; color: #475569; font-weight: bold; }
+.price-mode-option-text-active { color: #FFFFFF; }
 .quick-input-box { min-height: 52px; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #CBD5E1; background-color: #FFFFFF; flex-direction: row; align-items: center; padding-left: 12px; }
 .quick-input { flex: 1; height: 50px; font-size: 17px; color: #0F172A; }
 .enter-btn { width: 68px; height: 42px; margin-right: 5px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }

@@ -30,6 +30,7 @@
 <script setup lang="uts">
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createInventoryTransfer, InventoryMutationData } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 function normalizeDateNumber(value: number): string {
 	if (value < 10) return '0' + value
@@ -68,8 +69,6 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const text = JSON.stringify(error)
 		if (text != null && text != '') {
 			let parsedError: UTSJSONObject | null = null
@@ -241,15 +240,15 @@ function buildPayload(data: UTSJSONObject): InventoryMutationData | null {
 	const fromLocation = intValue(data['from_location'])
 	const toLocation = intValue(data['to_location'])
 	if (fromLocation <= 0) {
-		uni.showToast({ title: '请选择调出位置', icon: 'none' })
+		uni.showToast({ title: '请选择调出位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	if (toLocation <= 0) {
-		uni.showToast({ title: '请选择调入位置', icon: 'none' })
+		uni.showToast({ title: '请选择调入位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	if (fromLocation == toLocation) {
-		uni.showToast({ title: '调入位置不能与调出位置相同', icon: 'none' })
+		uni.showToast({ title: '调入位置不能与调出位置相同', icon: 'none', duration: 3500 })
 		return null
 	}
 	return {
@@ -276,7 +275,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage('创建调拨单成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '创建调拨单失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '创建调拨单失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -292,8 +291,8 @@ function handleFormChange(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	if (rawData != null) liveFormData.value = rawData as UTSJSONObject
 }
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }) }
 </script>
 
 <style>

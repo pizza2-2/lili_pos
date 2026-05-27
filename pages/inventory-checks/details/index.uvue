@@ -4,16 +4,52 @@
 			:title="pageTitle"
 			searchPlaceholder="商品名、SKU"
 			:searchValue="keyword"
+			:filterVisible="filterVisible"
 			:showBack="true"
 			:showSearch="true"
+			:showFilter="true"
 			:showScan="true"
 			:showHome="true"
+			:filterActive="hasActiveFilter"
 			homePath="/pages/inventory-checks/index"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
 			@scan="handleScanSearch"
-		/>
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="detail-filter-panel">
+					<view class="detail-filter-group">
+						<text class="detail-filter-title">差异状态</text>
+						<view class="detail-filter-options">
+							<view v-for="option in discrepancyOptions" :key="'diff-' + option.value" :class="draftDiscrepancy == option.value ? 'detail-filter-option detail-filter-option-active' : 'detail-filter-option'" @click="selectDraftDiscrepancy(option.value)">
+								<text :class="draftDiscrepancy == option.value ? 'detail-filter-option-text detail-filter-option-text-active' : 'detail-filter-option-text'">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="detail-filter-group">
+						<text class="detail-filter-title">排序</text>
+						<view class="detail-filter-options">
+							<view v-for="option in sortOptions" :key="'sort-' + option.value" :class="draftSortBy == option.value ? 'detail-filter-option detail-filter-option-active' : 'detail-filter-option'" @click="selectDraftSort(option.value)">
+								<text :class="draftSortBy == option.value ? 'detail-filter-option-text detail-filter-option-text-active' : 'detail-filter-option-text'">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="detail-filter-actions">
+						<view class="detail-filter-btn detail-filter-btn-light" @click="handleFilterReset">
+							<text class="detail-filter-btn-light-text">重置</text>
+						</view>
+						<view class="detail-filter-btn detail-filter-btn-primary" @click="applySelectedFilters">
+							<text class="detail-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
 
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
@@ -40,8 +76,6 @@
 					inlineLoadingText="盘点明细刷新中..."
 					:emptyText="emptyText"
 					emptyIcon="◎"
-					:showMenu="true"
-					:menuActions="menuActions"
 					:showChevron="false"
 					:showPagination="true"
 					:currentPage="currentPage"
@@ -51,7 +85,7 @@
 					:summaryItems="summaryItems"
 					:showFloatingAdd="true"
 					floatingAddText="添加商品"
-					@menu="handleMenu"
+					@item-click="handleItemClick"
 					@page-change="handlePageChange"
 					@floating-add="openAddPopup"
 				/>
@@ -74,7 +108,7 @@
 				<view class="add-handle"></view>
 				<view class="add-head">
 					<view>
-						<text class="add-title">添加盘点商品</text>
+						<text class="add-title">{{ draftPanelTitle }}</text>
 						<text class="add-subtitle">{{ locationText }}</text>
 					</view>
 					<view class="add-close" @click="closeAddPopup">
@@ -128,7 +162,74 @@
 						<text class="add-secondary-text">取消</text>
 					</view>
 					<view class="add-primary-btn" @click="confirmAddItem">
-						<text class="add-primary-text">{{ submitting ? '添加中...' : '确认添加' }}</text>
+						<text class="add-primary-text">{{ draftSubmitText }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
+
+		<page-container
+			:show="quickCreateVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeQuickCreatePopup"
+		>
+			<view class="add-panel">
+				<view class="add-handle"></view>
+				<view class="add-head">
+					<view>
+						<text class="add-title">快速创建商品</text>
+						<text class="add-subtitle">{{ locationText }}</text>
+					</view>
+					<view class="add-close" @click="closeQuickCreatePopup">
+						<text class="add-close-text">关闭</text>
+					</view>
+				</view>
+
+				<view class="add-field">
+					<text class="add-label">条码</text>
+					<input class="quick-input" :value="quickCreateBarcode" placeholder="条码" @input="handleQuickBarcodeInput" />
+				</view>
+				<view class="add-field">
+					<text class="add-label">价格</text>
+					<input class="quick-input" :value="quickCreatePrice" type="digit" placeholder="0.00" @input="handleQuickPriceInput" />
+				</view>
+				<view class="add-field">
+					<text class="add-label">图片</text>
+					<view class="quick-image-list">
+						<view
+							v-for="(imagePath, imageIndex) in quickCreateImages"
+							:key="imagePath + '-' + imageIndex"
+							class="quick-image-item"
+						>
+							<image class="quick-image" :src="imagePath" mode="aspectFill" @click="previewQuickCreateImage(imageIndex)"></image>
+							<view class="quick-image-delete" @click.stop="removeQuickCreateImage(imageIndex)">
+								<text class="quick-image-delete-text">×</text>
+							</view>
+						</view>
+						<view v-if="quickCreateImages.length < quickCreateImageLimit" class="quick-image-add" @click="chooseQuickCreateImages">
+							<text class="quick-image-add-plus">+</text>
+							<text class="quick-image-add-text">上传图片</text>
+						</view>
+					</view>
+				</view>
+				<view class="add-field">
+					<text class="add-label">分类</text>
+					<view class="quick-readonly">
+						<text class="quick-readonly-text">{{ quickCreateCategoryText }}</text>
+					</view>
+				</view>
+
+				<view class="add-actions">
+					<view class="add-secondary-btn" @click="closeQuickCreatePopup">
+						<text class="add-secondary-text">取消</text>
+					</view>
+					<view class="add-primary-btn" @click="confirmQuickCreateProduct">
+						<text class="add-primary-text">{{ quickCreateSubmitting ? '创建中...' : '创建并盘点' }}</text>
 					</view>
 				</view>
 			</view>
@@ -140,13 +241,23 @@
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { createInventoryCheckItem, getInventoryCheckDetail, getInventoryCheckItems, getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { checkInventoryCheckItem, createInventoryCheckItem, createInventoryStockForProduct, getInventoryCheckDetail, getInventoryCheckItems, getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { createProduct, getProductList, updateProduct, ProductItem, ProductMutationData, ProductSelectedFilter } from '@/pkg/api/modules/products'
+import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
+import { getCategoryDescendants } from '@/pkg/api/modules/category'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type SelectOption = {
+	value: string
+	label: string
+}
 
 const refreshStorageKey = 'refresh:pages:inventory-checks:index'
 const checkId = ref('')
 const keyword = ref('')
+const filterVisible = ref(false)
 const checkInfo = ref<UTSJSONObject | null>(null)
 const items = ref<UTSJSONObject[]>([])
 const isLoading = ref(false)
@@ -167,8 +278,21 @@ const draftProductImage = ref('')
 const draftProductSubtitle = ref('')
 const draftActualQuantity = ref('0')
 const draftNotes = ref('')
+const editingItemId = ref('')
 const scanLookupRunning = ref(false)
 const volumeScanLocked = ref(false)
+const quickCreateVisible = ref(false)
+const quickCreateSubmitting = ref(false)
+const quickCreateBarcode = ref('')
+const quickCreatePrice = ref('')
+const quickCreateCategoryText = ref('')
+const quickCreateImages = ref<string[]>([])
+const quickCreateImageLimit = 4
+const categoryScopeIds = ref<string[]>([])
+const discrepancyFilter = ref('')
+const sortBy = ref('')
+const draftDiscrepancy = ref('')
+const draftSortBy = ref('')
 let volumeKeyStartTimer = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
@@ -178,9 +302,23 @@ const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'differenceText', label: '差异:' } as UTSJSONObject,
 ])
 
-const menuActions = ref<UTSJSONObject[]>([
-	{ key: 'reload', text: '刷新' } as UTSJSONObject,
-])
+const discrepancyOptions = [
+	{ value: '', label: '全部' } as SelectOption,
+	{ value: 'changed', label: '有变化' } as SelectOption,
+	{ value: 'unchanged', label: '没变化' } as SelectOption,
+]
+
+const sortOptions = [
+	{ value: '', label: '默认' } as SelectOption,
+	{ value: '-difference_quantity', label: '差异从大到小' } as SelectOption,
+	{ value: 'difference_quantity', label: '差异从小到大' } as SelectOption,
+	{ value: 'product_name', label: '名称 A-Z' } as SelectOption,
+	{ value: '-product_name', label: '名称 Z-A' } as SelectOption,
+	{ value: '-actual_quantity', label: '实盘数量多到少' } as SelectOption,
+	{ value: 'actual_quantity', label: '实盘数量少到多' } as SelectOption,
+	{ value: '-system_quantity', label: '系统数量多到少' } as SelectOption,
+	{ value: 'system_quantity', label: '系统数量少到多' } as SelectOption,
+]
 
 const tagColorMap = ref<UTSJSONObject>({
 	已盘点: 'success',
@@ -205,9 +343,13 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const errorText = JSON.stringify(error)
+		let errorText = ''
+		try {
+			const text = JSON.stringify(error)
+			if (text != null) errorText = text
+		} catch (stringifyError) {
+			errorText = ''
+		}
 		if (errorText != null && errorText != '') {
 			let parsedError: UTSJSONObject | null = null
 			try {
@@ -219,11 +361,15 @@ function parseErrorMessage(error: any, fallback: string): string {
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
+					const parsedMessage = stringValue(rawMessage)
 					if (parsedMessage != '') message = parsedMessage
 				}
 			}
-			if (message == fallback && errorText != '{}') message = errorText
+			if (message == fallback && errorText != '{}' && errorText != 'null') message = errorText
+		}
+		if (message == fallback) {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
 		}
 	}
 	return message
@@ -299,14 +445,97 @@ function firstStringField(obj: UTSJSONObject, keys: string[]): string {
 	return ''
 }
 
-function firstImageFromStock(stock: UTSJSONObject): string {
-	const direct = stringValue(stock['product_image'])
-	if (direct != '') return direct
-	const mediaFiles = parseObjectArray(stock['product_media_files'])
-	for (let index = 0; index < mediaFiles.length; index += 1) {
-		const image = firstStringField(mediaFiles[index], ['signed_thumbnail_url', 'signed_download_url', 'file_url', 'url', 'image'])
-		if (image != '') return image
+function normalizedMoneyText(value: string): string {
+	const trimmed = value.trim()
+	if (trimmed == '') return '0.00'
+	const parsed = parseFloat(trimmed)
+	if (isNaN(parsed) || parsed < 0) return ''
+	return parsed.toFixed(2)
+}
+
+function productCategoryId(product: ProductItem): string {
+	const categoryObject = parseObject(product.category)
+	if (categoryObject != null) return firstStringField(categoryObject!, ['id', 'value'])
+	if (product.category == null) return ''
+	return stringValue(product.category)
+}
+
+function productDisplayName(product: ProductItem): string {
+	if (product.name_cn != '') return product.name_cn
+	if (product.name_en != '') return product.name_en
+	if (product.barcode != '') return product.barcode
+	return '商品 #' + product.id.toString()
+}
+
+function productMutationPayload(product: ProductItem, categoryId: string): ProductMutationData {
+	return {
+		sku: product.sku == '' ? null : product.sku,
+		barcode: product.barcode == '' ? null : product.barcode,
+		name_cn: product.name_cn == '' ? productDisplayName(product) : product.name_cn,
+		name_en: product.name_en == '' ? null : product.name_en,
+		name_other: product.name_other == '' ? null : product.name_other,
+		description: product.description == '' ? null : product.description,
+		category: categoryId == '' ? null : categoryId,
+		supplier: product.supplier == null ? null : product.supplier!.toString(),
+		purchase_price: product.purchase_price == '' ? '0.00' : product.purchase_price,
+		net_purchase_price: product.net_purchase_price == '' ? '0.00' : product.net_purchase_price,
+		cost_price: product.cost_price == '' ? '0.00' : product.cost_price,
+		base_sales_price: product.base_sales_price == '' ? '0.00' : product.base_sales_price,
+		status: product.status == '' ? 'ACTIVE' : product.status,
+		is_featured: product.is_featured,
+		is_new: product.is_new,
+		is_bestseller: product.is_bestseller,
+		sort_order: product.sort_order,
+	} as ProductMutationData
+}
+
+function appendUniqueString(list: string[], value: string) {
+	const text = value.trim()
+	if (text == '') return
+	for (let index = 0; index < list.length; index += 1) {
+		if (list[index] == text) return
 	}
+	list.push(text)
+}
+
+function productImageListFromItem(item: UTSJSONObject): string[] {
+	const images: string[] = []
+	appendUniqueString(images, stringValue(item['product_image']))
+	const mediaFiles = parseObjectArray(item['product_media_files'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		appendUniqueString(
+			images,
+			firstStringField(mediaFiles[index], ['signed_thumbnail_url', 'thumbnail_url', 'signed_url', 'signed_download_url', 'file_url', 'url', 'image'])
+		)
+	}
+	return images
+}
+
+function productPreviewImageListFromItem(item: UTSJSONObject): string[] {
+	const images: string[] = []
+	const mediaFiles = parseObjectArray(item['product_media_files'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		appendUniqueString(
+			images,
+			firstStringField(mediaFiles[index], ['signed_url', 'signed_download_url', 'file_url', 'signed_thumbnail_url', 'thumbnail_url', 'url', 'image'])
+		)
+	}
+	if (images.length > 0) return images
+	return productImageListFromItem(item)
+}
+
+function productMediaIdListFromItem(item: UTSJSONObject): string[] {
+	const ids: string[] = []
+	const mediaFiles = parseObjectArray(item['product_media_files'])
+	for (let index = 0; index < mediaFiles.length; index += 1) {
+		appendUniqueString(ids, stringValue(mediaFiles[index]['id']))
+	}
+	return ids
+}
+
+function firstImageFromStock(stock: UTSJSONObject): string {
+	const images = productImageListFromItem(stock)
+	if (images.length > 0) return images[0]
 	return ''
 }
 
@@ -339,6 +568,37 @@ function checkLocationValue(): string {
 function checkCategoryValue(): string {
 	if (checkInfo.value == null) return ''
 	return firstArrayValue((checkInfo.value as UTSJSONObject)['categories'])
+}
+
+function checkCategoryText(): string {
+	if (checkInfo.value == null) return ''
+	return stringValue((checkInfo.value as UTSJSONObject)['category_names'], checkCategoryValue())
+}
+
+async function ensureCategoryScopeIds(): Promise<string[]> {
+	const category = checkCategoryValue()
+	if (category == '') return [] as string[]
+	if (categoryScopeIds.value.length > 0 && categoryScopeIds.value[0] == category) return categoryScopeIds.value
+	const ids: string[] = [category]
+	try {
+		const descendants = await getCategoryDescendants(category, true)
+		for (let index = 0; index < descendants.length; index += 1) {
+			const id = descendants[index].id.toString()
+			if (ids.indexOf(id) < 0) ids.push(id)
+		}
+	} catch (error) {
+	}
+	categoryScopeIds.value = ids
+	return ids
+}
+
+async function productInCheckCategory(product: ProductItem): Promise<boolean> {
+	const category = checkCategoryValue()
+	if (category == '') return true
+	const productCategory = productCategoryId(product)
+	if (productCategory == '') return false
+	const ids = await ensureCategoryScopeIds()
+	return ids.indexOf(productCategory) >= 0
 }
 
 function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
@@ -391,6 +651,8 @@ function buildQuery(): InventoryListQuery {
 		stock: null,
 		check_type: null,
 		is_checked: null,
+		discrepancy: discrepancyFilter.value == '' ? null : discrepancyFilter.value,
+		sort_by: sortBy.value == '' ? null : sortBy.value,
 		transaction_type: null,
 		location_type: null,
 		is_active: null,
@@ -452,21 +714,111 @@ async function loadItems() {
 
 function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 	const sku = stringValue(item['product_sku'])
+	const barcode = stringValue(item['product_barcode'])
 	const checked = stringValue(item['is_checked']) == 'true'
 	const diff = intValue(item['difference_quantity'])
 	const tags: string[] = [checked ? '已盘点' : '未盘点']
+	const images = productImageListFromItem(item)
+	const previewImages = productPreviewImageListFromItem(item)
+	const previewCover = previewImages.length > 0 ? previewImages[0] : (images.length > 0 ? images[0] : '')
+	const titleFallback = barcode == '' ? '商品 #' + stringValue(item['stock']) : barcode
+	const subtitle = barcode != '' ? '条码：' + barcode : (sku == '' ? 'SKU：-' : 'SKU：' + sku)
 	tags.push(diff == 0 ? '无差异' : '有差异')
 	return {
 		id: stringValue(item['id']),
 		rawId: stringValue(item['id']),
-		title: stringValue(item['product_name'], '商品 #' + stringValue(item['stock'])),
-		subtitle: sku == '' ? 'SKU：-' : 'SKU：' + sku,
+		stockId: stringValue(item['stock']),
+		title: stringValue(item['product_name'], titleFallback),
+		subtitle: subtitle,
+		image: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewCover,
+		previewImages: previewImages,
+		mediaIds: productMediaIdListFromItem(item),
 		skuText: sku == '' ? '-' : sku,
 		systemText: stringValue(item['system_quantity'], '0'),
 		actualText: stringValue(item['actual_quantity'], '0'),
 		differenceText: stringValue(item['difference_quantity'], '0'),
+		notesText: stringValue(item['notes']),
 		tags: tags,
 	} as UTSJSONObject
+}
+
+function findRawItemById(itemId: string): UTSJSONObject | null {
+	if (itemId == '') return null
+	for (let index = 0; index < items.value.length; index += 1) {
+		const item = items.value[index]
+		if (stringValue(item['id']) == itemId) return item
+	}
+	return null
+}
+
+function findLocalCheckItemByStock(stockId: string): UTSJSONObject | null {
+	if (stockId == '') return null
+	for (let index = 0; index < items.value.length; index += 1) {
+		const item = items.value[index]
+		if (stringValue(item['stock']) == stockId) return item
+	}
+	return null
+}
+
+async function findExistingCheckItemByStock(stockId: string): Promise<UTSJSONObject | null> {
+	const localItem = findLocalCheckItemByStock(stockId)
+	if (localItem != null) return localItem
+	if (checkId.value == '' || stockId == '') return null
+	const response = await getInventoryCheckItems({
+		search: null,
+		page: 1,
+		page_size: 1,
+		status: null,
+		alert_status: null,
+		supplier: null,
+		category: null,
+		is_listed: null,
+		location: null,
+		from_location: null,
+		to_location: null,
+		transfer_order: null,
+		inventory_check: checkId.value,
+		product: null,
+		stock: stockId,
+		check_type: null,
+		is_checked: null,
+		transaction_type: null,
+		location_type: null,
+		is_active: null,
+	} as InventoryListQuery)
+	if (response.results.length == 0) return null
+	return response.results[0]
+}
+
+function fillDraftFromExistingItem(item: UTSJSONObject, showHint: boolean) {
+	const images = productImageListFromItem(item)
+	const checked = stringValue(item['is_checked']) == 'true'
+	const stockId = stringValue(item['stock'])
+	editingItemId.value = stringValue(item['id'])
+	draftProductValue.value = stringValue(item['product'], stockId)
+	draftStockValue.value = stockId
+	draftProductText.value = stringValue(item['product_name'], '库存 #' + stockId)
+	draftProductImage.value = images.length > 0 ? images[0] : ''
+	draftProductSubtitle.value = '系统 ' + stringValue(item['system_quantity'], '0') + ' / 已在盘点明细中'
+	draftActualQuantity.value = checked ? stringValue(item['actual_quantity'], '0') : stringValue(item['system_quantity'], '0')
+	draftNotes.value = stringValue(item['notes'])
+	if (showHint) uni.showToast({ title: '商品已在盘点中，将修改数量', icon: 'none', duration: 3500 })
+}
+
+function openEditPopupFromRawItem(item: UTSJSONObject, showHint: boolean = false) {
+	fillDraftFromExistingItem(item, showHint)
+	addPopupVisible.value = true
+}
+
+function openEditPopupById(itemId: string) {
+	const item = findRawItemById(itemId)
+	if (item == null) {
+		uni.showToast({ title: '未找到盘点明细', icon: 'none', duration: 3500 })
+		return
+	}
+	openEditPopupFromRawItem(item!)
 }
 
 function resetDraft() {
@@ -477,6 +829,7 @@ function resetDraft() {
 	draftProductSubtitle.value = ''
 	draftActualQuantity.value = '0'
 	draftNotes.value = ''
+	editingItemId.value = ''
 }
 
 function openAddPopup() {
@@ -489,8 +842,14 @@ function closeAddPopup() {
 	addPopupVisible.value = false
 }
 
-function openPopupWithStock(stock: UTSJSONObject) {
+async function openPopupWithStock(stock: UTSJSONObject) {
 	const option = stockOption(stock)
+	const existingItem = await findExistingCheckItemByStock(stringValue(option['stock_id']))
+	if (existingItem != null) {
+		openEditPopupFromRawItem(existingItem!, true)
+		return
+	}
+	editingItemId.value = ''
 	draftProductValue.value = stringValue(option['value'])
 	draftStockValue.value = stringValue(option['stock_id'])
 	draftProductText.value = stringValue(option['text'])
@@ -501,7 +860,294 @@ function openPopupWithStock(stock: UTSJSONObject) {
 	addPopupVisible.value = true
 }
 
-function handleDraftProductChange(payload: UTSJSONObject) {
+function closeQuickCreatePopup() {
+	if (quickCreateSubmitting.value) return
+	quickCreateVisible.value = false
+	quickCreateImages.value = [] as string[]
+}
+
+function openQuickCreatePopup(barcode: string) {
+	quickCreateBarcode.value = barcode
+	quickCreatePrice.value = ''
+	quickCreateCategoryText.value = checkCategoryText()
+	quickCreateImages.value = [] as string[]
+	quickCreateVisible.value = true
+}
+
+function handleQuickBarcodeInput(event: any) {
+	const inputEvent = event as UniInputEvent
+	quickCreateBarcode.value = inputEvent.detail.value
+}
+
+function handleQuickPriceInput(event: any) {
+	const inputEvent = event as UniInputEvent
+	quickCreatePrice.value = inputEvent.detail.value
+}
+
+function quickCreateImageList(): string[] {
+	const result: string[] = []
+	for (let index = 0; index < quickCreateImages.value.length; index += 1) {
+		result.push(quickCreateImages.value[index])
+	}
+	return result
+}
+
+function chooseQuickCreateImages() {
+	if (quickCreateSubmitting.value) return
+	const remain = quickCreateImageLimit - quickCreateImages.value.length
+	if (remain <= 0) {
+		uni.showToast({ title: '最多上传 ' + quickCreateImageLimit.toString() + ' 张图片', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.chooseImage({
+		count: remain,
+		sizeType: ['compressed', 'original'],
+		sourceType: ['album', 'camera'],
+		success: (res) => {
+			const selectedPaths = res.tempFilePaths
+			for (let index = 0; index < selectedPaths.length; index += 1) {
+				const path = selectedPaths[index]
+				if (path != '' && !quickCreateImages.value.includes(path)) {
+					quickCreateImages.value.push(path)
+				}
+			}
+		},
+		fail: (err) => {
+			const message = err.errMsg == '' ? '选择图片失败' : err.errMsg
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
+		},
+	})
+}
+
+function previewQuickCreateImage(index: number) {
+	if (index < 0 || index >= quickCreateImages.value.length) return
+	const urls = quickCreateImageList()
+	uni.previewImage({
+		current: urls[index],
+		urls: urls,
+	})
+}
+
+function removeQuickCreateImage(index: number) {
+	if (quickCreateSubmitting.value) return
+	if (index < 0 || index >= quickCreateImages.value.length) return
+	quickCreateImages.value.splice(index, 1)
+}
+
+async function uploadQuickCreateProductImages(productId: string): Promise<void> {
+	if (productId == '' || quickCreateImages.value.length == 0) return
+	const uploadItems: MediaBatchUploadItem[] = []
+	for (let index = 0; index < quickCreateImages.value.length; index += 1) {
+		const imagePath = quickCreateImages.value[index]
+		if (imagePath == '') continue
+		uploadItems.push({
+			filePath: imagePath,
+			name: 'files',
+			formData: {
+				content_type_model: 'product',
+				object_id: productId,
+			} as UTSJSONObject,
+		} as MediaBatchUploadItem)
+	}
+	if (uploadItems.length == 0) return
+	const uploadResult = await batchUploadMediaFiles(uploadItems)
+	if (uploadResult.failItems.length > 0) {
+		const firstFail = uploadResult.failItems[0]
+		throw new Error(stringValue(firstFail['message'], '图片上传失败'))
+	}
+}
+
+async function searchStockForProduct(productId: string): Promise<UTSJSONObject | null> {
+	const response = await getInventoryStocks({
+		search: null,
+		page: 1,
+		page_size: 10,
+		status: null,
+		alert_status: null,
+		supplier: null,
+		category: null,
+		is_listed: null,
+		location: checkLocationValue() == '' ? null : checkLocationValue(),
+		from_location: null,
+		to_location: null,
+		transfer_order: null,
+		inventory_check: null,
+		product: productId,
+		stock: null,
+		check_type: null,
+		is_checked: null,
+		transaction_type: null,
+		location_type: null,
+		is_active: null,
+	} as InventoryListQuery)
+	if (response.results.length == 0) return null
+	return response.results[0]
+}
+
+async function searchStockByBarcodeInCheckScope(barcode: string): Promise<UTSJSONObject | null> {
+	const response = await getInventoryStocks({
+		search: barcode,
+		page: 1,
+		page_size: 10,
+		status: null,
+		alert_status: null,
+		supplier: null,
+		category: checkCategoryValue() == '' ? null : checkCategoryValue(),
+		is_listed: null,
+		location: checkLocationValue() == '' ? null : checkLocationValue(),
+		from_location: null,
+		to_location: null,
+		transfer_order: null,
+		inventory_check: null,
+		product: null,
+		stock: null,
+		check_type: null,
+		is_checked: null,
+		transaction_type: null,
+		location_type: null,
+		is_active: null,
+	} as InventoryListQuery)
+	for (let index = 0; index < response.results.length; index += 1) {
+		const stock = response.results[index]
+		if (stringValue(stock['product_barcode']) == barcode) return stock
+	}
+	return null
+}
+
+async function ensureStockForProduct(product: ProductItem): Promise<UTSJSONObject> {
+	const productId = product.id.toString()
+	const existing = await searchStockForProduct(productId)
+	if (existing != null) return existing!
+	const locationId = intValue(checkLocationValue())
+	if (locationId <= 0) throw new Error('盘点单缺少库存位置')
+	await createInventoryStockForProduct({
+		product: product.id,
+		location: locationId,
+		quantity: 0,
+		transaction_type: 'INITIAL',
+		unit_cost: product.cost_price == '' ? '0.00' : product.cost_price,
+		notes: '盘点扫码自动创建库存记录',
+	})
+	const created = await searchStockForProduct(productId)
+	if (created == null) throw new Error('库存记录创建后未找到')
+	return created!
+}
+
+async function openInventoryPopupForProduct(product: ProductItem) {
+	const stock = await ensureStockForProduct(product)
+	await openPopupWithStock(stock)
+}
+
+async function findProductByBarcode(barcode: string): Promise<ProductItem | null> {
+	const response = await getProductList({
+		search: barcode,
+		page: 1,
+		page_size: 20,
+		filters: [] as ProductSelectedFilter[],
+	})
+	for (let index = 0; index < response.results.length; index += 1) {
+		const product = response.results[index]
+		if (product.barcode == barcode) return product
+	}
+	return null
+}
+
+async function migrateProductToCheckCategory(product: ProductItem) {
+	const category = checkCategoryValue()
+	if (category == '') {
+		uni.showToast({ title: '盘点单缺少分类', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.showLoading({ title: '迁移商品中...', mask: true })
+	try {
+		const updated = await updateProduct(product.id, productMutationPayload(product, category))
+		uni.showToast({ title: takeLatestResponseMessage('商品已迁移'), icon: 'success' })
+		await openInventoryPopupForProduct(updated)
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '商品迁移失败'))
+	} finally {
+		uni.hideLoading()
+	}
+}
+
+function confirmMigrateProduct(product: ProductItem) {
+	uni.showModal({
+		title: '商品不在该分类下',
+		content: '商品「' + productDisplayName(product) + '」不属于盘点分类「' + checkCategoryText() + '」。是否迁移到该分类并继续盘点？',
+		confirmText: '迁移',
+		cancelText: '取消',
+		success: (res) => {
+			if (res.confirm) migrateProductToCheckCategory(product)
+		},
+	})
+}
+
+async function confirmQuickCreateProduct() {
+	if (quickCreateSubmitting.value) return
+	const barcode = quickCreateBarcode.value.trim()
+	const category = checkCategoryValue()
+	const price = normalizedMoneyText(quickCreatePrice.value)
+	if (barcode == '') {
+		uni.showToast({ title: '请填写条码', icon: 'none', duration: 3500 })
+		return
+	}
+	if (category == '') {
+		uni.showToast({ title: '盘点单缺少分类', icon: 'none', duration: 3500 })
+		return
+	}
+	if (price == '') {
+		uni.showToast({ title: '请输入有效价格', icon: 'none', duration: 3500 })
+		return
+	}
+	quickCreateSubmitting.value = true
+	uni.showLoading({ title: '创建商品中...', mask: true })
+	try {
+		const created = await createProduct({
+			sku: null,
+			barcode: barcode,
+			name_cn: barcode,
+			name_en: null,
+			name_other: null,
+			description: null,
+			category: category,
+			supplier: null,
+			purchase_price: price,
+			net_purchase_price: price,
+			cost_price: price,
+			base_sales_price: price,
+			status: 'ACTIVE',
+			is_featured: false,
+			is_new: false,
+			is_bestseller: false,
+			sort_order: 0,
+		} as ProductMutationData)
+		let uploadFailedMessage = ''
+		if (quickCreateImages.value.length > 0) {
+			uni.showLoading({ title: '上传图片中...', mask: true })
+			try {
+				await uploadQuickCreateProductImages(created.id.toString())
+			} catch (uploadError) {
+				uploadFailedMessage = parseErrorMessage(uploadError, '图片上传失败')
+			}
+		}
+		quickCreateVisible.value = false
+		quickCreateImages.value = [] as string[]
+		uni.hideLoading()
+		if (uploadFailedMessage != '') {
+			showErrorToast('商品已创建，图片上传失败')
+		} else {
+			uni.showToast({ title: takeLatestResponseMessage('商品已创建'), icon: 'success' })
+		}
+		await openInventoryPopupForProduct(created)
+	} catch (error) {
+		uni.hideLoading()
+		showErrorToast(parseErrorMessage(error, '快速创建失败'))
+	} finally {
+		quickCreateSubmitting.value = false
+	}
+}
+
+async function handleDraftProductChange(payload: UTSJSONObject) {
 	draftProductValue.value = stringValue(payload['value'])
 	draftProductText.value = stringValue(payload['text'])
 	draftProductImage.value = stringValue(payload['image'])
@@ -515,6 +1161,13 @@ function handleDraftProductChange(payload: UTSJSONObject) {
 		draftStockValue.value = ''
 		draftProductSubtitle.value = ''
 	}
+	if (draftStockValue.value == '') {
+		editingItemId.value = ''
+		return
+	}
+	const existingItem = await findExistingCheckItemByStock(draftStockValue.value)
+	if (existingItem != null) fillDraftFromExistingItem(existingItem!, true)
+	else editingItemId.value = ''
 }
 
 function handleDraftActualQuantityChange(value: any) {
@@ -530,37 +1183,51 @@ function handleDraftNotesInput(event: any) {
 async function confirmAddItem() {
 	if (submitting.value) return
 	if (checkId.value == '') {
-		uni.showToast({ title: '缺少盘点单 ID', icon: 'none' })
+		uni.showToast({ title: '缺少盘点单 ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const stockId = intValue(draftStockValue.value)
 	const actualQuantity = intValue(draftActualQuantity.value)
 	if (stockId <= 0) {
-		uni.showToast({ title: '请选择商品', icon: 'none' })
+		uni.showToast({ title: '请选择商品', icon: 'none', duration: 3500 })
 		return
 	}
 	if (actualQuantity < 0) {
-		uni.showToast({ title: '请输入有效数量', icon: 'none' })
+		uni.showToast({ title: '请输入有效数量', icon: 'none', duration: 3500 })
 		return
 	}
 	submitting.value = true
-	uni.showLoading({ title: '添加商品中...', mask: true })
+	uni.showLoading({ title: editingItemId.value == '' ? '添加商品中...' : '修改数量中...', mask: true })
 	try {
-		await createInventoryCheckItem({
-			payload: {
-				inventory_check: intValue(checkId.value),
-				stock: stockId,
-				actual_quantity: actualQuantity,
-				notes: draftNotes.value,
-			} as UTSJSONObject,
-		})
+		let targetItemId = editingItemId.value
+		if (targetItemId == '') {
+			const existingItem = await findExistingCheckItemByStock(stockId.toString())
+			if (existingItem != null) targetItemId = stringValue(existingItem!['id'])
+		}
+		if (targetItemId != '') {
+			await checkInventoryCheckItem(targetItemId, {
+				payload: {
+					actual_quantity: actualQuantity,
+					notes: draftNotes.value,
+				} as UTSJSONObject,
+			})
+		} else {
+			await createInventoryCheckItem({
+				payload: {
+					inventory_check: intValue(checkId.value),
+					stock: stockId,
+					actual_quantity: actualQuantity,
+					notes: draftNotes.value,
+				} as UTSJSONObject,
+			})
+		}
 		uni.setStorageSync(refreshStorageKey, '1')
-		uni.showToast({ title: takeLatestResponseMessage('添加成功'), icon: 'success' })
+		uni.showToast({ title: takeLatestResponseMessage(targetItemId == '' ? '添加成功' : '修改成功'), icon: 'success' })
 		addPopupVisible.value = false
 		currentPage.value = 1
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '添加失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '添加失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -573,37 +1240,28 @@ async function handleScannedBarcode(scanResult: string) {
 	scanLookupRunning.value = true
 	try {
 		await loadCheckInfo()
-		const response = await getInventoryStocks({
-			search: barcode,
-			page: 1,
-			page_size: 10,
-			status: null,
-			alert_status: null,
-			supplier: null,
-			category: checkCategoryValue() == '' ? null : checkCategoryValue(),
-			is_listed: null,
-			location: checkLocationValue() == '' ? null : checkLocationValue(),
-			from_location: null,
-			to_location: null,
-			transfer_order: null,
-			inventory_check: null,
-			product: null,
-			stock: null,
-			check_type: null,
-			is_checked: null,
-			transaction_type: null,
-			location_type: null,
-			is_active: null,
-		} as InventoryListQuery)
-		if (response.results.length > 0) {
-			openPopupWithStock(response.results[0])
+		let scopedStock: UTSJSONObject | null = null
+		try {
+			scopedStock = await searchStockByBarcodeInCheckScope(barcode)
+		} catch (stockError) {
+			scopedStock = null
+		}
+		if (scopedStock != null) {
+			await openPopupWithStock(scopedStock!)
 			return
 		}
-		resetDraft()
-		addPopupVisible.value = true
-		uni.showToast({ title: '未找到匹配商品', icon: 'none' })
+		const product = await findProductByBarcode(barcode)
+		if (product == null) {
+			openQuickCreatePopup(barcode)
+			return
+		}
+		if (await productInCheckCategory(product)) {
+			await openInventoryPopupForProduct(product)
+			return
+		}
+		confirmMigrateProduct(product)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '扫码查询失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '扫码查询失败'))
 	} finally {
 		scanLookupRunning.value = false
 	}
@@ -619,7 +1277,7 @@ function handleScanSearch() {
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
-			uni.showToast({ title: message, icon: 'none' })
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
 }
@@ -627,6 +1285,36 @@ function handleScanSearch() {
 function handleSearchInput(value: string) { keyword.value = value }
 function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadItems() }
 function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadItems() }
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+
+function handleFilterOpen() {
+	draftDiscrepancy.value = discrepancyFilter.value
+	draftSortBy.value = sortBy.value
+}
+
+function selectDraftDiscrepancy(value: string) { draftDiscrepancy.value = value }
+function selectDraftSort(value: string) { draftSortBy.value = value }
+
+function closeFilterDrawer() { filterVisible.value = false }
+
+function handleFilterReset() {
+	discrepancyFilter.value = ''
+	sortBy.value = ''
+	draftDiscrepancy.value = ''
+	draftSortBy.value = ''
+	keyword.value = ''
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadItems()
+}
+
+function applySelectedFilters() {
+	discrepancyFilter.value = draftDiscrepancy.value
+	sortBy.value = draftSortBy.value
+	currentPage.value = 1
+	closeFilterDrawer()
+	loadItems()
+}
 
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
@@ -637,11 +1325,8 @@ function handlePageChange(payload: UTSJSONObject) {
 	loadItems()
 }
 
-function handleMenu(payload: UTSJSONObject) {
-	const action = payload['action']
-	if (action == null) return
-	const actionKey = stringValue((action as UTSJSONObject)['key'])
-	if (actionKey == 'reload') loadItems()
+function handleItemClick(payload: UTSJSONObject) {
+	openEditPopupById(stringValue(payload['rawId'], stringValue(payload['id'])))
 }
 
 function unlockVolumeScanSoon() {
@@ -694,13 +1379,24 @@ const locationText = computed((): string => {
 	return '盘点位置：' + stringValue(check['location_name'], '-') + ' / 分类：' + categoryText
 })
 
+const draftPanelTitle = computed((): string => {
+	return editingItemId.value == '' ? '添加盘点商品' : '修改盘点数量'
+})
+
+const draftSubmitText = computed((): string => {
+	if (submitting.value) return editingItemId.value == '' ? '添加中...' : '修改中...'
+	return editingItemId.value == '' ? '确认添加' : '保存修改'
+})
+
 const listItems = computed((): UTSJSONObject[] => {
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < items.value.length; index += 1) result.push(itemToListItem(items.value[index]))
 	return result
 })
 
-const hasActiveFilter = computed((): boolean => keyword.value != '')
+const hasActiveFilter = computed((): boolean => {
+	return keyword.value != '' || discrepancyFilter.value != '' || sortBy.value != ''
+})
 
 const emptyText = computed((): string => {
 	if (isLoading.value) return '正在加载'
@@ -745,6 +1441,20 @@ onUnload(() => {
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.detail-filter-panel { position: relative; padding-top: 2px; padding-bottom: 52px; }
+.detail-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 12px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.detail-filter-title { font-size: 13px; line-height: 17px; color: #0F172A; font-weight: bold; }
+.detail-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.detail-filter-option { min-width: 48px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 15px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.detail-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.detail-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.detail-filter-option-text-active { color: #FFFFFF; }
+.detail-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.detail-filter-btn { flex: 1; height: 38px; border-radius: 11px; align-items: center; justify-content: center; }
+.detail-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.detail-filter-btn-primary { background-color: #0F172A; }
+.detail-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.detail-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
 .add-panel { padding-left: 14px; padding-right: 14px; padding-bottom: 24px; background-color: #FFFFFF; }
 .add-handle { width: 42px; height: 4px; border-radius: 2px; background-color: #CBD5E1; align-self: center; margin-top: 8px; margin-bottom: 12px; }
 .add-head { flex-direction: row; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
@@ -760,4 +1470,15 @@ onUnload(() => {
 .add-primary-btn { flex: 1; height: 42px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
 .add-secondary-text { font-size: 14px; line-height: 18px; color: #475569; font-weight: bold; }
 .add-primary-text { font-size: 14px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
+.quick-input { height: 42px; padding-left: 10px; padding-right: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; font-size: 14px; color: #0F172A; }
+.quick-image-list { flex-direction: row; flex-wrap: wrap; }
+.quick-image-item { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; margin-right: 8px; margin-bottom: 8px; background-color: #F1F5F9; position: relative; }
+.quick-image { width: 64px; height: 64px; border-radius: 8px; }
+.quick-image-delete { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 10px; background-color: rgba(15, 23, 42, 0.82); align-items: center; justify-content: center; }
+.quick-image-delete-text { font-size: 14px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
+.quick-image-add { width: 64px; height: 64px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: dashed; border-color: #CBD5E1; align-items: center; justify-content: center; margin-bottom: 8px; }
+.quick-image-add-plus { font-size: 22px; line-height: 24px; color: #334155; font-weight: bold; }
+.quick-image-add-text { font-size: 11px; line-height: 15px; color: #64748B; margin-top: 2px; }
+.quick-readonly { min-height: 42px; border-radius: 8px; background-color: #F1F5F9; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; justify-content: center; }
+.quick-readonly-text { font-size: 14px; line-height: 20px; color: #334155; }
 </style>

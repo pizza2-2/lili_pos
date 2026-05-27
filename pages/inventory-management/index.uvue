@@ -283,19 +283,33 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const errorText = JSON.stringify(error)
+		let errorText = ''
+		try {
+			const text = JSON.stringify(error)
+			if (text != null) errorText = text
+		} catch (stringifyError) {
+			errorText = ''
+		}
 		if (errorText != null && errorText != '') {
-			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			let parsedError: UTSJSONObject | null = null
+			try {
+				const trimmedText = errorText.trim()
+				if (trimmedText != '' && trimmedText.substring(0, 1) == '{') parsedError = JSON.parseObject<UTSJSONObject>(trimmedText)
+			} catch (parseError) {
+				parsedError = null
+			}
 			if (parsedError != null) {
-				const rawMessage = parsedError['message']
+				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
+					const parsedMessage = stringValue(rawMessage)
 					if (parsedMessage != '') message = parsedMessage
 				}
 			}
-			if (message == fallback && errorText != '{}') message = errorText
+			if (message == fallback && errorText != '{}' && errorText != 'null') message = errorText
+		}
+		if (message == fallback) {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
 		}
 	}
 	return message
@@ -305,8 +319,10 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) return null
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return null
+	const trimmedText = text.trim()
+	if (trimmedText == '' || trimmedText.substring(0, 1) != '{') return null
 	try {
-		return JSON.parseObject<UTSJSONObject>(text)
+		return JSON.parseObject<UTSJSONObject>(trimmedText)
 	} catch (error) {
 		return null
 	}
@@ -316,9 +332,11 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (value == null) return [] as UTSJSONObject[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as UTSJSONObject[]
+	const trimmedText = text.trim()
+	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as UTSJSONObject[]
 	let parsed: UTSJSONObject[] | null = null
 	try {
-		parsed = JSON.parseArray<UTSJSONObject>(text)
+		parsed = JSON.parseArray<UTSJSONObject>(trimmedText)
 	} catch (error) {
 		return [] as UTSJSONObject[]
 	}
@@ -330,14 +348,21 @@ function parseStringArray(value: any | null): string[] {
 	if (value == null) return [] as string[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as string[]
+	const trimmedText = text.trim()
+	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as string[]
 	let parsed: string[] | null = null
 	try {
-		parsed = JSON.parseArray<string>(text)
+		parsed = JSON.parseArray<string>(trimmedText)
 	} catch (error) {
 		return [] as string[]
 	}
 	if (parsed == null) return [] as string[]
 	return parsed!
+}
+
+function booleanValue(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
 }
 
 function firstStringField(obj: UTSJSONObject, keys: string[]): string {
@@ -365,7 +390,7 @@ function closeFilterDrawer() {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -382,12 +407,38 @@ function extractRows(raw: any | null): UTSJSONObject[] {
 	if (resultsArray.length > 0) return resultsArray
 	const itemsArray = parseObjectArray(rawObject!['items'])
 	if (itemsArray.length > 0) return itemsArray
+	const groups = parseObjectArray(rawObject!['groups'])
+	for (let index = 0; index < groups.length; index += 1) {
+		const groupItems = parseObjectArray(groups[index]['items'])
+		if (groupItems.length > 0) return groupItems
+	}
 	const dataObject = parseObject(rawObject!['data'])
 	if (dataObject != null) {
 		const nestedResults = parseObjectArray(dataObject!['results'])
 		if (nestedResults.length > 0) return nestedResults
+		const nestedGroups = parseObjectArray(dataObject!['groups'])
+		for (let index = 0; index < nestedGroups.length; index += 1) {
+			const nestedItems = parseObjectArray(nestedGroups[index]['items'])
+			if (nestedItems.length > 0) return nestedItems
+		}
 	}
 	return [] as UTSJSONObject[]
+}
+
+function extractCategoryTreeSource(raw: any | null): UTSJSONObject[] {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) return [] as UTSJSONObject[]
+	const groups = parseObjectArray(rawObject!['groups'])
+	for (let index = 0; index < groups.length; index += 1) {
+		const group = groups[index]
+		if (stringValue(group['key']) == 'parent') return parseObjectArray(group['items'])
+	}
+	if (groups.length > 0) return parseObjectArray(groups[0]['items'])
+	let items = parseObjectArray(rawObject!['items'])
+	if (items.length > 0) return items
+	items = parseObjectArray(rawObject!['results'])
+	if (items.length > 0) return items
+	return parseObjectArray(rawObject!['data'])
 }
 
 function getChildren(item: UTSJSONObject): UTSJSONObject[] {
@@ -401,6 +452,7 @@ function getChildren(item: UTSJSONObject): UTSJSONObject[] {
 function normalizeOptionNode(item: UTSJSONObject): UTSJSONObject {
 	const value = firstStringField(item, ['value', 'id', 'pk'])
 	let text = firstStringField(item, ['text', 'label', 'name', 'name_cn', 'title'])
+	const fullName = firstStringField(item, ['full_name', 'fullName'])
 	if (text == '') text = value
 	const children = getChildren(item)
 	const normalizedChildren: UTSJSONObject[] = []
@@ -408,8 +460,14 @@ function normalizeOptionNode(item: UTSJSONObject): UTSJSONObject {
 	return {
 		value: value,
 		text: text,
+		label: text,
+		full_name: fullName == '' ? text : fullName,
+		code: stringValue(item['code']),
+		level: stringValue(item['level']),
+		parent_value: stringValue(item['parent_value']),
+		disabled: booleanValue(item['disabled']),
 		children: normalizedChildren,
-		has_children: normalizedChildren.length > 0,
+		has_children: normalizedChildren.length > 0 || booleanValue(item['has_children']),
 	} as UTSJSONObject
 }
 
@@ -417,6 +475,18 @@ function buildBottomSelectResponse(raw: any | null, params: UTSJSONObject): UTSJ
 	const rows = extractRows(raw)
 	const normalized: UTSJSONObject[] = []
 	for (let index = 0; index < rows.length; index += 1) normalized.push(normalizeOptionNode(rows[index]))
+	return {
+		data: normalized,
+		results: normalized,
+		total: normalized.length,
+		total_count: normalized.length,
+	} as UTSJSONObject
+}
+
+function buildCategoryTreeResponse(raw: any | null): UTSJSONObject {
+	const source = extractCategoryTreeSource(raw)
+	const normalized: UTSJSONObject[] = []
+	for (let index = 0; index < source.length; index += 1) normalized.push(normalizeOptionNode(source[index]))
 	return {
 		data: normalized,
 		results: normalized,
@@ -445,13 +515,18 @@ function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
 }
 
 async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
-	const raw = await request('/api/procurement/suppliers/options/', 'GET', buildOptionQuery(params), true)
+	const query = buildOptionQuery(params)
+	query['key'] = 'supplier'
+	query['limit'] = 50
+	const raw = await request('/api/procurement/suppliers/options/', 'GET', query, true)
 	return buildBottomSelectResponse(raw, { keyword: '' } as UTSJSONObject)
 }
 
 async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
-	const raw = await request('/api/categories/categories/options/', 'GET', buildOptionQuery(params), true)
-	return buildBottomSelectResponse(raw, params)
+	const query = buildOptionQuery(params)
+	query['key'] = 'parent'
+	const raw = await request('/api/categories/categories/options/', 'GET', query, true)
+	return buildCategoryTreeResponse(raw)
 }
 
 async function fetchLocationFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
@@ -722,7 +797,7 @@ function buildInventoryDetailUrl(stockId: string, mode: string, productName: str
 
 function navigateToInventoryDetail(stockId: string, mode: string, productName: string) {
 	if (stockId == '' && productFilterId.value == '') {
-		uni.showToast({ title: '缺少商品或库存记录', icon: 'none' })
+		uni.showToast({ title: '缺少商品或库存记录', icon: 'none', duration: 3500 })
 		return
 	}
 	uni.navigateTo({ url: buildInventoryDetailUrl(stockId, mode, productName) })
@@ -730,7 +805,7 @@ function navigateToInventoryDetail(stockId: string, mode: string, productName: s
 
 function navigateToCreateStock() {
 	if (productFilterId.value == '') {
-		uni.showToast({ title: '请先从商品页进入库存', icon: 'none' })
+		uni.showToast({ title: '请先从商品页进入库存', icon: 'none', duration: 3500 })
 		return
 	}
 	navigateToInventoryDetail('', 'create', productFilterName.value)
@@ -800,7 +875,7 @@ function handleScanSearch() {
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
-			uni.showToast({ title: message, icon: 'none' })
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
 }

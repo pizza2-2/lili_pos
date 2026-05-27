@@ -115,6 +115,7 @@
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { PrintTemplateItem, PrintTemplateMutationData, getPrintTemplateDetail, setDefaultPrintTemplate, updatePrintTemplate } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const templateId = ref('')
 const loading = ref(false)
@@ -443,7 +444,7 @@ async function runSetDefault() {
 		uni.showToast({ title: '已设为默认', icon: 'success' })
 		loadTemplate()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '设置失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '设置失败'))
 	} finally {
 		settingDefault.value = false
 	}
@@ -459,7 +460,7 @@ async function saveLayout() {
 		markRefreshNeeded()
 		uni.showToast({ title: '布局已保存', icon: 'success' })
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '保存布局失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '保存布局失败'))
 	} finally {
 		savingLayout.value = false
 	}

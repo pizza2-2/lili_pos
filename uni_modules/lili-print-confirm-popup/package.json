@@ -1,0 +1,55 @@
+{
+	"id": "lili-print-confirm-popup",
+	"displayName": "lili-print-confirm-popup",
+	"version": "1.0.0",
+	"description": "Unified print confirmation popup for uni-app x",
+	"keywords": [
+		"print",
+		"popup",
+		"template"
+	],
+	"repository": "",
+	"engines": {
+		"HBuilderX": "^4.31",
+		"uni-app-x": "^3.1.0"
+	},
+	"dcloudext": {
+		"type": "uts-vue-component",
+		"sale": {
+			"regular": {
+				"price": "0.00"
+			},
+			"sourcecode": {
+				"price": "0.00"
+			}
+		},
+		"contact": {
+			"qq": ""
+		},
+		"declaration": {
+			"ads": "",
+			"data": "",
+			"permissions": ""
+		},
+		"npmurl": ""
+	},
+	"uni_modules": {
+		"dependencies": [],
+		"encrypt": [],
+		"platforms": {
+			"client": {
+				"Vue": {
+					"vue2": "n",
+					"vue3": "y"
+				},
+				"App": {
+					"app-android": {
+						"minVersion": "21"
+					},
+					"app-ios": "n",
+					"app-harmony": "n"
+				}
+			}
+		}
+	}
+}

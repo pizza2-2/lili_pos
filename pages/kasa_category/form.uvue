@@ -37,6 +37,7 @@
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createKasaCategory, getKasaCategoryDetail, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryMutationData, KasaCategoryTaxRatesResponse, updateKasaCategory } from '@/pkg/api/modules/kasa_category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type SelectOption = {
 	value: string
@@ -80,10 +81,6 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -286,10 +283,7 @@ async function loadDetailData(idText: string) {
 		console.log(detail)
 		initialData.value = buildInitialDataFromDetail(detail)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '收银分类详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '收银分类详情加载失败'))
 	}
 }
 
@@ -360,10 +354,7 @@ async function persistForm(payload: UTSJSONObject) {
 		})
 		goBackToList()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, actionText + '失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		savingVisible.value = false
 		uni.hideLoading()
@@ -398,14 +389,14 @@ function handleDirtyChange(value: boolean) {
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 

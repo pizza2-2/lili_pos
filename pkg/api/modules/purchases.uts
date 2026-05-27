@@ -187,6 +187,8 @@ export type QuickProcurementResultItem = {
 	product_sku: string
 	product_barcode: string
 	purchase_price: string
+	net_purchase_price: string
+	price_type: string
 	quantity: number
 	total: string
 }
@@ -684,6 +686,8 @@ function buildQuickProcurementResponse(rawObject: UTSJSONObject): QuickProcureme
 			product_sku: stringValue(row['product_sku']),
 			product_barcode: stringValue(row['product_barcode']),
 			purchase_price: stringValue(row['purchase_price']),
+			net_purchase_price: stringValue(row['net_purchase_price']),
+			price_type: stringValue(row['price_type']),
 			quantity: intValue(row['quantity']),
 			total: stringValue(row['total']),
 		} as QuickProcurementResultItem)
@@ -1017,7 +1021,7 @@ export async function createPurchase(data: PurchaseMutationData): Promise<Purcha
 	return buildPurchaseItem(rawDataObject(raw))
 }
 
-export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[]): Promise<QuickProcurementResponse> {
+export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[], priceType: string = 'gross'): Promise<QuickProcurementResponse> {
 	const requestItems: UTSJSONObject[] = []
 	for (let index = 0; index < items.length; index += 1) {
 		const item = items[index]
@@ -1029,6 +1033,7 @@ export async function quickProcurement(purchaseId: number | string, items: Quick
 	}
 	const raw = await request('/api/purchases/purchases/quick_procurement/', 'POST', {
 		procure_id: parseInt(stringValue(purchaseId)),
+		price_type: priceType,
 		items: requestItems,
 	} as UTSJSONObject, true)
 	return buildQuickProcurementResponse(rawDataObject(raw))

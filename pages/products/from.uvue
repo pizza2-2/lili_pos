@@ -24,6 +24,7 @@
 				@cancel="handleCancel"
 				@discard-leave="handleDiscardLeave"
 				@save-request="handleSaveRequest"
+				@field-change="handleFieldChange"
 				@dirty-change="handleDirtyChange"
 				@bottom-select-add="handleBottomSelectAdd"
 				@bottom-select-edit="handleBottomSelectEdit"
@@ -108,6 +109,13 @@
 				<text class="page-saving-text">{{ savingText }}</text>
 			</view>
 		</view>
+
+		<lili-print-confirm-popup
+			:visible="printPopupVisible"
+			templateType="product_label"
+			:valueResolver="resolveProductPrintValue"
+			@update:visible="handlePrintPopupVisibleChange"
+		/>
 	</view>
 </template>
 
@@ -118,6 +126,7 @@ import { ProductItem, ProductMutationData, createProduct, getProductConfigList, 
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const productListRefreshStorageKey = 'refresh:pages:products:index'
 const productDiscountSelectionStorageKey = 'selected_discount_for_product:'
@@ -134,9 +143,11 @@ const dirtySignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const printPopupVisible = ref(false)
 const pageTaskGuard = createAsyncGuard()
 const discountCards = ref<UTSJSONObject[]>([])
 const discountCardsLoading = ref(false)
+const categoryTaxRateCache = ref<UTSJSONObject>({} as UTSJSONObject)
 
 const initialData = ref<UTSJSONObject>({
 	sku: '',
@@ -195,9 +206,45 @@ function openProductPrintPage() {
 	if (productId.value == '') {
 		return
 	}
-	uni.navigateTo({
-		url: '/pages/label-templates/index?mode=print&product=' + productId.value,
-	})
+	printPopupVisible.value = true
+}
+
+function handlePrintPopupVisibleChange(value: boolean) {
+	printPopupVisible.value = value
+}
+
+function productPrintField(key: string, fallback: string = ''): string {
+	return stringValue(initialData.value[key], fallback)
+}
+
+function productPrintNameText(): string {
+	const nameCn = productPrintField('name_cn')
+	if (nameCn != '') return nameCn
+	const nameEn = productPrintField('name_en')
+	if (nameEn != '') return nameEn
+	const nameOther = productPrintField('name_other')
+	if (nameOther != '') return nameOther
+	return '未命名商品'
+}
+
+function productPrintPriceText(): string {
+	const discountPrice = productPrintField('discounted_base_sales_price')
+	if (discountPrice != '' && discountPrice != '0.00') return discountPrice
+	return productPrintField('base_sales_price', '0.00')
+}
+
+function resolveProductPrintValue(source: string, fallback: string): string {
+	if (source == 'name') return productPrintNameText()
+	if (source == 'price') return productPrintPriceText()
+	if (source == 'base_sales_price') return productPrintField('base_sales_price', '0.00')
+	if (source == 'discount_price') return productPrintPriceText()
+	if (source == 'barcode') {
+		const barcode = productPrintField('barcode')
+		if (barcode != '') return barcode
+		return productPrintField('sku', fallback)
+	}
+	if (source == 'sku' || source == 'kod') return productPrintField('sku', fallback)
+	return fallback
 }
 
 function floatValue(value: any | null, fallback: number = 0): number {
@@ -230,6 +277,55 @@ function formatMoneyText(value: string, fallback: string = '0.00'): string {
 		return fallback
 	}
 	return numberValue.toFixed(2)
+}
+
+function normalizeTaxRate(value: any | null): number {
+	let taxRate = floatValue(value, -1)
+	if (taxRate < 0) return -1
+	if (taxRate > 1) {
+		taxRate = taxRate / 100
+	}
+	return taxRate
+}
+
+async function resolveCategoryTaxRate(categoryId: string): Promise<number> {
+	if (categoryId == '') return -1
+	const cachedValue = categoryTaxRateCache.value[categoryId]
+	if (cachedValue != null) {
+		return normalizeTaxRate(cachedValue)
+	}
+	try {
+		const raw = await request('/api/categories/categories/' + categoryId + '/', 'GET', {} as UTSJSONObject, true)
+		const rawObject = parseObject(raw)
+		if (rawObject == null) return -1
+		const taxRate = normalizeTaxRate(rawObject['tax_rate'])
+		if (taxRate >= 0) {
+			categoryTaxRateCache.value[categoryId] = taxRate
+		}
+		return taxRate
+	} catch (error) {
+		return -1
+	}
+}
+
+function applyPurchasePriceSync(formDataObject: UTSJSONObject, taxRate: number, sourceKey: string): boolean {
+	if (taxRate < 0) return false
+	const multiplier = 1 + taxRate
+	if (multiplier <= 0) return false
+
+	const grossPrice = floatValue(formDataObject['purchase_price'], 0)
+	const netPrice = floatValue(formDataObject['net_purchase_price'], 0)
+	const canFillNet = sourceKey == 'category_id' || sourceKey == 'purchase_price'
+	const canFillGross = sourceKey == 'category_id' || sourceKey == 'net_purchase_price'
+	if (canFillNet && grossPrice > 0 && netPrice <= 0) {
+		formDataObject['net_purchase_price'] = formatMoneyText((grossPrice / multiplier).toString())
+		return true
+	}
+	if (canFillGross && netPrice > 0 && grossPrice <= 0) {
+		formDataObject['purchase_price'] = formatMoneyText((netPrice * multiplier).toString())
+		return true
+	}
+	return false
 }
 
 function calculateDiscountedPriceText(productSalesPriceText: string, discountRule: UTSJSONObject): string {
@@ -292,10 +388,6 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -895,10 +987,7 @@ async function loadProductDiscountCards(): Promise<void> {
 		}
 	} catch (error) {
 		discountCards.value = [] as UTSJSONObject[]
-		uni.showToast({
-			title: parseErrorMessage(error, '折扣规则加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '折扣规则加载失败'))
 	} finally {
 		discountCardsLoading.value = false
 	}
@@ -918,10 +1007,7 @@ async function loadProductDetailData(idText: string): Promise<void> {
 		initialData.value = buildInitialDataFromProduct(detail, categoryText)
 		await loadProductDiscountCards()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '商品详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '商品详情加载失败'))
 	}
 }
 
@@ -1014,10 +1100,7 @@ async function removeDiscountFromProduct(discountId: string): Promise<void> {
 			icon: 'success',
 		})
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '折扣删除失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '折扣删除失败'))
 	} finally {
 		uni.hideLoading()
 	}
@@ -1118,7 +1201,7 @@ function openDiscountSelector() {
 	if (safeProductId == '') {
 		uni.showToast({
 			title: '请先保存商品后再选择折扣',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1256,7 +1339,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 	if (nameCn == '') {
 		uni.showToast({
 			title: '中文名称不能为空',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1306,10 +1389,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
 		}
-		uni.showToast({
-			title: parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			savingVisible.value = false
@@ -1343,24 +1423,39 @@ function handleDiscardLeave(payload: UTSJSONObject) {
 function handleDirtyChange(value: boolean) {
 }
 
+async function handleFieldChange(payload: UTSJSONObject): Promise<void> {
+	const keyValue = getStringField(payload, 'key')
+	if (keyValue != 'category_id' && keyValue != 'purchase_price' && keyValue != 'net_purchase_price') {
+		return
+	}
+	const formDataValue = payload['formData']
+	if (formDataValue == null) return
+	const formDataObject = formDataValue as UTSJSONObject
+	const categoryId = getStringField(formDataObject, 'category_id').trim()
+	if (categoryId == '') return
+	const taxRate = await resolveCategoryTaxRate(categoryId)
+	if (getStringField(formDataObject, 'category_id').trim() != categoryId) return
+	applyPurchasePriceSync(formDataObject, taxRate, keyValue)
+}
+
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleUpload(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '图片已加入待保存列表',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -1379,14 +1474,14 @@ function handleUploadError(payload: UTSJSONObject) {
 		if (message != '') {
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
 	}
 	uni.showToast({
 		title: '图片上传失败',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -1394,7 +1489,7 @@ function openPriceCalculator() {
 	if (productId.value == '') {
 		uni.showToast({
 			title: '请先保存商品后再计算',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}

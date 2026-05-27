@@ -126,7 +126,8 @@ export function getLocationAsync():Promise<GetLocationSuccess> {
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)
@@ -198,7 +199,8 @@ export function getCameraAsync(sizeType:string[] = ['original','compressed']):Pr
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)
@@ -271,7 +273,8 @@ export function getAlbumAsync(count:number = 1,sizeType:string[] = ['original','
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)

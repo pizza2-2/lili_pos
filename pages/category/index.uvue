@@ -167,6 +167,7 @@
 import { computed, onUnmounted } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteCategory, getCategoryChildren, getCategoryRoots, CategoryItem, CategoryRootsQuery } from '@/pkg/api/modules/category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type FilterOption = {
 	value: string
@@ -217,10 +218,6 @@ const orderingFilterOptions = ref<FilterOption[]>([
 function parseErrorMessage(error: any): string {
 	let message = '分类列表加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -406,10 +403,7 @@ async function ensureChildrenLoaded(item: CategoryItem): Promise<boolean> {
 		}
 		return true
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 		return false
 	} finally {
 		loadingNodeIds.value = removeNodeId(loadingNodeIds.value, item.id)
@@ -685,10 +679,7 @@ async function executeDelete(item: CategoryItem): Promise<void> {
 		})
 		loadRootCategories()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	} finally {
 		isOperating.value = false
 	}

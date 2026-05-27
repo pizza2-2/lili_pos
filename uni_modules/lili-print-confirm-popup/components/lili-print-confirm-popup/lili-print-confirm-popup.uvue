@@ -1,0 +1,463 @@
+<template>
+	<page-container
+		:show="visible"
+		position="bottom"
+		:round="true"
+		:overlay="true"
+		:duration="240"
+		overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+		custom-style="background-color: #FFFFFF;"
+		@clickoverlay="closePopup"
+	>
+		<view class="print-panel">
+			<view class="print-handle"></view>
+			<view class="print-head">
+				<view class="print-head-copy">
+					<text class="print-title">{{ title }}</text>
+					<text class="print-subtitle">{{ selectedTemplateName }}</text>
+				</view>
+				<view class="print-close" @click="closePopup">
+					<text class="print-close-text">关闭</text>
+				</view>
+			</view>
+
+			<view class="template-select-card">
+				<view class="template-select-trigger" @click="toggleTemplateList">
+					<view class="template-select-copy">
+						<text class="template-select-label">打印模板</text>
+						<text class="template-select-value">{{ selectedTemplateName }}</text>
+					</view>
+					<text class="template-select-arrow">{{ templateListVisible ? '⌄' : '›' }}</text>
+				</view>
+				<view v-if="templateListVisible" class="template-list">
+					<view v-if="templatesLoading" class="template-state">
+						<text class="template-state-text">正在加载模板...</text>
+					</view>
+					<view v-else-if="templates.length == 0" class="template-state">
+						<text class="template-state-text">暂无可用模板</text>
+					</view>
+					<view
+						v-else
+						v-for="item in templates"
+						:key="item.id"
+						:class="isTemplateSelected(item) ? 'template-row template-row-active' : 'template-row'"
+						@click="selectTemplate(item)"
+					>
+						<view class="template-row-main">
+							<text :class="isTemplateSelected(item) ? 'template-name template-name-active' : 'template-name'">{{ item.name }}</text>
+							<text class="template-meta">{{ templateMetaText(item) }}</text>
+						</view>
+						<text v-if="item.is_default" class="template-badge">默认</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="print-content-card">
+				<view v-if="printPreviewFields.length == 0" class="print-empty-row">
+					<text class="print-empty-text">{{ emptyText }}</text>
+				</view>
+				<view v-for="field in printPreviewFields" :key="field.key" class="print-row">
+					<text class="print-label">{{ field.label }}</text>
+					<text :class="field.emphasis ? 'print-value print-value-emphasis' : 'print-value'">{{ field.value }}</text>
+				</view>
+			</view>
+
+			<view class="print-copies-wrap">
+				<lili-print-copies-stepper
+					:value="printCopiesText"
+					:title="copiesTitle"
+					:desc="copiesDesc"
+					@change="handlePrintCopiesChange"
+				/>
+			</view>
+
+			<view class="print-actions">
+				<view class="print-secondary-btn" @click="closePopup">
+					<text class="print-secondary-text">取消</text>
+				</view>
+				<view class="print-primary-btn" @click="confirmPrint">
+					<text class="print-primary-text">{{ printing ? '打印中...' : '打印' }}</text>
+				</view>
+			</view>
+		</view>
+	</page-container>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { PrintTemplateItem, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
+import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type PrintPreviewField = {
+	key: string
+	label: string
+	value: string
+	emphasis: boolean
+}
+
+type PrintValueResolver = (source: string, fallback: string) => string
+
+type Props = {
+	visible: boolean
+	title?: string
+	templateType?: string | null
+	emptyText?: string
+	copiesTitle?: string
+	copiesDesc?: string
+	valueResolver?: PrintValueResolver | null
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	visible: false,
+	title: '确认打印',
+	templateType: 'product_label',
+	emptyText: '当前模板没有需要核对的字段',
+	copiesTitle: '打印页数',
+	copiesDesc: '一个商品可一次贴上多张价格',
+	valueResolver: null,
+})
+
+const emit = defineEmits<{
+	(e: 'update:visible', value: boolean): void
+	(e: 'close'): void
+	(e: 'printed', payload: UTSJSONObject): void
+}>()
+
+const templates = ref<PrintTemplateItem[]>([])
+const selectedPrintTemplate = ref<PrintTemplateItem | null>(null)
+const templateListVisible = ref(false)
+const templatesLoading = ref(false)
+const printing = ref(false)
+const printCopiesText = ref('1')
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function numberValue(value: any | null, fallback: number): number {
+	const text = stringValue(value)
+	if (text == '') return fallback
+	const result = parseFloat(text)
+	if (isNaN(result)) return fallback
+	return result
+}
+
+function intValue(value: any | null, fallback: number): number {
+	const text = stringValue(value)
+	if (text == '') return fallback
+	const result = parseInt(text)
+	if (isNaN(result)) return fallback
+	return result
+}
+
+function boolValue(value: any | null, fallback: boolean): boolean {
+	if (value == null) return fallback
+	const text = ('' + value).toLowerCase()
+	if (text == 'true' || text == '1' || text == 'yes') return true
+	if (text == 'false' || text == '0' || text == 'no') return false
+	return fallback
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '') return fallback
+	const parsed = JSON.parseObject<UTSJSONObject>(text)
+	if (parsed == null) return text
+	const rawMessage = parsed['message']
+	return rawMessage == null ? fallback : stringValue(rawMessage, fallback)
+}
+
+function resolvePrintValue(source: string, fallback: string): string {
+	const resolver = props.valueResolver
+	if (resolver != null) {
+		return resolver(source, fallback)
+	}
+	return fallback
+}
+
+function printLabelForSource(source: UTSJSONObject, index: number): string {
+	const elementLabel = stringValue(source['label'])
+	if (elementLabel != '') return elementLabel
+	const elementSource = stringValue(source['source'])
+	if (elementSource == 'name') return '商品名称'
+	if (elementSource == 'price') return '打印价格'
+	if (elementSource == 'base_sales_price') return '原价'
+	if (elementSource == 'discount_price') return '折扣价'
+	if (elementSource == 'barcode') return '条码'
+	if (elementSource == 'sku' || elementSource == 'kod') return 'KOD'
+	if (elementSource == 'quantity' || elementSource == 'purchase_quantity') return '采购数量'
+	if (elementSource == 'received_quantity') return '已收货数量'
+	return '字段 ' + (index + 1).toString()
+}
+
+function printFieldKey(source: UTSJSONObject, index: number): string {
+	const elementSource = stringValue(source['source'])
+	if (elementSource != '' && elementSource != 'custom') return elementSource
+	const elementKey = stringValue(source['key'])
+	return elementKey == '' ? ('custom-' + index.toString()) : elementKey
+}
+
+function isEmphasisPrintSource(source: string): boolean {
+	return source == 'price' || source == 'discount_price' || source == 'base_sales_price'
+}
+
+function hasPreviewField(fields: PrintPreviewField[], key: string): boolean {
+	for (let index = 0; index < fields.length; index += 1) {
+		if (fields[index].key == key) return true
+	}
+	return false
+}
+
+function buildPrintPreviewFields(): PrintPreviewField[] {
+	const item = selectedPrintTemplate.value
+	if (item == null) return [] as PrintPreviewField[]
+	const result: PrintPreviewField[] = []
+	for (let index = 0; index < item.elements.length; index += 1) {
+		const source = item.elements[index]
+		const type = stringValue(source['type'])
+		if (type == 'hline' || type == 'vline' || type == 'rect') continue
+		const key = printFieldKey(source, index)
+		if (hasPreviewField(result, key)) continue
+		const elementSource = stringValue(source['source'])
+		const fallbackContent = stringValue(source['content'])
+		result.push({
+			key: key,
+			label: printLabelForSource(source, index),
+			value: resolvePrintValue(elementSource, fallbackContent),
+			emphasis: isEmphasisPrintSource(elementSource),
+		} as PrintPreviewField)
+	}
+	return result
+}
+
+const selectedTemplateName = computed((): string => {
+	const item = selectedPrintTemplate.value
+	if (item == null) return templatesLoading.value ? '正在加载模板' : '未选择模板'
+	return item.name
+})
+
+const printPreviewFields = computed((): PrintPreviewField[] => {
+	return buildPrintPreviewFields()
+})
+
+function firstUsableDefaultTemplate(items: PrintTemplateItem[]): PrintTemplateItem | null {
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		if (item.is_default && item.is_active) return item
+	}
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		if (item.is_active) return item
+	}
+	if (items.length > 0) return items[0]
+	return null
+}
+
+function applySelectedTemplate(item: PrintTemplateItem | null) {
+	selectedPrintTemplate.value = item
+	if (item == null) {
+		printCopiesText.value = '1'
+		return
+	}
+	printCopiesText.value = item.copies_default <= 0 ? '1' : item.copies_default.toString()
+}
+
+async function loadTemplates() {
+	if (templatesLoading.value) return
+	templatesLoading.value = true
+	try {
+		let response = await getPrintTemplateList({
+			search: null,
+			page: 1,
+			page_size: 50,
+			template_type: props.templateType,
+			is_active: 'true',
+			is_default: null,
+		})
+		if (response.results.length == 0 && props.templateType != null && props.templateType != '') {
+			response = await getPrintTemplateList({
+				search: null,
+				page: 1,
+				page_size: 50,
+				template_type: null,
+				is_active: 'true',
+				is_default: null,
+			})
+		}
+		templates.value = response.results
+		applySelectedTemplate(firstUsableDefaultTemplate(response.results))
+	} catch (error) {
+		templates.value = [] as PrintTemplateItem[]
+		applySelectedTemplate(null)
+		showErrorToast(parseErrorMessage(error, '标签模板加载失败'))
+	} finally {
+		templatesLoading.value = false
+	}
+}
+
+function templateMetaText(item: PrintTemplateItem): string {
+	return stringValue(item.paper_width_mm, '0') + ' x ' + stringValue(item.paper_height_mm, '0') + ' mm · ' + item.dots_per_mm.toString() + ' dots/mm'
+}
+
+function isTemplateSelected(item: PrintTemplateItem): boolean {
+	const selected = selectedPrintTemplate.value
+	return selected != null && selected.id == item.id
+}
+
+function toggleTemplateList() {
+	templateListVisible.value = !templateListVisible.value
+	if (templates.value.length == 0 && !templatesLoading.value) loadTemplates()
+}
+
+function selectTemplate(item: PrintTemplateItem) {
+	applySelectedTemplate(item)
+	templateListVisible.value = false
+}
+
+function handlePrintCopiesChange(value: string) {
+	printCopiesText.value = value
+}
+
+function printCopiesValue(): number {
+	const copies = intValue(printCopiesText.value, 1)
+	if (copies <= 0) return 1
+	if (copies > 999) return 999
+	return copies
+}
+
+function connectedPrinterAddress(): string {
+	const connected = getConnectedPrinter()
+	if (!connected.success || connected.data == null) return ''
+	const data = connected.data as UTSJSONObject
+	return stringValue(data['address'])
+}
+
+function goPrinterSettings() {
+	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
+	setTimeout(() => {
+		uni.navigateTo({ url: '/pages/printer-settings/index' })
+	}, 450)
+}
+
+function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
+	const elementSource = stringValue(source['source'])
+	const fallbackContent = stringValue(source['content'])
+	return {
+		type: stringValue(source['type'], 'text'),
+		x: numberValue(source['x'], 0),
+		y: numberValue(source['y'], 0),
+		width: numberValue(source['width'], 10),
+		height: numberValue(source['height'], 6),
+		fontSize: numberValue(source['fontSize'], 4),
+		content: resolvePrintValue(elementSource, fallbackContent),
+		source: elementSource,
+		barcodeType: stringValue(source['barcodeType'], 'EAN13'),
+		showText: boolValue(source['showText'], true),
+		lineWidth: numberValue(source['lineWidth'], 1),
+	} as UTSJSONObject
+}
+
+function buildProductPrintElements(item: PrintTemplateItem): UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < item.elements.length; index += 1) {
+		result.push(mappedPrintElement(item.elements[index]))
+	}
+	return result
+}
+
+function closePopup() {
+	if (printing.value) return
+	templateListVisible.value = false
+	emit('update:visible', false)
+	emit('close')
+}
+
+function confirmPrint() {
+	if (printing.value) return
+	const item = selectedPrintTemplate.value
+	if (item == null) {
+		uni.showToast({ title: '请选择打印模板', icon: 'none', duration: 3500 })
+		return
+	}
+	const address = connectedPrinterAddress()
+	if (address == '') {
+		closePopup()
+		goPrinterSettings()
+		return
+	}
+	printing.value = true
+	const copies = printCopiesValue()
+	const response = printLabelBitmap({
+		address: address,
+		paperWidthMm: numberValue(item.paper_width_mm, 30),
+		paperHeightMm: numberValue(item.paper_height_mm, 20),
+		dotsPerMm: item.dots_per_mm,
+		elements: buildProductPrintElements(item),
+		chunkSize: 1024,
+		delayMs: 20,
+		copies: copies,
+	})
+	printing.value = false
+	if (response.success) {
+		uni.showToast({ title: '已发送打印', icon: 'success' })
+		emit('printed', { template: item.id.toString(), copies: copies.toString() } as UTSJSONObject)
+		closePopup()
+		return
+	}
+	showErrorToast(response.message == '' ? '打印失败' : response.message)
+}
+
+watch(
+	(): boolean => props.visible,
+	(nextVisible: boolean) => {
+		if (nextVisible) {
+			templateListVisible.value = false
+			loadTemplates()
+		}
+	}
+)
+</script>
+
+<style>
+.print-panel { padding: 12px 14px 22px; background-color: #FFFFFF; }
+.print-handle { width: 42px; height: 4px; border-radius: 2px; background-color: #CBD5E1; align-self: center; margin-bottom: 14px; }
+.print-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.print-head-copy { flex: 1; padding-right: 12px; }
+.print-title { font-size: 20px; color: #0F172A; font-weight: 700; line-height: 28px; }
+.print-subtitle { margin-top: 3px; font-size: 13px; color: #64748B; line-height: 18px; }
+.print-close { height: 34px; padding-left: 14px; padding-right: 14px; border-radius: 17px; background-color: #F1F5F9; align-items: center; justify-content: center; }
+.print-close-text { font-size: 13px; color: #334155; }
+.template-select-card { border-radius: 8px; border-width: 1px; border-color: #DDE6F2; background-color: #FFFFFF; margin-bottom: 10px; overflow: hidden; }
+.template-select-trigger { min-height: 52px; padding: 10px 12px; flex-direction: row; align-items: center; justify-content: space-between; }
+.template-select-copy { flex: 1; padding-right: 10px; }
+.template-select-label { font-size: 12px; color: #64748B; line-height: 17px; }
+.template-select-value { margin-top: 2px; font-size: 15px; color: #0F172A; font-weight: 700; line-height: 21px; }
+.template-select-arrow { width: 28px; font-size: 24px; color: #64748B; text-align: center; }
+.template-list { border-top-width: 1px; border-top-color: #E2E8F0; max-height: 220px; }
+.template-state { min-height: 48px; align-items: center; justify-content: center; }
+.template-state-text { font-size: 13px; color: #64748B; }
+.template-row { min-height: 58px; padding: 9px 12px; flex-direction: row; align-items: center; justify-content: space-between; border-bottom-width: 1px; border-bottom-color: #EEF2F7; }
+.template-row-active { background-color: #F0FDFA; }
+.template-row-main { flex: 1; padding-right: 8px; }
+.template-name { font-size: 14px; color: #0F172A; font-weight: 700; line-height: 20px; }
+.template-name-active { color: #0F766E; }
+.template-meta { margin-top: 2px; font-size: 11px; color: #64748B; line-height: 16px; }
+.template-badge { height: 22px; padding-left: 8px; padding-right: 8px; border-radius: 11px; background-color: #111827; color: #FFFFFF; font-size: 11px; line-height: 22px; }
+.print-content-card { border-radius: 8px; border-width: 1px; border-color: #DDE6F2; background-color: #F8FAFC; padding: 12px; margin-bottom: 10px; }
+.print-row { flex-direction: row; align-items: flex-start; justify-content: space-between; padding-top: 9px; padding-bottom: 9px; border-bottom-width: 1px; border-bottom-color: #E2E8F0; }
+.print-empty-row { min-height: 42px; align-items: center; justify-content: center; }
+.print-empty-text { font-size: 13px; color: #64748B; }
+.print-label { width: 78px; font-size: 13px; color: #64748B; line-height: 20px; }
+.print-value { flex: 1; font-size: 14px; color: #0F172A; line-height: 20px; text-align: right; }
+.print-value-emphasis { color: #B91C1C; font-weight: 700; }
+.print-copies-wrap { margin-bottom: 14px; }
+.print-actions { flex-direction: row; }
+.print-secondary-btn { flex: 1; height: 44px; border-radius: 14px; background-color: #F1F5F9; align-items: center; justify-content: center; margin-right: 12px; }
+.print-secondary-text { font-size: 15px; color: #334155; font-weight: 700; }
+.print-primary-btn { flex: 1; height: 44px; border-radius: 14px; background-color: #111827; align-items: center; justify-content: center; }
+.print-primary-text { font-size: 15px; color: #FFFFFF; font-weight: 700; }
+</style>

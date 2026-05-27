@@ -187,6 +187,7 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { parseExcelFile, pickExcelFile } from '@/uni_modules/lili-excel-picker'
 import { type ExcelParseResult, type ExcelPickerResult } from '@/uni_modules/lili-excel-picker/utssdk/interface.uts'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type PreviewCell = {
 	key: string
@@ -330,8 +331,6 @@ function parseErrorMessage(error: any | null, fallback: string): string {
 	const latestMessage = takeLatestResponseMessage()
 	if (latestMessage != '') return latestMessage
 	if (error == null) return fallback
-	const directMessage = (error as Error).message
-	if (directMessage != null && directMessage != '') return directMessage
 	const text = stringValue(error)
 	return text == '' || text == '[object Object]' ? fallback : text
 }
@@ -739,7 +738,7 @@ function refreshHeaderConfig(updateMapping: boolean) {
 
 function openHeaderRowSelector() {
 	if (allRows.value.length == 0) {
-		uni.showToast({ title: '请先选择Excel文件', icon: 'none' })
+		uni.showToast({ title: '请先选择Excel文件', icon: 'none', duration: 3500 })
 		return
 	}
 	const itemList: string[] = []
@@ -1131,11 +1130,11 @@ function clearAIResult() {
 
 function applyAIResult() {
 	if (allRows.value.length == 0) {
-		uni.showToast({ title: '请先选择并读取Excel', icon: 'none' })
+		uni.showToast({ title: '请先选择并读取Excel', icon: 'none', duration: 3500 })
 		return
 	}
 	if (aiParsedMappings.value.length == 0 && aiParsedStartRow.value == '' && aiParsedEndRow.value == '') {
-		uni.showToast({ title: '没有可应用配置', icon: 'none' })
+		uni.showToast({ title: '没有可应用配置', icon: 'none', duration: 3500 })
 		return
 	}
 	if (aiParsedStartRow.value != '') {
@@ -1190,12 +1189,12 @@ function selectColumn(fieldKey: string, column: string) {
 	}
 	mappingRows.value = nextRows
 	precheckPassed.value = false
-	if (replacedLabel != '') uni.showToast({ title: '已从' + replacedLabel + '移除该列', icon: 'none' })
+	if (replacedLabel != '') uni.showToast({ title: '已从' + replacedLabel + '移除该列', icon: 'none', duration: 3500 })
 }
 
 function openColumnSelector(fieldKey: string) {
 	if (columnOptions.value.length == 0) {
-		uni.showToast({ title: '请先选择Excel并读取列', icon: 'none' })
+		uni.showToast({ title: '请先选择Excel并读取列', icon: 'none', duration: 3500 })
 		return
 	}
 	const itemList: string[] = ['不导入']
@@ -1220,30 +1219,30 @@ function openColumnSelector(fieldKey: string) {
 
 function validateMappingBeforeRun(): boolean {
 	if (allRows.value.length == 0) {
-		uni.showToast({ title: '请先选择并读取Excel', icon: 'none' })
+		uni.showToast({ title: '请先选择并读取Excel', icon: 'none', duration: 3500 })
 		return false
 	}
 	const start = intValue(startRow.value, 2)
 	const header = intValue(headerRow.value, 0)
 	const end = endRow.value == '' ? 0 : intValue(endRow.value, 0)
 	if (start <= 0) {
-		uni.showToast({ title: '开始行必须大于0', icon: 'none' })
+		uni.showToast({ title: '开始行必须大于0', icon: 'none', duration: 3500 })
 		return false
 	}
 	if (header > 0 && header >= start) {
-		uni.showToast({ title: '表头行必须小于开始行', icon: 'none' })
+		uni.showToast({ title: '表头行必须小于开始行', icon: 'none', duration: 3500 })
 		return false
 	}
 	if (end > 0 && end < start) {
-		uni.showToast({ title: '结束行不能小于开始行', icon: 'none' })
+		uni.showToast({ title: '结束行不能小于开始行', icon: 'none', duration: 3500 })
 		return false
 	}
 	if (mappingColumn('quantity') == '') {
-		uni.showToast({ title: '必须选择数量列', icon: 'none' })
+		uni.showToast({ title: '必须选择数量列', icon: 'none', duration: 3500 })
 		return false
 	}
 	if (mappingColumn('name_cn') == '' && mappingColumn('barcode') == '' && mappingColumn('sku') == '') {
-		uni.showToast({ title: '中文名、条形码、SKU 至少选择一个', icon: 'none' })
+		uni.showToast({ title: '中文名、条形码、SKU 至少选择一个', icon: 'none', duration: 3500 })
 		return false
 	}
 	return true
@@ -1329,7 +1328,7 @@ async function runPreview() {
 		const parsed = parseExcelFile(filePath.value)
 		if (!parsed.success) {
 			console.log('Excel上传: 解析失败', parsed.code, parsed.message)
-			uni.showToast({ title: parsed.message == '' ? 'Excel解析失败' : parsed.message, icon: 'none' })
+			showErrorToast(parsed.message == '' ? 'Excel解析失败' : parsed.message)
 			return
 		}
 		const raw = parsed as ExcelParseResult
@@ -1339,7 +1338,7 @@ async function runPreview() {
 		console.log('Excel上传: 解析成功', maxRow.value, maxColumn.value)
 	} catch (error) {
 		console.log('Excel上传: 解析异常', parseErrorMessage(error, '读取失败'))
-		uni.showToast({ title: parseErrorMessage(error, '读取失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '读取失败'))
 	} finally {
 		uni.hideLoading()
 		running.value = false
@@ -1353,14 +1352,14 @@ function chooseExcelFile() {
 		return
 	}
 	choosingFile.value = true
-	uni.showToast({ title: '正在打开文件选择器', icon: 'none' })
+	uni.showToast({ title: '正在打开文件选择器', icon: 'none', duration: 3500 })
 	console.log('Excel上传: 正在调用Android文件选择器')
 	pickExcelFile((result: ExcelPickerResult) => {
 		choosingFile.value = false
 		console.log('Excel上传: 文件选择器返回', result.code, result.message, result.filePath)
 		if (!result.success) {
 			if (result.code != 'CANCELLED') {
-				uni.showToast({ title: result.message == '' ? '选择文件失败' : result.message, icon: 'none' })
+				showErrorToast(result.message == '' ? '选择文件失败' : result.message)
 			}
 			return
 		}
@@ -1385,7 +1384,7 @@ async function runPrecheck() {
 	} catch (error) {
 		if (!pageTaskGuard.canApply(taskToken)) return
 		precheckPassed.value = false
-		uni.showToast({ title: parseErrorMessage(error, '预检失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '预检失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			uni.hideLoading()
@@ -1460,7 +1459,7 @@ async function runImport() {
 		uni.setStorageSync('refresh:pages:purchases:index', '1')
 	} catch (error) {
 		if (!pageTaskGuard.canApply(taskToken)) return
-		uni.showToast({ title: parseErrorMessage(error, '导入失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '导入失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			uni.hideLoading()

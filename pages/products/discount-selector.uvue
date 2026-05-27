@@ -58,6 +58,7 @@ import {
 	addProductDiscountToProduct,
 	getAvailableProductDiscountsForProduct,
 } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const productId = ref('')
 const baseSalesPrice = ref('0.00')
@@ -120,10 +121,6 @@ function floatValue(value: any | null, fallback: number = 0): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -304,7 +301,7 @@ async function handleItemClick(payload: UTSJSONObject) {
 	if (productId.value == '') {
 		uni.showToast({
 			title: '未找到商品信息',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -341,10 +338,7 @@ async function handleItemClick(payload: UTSJSONObject) {
 			})
 		}, 300)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '折扣添加失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '折扣添加失败'))
 	} finally {
 		uni.hideLoading()
 	}

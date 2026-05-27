@@ -131,6 +131,7 @@
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierMediaFile, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const supplierListRefreshStorageKey = 'refresh:pages:suppliers:index'
 
@@ -385,7 +386,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 	if (ids.length == 0) {
 		uni.showToast({
 			title: '请先选择供应商',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -399,7 +400,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 		} else {
 			uni.showToast({
 				title: '暂不支持该操作',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -411,10 +412,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 		loadSuppliers()
 		loadSupplierGlobalStatistics()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -437,7 +435,7 @@ function openSupplierBatchActionSheet() {
 	if (availableActions.length == 0) {
 		uni.showToast({
 			title: '暂无可执行操作',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -599,7 +597,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -710,7 +708,7 @@ function handleItemClick(payload: UTSJSONObject) {
 	const text = name == null ? '供应商' : (name as string)
 	uni.showToast({
 		title: text,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -785,10 +783,7 @@ async function confirmDeleteSupplier(supplierId: string) {
 		})
 		loadSuppliers()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -796,7 +791,7 @@ function navigateToTransactionsPage(pagePath: string, supplierId: string, suppli
 	if (supplierId == '') {
 		uni.showToast({
 			title: '供应商ID缺失',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -873,7 +868,7 @@ function handleMenu(payload: UTSJSONObject) {
 		if (phoneText == '' || phoneText == '-') {
 			uni.showToast({
 				title: '暂无电话',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}

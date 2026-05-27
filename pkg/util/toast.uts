@@ -1,0 +1,36 @@
+export const TOAST_SUCCESS_DURATION = 1500
+export const TOAST_NORMAL_DURATION = 3500
+export const TOAST_ERROR_DURATION = 7000
+const TOAST_AFTER_LOADING_DELAY = 150
+
+function normalizeToastTitle(title: string, fallback: string): string {
+	if (title == '') return fallback
+	return title
+}
+
+export function showSuccessToast(title: string, duration: number = TOAST_SUCCESS_DURATION) {
+	uni.showToast({
+		title: normalizeToastTitle(title, '操作成功'),
+		icon: 'success',
+		duration: duration,
+	})
+}
+
+export function showInfoToast(title: string, duration: number = TOAST_NORMAL_DURATION) {
+	uni.showToast({
+		title: normalizeToastTitle(title, '提示'),
+		icon: 'none',
+		duration: duration,
+	})
+}
+
+export function showErrorToast(title: string, duration: number = TOAST_ERROR_DURATION) {
+	const toastTitle = normalizeToastTitle(title, '操作失败')
+	setTimeout(() => {
+		uni.showToast({
+			title: toastTitle,
+			icon: 'none',
+			duration: duration,
+		})
+	}, TOAST_AFTER_LOADING_DELAY)
+}

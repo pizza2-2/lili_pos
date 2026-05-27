@@ -154,6 +154,7 @@
 									:showEditAction="showBottomSelectEdit(field)"
 									:showAddAction="showBottomSelectAdd(field)"
 									:showScan="showBottomSelectScan(field)"
+									:autoSelectUnique="getBottomSelectAutoSelectUnique(field)"
 									:scanOnlyFromCamera="getBottomSelectScanOnlyFromCamera(field)"
 									:addPath="getBottomSelectAddPath(field)"
 									:editPath="getBottomSelectEditPath(field)"
@@ -739,6 +740,10 @@ function showBottomSelectScan(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showScan', false)
 }
 
+function getBottomSelectAutoSelectUnique(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'autoSelectUnique', false)
+}
+
 function getBottomSelectScanOnlyFromCamera(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'scanOnlyFromCamera', true)
 }
@@ -1048,7 +1053,7 @@ function handleBottomSelectEdit(field: UTSJSONObject) {
 		if (value == '') {
 			uni.showToast({
 				title: '请先选择要编辑的项目',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -1210,7 +1215,7 @@ function handleSubmit() {
 	if (!validate()) {
 		uni.showToast({
 			title: '请检查必填项',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1260,7 +1265,7 @@ function handleScanClick(field: UTSJSONObject) {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 		},
 	} as ScanCodeOption)

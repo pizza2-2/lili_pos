@@ -37,7 +37,7 @@
 				:dirtySignal="dirtySignal"
 				:showFloatingAction="formMode == 'edit'"
 				:floatingActionText="quickPrintLoading ? '准备中' : '快速打印'"
-				:floatingActionDisabled="quickPrintLoading || printing"
+				:floatingActionDisabled="quickPrintLoading"
 				leaveConfirmContent="是否已收到全部数量"
 				leaveConfirmConfirmText="确认"
 				@submit="handleSubmit"
@@ -53,54 +53,12 @@
 			/>
 		</view>
 
-		<page-container
-			:show="printPopupVisible"
-			position="bottom"
-			:round="true"
-			:overlay="true"
-			:duration="240"
-			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
-			custom-style="background-color: #FFFFFF;"
-			@clickoverlay="closePrintPopup"
-		>
-			<view class="print-panel">
-				<view class="print-handle"></view>
-				<view class="print-head">
-					<view>
-						<text class="print-title">确认打印</text>
-						<text class="print-subtitle">{{ selectedTemplateName }}</text>
-					</view>
-					<view class="print-close" @click="closePrintPopup">
-						<text class="print-close-text">关闭</text>
-					</view>
-				</view>
-				<view class="print-content-card">
-					<view v-if="printPreviewFields.length == 0" class="print-empty-row">
-						<text class="print-empty-text">当前模板没有需要核对的字段</text>
-					</view>
-					<view v-for="field in printPreviewFields" :key="field.key" class="print-row">
-						<text class="print-label">{{ field.label }}</text>
-						<text :class="field.emphasis ? 'print-value print-value-emphasis' : 'print-value'">{{ field.value }}</text>
-					</view>
-				</view>
-				<view class="print-copies-wrap">
-					<lili-print-copies-stepper
-						:value="printCopiesText"
-						title="打印页数"
-						desc="一个商品可一次贴上多张价格"
-						@change="handlePrintCopiesChange"
-					/>
-				</view>
-				<view class="print-actions">
-					<view class="print-secondary-btn" @click="closePrintPopup">
-						<text class="print-secondary-text">取消</text>
-					</view>
-					<view class="print-primary-btn" @click="confirmPrintProduct">
-						<text class="print-primary-text">{{ printing ? '打印中...' : '打印' }}</text>
-					</view>
-				</view>
-			</view>
-		</page-container>
+		<lili-print-confirm-popup
+			:visible="printPopupVisible"
+			templateType="product_label"
+			:valueResolver="resolvePurchaseDetailPrintValue"
+			@update:visible="handlePrintPopupVisibleChange"
+		/>
 	</view>
 </template>
 
@@ -110,6 +68,7 @@ import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createPurchaseDetail, getPurchaseDetailItem, PurchaseDetailItem, PurchaseDetailMutationData, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 import { ProductItem, PrintTemplateItem, getProductDetail, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
 import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type ProductOption = {
 	value: string
@@ -149,6 +108,7 @@ const selectedPrintTemplate = ref<PrintTemplateItem | null>(null)
 const printing = ref(false)
 const printCopiesText = ref('1')
 const quickPrintLoading = ref(false)
+const printPayloadData = ref<UTSJSONObject>({} as UTSJSONObject)
 const productCategoryInfo = ref<ProductCategoryQuickInfo>({ id: '', name: '', kasaCode: '', kasaText: '' } as ProductCategoryQuickInfo)
 const productInfoLoading = ref(false)
 const productInfoError = ref('')
@@ -360,7 +320,7 @@ const formSections = ref<UTSJSONObject[]>([
 		description: '',
 		defaultOpen: true,
 		fields: [
-			{ key: 'product', textKey: 'product_text', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', imageKey: 'image', subtitleKey: 'subtitle', showScan: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
+			{ key: 'product', textKey: 'product_text', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', imageKey: 'image', subtitleKey: 'subtitle', showScan: true, autoSelectUnique: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
 			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
 			{ key: 'received_quantity', label: '已收货数量', type: 'number', showStepper: false, placeholder: '通常由收货操作更新', showAdd: true, addText: '全部收货', fillFromKey: 'quantity' } as UTSJSONObject,
 			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,
@@ -482,7 +442,7 @@ async function loadDetail(idText: string) {
 		initialData.value = await buildInitialDataWithProductInfo(detail)
 		markLeaveConfirmRequired()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '采购明细加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '采购明细加载失败'))
 	}
 }
 
@@ -548,6 +508,30 @@ const productInfoKasaCode = computed((): string => {
 	return code == '' ? '未关联' : code
 })
 
+function payloadFieldValue(key: string): string {
+	return getStringField(printPayloadData.value, key)
+}
+
+function purchaseQuantityText(): string {
+	const payloadQuantity = payloadFieldValue('quantity')
+	if (payloadQuantity != '') return payloadQuantity
+	const initialQuantity = getStringField(initialData.value, 'quantity')
+	if (initialQuantity != '') return initialQuantity
+	const detail = currentDetail.value
+	if (detail != null) return detail.quantity.toString()
+	return '-'
+}
+
+function receivedQuantityText(): string {
+	const payloadQuantity = payloadFieldValue('received_quantity')
+	if (payloadQuantity != '') return payloadQuantity
+	const initialQuantity = getStringField(initialData.value, 'received_quantity')
+	if (initialQuantity != '') return initialQuantity
+	const detail = currentDetail.value
+	if (detail != null) return detail.received_quantity.toString()
+	return '-'
+}
+
 function printValueForSource(source: string, fallback: string): string {
 	if (source == 'name') return productNameText()
 	if (source == 'price') return productDiscountPriceText()
@@ -556,7 +540,17 @@ function printValueForSource(source: string, fallback: string): string {
 	if (source == 'barcode') return productBarcodeText()
 	if (source == 'sku') return productSkuText()
 	if (source == 'kod') return productSkuText()
+	if (source == 'quantity' || source == 'purchase_quantity') return purchaseQuantityText()
+	if (source == 'received_quantity') return receivedQuantityText()
 	return fallback
+}
+
+function resolvePurchaseDetailPrintValue(source: string, fallback: string): string {
+	return printValueForSource(source, fallback)
+}
+
+function handlePrintPopupVisibleChange(value: boolean) {
+	printPopupVisible.value = value
 }
 
 function printLabelForSource(source: UTSJSONObject, index: number): string {
@@ -661,7 +655,7 @@ function connectedPrinterAddress(): string {
 }
 
 function goPrinterSettings() {
-	uni.showToast({ title: '请先连接打印机', icon: 'none' })
+	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({ url: '/pages/printer-settings/index' })
 	}, 450)
@@ -699,7 +693,7 @@ function confirmPrintProduct() {
 		closePrintPopup()
 		return
 	}
-	uni.showToast({ title: response.message == '' ? '打印失败' : response.message, icon: 'none' })
+	showErrorToast(response.message == '' ? '打印失败' : response.message)
 }
 
 function productIdFromPayload(payload: UTSJSONObject): string {
@@ -763,30 +757,25 @@ async function getDefaultProductPrintTemplate(): Promise<PrintTemplateItem | nul
 }
 
 async function handleQuickPrint(payload: UTSJSONObject) {
-	if (quickPrintLoading.value || printing.value) return
+	if (quickPrintLoading.value) return
 	quickPrintLoading.value = true
 	uni.showLoading({ title: '准备打印...', mask: true })
 	try {
+		const rawData = payload['formData']
+		printPayloadData.value = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
 		const productIdText = await resolveProductIdForPrint(payload)
 		if (productIdText == '') {
-			uni.showToast({ title: '当前明细缺少商品，无法打印', icon: 'none' })
+			uni.showToast({ title: '当前明细缺少商品，无法打印', icon: 'none', duration: 3500 })
 			return
 		}
 		const productReady = await ensurePrintProduct(productIdText)
 		if (!productReady) {
-			uni.showToast({ title: '商品信息加载失败，无法打印', icon: 'none' })
+			showErrorToast('商品信息加载失败，无法打印')
 			return
 		}
-		const template = await getDefaultProductPrintTemplate()
-		if (template == null) {
-			uni.showToast({ title: '未设置默认商品价签模板', icon: 'none' })
-			return
-		}
-		selectedPrintTemplate.value = template
-		printCopiesText.value = template.copies_default <= 0 ? '1' : template.copies_default.toString()
 		printPopupVisible.value = true
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '快速打印准备失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '快速打印准备失败'))
 	} finally {
 		uni.hideLoading()
 		quickPrintLoading.value = false
@@ -810,7 +799,7 @@ async function persistForm(payload: UTSJSONObject) {
 	const body = buildPayload(data)
 	const quantity = parseInt(body.quantity)
 	if (body.purchase == '' || body.product == '' || isNaN(quantity) || quantity <= 0) {
-		uni.showToast({ title: '请填写商品和有效采购数量', icon: 'none' })
+		uni.showToast({ title: '请填写商品和有效采购数量', icon: 'none', duration: 3500 })
 		return
 	}
 	const actionText = formMode.value == 'edit' ? '保存采购明细' : '创建采购明细'
@@ -823,7 +812,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -835,7 +824,7 @@ function fillReceivedQuantityFromQuantity(data: UTSJSONObject): boolean {
 	const quantity = getStringField(data, 'quantity')
 	const quantityNumber = parseInt(quantity)
 	if (quantity == '' || isNaN(quantityNumber) || quantityNumber <= 0) {
-		uni.showToast({ title: '请先填写有效采购数量', icon: 'none' })
+		uni.showToast({ title: '请先填写有效采购数量', icon: 'none', duration: 3500 })
 		return false
 	}
 	data['received_quantity'] = quantity
@@ -864,10 +853,10 @@ function handleInputAdd(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
 	if (!fillReceivedQuantityFromQuantity(data)) return
-	uni.showToast({ title: '已填入采购数量', icon: 'none' })
+	uni.showToast({ title: '已填入采购数量', icon: 'none', duration: 3500 })
 }
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none', duration: 3500 }) }
 
 onLoad((query: OnLoadOptions) => {
 	const purchaseValue = query['purchase']

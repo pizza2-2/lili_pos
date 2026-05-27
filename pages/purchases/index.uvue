@@ -196,6 +196,7 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { autoGeneratePurchasePrices, deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
 import { getProductPricingFormulaList, ProductPricingFormulaListQuery } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type PurchaseSelectOption = {
 	value: string
@@ -262,8 +263,6 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
 			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
@@ -675,7 +674,7 @@ async function runAction(id: string, actionName: string) {
 		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '操作失败'))
 	}
 }
 
@@ -689,7 +688,7 @@ async function runDelete(id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '删除失败'))
 	}
 }
 
@@ -731,7 +730,7 @@ async function confirmPriceCalculation() {
 	if (priceCalculating.value) return
 	if (pricePurchaseId.value == '') return
 	if (priceFormulaValue.value == '') {
-		uni.showToast({ title: '请选择售价公式', icon: 'none' })
+		uni.showToast({ title: '请选择售价公式', icon: 'none', duration: 3500 })
 		return
 	}
 	priceCalculating.value = true
@@ -742,7 +741,7 @@ async function confirmPriceCalculation() {
 		uni.showToast({ title: takeLatestResponseMessage('价格计算完成'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '价格计算失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '价格计算失败'))
 	} finally {
 		priceCalculating.value = false
 	}
@@ -763,7 +762,7 @@ function handleMenu(payload: UTSJSONObject) {
 	if (actionKey == 'quick_input') {
 		const statusValue = stringValue(itemObject['statusValue'])
 		if (statusValue != 'DRAFT' && statusValue != 'draft') {
-			uni.showToast({ title: '只能在草稿采购单录入', icon: 'none' })
+			uni.showToast({ title: '只能在草稿采购单录入', icon: 'none', duration: 3500 })
 			return
 		}
 		uni.navigateTo({ url: '/pages/purchases/details/quick-input?purchase=' + id })
@@ -772,12 +771,12 @@ function handleMenu(payload: UTSJSONObject) {
 	if (actionKey == 'excel_upload') {
 		const statusValue = stringValue(itemObject['statusValue'])
 		if (statusValue != 'DRAFT' && statusValue != 'draft') {
-			uni.showToast({ title: '只能向草稿采购单上传', icon: 'none' })
+			uni.showToast({ title: '只能向草稿采购单上传', icon: 'none', duration: 3500 })
 			return
 		}
 		const importStatusValue = stringValue(itemObject['importStatusValue']).toLowerCase()
 		if (isActiveImportStatusValue(importStatusValue)) {
-			uni.showToast({ title: stringValue(itemObject['importStatusMessage'], '该采购单正在后台导入'), icon: 'none' })
+			uni.showToast({ title: stringValue(itemObject['importStatusMessage'], '该采购单正在后台导入'), icon: 'none', duration: 3500 })
 			return
 		}
 		uni.navigateTo({ url: '/pages/purchases/details/excel-upload?purchase=' + id })

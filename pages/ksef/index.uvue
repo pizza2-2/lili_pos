@@ -16,42 +16,45 @@
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
 			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
 		>
 			<template #filter-panel>
-				<view class="filter-panel">
-					<text class="filter-title">同步状态</text>
-					<view class="filter-row">
-						<view :class="selectedSyncStatus == null ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus(null)">
-							<text :class="selectedSyncStatus == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">全部</text>
-						</view>
-						<view :class="selectedSyncStatus == 'METADATA_ONLY' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('METADATA_ONLY')">
-							<text :class="selectedSyncStatus == 'METADATA_ONLY' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">待详情</text>
-						</view>
-						<view :class="selectedSyncStatus == 'XML_DOWNLOADED' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('XML_DOWNLOADED')">
-							<text :class="selectedSyncStatus == 'XML_DOWNLOADED' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">已完成</text>
-						</view>
-						<view :class="selectedSyncStatus == 'SYNC_ERROR' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectSyncStatus('SYNC_ERROR')">
-							<text :class="selectedSyncStatus == 'SYNC_ERROR' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">异常</text>
+				<view class="list-filter-panel">
+					<view v-if="filterOptionsLoading" class="list-filter-state">
+						<text class="list-filter-state-text">筛选选项加载中...</text>
+					</view>
+
+					<view v-else-if="filterOptionsError != ''" class="list-filter-state">
+						<text class="list-filter-state-text">{{ filterOptionsError }}</text>
+					</view>
+
+					<view v-else class="list-filter-groups">
+						<view v-for="filter in filterDefinitions" :key="filter.key" class="list-filter-group">
+							<text class="list-filter-group-title">{{ filter.label }}</text>
+							<view class="list-filter-options">
+								<view
+									:class="isFilterOptionSelected(filter.param, '') ? 'list-filter-option list-filter-option-active' : 'list-filter-option'"
+									@click="clearFilterOption(filter.param)"
+								>
+									<text :class="isFilterOptionSelected(filter.param, '') ? 'list-filter-option-text list-filter-option-text-active' : 'list-filter-option-text'">全部</text>
+								</view>
+								<view
+									v-for="option in filter.options"
+									:key="filter.key + '-' + option.value"
+									:class="isFilterOptionSelected(filter.param, option.value) ? 'list-filter-option list-filter-option-active' : 'list-filter-option'"
+									@click="toggleFilterOption(filter.param, option.value)"
+								>
+									<text :class="isFilterOptionSelected(filter.param, option.value) ? 'list-filter-option-text list-filter-option-text-active' : 'list-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
 						</view>
 					</view>
-					<text class="filter-title filter-title-spaced">付款状态</text>
-					<view class="filter-row">
-						<view :class="selectedPaymentStatus == null ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus(null)">
-							<text :class="selectedPaymentStatus == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">全部</text>
+					<view class="list-filter-actions">
+						<view class="list-filter-btn list-filter-btn-light" @click="handleFilterReset">
+							<text class="list-filter-btn-light-text">重置</text>
 						</view>
-						<view :class="selectedPaymentStatus == 'false' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus('false')">
-							<text :class="selectedPaymentStatus == 'false' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">未付款</text>
-						</view>
-						<view :class="selectedPaymentStatus == 'true' ? 'filter-chip filter-chip-active' : 'filter-chip'" @click="selectPaymentStatus('true')">
-							<text :class="selectedPaymentStatus == 'true' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text'">已付款</text>
-						</view>
-					</view>
-					<view class="filter-actions">
-						<view class="filter-btn filter-btn-light" @click="handleFilterReset">
-							<text class="filter-btn-light-text">重置</text>
-						</view>
-						<view class="filter-btn filter-btn-primary" @click="applyFilter">
-							<text class="filter-btn-primary-text">应用</text>
+						<view class="list-filter-btn list-filter-btn-primary" @click="applyFilter">
+							<text class="list-filter-btn-primary-text">应用</text>
 						</view>
 					</view>
 				</view>
@@ -62,33 +65,6 @@
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
 			<view class="page-content">
-				<view class="status-card">
-					<view class="status-head">
-						<view>
-							<text class="status-title">自动同步</text>
-							<text class="status-subtitle">{{ autoSyncSubtitle }}</text>
-						</view>
-						<view class="sync-btn" @click="handleEnqueueAutoSync">
-							<text class="sync-btn-text">立即排队</text>
-						</view>
-					</view>
-					<view class="status-grid">
-						<view class="status-cell">
-							<text class="status-value">{{ pendingXmlText }}</text>
-							<text class="status-label">待详情</text>
-						</view>
-						<view class="status-cell">
-							<text class="status-value">{{ batchLimitText }}</text>
-							<text class="status-label">每批限制</text>
-						</view>
-						<view class="status-cell">
-							<text class="status-value">{{ lastSuccessText }}</text>
-							<text class="status-label">最近成功</text>
-						</view>
-					</view>
-					<text v-if="statusError != ''" class="status-error">{{ statusError }}</text>
-				</view>
-
 				<view v-if="errorMessage != '' && !isLoading" class="error-card">
 					<text class="error-title">加载失败</text>
 					<text class="error-desc">{{ errorMessage }}</text>
@@ -121,7 +97,7 @@
 					:showFloatingAdd="false"
 					summaryTitle="KSeF 汇总"
 					:summaryItems="summaryItems"
-					:summaryCollapsedByDefault="false"
+					:summaryCollapsedByDefault="true"
 					@item-click="handleItemClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
@@ -138,32 +114,34 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { downloadKsefInvoiceXml, enqueueKsefAutoSync, getKsefAutoSyncStatus, getKsefInvoiceList, KsefAutoSyncStatus, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef'
+import { downloadKsefInvoiceXml, getKsefAutoSyncStatus, getKsefInvoiceFilterOptions, getKsefInvoiceList, KsefAutoSyncStatus, KsefFilterDefinition, KsefFilterOption, KsefFilterOptionsResponse, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type KsefSelectedFilter = {
+	param: string
+	value: string
+}
 
 const refreshStorageKey = 'refresh:pages:ksef:index'
 const keyword = ref('')
 const filterVisible = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref('')
-const statusError = ref('')
 const invoices = ref<KsefInvoiceItem[]>([])
 const status = ref<KsefAutoSyncStatus | null>(null)
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
-const selectedSyncStatus = ref<string | null>(null)
-const selectedPaymentStatus = ref<string | null>(null)
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<KsefFilterOptionsResponse | null>(null)
+const selectedFilters = ref<KsefSelectedFilter[]>([])
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'seller_name', label: '卖方' } as UTSJSONObject,
 	{ key: 'supplier_name', label: '供应商' } as UTSJSONObject,
-	{ key: 'seller_nip', label: '卖方NIP' } as UTSJSONObject,
-	{ key: 'gross_amount_text', label: '总额' } as UTSJSONObject,
-	{ key: 'amount_due_text', label: '待付' } as UTSJSONObject,
 	{ key: 'payment_due_text', label: '到期日' } as UTSJSONObject,
 	{ key: 'bank_account_text', label: '银行账号' } as UTSJSONObject,
-	{ key: 'sync_status_text', label: '详情状态' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
@@ -171,6 +149,63 @@ const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'download_xml', text: '同步详情' } as UTSJSONObject,
 	{ key: 'copy_account', text: '复制账号' } as UTSJSONObject,
 	{ key: 'copy_ksef', text: '复制KSeF号' } as UTSJSONObject,
+])
+
+const defaultFilterDefinitions = ref<KsefFilterDefinition[]>([
+	{
+		key: 'sync_status',
+		param: 'sync_status',
+		label: '同步状态',
+		control: 'select',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: 'METADATA_ONLY', label: '待详情' } as KsefFilterOption,
+			{ value: 'XML_DOWNLOADED', label: '已完成' } as KsefFilterOption,
+			{ value: 'SYNC_ERROR', label: '异常' } as KsefFilterOption,
+		],
+	} as KsefFilterDefinition,
+	{
+		key: 'is_paid',
+		param: 'is_paid',
+		label: '付款状态',
+		control: 'boolean',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: 'false', label: '未付款' } as KsefFilterOption,
+			{ value: 'true', label: '已付款' } as KsefFilterOption,
+		],
+	} as KsefFilterDefinition,
+	{
+		key: 'has_xml',
+		param: 'has_xml',
+		label: 'XML 状态',
+		control: 'boolean',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: 'false', label: '未下载' } as KsefFilterOption,
+			{ value: 'true', label: '已下载' } as KsefFilterOption,
+		],
+	} as KsefFilterDefinition,
+	{
+		key: 'ordering',
+		param: 'ordering',
+		label: '排序方式',
+		control: 'select',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: 'payment_due_date', label: '到期日最近' } as KsefFilterOption,
+			{ value: '-payment_due_date', label: '到期日最远' } as KsefFilterOption,
+			{ value: '-issue_date', label: '开票日期最新' } as KsefFilterOption,
+			{ value: 'issue_date', label: '开票日期最早' } as KsefFilterOption,
+			{ value: '-gross_amount', label: '金额最高' } as KsefFilterOption,
+			{ value: 'gross_amount', label: '金额最低' } as KsefFilterOption,
+			{ value: '-created_at', label: '最近创建' } as KsefFilterOption,
+		],
+	} as KsefFilterDefinition,
 ])
 
 function parseErrorMessage(error: any, fallback: string = '操作失败'): string {
@@ -192,6 +227,66 @@ function applyListResponse(response: KsefInvoiceListResponse) {
 	pageSize.value = response.page_size
 }
 
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: KsefSelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as KsefSelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as KsefSelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function filterValueOrNull(param: string): string | null {
+	const value = selectedFilterValue(param)
+	return value == '' ? null : value
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return selectedFilterValue(param) == value
+}
+
+function clearFilterOption(param: string) {
+	setSelectedFilterValue(param, '')
+}
+
+function toggleFilterOption(param: string, value: string) {
+	const currentValue = selectedFilterValue(param)
+	setSelectedFilterValue(param, currentValue == value ? '' : value)
+}
+
+async function loadFilterOptions() {
+	if (filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getKsefInvoiceFilterOptions()
+	} catch (error) {
+		filterOptions.value = null
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
 async function loadInvoices() {
 	if (isLoading.value) {
 		return
@@ -203,8 +298,10 @@ async function loadInvoices() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
-			sync_status: selectedSyncStatus.value,
-			is_paid: selectedPaymentStatus.value,
+			sync_status: filterValueOrNull('sync_status'),
+			is_paid: filterValueOrNull('is_paid'),
+			has_xml: filterValueOrNull('has_xml'),
+			ordering: filterValueOrNull('ordering'),
 		})
 		applyListResponse(response)
 	} catch (error) {
@@ -216,17 +313,19 @@ async function loadInvoices() {
 }
 
 async function loadAutoSyncStatus() {
-	statusError.value = ''
 	try {
 		status.value = await getKsefAutoSyncStatus()
 	} catch (error) {
 		status.value = null
-		statusError.value = parseErrorMessage(error, '自动同步状态加载失败')
 	}
 }
 
 function handleFilterVisibleChange(value: boolean) {
 	filterVisible.value = value
+}
+
+function handleFilterOpen() {
+	loadFilterOptions()
 }
 
 function handleSearchInput(value: string) {
@@ -245,17 +344,8 @@ function handleSearchClear() {
 	loadInvoices()
 }
 
-function selectSyncStatus(value: string | null) {
-	selectedSyncStatus.value = value
-}
-
-function selectPaymentStatus(value: string | null) {
-	selectedPaymentStatus.value = value
-}
-
 function handleFilterReset() {
-	selectedSyncStatus.value = null
-	selectedPaymentStatus.value = null
+	selectedFilters.value = [] as KsefSelectedFilter[]
 	keyword.value = ''
 	currentPage.value = 1
 	filterVisible.value = false
@@ -279,18 +369,6 @@ function handlePageChange(payload: UTSJSONObject) {
 	}
 	currentPage.value = nextPage
 	loadInvoices()
-}
-
-function statusText(value: string): string {
-	if (value == 'XML_DOWNLOADED') return '已同步详情'
-	if (value == 'SYNC_ERROR') return '同步异常'
-	return '待同步详情'
-}
-
-function statusTag(value: string): string {
-	if (value == 'XML_DOWNLOADED') return '已完成'
-	if (value == 'SYNC_ERROR') return '异常'
-	return '待详情'
 }
 
 function paidText(value: boolean): string {
@@ -334,29 +412,29 @@ function normalizeAccount(value: string): string {
 }
 
 function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
+	const statusTags: string[] = [paidText(item.is_paid)]
+	if (item.sync_status == 'SYNC_ERROR') {
+		statusTags.push('异常')
+	}
 	return {
 		id: item.id.toString(),
 		name: displayText(item.invoice_number),
 		codeText: displayText(item.seller_name),
-		metaText: displayText(item.amount_due) + ' ' + displayText(item.currency) + ' / ' + paidText(item.is_paid),
-		seller_name: displayText(item.seller_name),
+		metaText: displayText(item.amount_due) + ' ' + displayText(item.currency) + ' · ' + paidText(item.is_paid),
 		supplier_name: supplierText(item),
 		seller_nip: displayText(item.seller_nip),
-		gross_amount_text: displayText(item.gross_amount) + ' ' + displayText(item.currency),
-		amount_due_text: displayText(item.amount_due) + ' ' + displayText(item.currency),
 		payment_due_text: compactDate(item.payment_due_date),
 		bank_account_text: displayText(normalizeAccount(item.bank_account_number)),
-		sync_status_text: statusText(item.sync_status),
 		rawId: item.id.toString(),
 		rawKsefNumber: item.ksef_number,
 		rawBankAccount: normalizeAccount(item.bank_account_number),
-		tags: [item.supplier > 0 ? '已关联供应商' : '未关联供应商', paidText(item.is_paid), statusTag(item.sync_status)] as string[],
+		tags: statusTags,
 	} as UTSJSONObject
 }
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({
@@ -367,16 +445,6 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	})
 }
 
-async function handleEnqueueAutoSync() {
-	try {
-		await enqueueKsefAutoSync()
-		uni.showToast({ title: takeLatestResponseMessage('已加入队列'), icon: 'success' })
-		loadAutoSyncStatus()
-	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '任务加入队列失败'), icon: 'none' })
-	}
-}
-
 async function handleDownloadXml(invoiceId: string) {
 	try {
 		await downloadKsefInvoiceXml(invoiceId)
@@ -384,7 +452,7 @@ async function handleDownloadXml(invoiceId: string) {
 		loadInvoices()
 		loadAutoSyncStatus()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '详情同步失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '详情同步失败'))
 	}
 }
 
@@ -471,8 +539,13 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const filterDefinitions = computed((): KsefFilterDefinition[] => {
+	if (filterOptions.value != null && filterOptions.value!.filters.length > 0) return filterOptions.value!.filters
+	return defaultFilterDefinitions.value
+})
+
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedSyncStatus.value != null || selectedPaymentStatus.value != null
+	return keyword.value != '' || selectedFilters.value.length > 0
 })
 
 const emptyText = computed((): string => {
@@ -486,27 +559,17 @@ const pendingXmlText = computed((): string => {
 	return status.value.pending_xml_count.toString()
 })
 
-const batchLimitText = computed((): string => {
-	if (status.value == null) return '-'
-	return status.value.xml_batch_size.toString() + '张/' + status.value.xml_delay_seconds.toString() + '秒'
-})
-
 const lastSuccessText = computed((): string => {
 	if (status.value == null) return '-'
 	return compactDate(status.value.last_success_at)
 })
 
-const autoSyncSubtitle = computed((): string => {
-	if (status.value == null) return '读取自动同步配置中'
-	if (!status.value.enabled) return '自动同步已关闭'
-	return '每 5 小时增量同步，详情分批自动回填'
-})
-
 const summaryItems = computed((): UTSJSONObject[] => {
+	const paymentFilter = selectedFilterValue('is_paid')
 	return [
 		{ key: 'total', label: '发票总数', value: totalCount.value.toString() } as UTSJSONObject,
 		{ key: 'pending', label: '待详情', value: pendingXmlText.value } as UTSJSONObject,
-		{ key: 'payment', label: '付款筛选', value: selectedPaymentStatus.value == null ? '全部' : (selectedPaymentStatus.value == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
+		{ key: 'payment', label: '付款筛选', value: paymentFilter == '' ? '全部' : (paymentFilter == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
 		{ key: 'last', label: '最近成功', value: lastSuccessText.value } as UTSJSONObject,
 	]
 })
@@ -544,111 +607,44 @@ onShow(() => {
 	padding-bottom: 96px;
 }
 
-.status-card {
-	background-color: #FFFFFF;
-	border-radius: 8px;
-	padding: 14px;
-	margin-bottom: 10px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E5EAF1;
+.list-filter-panel {
+	padding-bottom: 8px;
 }
 
-.status-head {
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: center;
-}
-
-.status-title {
-	font-size: 17px;
-	line-height: 22px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.status-subtitle {
-	font-size: 12px;
-	line-height: 18px;
-	color: #64748B;
-	margin-top: 2px;
-}
-
-.sync-btn {
-	height: 36px;
-	padding-left: 14px;
-	padding-right: 14px;
-	border-radius: 8px;
-	background-color: #0F172A;
+.list-filter-state {
+	min-height: 64px;
 	align-items: center;
 	justify-content: center;
 }
 
-.sync-btn-text {
+.list-filter-state-text {
 	font-size: 13px;
-	line-height: 13px;
-	color: #FFFFFF;
-}
-
-.status-grid {
-	flex-direction: row;
-	margin-top: 12px;
-}
-
-.status-cell {
-	flex: 1;
-	background-color: #F8FAFC;
-	border-radius: 8px;
-	padding-top: 10px;
-	padding-bottom: 10px;
-	padding-left: 8px;
-	padding-right: 8px;
-	margin-right: 6px;
-}
-
-.status-value {
-	font-size: 15px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.status-label {
-	font-size: 11px;
-	line-height: 16px;
-	color: #64748B;
-	margin-top: 2px;
-}
-
-.status-error {
-	font-size: 12px;
 	line-height: 18px;
-	color: #B42318;
-	margin-top: 8px;
+	color: #64748B;
 }
 
-.filter-panel {
-	padding-bottom: 8px;
+.list-filter-groups {
+	padding-bottom: 2px;
 }
 
-.filter-title {
+.list-filter-group {
+	margin-bottom: 10px;
+}
+
+.list-filter-group-title {
 	font-size: 14px;
 	line-height: 18px;
 	color: #0F172A;
 	font-weight: bold;
 }
 
-.filter-title-spaced {
-	margin-top: 8px;
-}
-
-.filter-row {
+.list-filter-options {
 	flex-direction: row;
 	flex-wrap: wrap;
 	margin-top: 10px;
 }
 
-.filter-chip {
+.list-filter-option {
 	height: 34px;
 	padding-left: 12px;
 	padding-right: 12px;
@@ -663,27 +659,27 @@ onShow(() => {
 	margin-bottom: 8px;
 }
 
-.filter-chip-active {
+.list-filter-option-active {
 	background-color: #0F172A;
 	border-color: #0F172A;
 }
 
-.filter-chip-text {
+.list-filter-option-text {
 	font-size: 13px;
 	line-height: 13px;
 	color: #475569;
 }
 
-.filter-chip-text-active {
+.list-filter-option-text-active {
 	color: #FFFFFF;
 }
 
-.filter-actions {
+.list-filter-actions {
 	flex-direction: row;
 	margin-top: 8px;
 }
 
-.filter-btn {
+.list-filter-btn {
 	flex: 1;
 	height: 40px;
 	border-radius: 8px;
@@ -691,7 +687,7 @@ onShow(() => {
 	justify-content: center;
 }
 
-.filter-btn-light {
+.list-filter-btn-light {
 	background-color: #F3F6FA;
 	border-width: 1px;
 	border-style: solid;
@@ -699,17 +695,17 @@ onShow(() => {
 	margin-right: 8px;
 }
 
-.filter-btn-primary {
+.list-filter-btn-primary {
 	background-color: #0F172A;
 }
 
-.filter-btn-light-text {
+.list-filter-btn-light-text {
 	font-size: 14px;
 	line-height: 14px;
 	color: #475569;
 }
 
-.filter-btn-primary-text {
+.list-filter-btn-primary-text {
 	font-size: 14px;
 	line-height: 14px;
 	color: #FFFFFF;

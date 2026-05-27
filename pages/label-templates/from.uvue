@@ -131,6 +131,7 @@
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { PrintTemplateItem, PrintTemplateMutationData, createPrintTemplate, getPrintTemplateDetail, updatePrintTemplate } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type TemplateChoice = {
 	value: string
@@ -378,10 +379,7 @@ async function handleSave() {
 			handleCancel()
 		}, 450)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '保存失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '保存失败'))
 	} finally {
 		submitting.value = false
 	}

@@ -186,13 +186,6 @@
 			}
 		},
 		{
-			"path": "pages/label-print/index",
-			"style": {
-				"navigationStyle":"custom",
-				"navigationBarTitleText": ""
-			}
-		},
-		{
 			"path": "pages/printer-settings/index",
 			"style": {
 				"navigationStyle":"custom",

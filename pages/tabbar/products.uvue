@@ -139,11 +139,19 @@
 					:currentPage="currentPage"
 					:totalPages="totalPages"
 					:totalCount="totalCount"
+					:selectionMode="selectionMode"
+					:selectedItems="selectedProductIds"
+					:batchActions="batchToolbarActions"
+					:batchInfoText="batchInfoText"
 					summaryTitle="商品概览"
 					:summaryItems="summaryItems"
 					:summaryCollapsedByDefault="true"
 					:showFloatingAdd="true"
 					floatingAddText="新增商品"
+					@update:selectionMode="handleSelectionModeChange"
+					@update:selectedItems="handleSelectedProductIdsChange"
+					@selection-exit="handleSelectionExit"
+					@batch-action="handleBatchToolbarAction"
 					@item-click="handleItemClick"
 					@subtitle-click="handleSubtitleClick"
 					@meta-click="handleMetaClick"
@@ -156,18 +164,105 @@
 		<!-- #ifdef APP -->
 		</scroll-view>
 		<!-- #endif -->
+
+		<page-container
+			:show="batchEditorVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeBatchEditor"
+		>
+			<view class="batch-panel">
+				<view class="batch-handle"></view>
+				<view class="batch-head">
+					<view>
+						<text class="batch-title">{{ batchEditorTitle }}</text>
+						<text class="batch-subtitle">{{ batchEditorSubtitle }}</text>
+					</view>
+					<view class="batch-close" @click="closeBatchEditor">
+						<text class="batch-close-text">关闭</text>
+					</view>
+				</view>
+
+				<view v-if="batchEditorType == 'update-category'" class="batch-field">
+					<text class="batch-label">目标分类</text>
+					<liliBottomSelect
+						:value="batchCategoryValue"
+						:valueText="batchCategoryText"
+						title="批量修改分类"
+						placeholder="请选择分类"
+						searchPlaceholder="请输入分类名称"
+						emptyText="暂无分类"
+						:tree="true"
+						:checkStrictly="false"
+						:showAddAction="false"
+						:showEditAction="false"
+						:fetchData="fetchCategoryFilterOptions"
+						@change="handleBatchCategoryChange"
+					/>
+				</view>
+
+				<view v-else-if="batchEditorType == 'update-supplier'" class="batch-field">
+					<text class="batch-label">目标供应商</text>
+					<liliBottomSelect
+						:value="batchSupplierValue"
+						:valueText="batchSupplierText"
+						title="批量修改供应商"
+						placeholder="请选择供应商"
+						searchPlaceholder="请输入供应商名称"
+						emptyText="暂无供应商"
+						:showAddAction="false"
+						:showEditAction="false"
+						:fetchData="fetchSupplierFilterOptions"
+						@change="handleBatchSupplierChange"
+					/>
+				</view>
+
+				<view v-else-if="batchEditorType == 'update-status'" class="batch-field">
+					<text class="batch-label">目标状态</text>
+					<view class="batch-status-options">
+						<view
+							v-for="option in productStatusOptions"
+							:key="option.value"
+							:class="isBatchStatusSelected(option) ? 'batch-status-option batch-status-option-active' : 'batch-status-option'"
+							@click="selectBatchStatus(option)"
+						>
+							<text :class="isBatchStatusSelected(option) ? 'batch-status-option-text batch-status-option-text-active' : 'batch-status-option-text'">{{ option.text }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="batch-actions">
+					<view class="batch-secondary-btn" @click="closeBatchEditor">
+						<text class="batch-secondary-text">取消</text>
+					</view>
+					<view class="batch-primary-btn" @click="confirmBatchEditor">
+						<text class="batch-primary-text">{{ batchSubmitting ? '处理中...' : '确认修改' }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
 <script setup lang="uts">
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
-import { request } from '@/pkg/api/index.uts'
-import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { batchDeleteProducts, batchUpdateProductCategory, batchUpdateProductStatus, batchUpdateProductSupplier, getProductFilterOptions, getProductList, ProductBatchActionResponse, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type ProductSelectOption = {
+	value: string
+	text: string
+}
+
+type ProductStatusOption = {
 	value: string
 	text: string
 }
@@ -191,10 +286,22 @@ const categoryFilterValues = ref<string[]>([])
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 const volumeScanLocked = ref(false)
+const selectionMode = ref(false)
+const selectedProductIds = ref<string[]>([])
+const batchSubmitting = ref(false)
+const batchEditorVisible = ref(false)
+const batchEditorType = ref('')
+const batchCategoryValue = ref('')
+const batchCategoryText = ref('')
+const batchSupplierValue = ref('')
+const batchSupplierText = ref('')
+const batchStatusValue = ref('')
+const batchStatusText = ref('')
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'supplierText', label: '供应商：' } as UTSJSONObject,
-	{ key: 'purchasePriceText', label: '含税进价：' } as UTSJSONObject,
+	{ key: 'supplierText', label: '供应商：', hideWhenEmpty: true } as UTSJSONObject,
+	{ key: 'stockQuantityText', label: '库存数量：' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '含税进价：', hideWhenEmpty: true } as UTSJSONObject,
 	{ key: 'salesPriceText', label: '售价：' } as UTSJSONObject,
 	{ key: 'salesCountText', label: '销量：' } as UTSJSONObject,
 ])
@@ -203,6 +310,20 @@ const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
 	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const batchToolbarActions = ref<UTSJSONObject[]>([
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+	{ key: 'update-category', text: '改分类' } as UTSJSONObject,
+	{ key: 'update-supplier', text: '改供应商' } as UTSJSONObject,
+	{ key: 'update-status', text: '改状态' } as UTSJSONObject,
+])
+
+const productStatusOptions = ref<ProductStatusOption[]>([
+	{ value: 'DRAFT', text: '草稿' } as ProductStatusOption,
+	{ value: 'ACTIVE', text: '启用' } as ProductStatusOption,
+	{ value: 'INACTIVE', text: '停用' } as ProductStatusOption,
+	{ value: 'DISCONTINUED', text: '停产' } as ProductStatusOption,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
@@ -252,6 +373,73 @@ function parseErrorMessage(error: any): string {
 	return message
 }
 
+function numberValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+function selectedCountText(): string {
+	return selectedProductIds.value.length.toString()
+}
+
+function clearSelectionState() {
+	selectionMode.value = false
+	selectedProductIds.value = [] as string[]
+}
+
+function handleSelectionModeChange(value: boolean) {
+	selectionMode.value = value
+	if (!value) {
+		selectedProductIds.value = [] as string[]
+	}
+}
+
+function handleSelectedProductIdsChange(value: string[]) {
+	const nextIds: string[] = []
+	for (let index = 0; index < value.length; index += 1) {
+		nextIds.push(value[index])
+	}
+	selectedProductIds.value = nextIds
+}
+
+function handleSelectionExit(payload: UTSJSONObject) {
+	clearSelectionState()
+}
+
+function selectedProductIdsSnapshot(): string[] {
+	const result: string[] = []
+	for (let index = 0; index < selectedProductIds.value.length; index += 1) {
+		result.push(selectedProductIds.value[index])
+	}
+	return result
+}
+
+function ensureBatchSelection(): boolean {
+	if (selectedProductIds.value.length > 0) {
+		return true
+	}
+	uni.showToast({
+		title: '请先选择商品',
+		icon: 'none', duration: 3500,
+	})
+	return false
+}
+
+function resetBatchDraft() {
+	batchCategoryValue.value = ''
+	batchCategoryText.value = ''
+	batchSupplierValue.value = ''
+	batchSupplierText.value = ''
+	batchStatusValue.value = ''
+	batchStatusText.value = ''
+}
+
 function updateFilterPanelLayout() {
 	const info = uni.getWindowInfo()
 	let nextPanelHeight = info.windowHeight - 168
@@ -287,7 +475,6 @@ async function loadProducts() {
 			filters: selectedFilters.value,
 		})
 		applyProductResponse(response)
-		console.log("输出打印",response)
 	} catch (error) {
 		products.value = []
 		currentPage.value = 1
@@ -716,6 +903,193 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 	return buildCategoryTreeResponse(raw)
 }
 
+function batchActionTitle(actionKey: string): string {
+	if (actionKey == 'delete') return '批量删除'
+	if (actionKey == 'update-category') return '批量修改分类'
+	if (actionKey == 'update-supplier') return '批量修改供应商'
+	if (actionKey == 'update-status') return '批量修改状态'
+	return '批量操作'
+}
+
+function batchActionConfirmText(actionKey: string, count: number): string {
+	if (actionKey == 'delete') return '确定删除选中的 ' + count.toString() + ' 个商品吗？'
+	if (actionKey == 'update-category') return '确定将选中的 ' + count.toString() + ' 个商品修改到该分类吗？'
+	if (actionKey == 'update-supplier') return '确定将选中的 ' + count.toString() + ' 个商品修改到该供应商吗？'
+	if (actionKey == 'update-status') return '确定将选中的 ' + count.toString() + ' 个商品修改为该状态吗？'
+	return '确定执行批量操作吗？'
+}
+
+function batchResultMessage(response: ProductBatchActionResponse, fallback: string): string {
+	let message = takeLatestResponseMessage(fallback)
+	if (message == '') {
+		message = fallback
+	}
+	const summaryObject = parseObject(response.data['summary'])
+	if (summaryObject == null) {
+		return message
+	}
+
+	const successCount = numberValue(summaryObject['success_count'])
+	const failureCount = numberValue(summaryObject['failure_count'])
+	const skippedCount = numberValue(summaryObject['skipped_count'])
+	if (failureCount > 0) {
+		return '成功' + successCount.toString() + '，失败' + failureCount.toString()
+	}
+	if (skippedCount > 0) {
+		return '成功' + successCount.toString() + '，跳过' + skippedCount.toString()
+	}
+	return message
+}
+
+function batchResultHasIssue(response: ProductBatchActionResponse): boolean {
+	const summaryObject = parseObject(response.data['summary'])
+	if (summaryObject == null) {
+		return false
+	}
+	return numberValue(summaryObject['failure_count']) > 0 || numberValue(summaryObject['skipped_count']) > 0
+}
+
+async function executeProductBatchAction(actionKey: string) {
+	if (batchSubmitting.value || !ensureBatchSelection()) {
+		return
+	}
+
+	const ids = selectedProductIdsSnapshot()
+	batchSubmitting.value = true
+	try {
+		let response: ProductBatchActionResponse | null = null
+		if (actionKey == 'delete') {
+			response = await batchDeleteProducts(ids)
+		} else if (actionKey == 'update-category') {
+			response = await batchUpdateProductCategory(ids, batchCategoryValue.value)
+		} else if (actionKey == 'update-supplier') {
+			response = await batchUpdateProductSupplier(ids, batchSupplierValue.value)
+		} else if (actionKey == 'update-status') {
+			response = await batchUpdateProductStatus(ids, batchStatusValue.value)
+		} else {
+			uni.showToast({ title: '暂不支持该操作', icon: 'none', duration: 3500 })
+			return
+		}
+
+		const fallbackMessage = batchActionTitle(actionKey) + '成功'
+		let resultMessage = fallbackMessage
+		let resultIcon = 'success'
+		if (response != null) {
+			const batchResponse = response as ProductBatchActionResponse
+			resultMessage = batchResultMessage(batchResponse, fallbackMessage)
+			if (batchResultHasIssue(batchResponse)) {
+				resultIcon = 'none'
+			}
+		}
+		uni.showToast({
+			title: resultMessage,
+			icon: resultIcon,
+		})
+		batchEditorVisible.value = false
+		batchEditorType.value = ''
+		resetBatchDraft()
+		clearSelectionState()
+		loadProducts()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		batchSubmitting.value = false
+	}
+}
+
+function confirmProductBatchAction(actionKey: string) {
+	if (!ensureBatchSelection()) {
+		return
+	}
+	const count = selectedProductIds.value.length
+	uni.showModal({
+		title: batchActionTitle(actionKey),
+		content: batchActionConfirmText(actionKey, count),
+		success: (res) => {
+			if (!res.confirm) {
+				return
+			}
+			executeProductBatchAction(actionKey)
+		},
+	})
+}
+
+function openBatchEditor(actionKey: string) {
+	if (!ensureBatchSelection()) {
+		return
+	}
+	resetBatchDraft()
+	batchEditorType.value = actionKey
+	batchEditorVisible.value = true
+}
+
+function closeBatchEditor() {
+	if (batchSubmitting.value) {
+		return
+	}
+	batchEditorVisible.value = false
+	batchEditorType.value = ''
+	resetBatchDraft()
+}
+
+function handleBatchCategoryChange(payload: UTSJSONObject) {
+	batchCategoryValue.value = stringValue(payload['value'])
+	batchCategoryText.value = stringValue(payload['text'])
+}
+
+function handleBatchSupplierChange(payload: UTSJSONObject) {
+	batchSupplierValue.value = stringValue(payload['value'])
+	batchSupplierText.value = stringValue(payload['text'])
+}
+
+function selectBatchStatus(option: ProductStatusOption) {
+	batchStatusValue.value = option.value
+	batchStatusText.value = option.text
+}
+
+function isBatchStatusSelected(option: ProductStatusOption): boolean {
+	return batchStatusValue.value == option.value
+}
+
+function validateBatchEditor(): boolean {
+	if (batchEditorType.value == 'update-category' && batchCategoryValue.value == '') {
+		uni.showToast({ title: '请选择分类', icon: 'none', duration: 3500 })
+		return false
+	}
+	if (batchEditorType.value == 'update-supplier' && batchSupplierValue.value == '') {
+		uni.showToast({ title: '请选择供应商', icon: 'none', duration: 3500 })
+		return false
+	}
+	if (batchEditorType.value == 'update-status' && batchStatusValue.value == '') {
+		uni.showToast({ title: '请选择状态', icon: 'none', duration: 3500 })
+		return false
+	}
+	return true
+}
+
+function confirmBatchEditor() {
+	if (batchEditorType.value == '' || !validateBatchEditor()) {
+		return
+	}
+	confirmProductBatchAction(batchEditorType.value)
+}
+
+function handleBatchToolbarAction(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	if (actionValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const actionKey = stringValue(action['key'])
+	if (actionKey == 'delete') {
+		confirmProductBatchAction(actionKey)
+		return
+	}
+	if (actionKey == 'update-category' || actionKey == 'update-supplier' || actionKey == 'update-status') {
+		openBatchEditor(actionKey)
+	}
+}
+
 function buildProductTags(item: ProductItem): string[] {
 	const result: string[] = []
 	if (item.is_new) {
@@ -760,10 +1134,11 @@ function productToListItem(item: ProductItem): UTSJSONObject {
 		barcodeText: '条码：' + getDisplayText(item.barcode),
 		foreignNameText: getDisplayText(item.name_en),
 		otherNameText: getDisplayText(item.name_other),
-		supplierText: getDisplayText(item.supplier_name),
-		purchasePriceText: getDisplayText(item.purchase_price),
-		netPurchasePriceText: getDisplayText(item.net_purchase_price),
-		costPriceText: getDisplayText(item.cost_price),
+		supplierText: item.supplier_name,
+		stockQuantityText: item.total_stock_quantity.toString(),
+		purchasePriceText: item.purchase_price,
+		netPurchasePriceText: item.net_purchase_price,
+		costPriceText: item.cost_price,
 		salesPriceText: getDisplayText(item.base_sales_price),
 		salesCountText: item.total_sales_quantity.toString(),
 		variantCountText: item.variant_count.toString(),
@@ -782,7 +1157,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -827,7 +1202,7 @@ function handleScanSearch() {
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
-			uni.showToast({ title: message, icon: 'none' })
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
 }
@@ -973,7 +1348,7 @@ function handleItemClick(payload: UTSJSONObject) {
 	const itemName = stringValue(payload['name'], '商品')
 	uni.showToast({
 		title: itemName,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -1040,7 +1415,7 @@ function handleFieldClick(payload: UTSJSONObject) {
 function navigateToProductInventory(item: UTSJSONObject) {
 	const rawId = stringValue(item['rawId'], stringValue(item['id']))
 	if (rawId == '') {
-		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const productName = stringValue(item['name'])
@@ -1109,6 +1484,18 @@ const listItems = computed((): UTSJSONObject[] => {
 		result.push(productToListItem(products.value[index]))
 	}
 	return result
+})
+
+const batchInfoText = computed((): string => {
+	return '已选 ' + selectedCountText() + ' 个商品'
+})
+
+const batchEditorTitle = computed((): string => {
+	return batchActionTitle(batchEditorType.value)
+})
+
+const batchEditorSubtitle = computed((): string => {
+	return '当前已选 ' + selectedCountText() + ' 个商品'
 })
 
 const summaryItems = computed((): UTSJSONObject[] => {
@@ -1432,5 +1819,147 @@ onUnload(() => {
 	border-top-style: solid;
 	border-top-color: rgba(226, 232, 240, 0.78);
 	background-color: #FFFFFF;
+}
+
+.batch-panel {
+	padding-left: 18px;
+	padding-right: 18px;
+	padding-top: 10px;
+	padding-bottom: 22px;
+	background-color: #FFFFFF;
+}
+
+.batch-handle {
+	width: 42px;
+	height: 4px;
+	border-radius: 2px;
+	background-color: #CBD5E1;
+	align-self: center;
+	margin-bottom: 14px;
+}
+
+.batch-head {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 18px;
+}
+
+.batch-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.batch-subtitle {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 3px;
+}
+
+.batch-close {
+	height: 32px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 16px;
+	background-color: #F1F5F9;
+	align-items: center;
+	justify-content: center;
+}
+
+.batch-close-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #475569;
+}
+
+.batch-field {
+	margin-bottom: 16px;
+}
+
+.batch-label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-bottom: 8px;
+}
+
+.batch-status-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.batch-status-option {
+	height: 36px;
+	min-width: 72px;
+	padding-left: 14px;
+	padding-right: 14px;
+	border-radius: 18px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.batch-status-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.batch-status-option-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #334155;
+}
+
+.batch-status-option-text-active {
+	color: #FFFFFF;
+}
+
+.batch-actions {
+	flex-direction: row;
+	margin-top: 4px;
+}
+
+.batch-secondary-btn,
+.batch-primary-btn {
+	flex: 1;
+	height: 42px;
+	border-radius: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.batch-secondary-btn {
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	margin-right: 10px;
+}
+
+.batch-primary-btn {
+	background-color: #0F172A;
+}
+
+.batch-secondary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #475569;
+	font-weight: bold;
+}
+
+.batch-primary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
 }
 </style>

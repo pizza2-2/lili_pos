@@ -23,6 +23,7 @@
 <script setup lang="uts">
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createInventoryCheck, InventoryMutationData } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 function normalizeDateNumber(value: number): string {
 	if (value < 10) return '0' + value
@@ -67,9 +68,13 @@ function booleanValue(value: any | null): boolean {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const text = JSON.stringify(error)
+		let text = ''
+		try {
+			const errorText = JSON.stringify(error)
+			if (errorText != null) text = errorText
+		} catch (stringifyError) {
+			text = ''
+		}
 		if (text != null && text != '') {
 			let parsedError: UTSJSONObject | null = null
 			try {
@@ -81,11 +86,15 @@ function parseErrorMessage(error: any, fallback: string): string {
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
+					const parsedMessage = stringValue(rawMessage)
 					if (parsedMessage != '') message = parsedMessage
 				}
 			}
-			if (message == fallback && text != '{}') message = text
+			if (message == fallback && text != '{}' && text != 'null') message = text
+		}
+		if (message == fallback) {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
 		}
 	}
 	return message
@@ -283,12 +292,12 @@ function goBackToList() {
 function buildPayload(data: UTSJSONObject): InventoryMutationData | null {
 	const locationId = intValue(data['location'])
 	if (locationId <= 0) {
-		uni.showToast({ title: '请选择盘点位置', icon: 'none' })
+		uni.showToast({ title: '请选择盘点位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	const categoryId = intValue(data['category'])
 	if (categoryId <= 0) {
-		uni.showToast({ title: '请选择盘点分类', icon: 'none' })
+		uni.showToast({ title: '请选择盘点分类', icon: 'none', duration: 3500 })
 		return null
 	}
 	return {
@@ -317,7 +326,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage('创建盘点单成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '创建盘点单失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '创建盘点单失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -333,8 +342,8 @@ function handleFormChange(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	if (rawData != null) liveFormData.value = rawData as UTSJSONObject
 }
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }) }
 </script>
 
 <style>

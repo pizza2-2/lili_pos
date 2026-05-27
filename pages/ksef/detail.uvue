@@ -41,50 +41,76 @@
 				</view>
 
 				<view v-if="invoice != null && !isLoading" class="section">
-					<text class="section-title">发票信息</text>
+					<view class="section-head">
+						<text class="section-title">操作</text>
+						<text class="section-note">{{ operationNote }}</text>
+					</view>
+					<view class="action-grid">
+						<view class="action-tile" @click="openInvoiceInfoPopup">
+							<text class="action-title">发票资料</text>
+							<text class="action-desc">{{ invoiceInfoActionText }}</text>
+						</view>
+						<view class="action-tile" @click="openPaymentInfoPopup">
+							<text class="action-title">付款信息</text>
+							<text class="action-desc">{{ paymentInfoActionText }}</text>
+						</view>
+						<view class="action-tile" @click="openPaymentEditPopup">
+							<text class="action-title">付款登记</text>
+							<text class="action-desc">{{ paymentEditActionText }}</text>
+						</view>
+						<view class="action-tile" @click="openSupplierPopup">
+							<text class="action-title">供应商</text>
+							<text class="action-desc">{{ supplierActionText }}</text>
+						</view>
+						<view class="action-tile" @click="openPdfPopup">
+							<text class="action-title">官方PDF</text>
+							<text class="action-desc">{{ pdfActionText }}</text>
+						</view>
+						<view class="action-tile" @click="openAttachmentPopup">
+							<text class="action-title">附件</text>
+							<text class="action-desc">{{ attachmentActionText }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<page-container :show="invoiceInfoPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closeInvoiceInfoPopup">
+			<view class="popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">发票资料</text>
+						<text class="popup-subtitle">{{ invoiceNumberText }}</text>
+					</view>
+					<view class="popup-close" @click="closeInvoiceInfoPopup"><text class="popup-close-text">关闭</text></view>
+				</view>
+				<scroll-view class="popup-scroll" scroll-y="true" :style="popupScrollStyle">
 					<view class="info-row" v-for="row in invoiceRows" :key="row['key']">
 						<text class="info-label">{{ row['label'] }}</text>
 						<text class="info-value">{{ row['value'] }}</text>
 					</view>
-				</view>
+					<view class="copy-grid">
+						<view class="copy-btn" @click="copyKsefNumber"><text class="copy-btn-text">复制KSeF号</text></view>
+						<view class="copy-btn" @click="copySellerNip"><text class="copy-btn-text">复制卖方NIP</text></view>
+					</view>
+				</scroll-view>
+			</view>
+		</page-container>
 
-				<view v-if="invoice != null && !isLoading" class="section">
-					<view class="section-head">
-						<text class="section-title">对应供应商</text>
-						<text class="section-note">{{ supplierLinkNote }}</text>
+		<page-container :show="paymentInfoPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closePaymentInfoPopup">
+			<view class="popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">付款信息</text>
+						<text class="popup-subtitle">{{ amountDueText }}</text>
 					</view>
-					<view class="supplier-context">
-						<text class="supplier-context-label">KSeF 销售方</text>
-						<text class="supplier-context-value">{{ sellerNameText }} / {{ sellerNipText }}</text>
-					</view>
-					<view class="supplier-picker">
-						<liliBottomSelect
-							:value="supplierDraftValue"
-							:valueText="supplierDraftText"
-							title="选择供应商"
-							placeholder="请选择对应供应商"
-							searchPlaceholder="搜索名称、NIP、电话"
-							subtitleKey="subtitle"
-							:fetchData="fetchSupplierOptions"
-							:showAddAction="true"
-							:showEditAction="true"
-							addPath="/pages/suppliers/from"
-							editPath="/pages/suppliers/from"
-							@change="handleSupplierChange"
-						/>
-					</view>
-					<view class="form-actions">
-						<view class="form-btn form-btn-light" @click="clearSupplierLink">
-							<text class="form-btn-light-text">清除关联</text>
-						</view>
-						<view class="form-btn form-btn-primary" @click="saveSupplierLink">
-							<text class="form-btn-primary-text">{{ supplierSaving ? '保存中' : '保存供应商' }}</text>
-						</view>
-					</view>
+					<view class="popup-close" @click="closePaymentInfoPopup"><text class="popup-close-text">关闭</text></view>
 				</view>
-
-				<view v-if="invoice != null && !isLoading" class="section">
-					<text class="section-title">付款信息</text>
+				<scroll-view class="popup-scroll" scroll-y="true" :style="popupScrollStyle">
 					<view class="info-row clickable" @click="copyText(normalizedAccount, '账号已复制', '暂无银行账号')">
 						<text class="info-label">银行账号</text>
 						<text class="info-value">{{ displayText(normalizedAccount) }}</text>
@@ -101,36 +127,36 @@
 						<text class="info-label">到期日</text>
 						<text class="info-value">{{ paymentDueText }}</text>
 					</view>
+					<view class="info-row">
+						<text class="info-label">付款数据</text>
+						<text class="info-value">{{ paymentDataStatusText }}</text>
+					</view>
 					<view class="copy-grid">
-						<view class="copy-btn" @click="copyTransferTitle">
-							<text class="copy-btn-text">复制标题</text>
-						</view>
-						<view class="copy-btn" @click="copyTransferSummary">
-							<text class="copy-btn-text">复制转账信息</text>
-						</view>
+						<view class="copy-btn" @click="copyTransferTitle"><text class="copy-btn-text">复制标题</text></view>
+						<view class="copy-btn" @click="copyTransferSummary"><text class="copy-btn-text">复制转账信息</text></view>
 					</view>
-				</view>
-
-				<view v-if="invoice != null && !isLoading" class="section">
-					<view class="section-head">
-						<text class="section-title">付款二维码</text>
-						<text class="section-note">{{ qrNote }}</text>
-					</view>
-					<view v-if="paymentQrUrl != ''" class="qr-box">
+					<view v-if="paymentQrUrl != ''" class="qr-box qr-inline">
 						<image class="qr-image" :src="paymentQrUrl" mode="aspectFit"></image>
 						<text class="qr-title">{{ transferTitle }}</text>
 						<text class="qr-desc">{{ amountDueText }} · {{ displayText(normalizedAccount) }}</text>
-						<view class="qr-action" @click="copyText(paymentQrPayload, '二维码内容已复制', '暂无二维码内容')">
-							<text class="qr-action-text">复制二维码内容</text>
-						</view>
+						<view class="qr-action" @click="copyText(paymentQrPayload, '二维码内容已复制', '暂无二维码内容')"><text class="qr-action-text">复制二维码内容</text></view>
 					</view>
-					<view v-if="paymentQrUrl == ''" class="qr-empty">
-						<text class="qr-empty-text">{{ qrUnavailableText }}</text>
-					</view>
-				</view>
+					<view v-if="paymentQrUrl == ''" class="qr-empty qr-inline"><text class="qr-empty-text">{{ qrUnavailableText }}</text></view>
+				</scroll-view>
+			</view>
+		</page-container>
 
-				<view v-if="invoice != null && !isLoading" class="section">
-					<text class="section-title">付款登记</text>
+		<page-container :show="paymentEditPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closePaymentEditPopup">
+			<view class="popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">付款登记</text>
+						<text class="popup-subtitle">{{ paymentEditActionText }}</text>
+					</view>
+					<view class="popup-close" @click="closePaymentEditPopup"><text class="popup-close-text">关闭</text></view>
+				</view>
+				<scroll-view class="popup-scroll" scroll-y="true" :style="popupScrollStyle">
 					<view class="switch-line">
 						<view class="switch-copy">
 							<text class="switch-title">已付款</text>
@@ -154,21 +180,82 @@
 						<text class="field-label">备注</text>
 						<textarea class="field-textarea" :value="remarkDraft" placeholder="内部备注" @input="handleRemarkInput"></textarea>
 					</view>
+					<view class="field-block">
+						<text class="field-label">付款凭证</text>
+						<view class="voucher-upload" @click="chooseVoucherFiles">
+							<text class="voucher-upload-text">{{ voucherUploadText }}</text>
+						</view>
+						<view v-if="mediaRows.length == 0" class="voucher-empty"><text class="voucher-empty-text">暂无付款凭证</text></view>
+						<view v-for="file in mediaRows" :key="file['key']" class="voucher-row" @click="openAttachment(file)">
+							<view class="voucher-main">
+								<text class="voucher-name">{{ file['name'] }}</text>
+								<text class="voucher-meta">{{ file['meta'] }}</text>
+							</view>
+							<text class="voucher-open">查看</text>
+						</view>
+					</view>
 					<view class="form-actions">
-						<view class="form-btn form-btn-light" @click="fillPaidNow">
-							<text class="form-btn-light-text">填为已付</text>
-						</view>
-						<view class="form-btn form-btn-primary" @click="savePayment">
-							<text class="form-btn-primary-text">{{ saving ? '保存中' : '保存付款' }}</text>
-						</view>
+						<view class="form-btn form-btn-light" @click="fillPaidNow"><text class="form-btn-light-text">填为已付</text></view>
+						<view class="form-btn form-btn-primary" @click="savePayment"><text class="form-btn-primary-text">{{ saving ? '保存中' : '保存付款' }}</text></view>
 					</view>
-				</view>
+				</scroll-view>
+			</view>
+		</page-container>
 
-				<view v-if="invoice != null && !isLoading" class="section">
-					<text class="section-title">付款凭证</text>
-					<view v-if="mediaRows.length == 0" class="attachment-empty">
-						<text class="attachment-empty-text">暂无付款凭证</text>
+		<page-container :show="supplierPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closeSupplierPopup">
+			<view class="popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">对应供应商</text>
+						<text class="popup-subtitle">{{ supplierLinkNote }}</text>
 					</view>
+					<view class="popup-close" @click="closeSupplierPopup"><text class="popup-close-text">关闭</text></view>
+				</view>
+				<scroll-view class="popup-scroll" scroll-y="true" :style="popupScrollStyle">
+					<view class="supplier-context">
+						<text class="supplier-context-label">KSeF 销售方</text>
+						<text class="supplier-context-value">{{ sellerNameText }} / {{ sellerNipText }}</text>
+					</view>
+					<view class="supplier-picker">
+						<liliBottomSelect
+							:value="supplierDraftValue"
+							:valueText="supplierDraftText"
+							title="选择供应商"
+							placeholder="请选择对应供应商"
+							searchPlaceholder="搜索名称、NIP、电话"
+							subtitleKey="subtitle"
+							:fetchData="fetchSupplierOptions"
+							:showAddAction="true"
+							:showEditAction="true"
+							addPath="/pages/suppliers/from"
+							editPath="/pages/suppliers/from"
+							@change="handleSupplierChange"
+						/>
+					</view>
+					<view class="form-actions">
+						<view class="form-btn form-btn-light" @click="clearSupplierLink"><text class="form-btn-light-text">清除关联</text></view>
+						<view class="form-btn form-btn-primary" @click="saveSupplierLink"><text class="form-btn-primary-text">{{ supplierSaving ? '保存中' : '保存供应商' }}</text></view>
+					</view>
+				</scroll-view>
+			</view>
+		</page-container>
+
+		<page-container :show="attachmentPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closeAttachmentPopup">
+			<view class="popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">付款凭证</text>
+						<text class="popup-subtitle">{{ attachmentActionText }}</text>
+					</view>
+					<view class="popup-close" @click="closeAttachmentPopup"><text class="popup-close-text">关闭</text></view>
+				</view>
+				<scroll-view class="popup-scroll" scroll-y="true" :style="popupScrollStyle">
+					<view class="voucher-upload" @click="chooseVoucherFiles">
+						<text class="voucher-upload-text">{{ voucherUploadText }}</text>
+					</view>
+					<view v-if="mediaRows.length == 0" class="attachment-empty"><text class="attachment-empty-text">暂无付款凭证</text></view>
 					<view v-for="file in mediaRows" :key="file['key']" class="attachment-row" @click="openAttachment(file)">
 						<view class="attachment-main">
 							<text class="attachment-name">{{ file['name'] }}</text>
@@ -176,11 +263,34 @@
 						</view>
 						<text class="attachment-open">查看</text>
 					</view>
+				</scroll-view>
+			</view>
+		</page-container>
+
+		<page-container :show="pdfPopupVisible" position="bottom" :round="true" :overlay="true" :duration="240" overlay-style="background-color: rgba(15, 23, 42, 0.42);" custom-style="background-color: #FFFFFF;" @clickoverlay="closePdfPopup">
+			<view class="popup-panel pdf-popup-panel" :style="popupPanelStyle">
+				<view class="popup-handle"></view>
+				<view class="popup-head">
+					<view class="popup-title-wrap">
+						<text class="popup-title">官方PDF</text>
+						<text class="popup-subtitle">{{ pdfPopupSubtitle }}</text>
+					</view>
+					<view class="popup-close" @click="closePdfPopup"><text class="popup-close-text">关闭</text></view>
+				</view>
+				<view v-if="pdfLoading" class="pdf-loading" :style="pdfPreviewFrameStyle"><text class="pdf-loading-text">{{ pdfLoadingText }}</text></view>
+				<view v-if="!pdfLoading && pdfErrorMessage != ''" class="pdf-loading" :style="pdfPreviewFrameStyle">
+					<text class="pdf-loading-text">{{ pdfErrorMessage }}</text>
+					<view class="retry-btn" @click="loadPdfPreview"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+				<view v-if="!pdfLoading && pdfErrorMessage == '' && pdfPreviewSrc != ''" class="pdf-preview-frame" :style="pdfPreviewFrameStyle">
+					<web-view id="ksef-pdf-webview" class="pdf-webview" :src="pdfPreviewSrc"></web-view>
+				</view>
+				<view v-if="!pdfLoading && pdfPreviewSrc != ''" class="pdf-actions">
+					<view class="form-btn form-btn-light" @click="loadPdfPreview"><text class="form-btn-light-text">重新获取</text></view>
+					<view class="form-btn form-btn-primary" @click="openPdfDocument"><text class="form-btn-primary-text">系统打开</text></view>
 				</view>
 			</view>
-		<!-- #ifdef APP -->
-		</scroll-view>
-		<!-- #endif -->
+		</page-container>
 	</view>
 </template>
 
@@ -188,9 +298,10 @@
 import { computed, watch } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
-import { getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, updateKsefInvoicePayment } from '@/pkg/api/modules/ksef'
+import { downloadKsefInvoicePdfFile, downloadKsefInvoiceXml, getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, updateKsefInvoicePayment, uploadKsefInvoiceVouchers } from '@/pkg/api/modules/ksef'
 import { getSupplierList, SupplierItem } from '@/pkg/api/modules/suppliers'
 import { createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:ksef:index'
 const invoiceId = ref('')
@@ -198,7 +309,11 @@ const invoice = ref<KsefInvoiceDetail | null>(null)
 const isLoading = ref(false)
 const saving = ref(false)
 const supplierSaving = ref(false)
+const voucherUploading = ref(false)
+const pdfLoading = ref(false)
 const errorMessage = ref('')
+const pdfErrorMessage = ref('')
+const pdfLoadingText = ref('正在生成PDF')
 const isPaidDraft = ref(false)
 const paidAmountDraft = ref('')
 const paidAtDraft = ref('')
@@ -208,6 +323,15 @@ const supplierDraftValue = ref('')
 const supplierDraftText = ref('')
 const qrImageSrc = ref('')
 const qrGenerating = ref(false)
+const invoiceInfoPopupVisible = ref(false)
+const paymentInfoPopupVisible = ref(false)
+const paymentEditPopupVisible = ref(false)
+const supplierPopupVisible = ref(false)
+const attachmentPopupVisible = ref(false)
+const pdfPopupVisible = ref(false)
+const pdfPreviewSrc = ref('')
+const popupPanelHeight = ref(620)
+const popupScrollHeight = ref(500)
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
@@ -242,6 +366,17 @@ function readEventValue(event: any): string {
 	return detail.value
 }
 
+function updatePopupLayout() {
+	const info = uni.getWindowInfo()
+	let panelHeight = info.windowHeight - 96
+	if (panelHeight > 680) panelHeight = 680
+	if (panelHeight < 500) panelHeight = 500
+	let scrollHeight = panelHeight - 118
+	if (scrollHeight < 320) scrollHeight = 320
+	popupPanelHeight.value = panelHeight
+	popupScrollHeight.value = scrollHeight
+}
+
 function displayText(value: string): string {
 	if (value == '') return '-'
 	return value
@@ -272,7 +407,7 @@ function sanitizeQrPart(value: string): string {
 	let result = ''
 	for (let index = 0; index < value.length; index += 1) {
 		const char = value.substring(index, index + 1)
-		if (char == '|' || char == '\n' || char == '\r' || char == '\t') {
+		if (char == '|' || char == '/' || char == '\\' || char == '\n' || char == '\r' || char == '\t') {
 			result += ' '
 		} else {
 			result += char
@@ -389,7 +524,7 @@ async function loadInvoice() {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({
@@ -429,6 +564,16 @@ function transferSummaryText(): string {
 	return 'Odbiorca: ' + displayText(invoice.value.seller_name) + '\nKonto: ' + displayText(normalizedAccountText()) + '\nKwota: ' + amountDueDisplayText() + '\nTytul: ' + displayText(transferTitleText())
 }
 
+function hasParsedPaymentInfo(): boolean {
+	if (invoice.value == null) return false
+	return invoice.value.payment_due_date != '' || invoice.value.payment_method != '' || invoice.value.bank_account_number != '' || invoice.value.bank_name != ''
+}
+
+function xmlSummaryIntValue(key: string): number {
+	if (invoice.value == null) return 0
+	return intValue(invoice.value.xml_summary[key], 0)
+}
+
 function copyTransferTitle() {
 	copyText(transferTitleText(), '标题已复制', '暂无标题')
 }
@@ -437,10 +582,129 @@ function copyTransferSummary() {
 	copyText(transferSummaryText(), '转账信息已复制', '暂无转账信息')
 }
 
+function copyKsefNumber() {
+	if (invoice.value == null) {
+		copyText('', 'KSeF号已复制', '暂无KSeF号')
+		return
+	}
+	copyText(invoice.value.ksef_number, 'KSeF号已复制', '暂无KSeF号')
+}
+
+function copySellerNip() {
+	if (invoice.value == null) {
+		copyText('', '卖方NIP已复制', '暂无卖方NIP')
+		return
+	}
+	copyText(invoice.value.seller_nip, '卖方NIP已复制', '暂无卖方NIP')
+}
+
+function openInvoiceInfoPopup() {
+	if (invoice.value == null) return
+	invoiceInfoPopupVisible.value = true
+}
+
+function closeInvoiceInfoPopup() {
+	invoiceInfoPopupVisible.value = false
+}
+
+function openPaymentInfoPopup() {
+	if (invoice.value == null) return
+	paymentInfoPopupVisible.value = true
+}
+
+function closePaymentInfoPopup() {
+	paymentInfoPopupVisible.value = false
+}
+
+function openPaymentEditPopup() {
+	if (invoice.value == null) return
+	applyDraft(invoice.value as KsefInvoiceDetail)
+	paymentEditPopupVisible.value = true
+}
+
+function closePaymentEditPopup() {
+	if (saving.value || voucherUploading.value) return
+	paymentEditPopupVisible.value = false
+}
+
+function openSupplierPopup() {
+	if (invoice.value == null) return
+	applyDraft(invoice.value as KsefInvoiceDetail)
+	supplierPopupVisible.value = true
+}
+
+function closeSupplierPopup() {
+	if (supplierSaving.value) return
+	supplierPopupVisible.value = false
+}
+
+function openAttachmentPopup() {
+	if (invoice.value == null) return
+	attachmentPopupVisible.value = true
+}
+
+function closeAttachmentPopup() {
+	if (voucherUploading.value) return
+	attachmentPopupVisible.value = false
+}
+
+async function loadPdfPreview() {
+	if (invoiceId.value == '' || pdfLoading.value) return
+	pdfLoading.value = true
+	pdfErrorMessage.value = ''
+	try {
+		if (invoice.value != null && invoice.value.raw_xml == '') {
+			pdfLoadingText.value = '正在同步XML'
+			await downloadKsefInvoiceXml(invoiceId.value)
+			const refreshed = await getKsefInvoiceDetail(invoiceId.value)
+			invoice.value = refreshed
+			applyDraft(refreshed)
+			uni.setStorageSync(refreshStorageKey, '1')
+			if (refreshed.raw_xml == '') {
+				throw new Error('XML同步后仍为空，无法生成PDF')
+			}
+		}
+		pdfLoadingText.value = '正在生成PDF'
+		const result = await downloadKsefInvoicePdfFile(invoiceId.value)
+		pdfPreviewSrc.value = result.tempFilePath
+	} catch (error) {
+		pdfPreviewSrc.value = ''
+		pdfErrorMessage.value = parseErrorMessage(error, 'PDF加载失败')
+	} finally {
+		pdfLoading.value = false
+	}
+}
+
+function openPdfPopup() {
+	if (invoice.value == null) return
+	pdfPopupVisible.value = true
+	if (pdfPreviewSrc.value == '' && !pdfLoading.value) {
+		loadPdfPreview()
+	}
+}
+
+function closePdfPopup() {
+	pdfPopupVisible.value = false
+}
+
+function openPdfDocument() {
+	if (pdfPreviewSrc.value == '') {
+		loadPdfPreview()
+		return
+	}
+	uni.openDocument({
+		filePath: pdfPreviewSrc.value,
+		fileType: 'pdf',
+		fail: (error) => {
+			showErrorToast(parseErrorMessage(error, 'PDF打开失败'))
+		},
+	})
+}
+
 function openAttachment(file: UTSJSONObject) {
 	const url = objectStringValue(file, 'url')
 	if (url == '') {
-		uni.showToast({ title: '暂无文件地址', icon: 'none' })
+		uni.showToast({ title: '暂无文件地址', icon: 'none', duration: 3500 })
 		return
 	}
 	uni.navigateTo({ url: '/pages/webview/webview?url=' + encodeURIComponent(url) })
@@ -471,6 +735,42 @@ function fillPaidNow() {
 	paidAtDraft.value = nowText()
 }
 
+async function uploadVoucherFiles(paths: string[]) {
+	if (paths.length == 0 || invoiceId.value == '' || voucherUploading.value) return
+	voucherUploading.value = true
+	try {
+		const response = await uploadKsefInvoiceVouchers(invoiceId.value, paths)
+		if (invoice.value != null) {
+			invoice.value.media_files = response.media_files
+			invoice.value.files_count = response.files_count
+		}
+		uni.setStorageSync(refreshStorageKey, '1')
+		uni.showToast({ title: takeLatestResponseMessage('凭证已上传'), icon: 'success' })
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '凭证上传失败'))
+	} finally {
+		voucherUploading.value = false
+	}
+}
+
+function chooseVoucherFiles() {
+	if (invoiceId.value == '' || voucherUploading.value) return
+	uni.chooseImage({
+		count: 6,
+		sizeType: ['compressed'],
+		sourceType: ['camera', 'album'],
+		success: (res) => {
+			const selectedPaths = res.tempFilePaths
+			const paths: string[] = []
+			for (let index = 0; index < selectedPaths.length; index += 1) {
+				paths.push(selectedPaths[index])
+			}
+			uploadVoucherFiles(paths)
+		},
+		fail: () => {},
+	})
+}
+
 async function savePayment() {
 	if (invoiceId.value == '' || saving.value) return
 	saving.value = true
@@ -485,9 +785,10 @@ async function savePayment() {
 		invoice.value = data
 		applyDraft(data)
 		uni.setStorageSync(refreshStorageKey, '1')
+		paymentEditPopupVisible.value = false
 		uni.showToast({ title: takeLatestResponseMessage('付款已保存'), icon: 'success' })
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '付款保存失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '付款保存失败'))
 	} finally {
 		saving.value = false
 	}
@@ -501,9 +802,10 @@ async function persistSupplierLink(nextSupplierId: string | null) {
 		invoice.value = data
 		applyDraft(data)
 		uni.setStorageSync(refreshStorageKey, '1')
+		supplierPopupVisible.value = false
 		uni.showToast({ title: takeLatestResponseMessage('供应商已保存'), icon: 'success' })
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '供应商保存失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '供应商保存失败'))
 	} finally {
 		supplierSaving.value = false
 	}
@@ -511,7 +813,7 @@ async function persistSupplierLink(nextSupplierId: string | null) {
 
 function saveSupplierLink() {
 	if (supplierDraftValue.value == '') {
-		uni.showToast({ title: '请选择供应商', icon: 'none' })
+		uni.showToast({ title: '请选择供应商', icon: 'none', duration: 3500 })
 		return
 	}
 	persistSupplierLink(supplierDraftValue.value)
@@ -524,6 +826,20 @@ function clearSupplierLink() {
 const pageTitle = computed((): string => {
 	if (invoice.value == null || invoice.value.invoice_number == '') return 'KSeF 付款'
 	return invoice.value.invoice_number
+})
+
+const popupPanelStyle = computed((): string => {
+	return 'height:' + popupPanelHeight.value.toString() + 'px;'
+})
+
+const popupScrollStyle = computed((): string => {
+	return 'height:' + popupScrollHeight.value.toString() + 'px;'
+})
+
+const pdfPreviewFrameStyle = computed((): string => {
+	let height = popupPanelHeight.value - 112
+	if (height < 360) height = 360
+	return 'height:' + height.toString() + 'px;'
 })
 
 const invoiceNumberText = computed((): string => {
@@ -558,6 +874,7 @@ const bankNameText = computed((): string => {
 
 const paymentMethodText = computed((): string => {
 	if (invoice.value == null) return '-'
+	if (invoice.value.payment_method_display != '') return displayText(invoice.value.payment_method_display)
 	return displayText(invoice.value.payment_method)
 })
 
@@ -610,20 +927,26 @@ function refreshQrCode() {
 	}
 	qrGenerating.value = true
 	// #ifdef APP-ANDROID || APP-IOS
-	createQRCode({
-		width: 280,
-		height: 280,
-		content: payload,
-		success(src: string) {
-			qrImageSrc.value = src
-			qrGenerating.value = false
-		},
-		fail(error: any) {
-			console.log('KSeF QR生成失败', error)
-			qrImageSrc.value = ''
-			qrGenerating.value = false
-		}
-	} as CreateQRCodeOptions)
+	try {
+		createQRCode({
+			width: 280,
+			height: 280,
+			content: payload,
+			success(src: string) {
+				qrImageSrc.value = src
+				qrGenerating.value = false
+			},
+			fail(error: any) {
+				console.log('KSeF QR生成失败', error)
+				qrImageSrc.value = ''
+				qrGenerating.value = false
+			}
+		} as CreateQRCodeOptions)
+	} catch (error) {
+		console.log('KSeF QR生成异常', error)
+		qrImageSrc.value = ''
+		qrGenerating.value = false
+	}
 	// #endif
 	// #ifndef APP-ANDROID || APP-IOS
 	qrGenerating.value = false
@@ -634,12 +957,6 @@ const paymentQrUrl = computed((): string => {
 	return qrImageSrc.value
 })
 
-const qrNote = computed((): string => {
-	if (qrGenerating.value) return '正在生成二维码'
-	if (paymentQrPayload.value == '') return '缺少 PLN 金额或银行账号'
-	return '本机生成，Santander 等银行 App 可尝试扫码'
-})
-
 const qrUnavailableText = computed((): string => {
 	if (invoice.value == null) return '暂无发票数据'
 	if (invoice.value.currency != '' && invoice.value.currency != 'PLN') return '当前币种不是 PLN，暂不生成波兰转账二维码'
@@ -647,6 +964,67 @@ const qrUnavailableText = computed((): string => {
 	if (qrGenerating.value) return '二维码生成中'
 	if (paymentQrPayload.value != '') return '当前平台未返回二维码图片'
 	return '缺少付款金额，无法生成二维码'
+})
+
+const operationNote = computed((): string => {
+	if (invoice.value == null) return ''
+	return (invoice.value.is_paid ? '已付款' : '待付款') + ' · ' + amountDueText.value
+})
+
+const invoiceInfoActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return compactDate(invoice.value.issue_date)
+})
+
+const supplierActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return invoice.value.supplier_name == '' ? '未关联' : invoice.value.supplier_name
+})
+
+const paymentDataStatusText = computed((): string => {
+	if (invoice.value == null) return '-'
+	if (hasParsedPaymentInfo()) return '已解析'
+	if (invoice.value.raw_xml == '') return '未下载XML'
+	return 'XML未提供付款节点'
+})
+
+const paymentInfoActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return normalizedAccount.value == '' ? paymentDataStatusText.value : displayText(normalizedAccount.value)
+})
+
+const paymentEditActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return invoice.value.is_paid ? '已登记' : '待登记'
+})
+
+const attachmentActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	return invoice.value.files_count.toString() + ' 个文件'
+})
+
+const voucherUploadText = computed((): string => {
+	return voucherUploading.value ? '上传中' : '上传付款凭证'
+})
+
+const pdfActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	if (invoice.value.raw_xml == '') return '需先同步XML'
+	return pdfPreviewSrc.value == '' ? '底部预览' : '继续查看'
+})
+
+const pdfPopupSubtitle = computed((): string => {
+	if (pdfLoading.value) return '正在调用官方PDF解析'
+	if (pdfErrorMessage.value != '') return '官方PDF生成失败'
+	if (pdfPreviewSrc.value != '') return '来自后端官方解析插件'
+	return pdfActionText.value
+})
+
+const xmlLineItemsCountText = computed((): string => {
+	if (invoice.value == null) return '-'
+	const count = xmlSummaryIntValue('line_items_count')
+	if (count > 0) return count.toString() + ' 行'
+	return invoice.value.raw_xml == '' ? '未下载XML' : '未解析到商品行'
 })
 
 const invoiceRows = computed((): UTSJSONObject[] => {
@@ -662,6 +1040,8 @@ const invoiceRows = computed((): UTSJSONObject[] => {
 		{ key: 'net', label: '净额', value: displayText(invoice.value.net_amount) + ' ' + displayText(invoice.value.currency) } as UTSJSONObject,
 		{ key: 'gross', label: '总额', value: displayText(invoice.value.gross_amount) + ' ' + displayText(invoice.value.currency) } as UTSJSONObject,
 		{ key: 'files', label: '附件数', value: invoice.value.files_count.toString() } as UTSJSONObject,
+		{ key: 'xml_lines', label: 'XML商品行', value: xmlLineItemsCountText.value } as UTSJSONObject,
+		{ key: 'payment_source', label: '付款数据', value: paymentDataStatusText.value } as UTSJSONObject,
 		{ key: 'sync', label: '详情状态', value: invoice.value.raw_xml_downloaded_at == '' ? '未下载XML' : compactDate(invoice.value.raw_xml_downloaded_at) } as UTSJSONObject,
 	]
 })
@@ -691,6 +1071,7 @@ watch(paymentQrPayload, () => {
 })
 
 onLoad((event: OnLoadOptions) => {
+	updatePopupLayout()
 	const idValue = event['id']
 	invoiceId.value = stringValue(idValue)
 	loadInvoice()
@@ -729,6 +1110,7 @@ onLoad((event: OnLoadOptions) => {
 .summary-head,
 .amount-row,
 .section-head,
+.popup-head,
 .copy-grid,
 .form-actions,
 .switch-line {
@@ -835,6 +1217,100 @@ onLoad((event: OnLoadOptions) => {
 	margin-bottom: 10px;
 }
 
+.action-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 4px;
+}
+
+.action-tile {
+	width: 48%;
+	min-height: 72px;
+	border-radius: 8px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 10px;
+	margin-right: 6px;
+	margin-bottom: 8px;
+	justify-content: center;
+}
+
+.action-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.action-desc {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+	margin-top: 4px;
+}
+
+.popup-panel {
+	background-color: #FFFFFF;
+	border-top-left-radius: 14px;
+	border-top-right-radius: 14px;
+	padding: 12px;
+}
+
+.popup-handle {
+	width: 36px;
+	height: 4px;
+	border-radius: 2px;
+	background-color: #CBD5E1;
+	align-self: center;
+	margin-bottom: 10px;
+}
+
+.popup-head {
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.popup-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.popup-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.popup-subtitle {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+	margin-top: 2px;
+}
+
+.popup-close {
+	height: 32px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+	padding-left: 12px;
+	padding-right: 12px;
+	align-items: center;
+	justify-content: center;
+}
+
+.popup-close-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #475569;
+}
+
+.popup-scroll {
+	padding-bottom: 8px;
+}
+
 .info-row {
 	flex-direction: row;
 	align-items: flex-start;
@@ -919,6 +1395,10 @@ onLoad((event: OnLoadOptions) => {
 .qr-box {
 	align-items: center;
 	padding-top: 4px;
+}
+
+.qr-inline {
+	margin-top: 14px;
 }
 
 .qr-image {
@@ -1007,6 +1487,108 @@ onLoad((event: OnLoadOptions) => {
 	line-height: 18px;
 	color: #0F172A;
 	font-weight: bold;
+}
+
+.voucher-upload {
+	min-height: 42px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+	margin-top: 8px;
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.voucher-upload-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.voucher-empty {
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 12px;
+	margin-top: 8px;
+	align-items: center;
+}
+
+.voucher-empty-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.voucher-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #EEF2F7;
+}
+
+.voucher-main {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.voucher-name {
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.voucher-meta {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+	margin-top: 2px;
+}
+
+.voucher-open {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.pdf-popup-panel {
+	padding-bottom: 8px;
+}
+
+.pdf-preview-frame,
+.pdf-loading {
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.pdf-webview {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+}
+
+.pdf-loading-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #64748B;
+	text-align: center;
+	padding-left: 20px;
+	padding-right: 20px;
+}
+
+.pdf-actions {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 10px;
 }
 
 .switch-line {
