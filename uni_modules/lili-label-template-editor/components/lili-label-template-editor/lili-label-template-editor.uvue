@@ -897,7 +897,6 @@ function validateCurrentElements(): string {
 		const name = validationElementName(item, index)
 		if (item.x < 0 || item.y < 0) return name + ' 位置不能为负数'
 		if (item.width <= 0 || item.height <= 0) return name + ' 宽高必须大于 0'
-		if (item.x + item.width > paperWidth + 0.05) return name + ' 超出纸张宽度'
 		if (item.y + item.height > paperHeight + 0.05) return name + ' 超出纸张高度'
 		if (item.type == 'text' && isBlankTemplateText(item.content)) return name + ' 内容为空'
 		if (item.type == 'barcode' && isBlankTemplateText(item.content)) return name + ' 条码为空'

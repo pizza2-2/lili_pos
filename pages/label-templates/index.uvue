@@ -359,7 +359,6 @@ function validateElementLayout(source: UTSJSONObject, index: number, paperWidth:
 	const y = numberValue(source['y'], 0)
 	const width = numberValue(source['width'], 0)
 	const height = numberValue(source['height'], 0)
-	if (x + width > paperWidth + 0.05) return elementDisplayName(source, index) + ' 超出纸张宽度'
 	if (y + height > paperHeight + 0.05) return elementDisplayName(source, index) + ' 超出纸张高度'
 	if (isGraphicElementType(type)) {
 		const lineWidth = numberValue(source['lineWidth'], numberValue(source['line_width'], 0.4))
