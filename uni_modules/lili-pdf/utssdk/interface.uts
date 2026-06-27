@@ -1,0 +1,29 @@
+export type PdfRenderErrorCode = 'EMPTY_PATH' | 'NO_ACTIVITY' | 'FILE_NOT_FOUND' | 'OPEN_FAILED' | 'RENDER_FAILED' | 'UNSUPPORTED_PLATFORM'
+
+export type PdfRenderResult = {
+	success: boolean
+	code: string
+	message: string
+	filePath: string
+	pageCount: number
+	pages: string[]
+}
+
+export type PdfRenderFail = {
+	success: boolean
+	code: PdfRenderErrorCode
+	message: string
+	errCode: PdfRenderErrorCode
+	errMsg: string
+}
+
+export type PdfRenderPagesOptions = {
+	filePath: string
+	scale?: number
+	maxPages?: number
+	success?: (res: PdfRenderResult) => void
+	fail?: (res: PdfRenderFail) => void
+	complete?: (res: any) => void
+}
+
+export type RenderPdfPages = (options: PdfRenderPagesOptions) => void

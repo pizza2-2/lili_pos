@@ -35,13 +35,9 @@ const __sfc__ = defineComponent({
         function parseErrorMessage(error: any): string {
             let message = '商店列表加载失败';
             if (error != null) {
-                const directMessage = (error as Error).message;
-                if (directMessage != null && directMessage != '') {
-                    message = directMessage;
-                }
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:107");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:103");
                     if (parsedError != null) {
                         const rawMessage = parsedError['message'];
                         if (rawMessage != null) {
@@ -116,7 +112,7 @@ const __sfc__ = defineComponent({
             if (text == '' || text == '-') {
                 uni.showToast({
                     title: emptyTitle,
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
                 return;
             }
@@ -135,7 +131,7 @@ const __sfc__ = defineComponent({
                 return;
             }
             uni.navigateTo({
-                url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:208"),
+                url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:204"),
             });
         }
         function consumeShopListRefreshNeeded(): boolean {
@@ -179,7 +175,7 @@ const __sfc__ = defineComponent({
             const itemName = stringValue(payload['name'], '商店');
             uni.showToast({
                 title: itemName,
-                icon: 'none',
+                icon: 'none', duration: 3500,
             });
         }
         function handleSubtitleClick(payload: UTSJSONObject): void {

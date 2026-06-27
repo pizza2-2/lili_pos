@@ -56,7 +56,10 @@
 		<lili-print-confirm-popup
 			:visible="printPopupVisible"
 			templateType="product_label"
-			:valueResolver="resolvePurchaseDetailPrintValue"
+			:defaultCopies="quickPrintCopiesText"
+			copiesTitle="打印数量"
+			copiesDesc="默认按当前采购数量打印，可手动调整"
+			:printData="purchasePrintData"
 			@update:visible="handlePrintPopupVisibleChange"
 		/>
 	</view>
@@ -67,7 +70,7 @@ import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createPurchaseDetail, getPurchaseDetailItem, PurchaseDetailItem, PurchaseDetailMutationData, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 import { ProductItem, PrintTemplateItem, getProductDetail, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
-import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
+import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type ProductOption = {
@@ -459,6 +462,24 @@ function productNameText(): string {
 	return '未命名商品'
 }
 
+function productNameCnText(): string {
+	const product = activePrintProduct()
+	if (product == null) return ''
+	return product.name_cn
+}
+
+function productNameEnText(): string {
+	const product = activePrintProduct()
+	if (product == null) return ''
+	return product.name_en
+}
+
+function productNameOtherText(): string {
+	const product = activePrintProduct()
+	if (product == null) return ''
+	return product.name_other
+}
+
 function productOriginalPriceText(): string {
 	const product = activePrintProduct()
 	if (product == null) return '0.00'
@@ -485,6 +506,13 @@ function productSkuText(): string {
 	const product = activePrintProduct()
 	if (product == null) return '-'
 	return product.sku == '' ? '-' : product.sku
+}
+
+function productKodText(): string {
+	const product = activePrintProduct()
+	if (product != null && product.category_kasa_kod != '') return product.category_kasa_kod
+	const code = productCategoryInfo.value.kasaCode
+	return code == '' ? '-' : code
 }
 
 const productInfoVisible = computed((): boolean => {
@@ -532,14 +560,47 @@ function receivedQuantityText(): string {
 	return '-'
 }
 
+function normalizedPrintCopiesText(value: string): string {
+	const copies = parseInt(value)
+	if (isNaN(copies) || copies <= 0) return '1'
+	if (copies > 999) return '999'
+	return copies.toString()
+}
+
+const quickPrintCopiesText = computed((): string => {
+	return normalizedPrintCopiesText(purchaseQuantityText())
+})
+
+const purchasePrintData = computed((): UTSJSONObject => {
+	const data = {} as UTSJSONObject
+	data['name'] = productNameText()
+	data['name_cn'] = productNameCnText()
+	data['name_en'] = productNameEnText()
+	data['name_other'] = productNameOtherText()
+	data['price'] = productDiscountPriceText()
+	data['base_sales_price'] = productOriginalPriceText()
+	data['discount_price'] = productDiscountPriceText()
+	data['barcode'] = productBarcodeText()
+	data['sku'] = productSkuText()
+	data['kod'] = productKodText()
+	data['category_kasa_kod'] = productKodText()
+	data['quantity'] = purchaseQuantityText()
+	data['purchase_quantity'] = purchaseQuantityText()
+	data['received_quantity'] = receivedQuantityText()
+	return data
+})
+
 function printValueForSource(source: string, fallback: string): string {
 	if (source == 'name') return productNameText()
+	if (source == 'name_cn') return productNameCnText()
+	if (source == 'name_en') return productNameEnText()
+	if (source == 'name_other') return productNameOtherText()
 	if (source == 'price') return productDiscountPriceText()
 	if (source == 'base_sales_price') return productOriginalPriceText()
 	if (source == 'discount_price') return productDiscountPriceText()
 	if (source == 'barcode') return productBarcodeText()
 	if (source == 'sku') return productSkuText()
-	if (source == 'kod') return productSkuText()
+	if (source == 'kod') return productKodText()
 	if (source == 'quantity' || source == 'purchase_quantity') return purchaseQuantityText()
 	if (source == 'received_quantity') return receivedQuantityText()
 	return fallback
@@ -558,6 +619,9 @@ function printLabelForSource(source: UTSJSONObject, index: number): string {
 	if (elementLabel != '') return elementLabel
 	const elementSource = getStringField(source, 'source')
 	if (elementSource == 'name') return '商品名称'
+	if (elementSource == 'name_cn') return '中文名'
+	if (elementSource == 'name_en') return '英文名'
+	if (elementSource == 'name_other') return '其他名'
 	if (elementSource == 'price') return '打印价格'
 	if (elementSource == 'base_sales_price') return '原价'
 	if (elementSource == 'discount_price') return '折扣价'
@@ -613,6 +677,8 @@ const printPreviewFields = computed((): PrintPreviewField[] => {
 function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 	const elementSource = getStringField(source, 'source')
 	const fallbackContent = getStringField(source, 'content')
+	const fontWeight = getStringField(source, 'fontWeight', getStringField(source, 'font_weight')).toLowerCase()
+	const isBold = boolValue(source['isBold'], boolValue(source['bold'], fontWeight == 'bold' || fontWeight == '700'))
 	return {
 		type: getStringField(source, 'type', 'text'),
 		x: numberValue(source['x'], 0),
@@ -625,6 +691,9 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		barcodeType: getStringField(source, 'barcodeType', 'EAN13'),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
+		isBold: isBold,
+		fontWeight: isBold ? 'bold' : 'normal',
+		textAlign: getStringField(source, 'textAlign', getStringField(source, 'text_align', 'left')),
 	} as UTSJSONObject
 }
 
@@ -648,10 +717,7 @@ function printCopiesValue(): number {
 }
 
 function connectedPrinterAddress(): string {
-	const connected = getConnectedPrinter()
-	if (!connected.success || connected.data == null) return ''
-	const data = connected.data as UTSJSONObject
-	return getStringField(data, 'address')
+	return getPreferredPrinterAddress()
 }
 
 function goPrinterSettings() {
@@ -666,7 +732,23 @@ function closePrintPopup() {
 	printPopupVisible.value = false
 }
 
-function confirmPrintProduct() {
+function promptChoosePrinterAfterPrintFailure(message: string) {
+	const detail = message == '' ? '打印机连接失败，请确认打印机在附近并已开机。' : message
+	uni.showModal({
+		title: '打印失败',
+		content: detail + '\n是否选择新的打印机？',
+		confirmText: '选择打印机',
+		cancelText: '取消',
+		success: (modal) => {
+			if (modal.confirm) {
+				closePrintPopup()
+				uni.navigateTo({ url: '/pages/printer-settings/index' })
+			}
+		}
+	})
+}
+
+async function confirmPrintProduct() {
 	if (printing.value) return
 	const item = selectedPrintTemplate.value
 	if (item == null) return
@@ -677,23 +759,34 @@ function confirmPrintProduct() {
 		return
 	}
 	printing.value = true
-	const response = printLabelBitmap({
-		address: address,
-		paperWidthMm: numberValue(item.paper_width_mm, 30),
-		paperHeightMm: numberValue(item.paper_height_mm, 20),
-		dotsPerMm: item.dots_per_mm,
-		elements: buildProductPrintElements(item),
-		chunkSize: 1024,
-		delayMs: 20,
-		copies: printCopiesValue(),
-	})
-	printing.value = false
-	if (response.success) {
-		uni.showToast({ title: '已发送打印', icon: 'success' })
-		closePrintPopup()
-		return
+	let shouldClose = false
+	let responseSuccess = false
+	let responseMessage = ''
+	uni.showLoading({ title: '打印中', mask: true })
+	try {
+		const response = await printLabelBitmapAsync({
+			address: address,
+			paperWidthMm: numberValue(item.paper_width_mm, 30),
+			paperHeightMm: numberValue(item.paper_height_mm, 20),
+			dotsPerMm: item.dots_per_mm,
+			elements: buildProductPrintElements(item),
+			chunkSize: 1024,
+			delayMs: 20,
+			copies: printCopiesValue(),
+		} as UTSJSONObject)
+		responseSuccess = response.success
+		responseMessage = response.message
+	} finally {
+		printing.value = false
+		uni.hideLoading()
 	}
-	showErrorToast(response.message == '' ? '打印失败' : response.message)
+	if (responseSuccess) {
+		uni.showToast({ title: responseMessage == '' ? '已发送打印' : responseMessage, icon: 'success' })
+		shouldClose = true
+	} else {
+		promptChoosePrinterAfterPrintFailure(responseMessage)
+	}
+	if (shouldClose) closePrintPopup()
 }
 
 function productIdFromPayload(payload: UTSJSONObject): string {
@@ -713,16 +806,13 @@ function productIdFromPayload(payload: UTSJSONObject): string {
 async function resolveProductIdForPrint(payload: UTSJSONObject): Promise<string> {
 	const currentProductId = productIdFromPayload(payload)
 	if (currentProductId != '') return currentProductId
-	if (detailId.value == '') return ''
-	const detail = await getPurchaseDetailItem(detailId.value)
-	currentDetail.value = detail
-	return detail.product.toString()
+	return ''
 }
 
 async function ensurePrintProduct(productIdText: string): Promise<boolean> {
 	if (productIdText == '') return false
-	await loadProductInfo(productIdText)
-	return printProduct.value != null && printProductId.value == productIdText
+	const product = printProduct.value
+	return product != null && product.id.toString() == productIdText
 }
 
 function firstUsableDefaultTemplate(items: PrintTemplateItem[]): PrintTemplateItem | null {

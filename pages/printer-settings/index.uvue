@@ -28,7 +28,7 @@
 							<text class="action-btn-light-text">断开连接</text>
 						</view>
 						<view class="action-btn action-btn-dark" @click="printTestLabel()">
-							<text class="action-btn-dark-text">测试打印</text>
+							<text class="action-btn-dark-text">{{ operationVisible ? '请稍候' : '测试打印' }}</text>
 						</view>
 					</view>
 					<text class="hint-text">{{ messageText }}</text>
@@ -51,7 +51,7 @@
 								<text class="device-rssi">RSSI {{ device.rssi.toString() }}</text>
 							</view>
 							<view :class="selectedAddress == device.address ? 'device-action device-action-active' : 'device-action'">
-								<text :class="selectedAddress == device.address ? 'device-action-text device-action-text-active' : 'device-action-text'">{{ selectedAddress == device.address ? '已选' : '连接' }}</text>
+								<text :class="selectedAddress == device.address ? 'device-action-text device-action-text-active' : 'device-action-text'">{{ deviceActionText(device) }}</text>
 							</view>
 						</view>
 					</view>
@@ -66,11 +66,20 @@
 				</view>
 			</view>
 		</scroll-view>
+		<view v-if="operationVisible" class="operation-mask">
+			<view class="operation-card">
+				<view class="operation-indicator">
+					<text class="operation-indicator-text">...</text>
+				</view>
+				<text class="operation-title">{{ operationTitle }}</text>
+				<text class="operation-desc">{{ operationDesc }}</text>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script setup lang="uts">
-import { checkBluetoothEnvironment, requestBluetoothEnable, requestLocationPermission, openLocationSettings, searchBluetoothPrinters, connectPrinter, disconnectPrinter, getConnectedPrinter, printTspl, LabelPrinterDevice, LabelPrinterResult } from '@/uni_modules/lili-label-printer/index.uts'
+import { checkBluetoothEnvironment, requestBluetoothEnable, requestLocationPermission, openLocationSettings, searchBluetoothPrinters, connectPrinterAsync, disconnectPrinter, getConnectedPrinter, getPreferredPrinterAddress, printTsplAsync, LabelPrinterDevice, LabelPrinterResult } from '@/uni_modules/lili-label-printer/index.uts'
 
 const defaultPrinterStorageKey = 'label-print:default-printer'
 const devices = ref<LabelPrinterDevice[]>([])
@@ -81,6 +90,10 @@ const messageText = ref('请先检查蓝牙环境，或直接搜索附近设备�
 const logText = ref('等待操作')
 const searching = ref(false)
 const connecting = ref(false)
+const testPrinting = ref(false)
+const connectingAddress = ref('')
+const operationDescText = ref('')
+const connectSlowTimer = ref(0)
 
 const printerTitle = computed((): string => {
 	if (selectedName.value != '') return selectedName.value
@@ -90,6 +103,25 @@ const printerTitle = computed((): string => {
 const printerSubtitle = computed((): string => {
 	if (selectedAddress.value != '') return selectedAddress.value
 	return '连接后会自动保存为默认标签打印机'
+})
+
+const operationVisible = computed((): boolean => {
+	return searching.value || connecting.value || testPrinting.value
+})
+
+const operationTitle = computed((): string => {
+	if (testPrinting.value) return '正在发送测试打印'
+	if (connecting.value) return '正在连接打印机'
+	if (searching.value) return '正在搜索蓝牙设备'
+	return ''
+})
+
+const operationDesc = computed((): string => {
+	if (operationDescText.value != '') return operationDescText.value
+	if (testPrinting.value) return '如果连接已断开，会自动尝试重新连接默认打印机。'
+	if (connecting.value) return '正在建立蓝牙连接，请稍候。'
+	if (searching.value) return '正在扫描附近设备，通常需要几秒钟。'
+	return ''
 })
 
 function resultMessage(result: LabelPrinterResult, fallback: string): string {
@@ -124,6 +156,20 @@ function appendLog(text: string) {
 
 function clearLogs() {
 	logText.value = '等待操作'
+}
+
+function clearConnectSlowTimer() {
+	if (connectSlowTimer.value > 0) {
+		clearTimeout(connectSlowTimer.value)
+		connectSlowTimer.value = 0
+	}
+}
+
+function deviceActionText(device: LabelPrinterDevice): string {
+	if (connecting.value && connectingAddress.value == device.address) return '连接中'
+	if (connectedAddress.value == device.address) return '已连接'
+	if (selectedAddress.value == device.address) return '已选'
+	return '连接'
 }
 
 function saveDefaultPrinter(name: string, address: string) {
@@ -168,6 +214,16 @@ onLoad(() => {
 		updateConnectedFromResult(connected)
 		appendLog('检测到已连接打印机')
 	}
+})
+
+onUnload(() => {
+	clearConnectSlowTimer()
+	searching.value = false
+	connecting.value = false
+	testPrinting.value = false
+	connectingAddress.value = ''
+	operationDescText.value = ''
+	uni.hideLoading()
 })
 
 function showActionMessage(result: LabelPrinterResult, fallback: string) {
@@ -253,15 +309,19 @@ function ensurePrinterEnvironment(done: (ready: boolean) => void) {
 }
 
 function searchPrinters() {
-	if (searching.value) return
+	if (searching.value || connecting.value) return
 	ensurePrinterEnvironment((ready) => {
 		if (!ready) return
 		searching.value = true
 		devices.value = []
+		operationDescText.value = '正在扫描附近设备，搜索期间请保持蓝牙和打印机开启。'
 		messageText.value = '正在搜索附近蓝牙设备...'
 		appendLog('开始搜索蓝牙设备')
+		uni.showLoading({ title: '搜索中', mask: true })
 		searchBluetoothPrinters(10000).then((resultDevices) => {
 			searching.value = false
+			operationDescText.value = ''
+			uni.hideLoading()
 			devices.value = resultDevices
 			messageText.value = '搜索完成，发现 ' + resultDevices.length.toString() + ' 台设备'
 			appendLog('搜索完成，发现 ' + resultDevices.length.toString() + ' 台设备')
@@ -273,25 +333,59 @@ function searchPrinters() {
 	})
 }
 
-function connectDevice(device: any) {
-	if (connecting.value) return
+function promptChoosePrinterAfterPrintFailure(message: string) {
+	const detail = message == '' ? '打印机连接失败，请确认打印机在附近并已开机。' : message
+	uni.showModal({
+		title: '打印失败',
+		content: detail + '\n是否重新搜索并选择新的打印机？',
+		confirmText: '重新搜索',
+		cancelText: '取消',
+		success: (modal) => {
+			if (modal.confirm) {
+				searchPrinters()
+			}
+		}
+	})
+}
+
+async function connectDevice(device: any) {
+	if (connecting.value || searching.value) return
 	const current = device as LabelPrinterDevice
 	connecting.value = true
+	connectingAddress.value = current.address
 	selectedAddress.value = current.address
 	selectedName.value = current.name
+	operationDescText.value = '正在连接 ' + current.name + '，如果打印机未开机或距离较远会稍慢。'
 	messageText.value = '正在连接 ' + current.name
 	appendLog('开始连接 ' + current.name + ' ' + current.address)
-	const result = connectPrinter(current.address)
-	connecting.value = false
-	messageText.value = resultMessage(result, '连接完成')
-	appendLog('连接结果：' + result.code + ' / ' + resultMessage(result, ''))
-	if (result.success) {
-		updateConnectedFromResult(result)
+	uni.showLoading({ title: '连接中', mask: true })
+	clearConnectSlowTimer()
+	connectSlowTimer.value = setTimeout(() => {
+		operationDescText.value = '连接仍在进行，请确认打印机已开机且未被其他设备占用。'
+		messageText.value = '连接耗时较长，请稍候...'
+		appendLog('连接耗时较长，仍在等待系统蓝牙返回')
+	}, 8000)
+	let actionResult: LabelPrinterResult | null = null
+	try {
+		const result = await connectPrinterAsync(current.address)
+		actionResult = result
+		messageText.value = resultMessage(result, '连接完成')
+		appendLog('连接结果：' + result.code + ' / ' + resultMessage(result, ''))
+		if (result.success) {
+			updateConnectedFromResult(result)
+		}
+	} finally {
+		clearConnectSlowTimer()
+		connecting.value = false
+		connectingAddress.value = ''
+		operationDescText.value = ''
+		uni.hideLoading()
 	}
-	showActionMessage(result, '连接完成')
+	if (actionResult != null) showActionMessage(actionResult!, '连接完成')
 }
 
 function disconnectCurrentPrinter() {
+	if (connecting.value || searching.value) return
 	const result = disconnectPrinter()
 	connectedAddress.value = ''
 	messageText.value = resultMessage(result, '已断开打印机')
@@ -315,30 +409,57 @@ function buildTestTspl(): string {
 	return command
 }
 
-function printTestLabel() {
-	if (selectedAddress.value == '') {
+async function printTestLabel() {
+	if (operationVisible.value) {
+		uni.showToast({ title: '请等待当前操作完成', icon: 'none', duration: 2500 })
+		return
+	}
+	let address = selectedAddress.value
+	if (address == '') {
+		address = getPreferredPrinterAddress()
+	}
+	if (address == '') {
 		uni.showToast({ title: '请先选择打印机', icon: 'none', duration: 3500 })
 		return
 	}
-	const result = printTspl({
-		address: selectedAddress.value,
-		tspl: buildTestTspl(),
-		charset: 'GBK',
-		chunkSize: 256,
-		delayMs: 20
-	})
-	messageText.value = resultMessage(result, '测试打印完成')
-	appendLog('测试打印：' + result.code + ' / ' + resultMessage(result, ''))
-	if (result.success) {
-		const connected = getConnectedPrinter()
-		if (connected.success) updateConnectedFromResult(connected)
+	testPrinting.value = true
+	operationDescText.value = '正在发送测试标签，如果连接已断开会自动重连。'
+	messageText.value = '正在发送测试打印...'
+	appendLog('开始测试打印 ' + address)
+	uni.showLoading({ title: '打印中', mask: true })
+	let actionResult: LabelPrinterResult | null = null
+	try {
+		const result = await printTsplAsync({
+			address: address,
+			tspl: buildTestTspl(),
+			charset: 'GBK',
+			chunkSize: 256,
+			delayMs: 20
+		})
+		actionResult = result
+		messageText.value = resultMessage(result, '测试打印完成')
+		appendLog('测试打印：' + result.code + ' / ' + resultMessage(result, ''))
+		if (result.success) {
+			const connected = getConnectedPrinter()
+			if (connected.success) updateConnectedFromResult(connected)
+		}
+	} finally {
+		testPrinting.value = false
+		operationDescText.value = ''
+		uni.hideLoading()
 	}
-	showActionMessage(result, '测试打印完成')
+	if (actionResult != null) {
+		if (actionResult!.success) {
+			showActionMessage(actionResult!, '测试打印完成')
+		} else {
+			promptChoosePrinterAfterPrintFailure(resultMessage(actionResult!, '打印失败'))
+		}
+	}
 }
 </script>
 
 <style>
-.page { flex: 1; background-color: #F3F6FA; }
+.page { flex: 1; position: relative; background-color: #F3F6FA; }
 .page-scroll { flex: 1; }
 .content { padding: 14px; }
 .status-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 14px; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -381,4 +502,10 @@ function printTestLabel() {
 .device-action-text-active { color: #1D4ED8; }
 .log-card { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #DDE6F0; padding: 12px; margin-bottom: 20px; }
 .log-text { font-size: 11px; color: #334155; line-height: 17px; background-color: #F8FAFC; border-radius: 10px; padding: 10px; }
+.operation-mask { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 9999; background-color: rgba(15, 23, 42, 0.32); align-items: center; justify-content: center; padding-left: 24px; padding-right: 24px; }
+.operation-card { width: 100%; max-width: 320px; border-radius: 14px; background-color: #FFFFFF; padding: 18px; align-items: center; border-width: 1px; border-style: solid; border-color: #DDE6F0; }
+.operation-indicator { width: 42px; height: 42px; border-radius: 21px; background-color: #EFF6FF; align-items: center; justify-content: center; margin-bottom: 10px; }
+.operation-indicator-text { font-size: 18px; line-height: 20px; color: #2563EB; font-weight: 700; }
+.operation-title { font-size: 16px; line-height: 22px; color: #0F172A; font-weight: 700; text-align: center; }
+.operation-desc { margin-top: 6px; font-size: 12px; line-height: 18px; color: #475569; text-align: center; }
 </style>

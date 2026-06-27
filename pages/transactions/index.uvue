@@ -194,6 +194,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'ksef', text: '查看KSeF' } as UTSJSONObject,
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
@@ -754,6 +755,21 @@ function handleCreateTransaction() {
 	})
 }
 
+function openKsefForCurrentSupplier() {
+	if (supplierId.value == '') {
+		uni.showToast({
+			title: '供应商ID缺失',
+			icon: 'none', duration: 3500,
+		})
+		return
+	}
+	let url = '/pages/ksef/index?supplier_id=' + supplierId.value
+	if (supplierName.value != '') {
+		url += '&supplier_name=' + encodeURIComponent(supplierName.value)
+	}
+	uni.navigateTo({ url: url })
+}
+
 async function confirmDeleteTransaction(transactionId: string) {
 	try {
 		await deleteTransaction(transactionId)
@@ -790,6 +806,11 @@ function handleMenu(payload: UTSJSONObject) {
 			title: '采购记录ID缺失',
 			icon: 'none', duration: 3500,
 		})
+		return
+	}
+
+	if (key == 'ksef') {
+		openKsefForCurrentSupplier()
 		return
 	}
 

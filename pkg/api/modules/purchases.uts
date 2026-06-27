@@ -26,6 +26,7 @@ export type PurchaseItem = {
 	total_quantity: number
 	received_quantity: number
 	total_amount: string
+	net_total_amount: string
 	receive_progress: string
 	is_fully_received: boolean
 	remark: string
@@ -429,6 +430,9 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 	const supplierInfo = parseObject(rawObject['supplier_info'])
 	if (supplierName == '' && supplierInfo != null) supplierName = stringValue(supplierInfo!['name'])
 	const supplierExcelImportStatus = parseObject(rawObject['supplier_excel_import_status'])
+	const totalAmount = stringValue(rawObject['total_amount'])
+	let netTotalAmount = stringValue(rawObject['net_total_amount'])
+	if (netTotalAmount == '') netTotalAmount = totalAmount
 	return {
 		id: intValue(rawObject['id']),
 		purchase_number: stringValue(rawObject['purchase_number']),
@@ -441,7 +445,8 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 		supplier_name: supplierName,
 		total_quantity: intValue(rawObject['total_quantity']),
 		received_quantity: intValue(rawObject['received_quantity']),
-		total_amount: stringValue(rawObject['total_amount']),
+		total_amount: totalAmount,
+		net_total_amount: netTotalAmount,
 		receive_progress: stringValue(rawObject['receive_progress']),
 		is_fully_received: boolValue(rawObject['is_fully_received']),
 		remark: stringValue(rawObject['remark']),

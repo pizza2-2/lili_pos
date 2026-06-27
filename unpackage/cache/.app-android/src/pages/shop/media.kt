@@ -52,13 +52,9 @@ open class GenPagesShopMedia : BasePage {
             fun gen_parseErrorMessage_fn(error: Any): String {
                 var message = "商店资料加载失败"
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/media.uvue:114")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/media.uvue:110")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -237,7 +233,7 @@ open class GenPagesShopMedia : BasePage {
             val mediaRecordToListItem = ::gen_mediaRecordToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String): Unit {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -290,7 +286,7 @@ open class GenPagesShopMedia : BasePage {
             val handlePageChange = ::gen_handlePageChange_fn
             fun gen_handleItemClick_fn(payload: UTSJSONObject): Unit {
                 val title = stringValue(payload["title"], "商店资料")
-                uni_showToast(ShowToastOptions(title = title, icon = "none"))
+                uni_showToast(ShowToastOptions(title = title, icon = "none", duration = 3500))
             }
             val handleItemClick = ::gen_handleItemClick_fn
             fun gen_handleMenu_fn(payload: UTSJSONObject): Unit {
@@ -312,7 +308,7 @@ open class GenPagesShopMedia : BasePage {
                 val url = if (shopId.value == "") {
                     "/pages/shop/from"
                 } else {
-                    ("/pages/shop/from?shop_id=" + shopId.value + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:357"))
+                    ("/pages/shop/from?shop_id=" + shopId.value + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:353"))
                 }
                 uni_navigateTo(NavigateToOptions(url = url))
             }
@@ -410,7 +406,7 @@ open class GenPagesShopMedia : BasePage {
                 shopName.value = if (rawShopName == "") {
                     ""
                 } else {
-                    stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:453"))
+                    stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:449"))
                 }
                 loadShopMedia()
             }

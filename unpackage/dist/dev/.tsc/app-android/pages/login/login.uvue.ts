@@ -9,8 +9,8 @@ const __ins = getCurrentInstance()!;
 const _ctx = __ins.proxy as InstanceType<typeof __sfc__>;
 const _cache = __ins.renderCache;
 
-	const username = ref('733063605')
-	const password = ref('Luochaowei88')
+	const username = ref('')
+	const password = ref('')
 	const showPassword = ref(false)
 	const isSubmitting = ref(false)
 
@@ -33,11 +33,11 @@ const _cache = __ins.renderCache;
 			return
 		}
 		if (username.value == '') {
-			uni.showToast({ title: '请输入账号', icon: 'none' })
+			uni.showToast({ title: '请输入账号', icon: 'none', duration: 3500 })
 			return
 		}
 		if (password.value == '') {
-			uni.showToast({ title: '请输入密码', icon: 'none' })
+			uni.showToast({ title: '请输入密码', icon: 'none', duration: 3500 })
 			return
 		}
 
@@ -82,7 +82,8 @@ const _cache = __ins.renderCache;
 		}
 			uni.showToast({
 				title: message,
-				icon: 'none'
+				icon: 'none',
+				duration: 3500
 			})
 		} finally {
 			isSubmitting.value = false

@@ -41,13 +41,9 @@ const menuActions = ref<UTSJSONObject[]>([
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/pricing-formula/index.uvue:103")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/pricing-formula/index.uvue:99")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -121,7 +117,7 @@ function formulaToListItem(item: ProductPricingFormulaItem): UTSJSONObject {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({

@@ -50,13 +50,9 @@ open class GenPagesKasaCategoryForm : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:89")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:86")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -202,7 +198,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                         }
                         try {
                             taxRateResponse.value = await(getKasaCategoryTaxRates())
-                            console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:219")
+                            console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:216")
                         }
                          catch (error: Throwable) {
                             taxRateResponse.value = null
@@ -277,11 +273,11 @@ open class GenPagesKasaCategoryForm : BasePage {
                         try {
                             await(loadTaxRateOptions())
                             val detail = await(getKasaCategoryDetail(idText))
-                            console.log(detail, " at pages/kasa_category/form.uvue:286")
+                            console.log(detail, " at pages/kasa_category/form.uvue:283")
                             initialData.value = buildInitialDataFromDetail(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "收银分类详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "收银分类详情加载失败"))
                         }
                 })
             }
@@ -362,7 +358,7 @@ open class GenPagesKasaCategoryForm : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             savingVisible.value = false
@@ -400,11 +396,11 @@ open class GenPagesKasaCategoryForm : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name_cn", "label" to "中文名", "type" to "input", "required" to true, "placeholder" to "请输入中文名"), _uO("key" to "name_en", "label" to "英文名", "type" to "input", "placeholder" to "请输入英文名"), _uO("key" to "unique_kod", "label" to "唯一编码", "type" to "input", "placeholder" to "请输入唯一编码"), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_display", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "bottomSelect", "title" to "选择启用状态", "placeholder" to "请选择启用状态", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchStatusOptions), _uO("key" to "products_count", "label" to "关联商品数", "type" to "input", "readonly" to true, "editOnly" to true, "placeholder" to "自动统计")))))

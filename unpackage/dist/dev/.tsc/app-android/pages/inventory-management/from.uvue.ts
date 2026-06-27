@@ -3,8 +3,9 @@ import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { adjustInventoryStock, createInventoryStockForProduct, getInventoryLocations, getInventoryStockDetail, getInventoryStocks, getInventoryTransactions, InventoryListQuery, InventoryStockCreateForProductData, StockAdjustmentData } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-management/from.uvue", 324, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-management/from.uvue", 325, 6>;
 	value: string
 	label: string
 }
@@ -42,7 +43,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (text == null || text == '') return [] as UTSJSONObject[]
 	let parsed: UTSJSONObject[] | null = null
 	try {
-		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/inventory-management/from.uvue:354")
+		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/inventory-management/from.uvue:355")
 	} catch (error) {
 		return [] as UTSJSONObject[]
 	}
@@ -52,11 +53,31 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 
 function parseErrorMessage(error: any, fallback: string): string {
 	if (error == null) return fallback
-	const directMessage = (error as Error).message
-	if (directMessage != null && directMessage != '') return directMessage
-	const text = JSON.stringify(error)
-	if (text == null || text == '' || text == '{}') return fallback
-	return text
+	let text = ''
+	try {
+		const errorText = JSON.stringify(error)
+		if (errorText != null) text = errorText
+	} catch (stringifyError) {
+		text = ''
+	}
+	if (text != '' && text != '{}' && text != 'null') {
+		let parsedError: UTSJSONObject | null = null
+		try {
+			const trimmedText = text.trim()
+			if (trimmedText != '' && trimmedText.substring(0, 1) == '{') parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-management/from.uvue:376")
+		} catch (parseError) {
+			parsedError = null
+		}
+		if (parsedError != null) {
+			const rawMessage = parsedError!['message']
+			const parsedMessage = stringValue(rawMessage)
+			if (parsedMessage != '') return parsedMessage
+		}
+		return text
+	}
+	const textMessage = stringValue(error)
+	if (textMessage != '' && textMessage != '[object Object]') return textMessage
+	return fallback
 }
 
 function readInputValue(event: any): string {
@@ -542,7 +563,7 @@ function resetCreateForm() {
 
 function openCreateSheet() {
 	if (productId.value == '') {
-		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
 		return
 	}
 	resetCreateForm()
@@ -569,7 +590,7 @@ function closeAdjustSheet() {
 function openSelectedAdjustSheet() {
 	const stock = selectedStock()
 	if (stock == null) {
-		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		uni.showToast({ title: '请选择库存位置', icon: 'none', duration: 3500 })
 		return
 	}
 	openAdjustSheet(stock!)
@@ -593,21 +614,21 @@ function openInitialSheetIfNeeded() {
 function buildCreateStockPayload(): InventoryStockCreateForProductData | null {
 	const parsedProductId = parseInt(productId.value)
 	if (isNaN(parsedProductId) || parsedProductId <= 0) {
-		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
 		return null
 	}
 	const locationId = parseInt(createLocationValue.value)
 	if (isNaN(locationId) || locationId <= 0) {
-		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		uni.showToast({ title: '请选择库存位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	if (hasStockAtLocation(createLocationValue.value)) {
-		uni.showToast({ title: '该位置已有库存记录', icon: 'none' })
+		uni.showToast({ title: '该位置已有库存记录', icon: 'none', duration: 3500 })
 		return null
 	}
 	const quantity = createQuantityText.value == '' ? 0 : parseInt(createQuantityText.value)
 	if (isNaN(quantity) || quantity < 0) {
-		uni.showToast({ title: '初始数量不能小于 0', icon: 'none' })
+		uni.showToast({ title: '初始数量不能小于 0', icon: 'none', duration: 3500 })
 		return null
 	}
 	return {
@@ -628,7 +649,7 @@ async function submitCreateStock() {
 	try {
 		const created = await createInventoryStockForProduct(payload!)
 		const createdText = JSON.stringify(created)
-		const createdObject = createdText == null || createdText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(createdText), " at pages/inventory-management/from.uvue:940")
+		const createdObject = createdText == null || createdText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(createdText), " at pages/inventory-management/from.uvue:961")
 		if (createdObject != null) selectedStockId.value = stringValue(createdObject!['id'])
 		markRefreshNeeded()
 		resetCreateForm()
@@ -636,7 +657,7 @@ async function submitCreateStock() {
 		uni.showToast({ title: takeLatestResponseMessage('库存创建成功'), icon: 'success' })
 		await loadAll()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '库存创建失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '库存创建失败'))
 	} finally {
 		createSubmitting.value = false
 	}
@@ -645,12 +666,12 @@ async function submitCreateStock() {
 function buildAdjustStockPayload(): StockAdjustmentData | null {
 	const stockId = parseInt(selectedStockId.value)
 	if (isNaN(stockId) || stockId <= 0) {
-		uni.showToast({ title: '请选择库存位置', icon: 'none' })
+		uni.showToast({ title: '请选择库存位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	const change = parseInt(adjustQuantityText.value)
 	if (isNaN(change) || change == 0) {
-		uni.showToast({ title: '请输入非 0 的调整数量', icon: 'none' })
+		uni.showToast({ title: '请输入非 0 的调整数量', icon: 'none', duration: 3500 })
 		return null
 	}
 	return {
@@ -676,7 +697,7 @@ async function submitAdjustStock() {
 		uni.showToast({ title: takeLatestResponseMessage('库存调整成功'), icon: 'success' })
 		await loadAll()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '库存调整失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '库存调整失败'))
 	} finally {
 		adjustSubmitting.value = false
 	}
@@ -801,10 +822,10 @@ onLoad((query: OnLoadOptions) => {
 	if (productNameValue == null) {
 		productName.value = ''
 	} else {
-		productName.value = stringValue(UTSAndroid.consoleDebugError(decodeURIComponent('' + productNameValue), " at pages/inventory-management/from.uvue:1113"))
+		productName.value = stringValue(UTSAndroid.consoleDebugError(decodeURIComponent('' + productNameValue), " at pages/inventory-management/from.uvue:1134"))
 	}
 	updateSheetLayout()
-	if (initialMode.value == 'adjust' && selectedStockId.value == '') uni.showToast({ title: '请选择库存位置', icon: 'none' })
+	if (initialMode.value == 'adjust' && selectedStockId.value == '') uni.showToast({ title: '请选择库存位置', icon: 'none', duration: 3500 })
 	loadAll().then(() => {
 		openInitialSheetIfNeeded()
 	})

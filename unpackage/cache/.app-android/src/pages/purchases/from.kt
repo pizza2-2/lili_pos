@@ -55,13 +55,9 @@ open class GenPagesPurchasesFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/from.uvue:57")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/from.uvue:56")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -176,7 +172,7 @@ open class GenPagesPurchasesFrom : BasePage {
                             initialData.value = buildInitialDataFromPurchase(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "采购单详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "采购单详情加载失败"))
                         }
                 })
             }
@@ -206,11 +202,11 @@ open class GenPagesPurchasesFrom : BasePage {
                             body = buildPayload(data)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "采购明细不完整"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "采购明细不完整"))
                             return@w1
                         }
                         if (body.purchase_date == "" || body.shop == "" || body.supplier == "") {
-                            uni_showToast(ShowToastOptions(title = "请填写采购日期、店铺和供应商", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请填写采购日期、店铺和供应商", icon = "none", duration = 3500))
                             return@w1
                         }
                         val actionText = if (formMode.value == "edit") {
@@ -237,7 +233,7 @@ open class GenPagesPurchasesFrom : BasePage {
                             }
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -273,11 +269,11 @@ open class GenPagesPurchasesFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "请在对应模块维护选项", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请在对应模块维护选项", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             onLoad(fun(query: OnLoadOptions){

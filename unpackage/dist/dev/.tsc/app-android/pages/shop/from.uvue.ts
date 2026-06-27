@@ -6,8 +6,9 @@ import { createShopMedia, getShopDetail, getShopMediaDetail, ShopMediaItem, Shop
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/shop/from.uvue", 50, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/shop/from.uvue", 51, 6>;
 	value: string
 	text: string
 }
@@ -65,13 +66,9 @@ function getArrayField(obj: UTSJSONObject, key: string): string[] {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:104")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:101")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -87,7 +84,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildUploadHeaders(): UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/shop/from.uvue", 120, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/shop/from.uvue", 117, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -247,10 +244,7 @@ async function loadShopMediaDetailData(idText: string): Promise<void> {
 		const detail = await getShopMediaDetail(idText)
 		initialData.value = buildInitialDataFromMedia(detail)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '商店资料详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '商店资料详情加载失败'))
 	}
 }
 
@@ -364,14 +358,14 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 	if (shopIdValue == '') {
 		uni.showToast({
 			title: '请选择商店',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
 	if (title == '') {
 		uni.showToast({
 			title: '资料标题不能为空',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -421,10 +415,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
 		}
-		uni.showToast({
-			title: parseErrorMessage(error, isEditing ? '资料保存失败' : '资料创建失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, isEditing ? '资料保存失败' : '资料创建失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			savingVisible.value = false
@@ -461,21 +452,21 @@ function handleDirtyChange(value: boolean) {
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleUpload(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '图片已加入待保存列表',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -494,14 +485,14 @@ function handleUploadError(payload: UTSJSONObject) {
 		if (message != '') {
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
 	}
 	uni.showToast({
 		title: '图片上传失败',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -519,7 +510,7 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 	const initialShopId = shopIdValue == null ? '' : (shopIdValue as string)
 	let initialShopName = ''
 	if (shopNameValue != null) {
-		const decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as string), " at pages/shop/from.uvue:552")
+		const decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as string), " at pages/shop/from.uvue:543")
 		initialShopName = decodedShopName == null ? '' : ('' + decodedShopName)
 	}
 	if (initialShopName == '' && initialShopId != '') {
@@ -528,7 +519,7 @@ async function initializeForm(event: OnLoadOptions): Promise<void> {
 	if (initialShopId == '') {
 		uni.showToast({
 			title: '请先从商店资料页进入',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		setTimeout(() => {
 			uni.navigateBack({

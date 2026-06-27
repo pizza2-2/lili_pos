@@ -59,7 +59,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
                 }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/inventory-management/from.uvue:354")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/inventory-management/from.uvue:355")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -74,15 +74,41 @@ open class GenPagesInventoryManagementFrom : BasePage {
                 if (error == null) {
                     return fallback
                 }
-                val directMessage = (error as UTSError).message
-                if (directMessage != null && directMessage != "") {
-                    return directMessage
+                var text = ""
+                try {
+                    val errorText = JSON.stringify(error)
+                    if (errorText != null) {
+                        text = errorText
+                    }
                 }
-                val text = JSON.stringify(error)
-                if (text == null || text == "" || text == "{}") {
-                    return fallback
+                 catch (stringifyError: Throwable) {
+                    text = ""
                 }
-                return text
+                if (text != "" && text != "{}" && text != "null") {
+                    var parsedError: UTSJSONObject? = null
+                    try {
+                        val trimmedText = text.trim()
+                        if (trimmedText != "" && trimmedText.substring(0, 1) == "{") {
+                            parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-management/from.uvue:376")
+                        }
+                    }
+                     catch (parseError: Throwable) {
+                        parsedError = null
+                    }
+                    if (parsedError != null) {
+                        val rawMessage = parsedError!!["message"]
+                        val parsedMessage = stringValue(rawMessage)
+                        if (parsedMessage != "") {
+                            return parsedMessage
+                        }
+                    }
+                    return text
+                }
+                val textMessage = stringValue(error)
+                if (textMessage != "" && textMessage != "[object Object]") {
+                    return textMessage
+                }
+                return fallback
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_readInputValue_fn(event: Any): String {
@@ -789,7 +815,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
             val resetCreateForm = ::gen_resetCreateForm_fn
             fun gen_openCreateSheet_fn() {
                 if (productId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none", duration = 3500))
                     return
                 }
                 resetCreateForm()
@@ -820,7 +846,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
             fun gen_openSelectedAdjustSheet_fn() {
                 val stock = selectedStock()
                 if (stock == null) {
-                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none", duration = 3500))
                     return
                 }
                 openAdjustSheet(stock!!)
@@ -848,16 +874,16 @@ open class GenPagesInventoryManagementFrom : BasePage {
             fun gen_buildCreateStockPayload_fn(): InventoryStockCreateForProductData? {
                 val parsedProductId = parseInt(productId.value)
                 if (isNaN(parsedProductId) || parsedProductId <= 0) {
-                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none", duration = 3500))
                     return null
                 }
                 val locationId = parseInt(createLocationValue.value)
                 if (isNaN(locationId) || locationId <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none", duration = 3500))
                     return null
                 }
                 if (hasStockAtLocation(createLocationValue.value)) {
-                    uni_showToast(ShowToastOptions(title = "该位置已有库存记录", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "该位置已有库存记录", icon = "none", duration = 3500))
                     return null
                 }
                 val quantity = if (createQuantityText.value == "") {
@@ -866,7 +892,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
                     parseInt(createQuantityText.value)
                 }
                 if (isNaN(quantity) || quantity < 0) {
-                    uni_showToast(ShowToastOptions(title = "初始数量不能小于 0", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "初始数量不能小于 0", icon = "none", duration = 3500))
                     return null
                 }
                 return InventoryStockCreateForProductData(product = parsedProductId, location = locationId, quantity = quantity, transaction_type = if (createTypeValue.value == "") {
@@ -893,7 +919,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
                             val createdObject = if (createdText == null || createdText == "") {
                                 null
                             } else {
-                                UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(createdText), " at pages/inventory-management/from.uvue:940")
+                                UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(createdText), " at pages/inventory-management/from.uvue:961")
                             }
                             if (createdObject != null) {
                                 selectedStockId.value = stringValue(createdObject!!["id"])
@@ -905,7 +931,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
                             await(loadAll())
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "库存创建失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "库存创建失败"))
                         }
                          finally {
                             createSubmitting.value = false
@@ -916,12 +942,12 @@ open class GenPagesInventoryManagementFrom : BasePage {
             fun gen_buildAdjustStockPayload_fn(): StockAdjustmentData? {
                 val stockId = parseInt(selectedStockId.value)
                 if (isNaN(stockId) || stockId <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none", duration = 3500))
                     return null
                 }
                 val change = parseInt(adjustQuantityText.value)
                 if (isNaN(change) || change == 0) {
-                    uni_showToast(ShowToastOptions(title = "请输入非 0 的调整数量", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请输入非 0 的调整数量", icon = "none", duration = 3500))
                     return null
                 }
                 return StockAdjustmentData(stock_id = stockId, quantity_change = change, transaction_type = if (adjustTypeValue.value == "") {
@@ -952,7 +978,7 @@ open class GenPagesInventoryManagementFrom : BasePage {
                             await(loadAll())
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "库存调整失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "库存调整失败"))
                         }
                          finally {
                             adjustSubmitting.value = false
@@ -1139,11 +1165,11 @@ open class GenPagesInventoryManagementFrom : BasePage {
                 if (productNameValue == null) {
                     productName.value = ""
                 } else {
-                    productName.value = stringValue(UTSAndroid.consoleDebugError(decodeURIComponent("" + productNameValue), " at pages/inventory-management/from.uvue:1113"))
+                    productName.value = stringValue(UTSAndroid.consoleDebugError(decodeURIComponent("" + productNameValue), " at pages/inventory-management/from.uvue:1134"))
                 }
                 updateSheetLayout()
                 if (initialMode.value == "adjust" && selectedStockId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择库存位置", icon = "none", duration = 3500))
                 }
                 loadAll().then(fun(){
                     openInitialSheetIfNeeded()

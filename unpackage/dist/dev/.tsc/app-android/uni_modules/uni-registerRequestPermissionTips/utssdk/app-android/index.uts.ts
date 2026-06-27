@@ -142,7 +142,8 @@ function createPermissionWindow(activity : Activity, permissions : Array<string>
 
 function getScale() : Float {
 	if (UTSAndroid.getUniActivity() != null) {
-		return UTSAndroid.getUniActivity()!.resources.displayMetrics.scaledDensity
+		const resources = UTSAndroid.getUniActivity()!.resources
+		return resources.displayMetrics.density * resources.configuration.fontScale
 	}
-	return (0 as number).toFloat();
+	return (1 as number).toFloat();
 }

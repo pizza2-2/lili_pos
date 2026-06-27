@@ -41,13 +41,9 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any): string {
 	let message = '商店列表加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:107")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:103")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -128,7 +124,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string): void 
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -148,7 +144,7 @@ function goToShopMedia(shopId: string, shopName: string): void {
 		return
 	}
 	uni.navigateTo({
-		url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:208"),
+		url: '/pages/shop/media?shop_id=' + shopId + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:204"),
 	})
 }
 
@@ -198,7 +194,7 @@ function handleItemClick(payload: UTSJSONObject): void {
 	const itemName = stringValue(payload['name'], '商店')
 	uni.showToast({
 		title: itemName,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 

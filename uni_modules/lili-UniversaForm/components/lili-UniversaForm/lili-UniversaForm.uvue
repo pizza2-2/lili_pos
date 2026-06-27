@@ -561,6 +561,15 @@ function getDefaultValue(field: UTSJSONObject) : any {
 	return ''
 }
 
+function shouldUseDefaultValue(field: UTSJSONObject, incoming: any | null) : boolean {
+	if (incoming == null) return true
+	const fieldType = getFieldType(field)
+	if (fieldType == 'datetime' && getBooleanField(field, 'defaultToToday', false)) {
+		return ('' + incoming) == ''
+	}
+	return false
+}
+
 function getFieldValue(field: UTSJSONObject) : any {
 	const key = getFieldKey(field)
 	if (key == '') return getDefaultValue(field)
@@ -901,10 +910,10 @@ function applyInitialValues() {
 			const key = getFieldKey(field)
 			if (key == '') continue
 			const incoming = props.initialData[key]
-			if (incoming != null) {
-				nextData[key] = incoming
-			} else {
+			if (shouldUseDefaultValue(field, incoming)) {
 				nextData[key] = getDefaultValue(field)
+			} else {
+				nextData[key] = incoming
 			}
 			const textKey = getBottomSelectTextKey(field)
 			if (textKey != '') {

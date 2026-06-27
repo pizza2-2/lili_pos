@@ -36,12 +36,9 @@ const __sfc__ = defineComponent({
         function parseErrorMessage(error: any, fallback: string): string {
             let message = fallback;
             if (error != null) {
-                const directMessage = (error as Error).message;
-                if (directMessage != null && directMessage != '')
-                    message = directMessage;
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:193");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:191");
                     if (parsedError != null) {
                         const rawMessage = parsedError['message'];
                         if (rawMessage != null) {
@@ -62,7 +59,7 @@ const __sfc__ = defineComponent({
             const text = JSON.stringify(value);
             if (text == null || text == '')
                 return [] as UTSJSONObject[];
-            const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:211");
+            const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:209");
             if (parsed == null)
                 return [] as UTSJSONObject[];
             return parsed!;
@@ -73,7 +70,7 @@ const __sfc__ = defineComponent({
             const text = JSON.stringify(value);
             if (text == null || text == '')
                 return null;
-            return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/orders/from.uvue:220");
+            return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/orders/from.uvue:218");
         }
         function boolText(value: boolean): string {
             return value ? '是' : '否';
@@ -199,7 +196,7 @@ const __sfc__ = defineComponent({
         }
         function copyText(text: string, successTitle: string, emptyTitle: string) {
             if (text == '' || text == '-') {
-                uni.showToast({ title: emptyTitle, icon: 'none' });
+                uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 });
                 return;
             }
             uni.setClipboardData({

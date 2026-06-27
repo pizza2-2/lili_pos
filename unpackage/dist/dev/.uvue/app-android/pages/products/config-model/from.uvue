@@ -3,6 +3,7 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue';
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts';
 import { attributeTypesPath, attributeValuesPath, barcodeSequencesPath, createProductConfig, getProductConfigDetail, getProductConfigList, productDiscountsPath, updateProductConfig, } from '@/pkg/api/modules/products.uts';
+import { showErrorToast } from '@/pkg/util/toast.uts';
 const __sfc__ = defineComponent({
     __name: 'from',
     setup(__props) {
@@ -63,9 +64,6 @@ const __sfc__ = defineComponent({
         function parseErrorMessage(error: any, fallback: string): string {
             let message = fallback;
             if (error != null) {
-                const directMessage = (error as Error).message;
-                if (directMessage != null && directMessage != '')
-                    message = directMessage;
             }
             return message;
         }
@@ -178,7 +176,7 @@ const __sfc__ = defineComponent({
                 initialData.value = normalizeDetail(detail);
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, resourceTitle() + '详情加载失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, resourceTitle() + '详情加载失败'));
             }
         }
         function buildAttributeTypeOption(item: UTSJSONObject): UTSJSONObject {
@@ -287,7 +285,7 @@ const __sfc__ = defineComponent({
                 goBackToList();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '保存失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '保存失败'));
             }
             finally {
                 uni.hideLoading();
@@ -313,10 +311,10 @@ const __sfc__ = defineComponent({
         function handleDirtyChange(value: boolean) {
         }
         function handleBottomSelectAdd(payload: UTSJSONObject) {
-            uni.showToast({ title: '请先到属性类型页面新增', icon: 'none' });
+            uni.showToast({ title: '请先到属性类型页面新增', icon: 'none', duration: 3500 });
         }
         function handleBottomSelectEdit(payload: UTSJSONObject) {
-            uni.showToast({ title: '请先到属性类型页面编辑', icon: 'none' });
+            uni.showToast({ title: '请先到属性类型页面编辑', icon: 'none', duration: 3500 });
         }
         const homePath = computed((): string => {
             let path = '/pages/products/config-model/index?resource=' + resource.value;

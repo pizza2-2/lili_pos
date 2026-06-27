@@ -39,13 +39,9 @@ open class GenPagesProductsPricingFormulaIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/pricing-formula/index.uvue:103")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/pricing-formula/index.uvue:99")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -138,7 +134,7 @@ open class GenPagesProductsPricingFormulaIndex : BasePage {
             val formulaToListItem = ::gen_formulaToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){

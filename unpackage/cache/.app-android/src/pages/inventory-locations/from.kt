@@ -144,7 +144,7 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                             initialData.value = _uO("name" to getStringField(detail, "name"), "code" to getStringField(detail, "code"), "location_type" to typeValue, "location_type_text" to typeText, "address" to getStringField(detail, "address"), "is_active" to activeValue, "is_active_text" to optionText(activeOptions.value, activeValue, "启用"))
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "库存位置详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "库存位置详情加载失败"))
                         }
                 })
             }
@@ -161,7 +161,7 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                             (rawData as UTSJSONObject)
                         }
                         if (getStringField(data, "name") == "" || getStringField(data, "code") == "") {
-                            uni_showToast(ShowToastOptions(title = "请填写位置名称和位置编码", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请填写位置名称和位置编码", icon = "none", duration = 3500))
                             return@w1
                         }
                         val actionText = if (formMode.value == "edit") {
@@ -182,7 +182,7 @@ open class GenPagesInventoryLocationsFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -218,11 +218,11 @@ open class GenPagesInventoryLocationsFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             onLoad(fun(query: OnLoadOptions){

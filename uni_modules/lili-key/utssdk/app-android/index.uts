@@ -33,6 +33,7 @@ const nativeKeyEventAction = 'lili.volume.KEY_EVENT'
 const nativeExtraKeyCode = 'lili.volume.EXTRA_KEY_CODE'
 const nativeExtraActionCode = 'lili.volume.EXTRA_ACTION_CODE'
 const debugEnabled = false
+const keyActionMultiple = 2
 
 let volumeReceiver: VolumeKeyReceiver | null = null
 let volumeReceiverContext: Context | null = null
@@ -59,7 +60,7 @@ function volumeLog(message: string) {
 function keyActionText(actionCode: Int): string {
 	if (actionCode == KeyEvent.ACTION_DOWN) return 'ACTION_DOWN'
 	if (actionCode == KeyEvent.ACTION_UP) return 'ACTION_UP'
-	if (actionCode == KeyEvent.ACTION_MULTIPLE) return 'ACTION_MULTIPLE'
+	if (actionCode == keyActionMultiple) return 'ACTION_MULTIPLE'
 	return 'ACTION_' + actionCode.toString()
 }
 

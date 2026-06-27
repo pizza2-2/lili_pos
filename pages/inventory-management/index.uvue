@@ -10,6 +10,8 @@
 			:showFilter="true"
 			:showScan="true"
 			:showHome="true"
+			:showRightText="true"
+			:rightText="movementPeriodButtonText"
 			:filterActive="hasActiveFilter"
 			filterText="重置"
 			:homePath="homePath"
@@ -17,6 +19,7 @@
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
 			@scan="handleScanSearch"
+			@right="openMovementPeriodPanel"
 			@update:filterVisible="handleFilterVisibleChange"
 			@filter-open="handleFilterOpen"
 		>
@@ -131,7 +134,7 @@
 				<view v-if="productMode" class="product-stock-header">
 					<view class="product-stock-title-wrap">
 						<text class="product-stock-title">{{ productStockTitle }}</text>
-						<text class="product-stock-subtitle">统一管理该商品在所有库存位置的数量</text>
+						<text class="product-stock-subtitle">{{ productStockSubtitle }}</text>
 					</view>
 					<view class="product-stock-action" @click="navigateToCreateStock">
 						<text class="product-stock-action-text">新增库存</text>
@@ -166,7 +169,7 @@
 					:currentPage="currentPage"
 					:totalPages="totalPages"
 					:totalCount="totalCount"
-					summaryTitle="库存概览"
+					:summaryTitle="inventorySummaryTitle"
 					:summaryItems="summaryItems"
 					:showFloatingAdd="productMode"
 					floatingAddText="新增库存"
@@ -182,6 +185,45 @@
 		<!-- #ifdef APP -->
 		</scroll-view>
 		<!-- #endif -->
+
+		<page-container
+			:show="movementPeriodPanelVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.38);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeMovementPeriodPanel"
+		>
+			<view class="movement-panel">
+				<view class="movement-panel-handle"></view>
+				<view class="movement-panel-head">
+					<text class="movement-panel-title">库存时间</text>
+					<view class="movement-panel-close" @click="closeMovementPeriodPanel">
+						<text class="movement-panel-close-text">关闭</text>
+					</view>
+				</view>
+				<view class="movement-options">
+					<view
+						v-for="option in movementPeriodOptions"
+						:key="option.value"
+						:class="draftMovementPeriod == option.value ? 'movement-option movement-option-active' : 'movement-option'"
+						@click="selectDraftMovementPeriod(option.value)"
+					>
+						<text :class="draftMovementPeriod == option.value ? 'movement-option-text movement-option-text-active' : 'movement-option-text'">{{ option.label }}</text>
+					</view>
+				</view>
+				<view class="movement-panel-actions">
+					<view class="movement-panel-btn movement-panel-btn-light" @click="resetMovementPeriod">
+						<text class="movement-panel-btn-light-text">全部</text>
+					</view>
+					<view class="movement-panel-btn movement-panel-btn-primary" @click="applyMovementPeriod">
+						<text class="movement-panel-btn-primary-text">应用</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
 	</view>
 </template>
 
@@ -230,6 +272,9 @@ const volumeScanLocked = ref(false)
 const scanLookupRunning = ref(false)
 const productFilterId = ref('')
 const productFilterName = ref('')
+const movementPeriodFilter = ref('all')
+const draftMovementPeriod = ref('all')
+const movementPeriodPanelVisible = ref(false)
 let volumeKeyStartTimer = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
@@ -265,6 +310,13 @@ const listedStatusOptions = [
 	{ value: '', label: '全部' } as SelectOption,
 	{ value: 'true', label: '上架' } as SelectOption,
 	{ value: 'false', label: '下架' } as SelectOption,
+]
+
+const movementPeriodOptions = [
+	{ value: 'all', label: '全部时间' } as SelectOption,
+	{ value: 'today', label: '今日' } as SelectOption,
+	{ value: 'week', label: '本周' } as SelectOption,
+	{ value: 'month', label: '本月' } as SelectOption,
 ]
 
 function stringValue(value: any | null, fallback: string = ''): string {
@@ -549,6 +601,13 @@ function listedText(value: string): string {
 	return '上架'
 }
 
+function movementPeriodText(value: string): string {
+	if (value == 'today') return '今日'
+	if (value == 'week') return '本周'
+	if (value == 'month') return '本月'
+	return '全部时间'
+}
+
 function numberText(value: any | null): string {
 	const text = stringValue(value)
 	if (text == '') return '0'
@@ -662,6 +721,7 @@ function buildQuery(): InventoryListQuery {
 		is_listed: listedStatusFilter.value == '' ? null : listedStatusFilter.value,
 		location: locationFilterValue.value == '' ? null : locationFilterValue.value,
 		product: productFilterId.value == '' ? null : productFilterId.value,
+		movement_period: movementPeriodFilter.value == 'all' ? null : movementPeriodFilter.value,
 		transaction_type: null,
 		location_type: null,
 		is_active: null,
@@ -740,6 +800,7 @@ function handleFilterReset() {
 	locationFilterText.value = ''
 	alertStatusFilter.value = ''
 	listedStatusFilter.value = ''
+	movementPeriodFilter.value = 'all'
 	draftSupplierValue.value = ''
 	draftSupplierText.value = ''
 	draftCategoryValues.value = [] as string[]
@@ -747,6 +808,7 @@ function handleFilterReset() {
 	draftLocationText.value = ''
 	draftAlertStatus.value = ''
 	draftListedStatus.value = ''
+	draftMovementPeriod.value = 'all'
 	keyword.value = ''
 	currentPage.value = 1
 	closeFilterDrawer()
@@ -763,6 +825,34 @@ function applySelectedFilters() {
 	listedStatusFilter.value = draftListedStatus.value
 	currentPage.value = 1
 	closeFilterDrawer()
+	loadStocks()
+}
+
+function openMovementPeriodPanel() {
+	draftMovementPeriod.value = movementPeriodFilter.value
+	movementPeriodPanelVisible.value = true
+}
+
+function closeMovementPeriodPanel() {
+	movementPeriodPanelVisible.value = false
+}
+
+function selectDraftMovementPeriod(value: string) {
+	draftMovementPeriod.value = value
+}
+
+function applyMovementPeriod() {
+	movementPeriodFilter.value = draftMovementPeriod.value
+	currentPage.value = 1
+	closeMovementPeriodPanel()
+	loadStocks()
+}
+
+function resetMovementPeriod() {
+	draftMovementPeriod.value = 'all'
+	movementPeriodFilter.value = 'all'
+	currentPage.value = 1
+	closeMovementPeriodPanel()
 	loadStocks()
 }
 
@@ -953,6 +1043,19 @@ const productStockTitle = computed((): string => {
 	return '商品库存'
 })
 
+const movementPeriodLabel = computed((): string => {
+	return movementPeriodText(movementPeriodFilter.value)
+})
+
+const movementPeriodButtonText = computed((): string => {
+	if (movementPeriodFilter.value == 'all') return '时间'
+	return movementPeriodLabel.value
+})
+
+const productStockSubtitle = computed((): string => {
+	return movementPeriodLabel.value + ' · 记录 ' + totalCount.value.toString() + ' · 本页库存 ' + totalQuantityText.value
+})
+
 const listItems = computed((): UTSJSONObject[] => {
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < stocks.value.length; index += 1) result.push(stockToListItem(stocks.value[index]))
@@ -960,7 +1063,7 @@ const listItems = computed((): UTSJSONObject[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || supplierFilterValue.value != '' || categoryFilterValues.value.length > 0 || locationFilterValue.value != '' || alertStatusFilter.value != '' || listedStatusFilter.value != ''
+	return keyword.value != '' || supplierFilterValue.value != '' || categoryFilterValues.value.length > 0 || locationFilterValue.value != '' || alertStatusFilter.value != '' || listedStatusFilter.value != '' || movementPeriodFilter.value != 'all'
 })
 
 const emptyText = computed((): string => {
@@ -975,8 +1078,12 @@ const summaryItems = computed((): UTSJSONObject[] => {
 		{ key: 'total', label: '库存记录', value: totalCount.value.toString() } as UTSJSONObject,
 		{ key: 'quantity', label: '本页库存', value: totalQuantityText.value } as UTSJSONObject,
 		{ key: 'alerts', label: '本页预警', value: alertCountText.value } as UTSJSONObject,
-		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
+		{ key: 'time', label: '时间', value: movementPeriodLabel.value } as UTSJSONObject,
 	]
+})
+
+const inventorySummaryTitle = computed((): string => {
+	return '库存概览 · ' + movementPeriodLabel.value + ' · 记录 ' + totalCount.value.toString() + ' · 本页库存 ' + totalQuantityText.value
 })
 
 const filterPanelStyle = computed((): string => {
@@ -1036,10 +1143,27 @@ onUnload(() => {
 .inventory-filter-btn-primary { background-color: #0F172A; }
 .inventory-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
 .inventory-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
-.product-stock-header { flex-direction: row; align-items: center; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
-.product-stock-title-wrap { flex: 1; padding-right: 10px; }
-.product-stock-title { font-size: 17px; line-height: 23px; color: #0F172A; font-weight: bold; }
-.product-stock-subtitle { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
-.product-stock-action { height: 38px; padding-left: 14px; padding-right: 14px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
-.product-stock-action-text { font-size: 13px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
+.product-stock-header { flex-direction: row; align-items: center; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E2E8F0; border-radius: 8px; padding: 9px; margin-bottom: 6px; }
+.product-stock-title-wrap { flex: 1; padding-right: 8px; }
+.product-stock-title { font-size: 15px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.product-stock-subtitle { margin-top: 2px; font-size: 11px; line-height: 15px; color: #64748B; }
+.product-stock-action { height: 32px; padding-left: 11px; padding-right: 11px; border-radius: 8px; background-color: #0F172A; align-items: center; justify-content: center; }
+.product-stock-action-text { font-size: 12px; line-height: 16px; color: #FFFFFF; font-weight: bold; }
+.movement-panel { padding-left: 14px; padding-right: 14px; padding-top: 8px; padding-bottom: 14px; background-color: #FFFFFF; }
+.movement-panel-handle { width: 40px; height: 4px; border-radius: 2px; background-color: #CBD5E1; align-self: center; margin-bottom: 10px; }
+.movement-panel-head { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.movement-panel-title { font-size: 15px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.movement-panel-close { height: 28px; padding-left: 10px; padding-right: 10px; border-radius: 8px; align-items: center; justify-content: center; background-color: #F1F5F9; }
+.movement-panel-close-text { font-size: 12px; line-height: 16px; color: #475569; }
+.movement-options { flex-direction: row; flex-wrap: wrap; }
+.movement-option { height: 30px; min-width: 66px; padding-left: 11px; padding-right: 11px; border-radius: 8px; margin-right: 7px; margin-bottom: 7px; align-items: center; justify-content: center; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; }
+.movement-option-active { background-color: #0F172A; border-color: #0F172A; }
+.movement-option-text { font-size: 12px; line-height: 16px; color: #334155; }
+.movement-option-text-active { color: #FFFFFF; font-weight: bold; }
+.movement-panel-actions { flex-direction: row; margin-top: 6px; }
+.movement-panel-btn { flex: 1; height: 34px; border-radius: 8px; align-items: center; justify-content: center; }
+.movement-panel-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.movement-panel-btn-primary { background-color: #0F172A; }
+.movement-panel-btn-light-text { font-size: 12px; line-height: 16px; color: #475569; }
+.movement-panel-btn-primary-text { font-size: 12px; line-height: 16px; color: #FFFFFF; font-weight: bold; }
 </style>

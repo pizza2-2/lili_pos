@@ -213,7 +213,7 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
-const pageTotalAmount = ref('0.00')
+const pageNetTotalAmount = ref('0.00')
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<PurchaseFilterOptionsResponse | null>(null)
@@ -512,10 +512,10 @@ function applyResponse(response: PurchaseListResponse) {
 	pageSize.value = response.page_size
 	let total = 0.0
 	for (let index = 0; index < response.results.length; index += 1) {
-		const amount = parseFloat(response.results[index].total_amount)
+		const amount = parseFloat(response.results[index].net_total_amount)
 		if (!isNaN(amount)) total = total + amount
 	}
-	pageTotalAmount.value = total.toFixed(2)
+	pageNetTotalAmount.value = total.toFixed(2)
 }
 
 async function loadPurchases() {
@@ -541,7 +541,7 @@ async function loadPurchases() {
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
-		pageTotalAmount.value = '0.00'
+		pageNetTotalAmount.value = '0.00'
 		errorMessage.value = parseErrorMessage(error, '采购单加载失败')
 	} finally {
 		isLoading.value = false
@@ -815,7 +815,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '采购单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'amount', label: '本页不含税', value: '¥ ' + pageNetTotalAmount.value } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

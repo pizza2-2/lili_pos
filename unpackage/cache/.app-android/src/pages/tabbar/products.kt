@@ -21,6 +21,7 @@ import uts.sdk.modules.limeScan.GeneralCallbackResult
 import uts.sdk.modules.limeScan.ScanCodeOption
 import uts.sdk.modules.limeScan.ScanCodeSuccessCallbackResult
 import io.dcloud.uniapp.extapi.setClipboardData as uni_setClipboardData
+import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 import uts.sdk.modules.liliKey.startVolumeKeyListener
 import uts.sdk.modules.liliKey.stopVolumeKeyListener
@@ -49,11 +50,26 @@ open class GenPagesTabbarProducts : BasePage {
             val supplierFilterValue = ref("")
             val supplierFilterText = ref("")
             val categoryFilterValues = ref(_uA<String>())
+            val sortOrdering = ref("-updated_at")
             val filterPanelHeight = ref(456)
             val filterContentHeight = ref(392)
             val volumeScanLocked = ref(false)
-            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "supplierText", "label" to "供应商："), _uO("key" to "purchasePriceText", "label" to "含税进价："), _uO("key" to "salesPriceText", "label" to "售价："), _uO("key" to "salesCountText", "label" to "销量：")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "detail", "text" to "详情"), _uO("key" to "inventory", "text" to "查看库存"), _uO("key" to "reload", "text" to "刷新")))
+            val selectionMode = ref(false)
+            val selectedProductIds = ref(_uA<String>())
+            val batchSubmitting = ref(false)
+            val batchEditorVisible = ref(false)
+            val batchEditorType = ref("")
+            val batchCategoryValue = ref("")
+            val batchCategoryText = ref("")
+            val batchSupplierValue = ref("")
+            val batchSupplierText = ref("")
+            val batchStatusValue = ref("")
+            val batchStatusText = ref("")
+            val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "supplierText", "label" to "供应商：", "hideWhenEmpty" to true), _uO("key" to "stockQuantityText", "label" to "库存数量："), _uO("key" to "purchasePriceText", "label" to "含税进价：", "hideWhenEmpty" to true), _uO("key" to "salesPriceText", "label" to "售价："), _uO("key" to "salesCountText", "label" to "销量：")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "detail", "text" to "详情"), _uO("key" to "copy-product", "text" to "复制商品"), _uO("key" to "inventory", "text" to "查看库存"), _uO("key" to "reload", "text" to "刷新")))
+            val batchToolbarActions = ref(_uA<UTSJSONObject>(_uO("key" to "delete", "text" to "删除"), _uO("key" to "update-category", "text" to "改分类"), _uO("key" to "update-supplier", "text" to "改供应商"), _uO("key" to "update-status", "text" to "改状态")))
+            val productStatusOptions = ref(_uA<ProductStatusOption>(ProductStatusOption(value = "DRAFT", text = "草稿"), ProductStatusOption(value = "ACTIVE", text = "启用"), ProductStatusOption(value = "INACTIVE", text = "停用"), ProductStatusOption(value = "DISCONTINUED", text = "停产")))
+            val productSortOptions = ref(_uA<ProductSortOption>(ProductSortOption(value = "-updated_at", text = "最近更新"), ProductSortOption(value = "-created_at", text = "最新创建"), ProductSortOption(value = "sort_order", text = "手动排序"), ProductSortOption(value = "name_cn", text = "名称正序"), ProductSortOption(value = "-total_stock_quantity", text = "库存最多"), ProductSortOption(value = "-total_sales_quantity", text = "销量最高"), ProductSortOption(value = "base_sales_price", text = "售价最低"), ProductSortOption(value = "-base_sales_price", text = "售价最高")))
             val tagColorMap = ref(_uO("新品" to "violet", "精选" to "info", "热销" to "warning"))
             val productListRefreshStorageKey = "refresh:pages:products:index"
             fun gen_applyProductResponse_fn(response: ProductListResponse) {
@@ -77,7 +93,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (error != null) {
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:237")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:390")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -95,6 +111,78 @@ open class GenPagesTabbarProducts : BasePage {
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
+            fun gen_numberValue_fn(value: Any?): Number {
+                if (value == null) {
+                    return 0
+                }
+                val parsed = parseInt("" + value)
+                if (isNaN(parsed)) {
+                    return 0
+                }
+                return parsed
+            }
+            val numberValue = ::gen_numberValue_fn
+            fun gen_selectedCountText_fn(): String {
+                return selectedProductIds.value.length.toString(10)
+            }
+            val selectedCountText = ::gen_selectedCountText_fn
+            fun gen_clearSelectionState_fn() {
+                selectionMode.value = false
+                selectedProductIds.value = _uA<String>()
+            }
+            val clearSelectionState = ::gen_clearSelectionState_fn
+            fun gen_handleSelectionModeChange_fn(value: Boolean) {
+                selectionMode.value = value
+                if (!value) {
+                    selectedProductIds.value = _uA<String>()
+                }
+            }
+            val handleSelectionModeChange = ::gen_handleSelectionModeChange_fn
+            fun gen_handleSelectedProductIdsChange_fn(value: UTSArray<String>) {
+                val nextIds: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < value.length){
+                        nextIds.push(value[index])
+                        index += 1
+                    }
+                }
+                selectedProductIds.value = nextIds
+            }
+            val handleSelectedProductIdsChange = ::gen_handleSelectedProductIdsChange_fn
+            fun gen_handleSelectionExit_fn(payload: UTSJSONObject) {
+                clearSelectionState()
+            }
+            val handleSelectionExit = ::gen_handleSelectionExit_fn
+            fun gen_selectedProductIdsSnapshot_fn(): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < selectedProductIds.value.length){
+                        result.push(selectedProductIds.value[index])
+                        index += 1
+                    }
+                }
+                return result
+            }
+            val selectedProductIdsSnapshot = ::gen_selectedProductIdsSnapshot_fn
+            fun gen_ensureBatchSelection_fn(): Boolean {
+                if (selectedProductIds.value.length > 0) {
+                    return true
+                }
+                uni_showToast(ShowToastOptions(title = "请先选择商品", icon = "none", duration = 3500))
+                return false
+            }
+            val ensureBatchSelection = ::gen_ensureBatchSelection_fn
+            fun gen_resetBatchDraft_fn() {
+                batchCategoryValue.value = ""
+                batchCategoryText.value = ""
+                batchSupplierValue.value = ""
+                batchSupplierText.value = ""
+                batchStatusValue.value = ""
+                batchStatusText.value = ""
+            }
+            val resetBatchDraft = ::gen_resetBatchDraft_fn
             fun gen_updateFilterPanelLayout_fn() {
                 val info = uni_getWindowInfo()
                 var nextPanelHeight = info.windowHeight - 168
@@ -125,9 +213,8 @@ open class GenPagesTabbarProducts : BasePage {
                             } else {
                                 keyword.value
                             }
-                            , page = currentPage.value, page_size = pageSize.value, filters = selectedFilters.value)))
+                            , page = currentPage.value, page_size = pageSize.value, ordering = sortOrdering.value, filters = selectedFilters.value)))
                             applyProductResponse(response)
-                            console.log("输出打印", response, " at pages/tabbar/products.uvue:290")
                         }
                          catch (error: Throwable) {
                             products.value = _uA()
@@ -168,7 +255,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:331")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:551")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -179,7 +266,7 @@ open class GenPagesTabbarProducts : BasePage {
                 if (text == null || text == "") {
                     return _uA()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:344")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:564")
                 if (parsed == null) {
                     return _uA()
                 }
@@ -506,7 +593,7 @@ open class GenPagesTabbarProducts : BasePage {
             fun gen_fetchSupplierFilterOptions_fn(params: UTSJSONObject): UTSPromise<UTSJSONObject> {
                 return wrapUTSPromise(suspend w1@{
                         val keywordValue = stringValue(params["keyword"])
-                        val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 674, 8), "key" to "supplier", "limit" to 50)
+                        val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 894, 8), "key" to "supplier", "limit" to 50)
                         if (keywordValue != "") {
                             query["search"] = keywordValue
                             query["keyword"] = keywordValue
@@ -522,7 +609,7 @@ open class GenPagesTabbarProducts : BasePage {
                         val pageValue = stringValue(params["page"], "1")
                         val parentValue = stringValue(params["parent"])
                         val pageSizeValue = stringValue(params["pageSize"], "20")
-                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 697, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
+                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 917, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
                             "1"
                         } else {
                             pageValue
@@ -539,6 +626,204 @@ open class GenPagesTabbarProducts : BasePage {
                 })
             }
             val fetchCategoryFilterOptions = ::gen_fetchCategoryFilterOptions_fn
+            fun gen_batchActionTitle_fn(actionKey: String): String {
+                if (actionKey == "delete") {
+                    return "批量删除"
+                }
+                if (actionKey == "update-category") {
+                    return "批量修改分类"
+                }
+                if (actionKey == "update-supplier") {
+                    return "批量修改供应商"
+                }
+                if (actionKey == "update-status") {
+                    return "批量修改状态"
+                }
+                return "批量操作"
+            }
+            val batchActionTitle = ::gen_batchActionTitle_fn
+            fun gen_batchActionConfirmText_fn(actionKey: String, count: Number): String {
+                if (actionKey == "delete") {
+                    return "确定删除选中的 " + count.toString(10) + " 个商品吗？"
+                }
+                if (actionKey == "update-category") {
+                    return "确定将选中的 " + count.toString(10) + " 个商品修改到该分类吗？"
+                }
+                if (actionKey == "update-supplier") {
+                    return "确定将选中的 " + count.toString(10) + " 个商品修改到该供应商吗？"
+                }
+                if (actionKey == "update-status") {
+                    return "确定将选中的 " + count.toString(10) + " 个商品修改为该状态吗？"
+                }
+                return "确定执行批量操作吗？"
+            }
+            val batchActionConfirmText = ::gen_batchActionConfirmText_fn
+            fun gen_batchResultMessage_fn(response: ProductBatchActionResponse, fallback: String): String {
+                var message = takeLatestResponseMessage(fallback)
+                if (message == "") {
+                    message = fallback
+                }
+                val summaryObject = parseObject(response.data["summary"])
+                if (summaryObject == null) {
+                    return message
+                }
+                val successCount = numberValue(summaryObject["success_count"])
+                val failureCount = numberValue(summaryObject["failure_count"])
+                val skippedCount = numberValue(summaryObject["skipped_count"])
+                if (failureCount > 0) {
+                    return "成功" + successCount.toString(10) + "，失败" + failureCount.toString(10)
+                }
+                if (skippedCount > 0) {
+                    return "成功" + successCount.toString(10) + "，跳过" + skippedCount.toString(10)
+                }
+                return message
+            }
+            val batchResultMessage = ::gen_batchResultMessage_fn
+            fun gen_batchResultHasIssue_fn(response: ProductBatchActionResponse): Boolean {
+                val summaryObject = parseObject(response.data["summary"])
+                if (summaryObject == null) {
+                    return false
+                }
+                return numberValue(summaryObject["failure_count"]) > 0 || numberValue(summaryObject["skipped_count"]) > 0
+            }
+            val batchResultHasIssue = ::gen_batchResultHasIssue_fn
+            fun gen_executeProductBatchAction_fn(actionKey: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (batchSubmitting.value || !ensureBatchSelection()) {
+                            return@w1
+                        }
+                        val ids = selectedProductIdsSnapshot()
+                        batchSubmitting.value = true
+                        try {
+                            var response: ProductBatchActionResponse? = null
+                            if (actionKey == "delete") {
+                                response = await(batchDeleteProducts(ids))
+                            } else if (actionKey == "update-category") {
+                                response = await(batchUpdateProductCategory(ids, batchCategoryValue.value))
+                            } else if (actionKey == "update-supplier") {
+                                response = await(batchUpdateProductSupplier(ids, batchSupplierValue.value))
+                            } else if (actionKey == "update-status") {
+                                response = await(batchUpdateProductStatus(ids, batchStatusValue.value))
+                            } else {
+                                uni_showToast(ShowToastOptions(title = "暂不支持该操作", icon = "none", duration = 3500))
+                                return@w1
+                            }
+                            val fallbackMessage = batchActionTitle(actionKey) + "成功"
+                            var resultMessage = fallbackMessage
+                            var resultIcon = "success"
+                            if (response != null) {
+                                val batchResponse = response as ProductBatchActionResponse
+                                resultMessage = batchResultMessage(batchResponse, fallbackMessage)
+                                if (batchResultHasIssue(batchResponse)) {
+                                    resultIcon = "none"
+                                }
+                            }
+                            uni_showToast(ShowToastOptions(title = resultMessage, icon = resultIcon))
+                            batchEditorVisible.value = false
+                            batchEditorType.value = ""
+                            resetBatchDraft()
+                            clearSelectionState()
+                            loadProducts()
+                        }
+                         catch (error: Throwable) {
+                            showErrorToast(parseErrorMessage(error))
+                        }
+                         finally {
+                            batchSubmitting.value = false
+                        }
+                })
+            }
+            val executeProductBatchAction = ::gen_executeProductBatchAction_fn
+            fun gen_confirmProductBatchAction_fn(actionKey: String) {
+                if (!ensureBatchSelection()) {
+                    return
+                }
+                val count = selectedProductIds.value.length
+                uni_showModal(ShowModalOptions(title = batchActionTitle(actionKey), content = batchActionConfirmText(actionKey, count), success = fun(res){
+                    if (!res.confirm) {
+                        return
+                    }
+                    executeProductBatchAction(actionKey)
+                }
+                ))
+            }
+            val confirmProductBatchAction = ::gen_confirmProductBatchAction_fn
+            fun gen_openBatchEditor_fn(actionKey: String) {
+                if (!ensureBatchSelection()) {
+                    return
+                }
+                resetBatchDraft()
+                batchEditorType.value = actionKey
+                batchEditorVisible.value = true
+            }
+            val openBatchEditor = ::gen_openBatchEditor_fn
+            fun gen_closeBatchEditor_fn() {
+                if (batchSubmitting.value) {
+                    return
+                }
+                batchEditorVisible.value = false
+                batchEditorType.value = ""
+                resetBatchDraft()
+            }
+            val closeBatchEditor = ::gen_closeBatchEditor_fn
+            fun gen_handleBatchCategoryChange_fn(payload: UTSJSONObject) {
+                batchCategoryValue.value = stringValue(payload["value"])
+                batchCategoryText.value = stringValue(payload["text"])
+            }
+            val handleBatchCategoryChange = ::gen_handleBatchCategoryChange_fn
+            fun gen_handleBatchSupplierChange_fn(payload: UTSJSONObject) {
+                batchSupplierValue.value = stringValue(payload["value"])
+                batchSupplierText.value = stringValue(payload["text"])
+            }
+            val handleBatchSupplierChange = ::gen_handleBatchSupplierChange_fn
+            fun gen_selectBatchStatus_fn(option: ProductStatusOption) {
+                batchStatusValue.value = option.value
+                batchStatusText.value = option.text
+            }
+            val selectBatchStatus = ::gen_selectBatchStatus_fn
+            fun gen_isBatchStatusSelected_fn(option: ProductStatusOption): Boolean {
+                return batchStatusValue.value == option.value
+            }
+            val isBatchStatusSelected = ::gen_isBatchStatusSelected_fn
+            fun gen_validateBatchEditor_fn(): Boolean {
+                if (batchEditorType.value == "update-category" && batchCategoryValue.value == "") {
+                    uni_showToast(ShowToastOptions(title = "请选择分类", icon = "none", duration = 3500))
+                    return false
+                }
+                if (batchEditorType.value == "update-supplier" && batchSupplierValue.value == "") {
+                    uni_showToast(ShowToastOptions(title = "请选择供应商", icon = "none", duration = 3500))
+                    return false
+                }
+                if (batchEditorType.value == "update-status" && batchStatusValue.value == "") {
+                    uni_showToast(ShowToastOptions(title = "请选择状态", icon = "none", duration = 3500))
+                    return false
+                }
+                return true
+            }
+            val validateBatchEditor = ::gen_validateBatchEditor_fn
+            fun gen_confirmBatchEditor_fn() {
+                if (batchEditorType.value == "" || !validateBatchEditor()) {
+                    return
+                }
+                confirmProductBatchAction(batchEditorType.value)
+            }
+            val confirmBatchEditor = ::gen_confirmBatchEditor_fn
+            fun gen_handleBatchToolbarAction_fn(payload: UTSJSONObject) {
+                val actionValue = payload["action"]
+                if (actionValue == null) {
+                    return
+                }
+                val action = actionValue as UTSJSONObject
+                val actionKey = stringValue(action["key"])
+                if (actionKey == "delete") {
+                    confirmProductBatchAction(actionKey)
+                    return
+                }
+                if (actionKey == "update-category" || actionKey == "update-supplier" || actionKey == "update-status") {
+                    openBatchEditor(actionKey)
+                }
+            }
+            val handleBatchToolbarAction = ::gen_handleBatchToolbarAction_fn
             fun gen_buildProductTags_fn(item: ProductItem): UTSArray<String> {
                 val result: UTSArray<String> = _uA()
                 if (item.is_new) {
@@ -576,7 +861,7 @@ open class GenPagesTabbarProducts : BasePage {
             fun gen_productToListItem_fn(item: ProductItem): UTSJSONObject {
                 val images = buildImages(item)
                 val previewImages = buildPreviewImages(item)
-                return _uO("id" to item.id.toString(10), "name" to productDisplayName(item), "name_en" to getDisplayText(item.name_en), "name_other" to getDisplayText(item.name_other), "sku" to getDisplayText(item.sku), "skuText" to ("SKU：" + getDisplayText(item.sku)), "barcode" to getDisplayText(item.barcode), "barcodeText" to ("条码：" + getDisplayText(item.barcode)), "foreignNameText" to getDisplayText(item.name_en), "otherNameText" to getDisplayText(item.name_other), "supplierText" to getDisplayText(item.supplier_name), "purchasePriceText" to getDisplayText(item.purchase_price), "netPurchasePriceText" to getDisplayText(item.net_purchase_price), "costPriceText" to getDisplayText(item.cost_price), "salesPriceText" to getDisplayText(item.base_sales_price), "salesCountText" to item.total_sales_quantity.toString(10), "variantCountText" to item.variant_count.toString(10), "updatedText" to getDisplayText(item.updated_at), "cover" to if (images.length > 0) {
+                return _uO("id" to item.id.toString(10), "name" to productDisplayName(item), "name_en" to getDisplayText(item.name_en), "name_other" to getDisplayText(item.name_other), "sku" to getDisplayText(item.sku), "skuText" to ("SKU：" + getDisplayText(item.sku)), "barcode" to getDisplayText(item.barcode), "barcodeText" to ("条码：" + getDisplayText(item.barcode)), "foreignNameText" to getDisplayText(item.name_en), "otherNameText" to getDisplayText(item.name_other), "supplierText" to item.supplier_name, "stockQuantityText" to item.total_stock_quantity.toString(10), "purchasePriceText" to item.purchase_price, "netPurchasePriceText" to item.net_purchase_price, "costPriceText" to item.cost_price, "salesPriceText" to getDisplayText(item.base_sales_price), "salesCountText" to item.total_sales_quantity.toString(10), "variantCountText" to item.variant_count.toString(10), "updatedText" to getDisplayText(item.updated_at), "cover" to if (images.length > 0) {
                     images[0]
                 } else {
                     ""
@@ -591,7 +876,7 @@ open class GenPagesTabbarProducts : BasePage {
             val productToListItem = ::gen_productToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -633,7 +918,7 @@ open class GenPagesTabbarProducts : BasePage {
                     } else {
                         res.errMsg
                     }
-                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                 }
                 ))
             }
@@ -764,6 +1049,10 @@ open class GenPagesTabbarProducts : BasePage {
                 setSelectedFilterValue(param, nextValues.join(","))
             }
             val toggleFilterOption = ::gen_toggleFilterOption_fn
+            fun gen_selectSortOption_fn(option: ProductSortOption) {
+                sortOrdering.value = option.value
+            }
+            val selectSortOption = ::gen_selectSortOption_fn
             fun gen_handlePageChange_fn(payload: UTSJSONObject) {
                 val pageValue = payload["page"]
                 if (pageValue == null) {
@@ -782,6 +1071,7 @@ open class GenPagesTabbarProducts : BasePage {
                 supplierFilterValue.value = ""
                 supplierFilterText.value = ""
                 categoryFilterValues.value = _uA()
+                sortOrdering.value = "-updated_at"
                 keyword.value = ""
                 currentPage.value = 1
                 closeFilterDrawer()
@@ -796,7 +1086,7 @@ open class GenPagesTabbarProducts : BasePage {
             val applySelectedFilters = ::gen_applySelectedFilters_fn
             fun gen_handleItemClick_fn(payload: UTSJSONObject) {
                 val itemName = stringValue(payload["name"], "商品")
-                uni_showToast(ShowToastOptions(title = itemName, icon = "none"))
+                uni_showToast(ShowToastOptions(title = itemName, icon = "none", duration = 3500))
             }
             val handleItemClick = ::gen_handleItemClick_fn
             fun gen_handleSubtitleClick_fn(payload: UTSJSONObject) {
@@ -861,13 +1151,13 @@ open class GenPagesTabbarProducts : BasePage {
             fun gen_navigateToProductInventory_fn(item: UTSJSONObject) {
                 val rawId = stringValue(item["rawId"], stringValue(item["id"]))
                 if (rawId == "") {
-                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none", duration = 3500))
                     return
                 }
                 val productName = stringValue(item["name"])
                 var url = "/pages/inventory-management/from?product=" + rawId
                 if (productName != "") {
-                    url = url + "&productName=" + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1048")
+                    url = url + "&productName=" + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1461")
                 }
                 uni_navigateTo(NavigateToOptions(url = url))
             }
@@ -895,6 +1185,15 @@ open class GenPagesTabbarProducts : BasePage {
                         return
                     }
                     uni_navigateTo(NavigateToOptions(url = "/pages/products/from?id=" + rawId))
+                    return
+                }
+                if (key == "copy-product") {
+                    val rawId = stringValue(item["rawId"])
+                    if (rawId == "") {
+                        uni_showToast(ShowToastOptions(title = "缺少商品ID", icon = "none", duration = 3500))
+                        return
+                    }
+                    uni_navigateTo(NavigateToOptions(url = "/pages/products/from?copy_id=" + rawId))
                     return
                 }
                 if (key == "inventory") {
@@ -931,6 +1230,18 @@ open class GenPagesTabbarProducts : BasePage {
                 return result
             }
             )
+            val batchInfoText = computed(fun(): String {
+                return "已选 " + selectedCountText() + " 个商品"
+            }
+            )
+            val batchEditorTitle = computed(fun(): String {
+                return batchActionTitle(batchEditorType.value)
+            }
+            )
+            val batchEditorSubtitle = computed(fun(): String {
+                return "当前已选 " + selectedCountText() + " 个商品"
+            }
+            )
             val summaryItems = computed(fun(): UTSArray<UTSJSONObject> {
                 return _uA(
                     _uO("key" to "total", "label" to "商品总数", "value" to totalCount.value.toString(10)),
@@ -940,7 +1251,7 @@ open class GenPagesTabbarProducts : BasePage {
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
-                return keyword.value != "" || selectedFilters.value.length > 0
+                return keyword.value != "" || selectedFilters.value.length > 0 || sortOrdering.value != "-updated_at"
             }
             )
             val emptyText = computed(fun(): String {
@@ -1029,6 +1340,7 @@ open class GenPagesTabbarProducts : BasePage {
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass)
+                val _component_page_container = resolveComponent("page-container")
                 return _cE("view", _uM("class" to "page"), _uA(
                     _cV(_component_lili_universal_filter, _uM("title" to "商品", "searchPlaceholder" to "输入商品名称、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to false, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to false, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
                         return _uA(
@@ -1050,6 +1362,32 @@ open class GenPagesTabbarProducts : BasePage {
                                                 _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("values" to unref(categoryFilterValues), "title" to "选择分类", "placeholder" to "请选择分类", "searchPlaceholder" to "请输入分类名称", "emptyText" to "暂无分类", "tree" to true, "multiple" to true, "checkStrictly" to false, "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchCategoryFilterOptions, "onMultiChange" to handleCategoryMultiChange), null, 8, _uA(
                                                     "values"
                                                 ))
+                                            ))
+                                        )),
+                                        _cE("view", _uM("class" to "product-filter-select-group"), _uA(
+                                            _cE("text", _uM("class" to "product-filter-select-title"), "排序"),
+                                            _cE("view", _uM("class" to "product-filter-options"), _uA(
+                                                _cE(Fragment, null, RenderHelpers.renderList(unref(productSortOptions), fun(option, __key, __index, _cached): Any {
+                                                    return _cE("view", _uM("key" to option.value, "class" to _nC(if (unref(sortOrdering) == option.value) {
+                                                        "product-filter-option product-filter-option-active"
+                                                    } else {
+                                                        "product-filter-option"
+                                                    }
+                                                    ), "onClick" to fun(){
+                                                        selectSortOption(option)
+                                                    }
+                                                    ), _uA(
+                                                        _cE("text", _uM("class" to _nC(if (unref(sortOrdering) == option.value) {
+                                                            "product-filter-option-text product-filter-option-text-active"
+                                                        } else {
+                                                            "product-filter-option-text"
+                                                        }
+                                                        )), _tD(option.text), 3)
+                                                    ), 10, _uA(
+                                                        "onClick"
+                                                    ))
+                                                }
+                                                ), 128)
                                             ))
                                         )),
                                         if (isTrue(unref(filterOptionsLoading))) {
@@ -1126,7 +1464,7 @@ open class GenPagesTabbarProducts : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "skuText", "metaField" to "barcodeText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载商品", "keepContentOnLoading" to true, "inlineLoadingText" to "商品数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "商品概览", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增商品", "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleFloatingAdd), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "name", "subtitleField" to "skuText", "metaField" to "barcodeText", "imageField" to "cover", "imageListField" to "images", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载商品", "keepContentOnLoading" to true, "inlineLoadingText" to "商品数据刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "selectionMode" to unref(selectionMode), "selectedItems" to unref(selectedProductIds), "batchActions" to unref(batchToolbarActions), "batchInfoText" to batchInfoText.value, "summaryTitle" to "商品概览", "summaryItems" to summaryItems.value, "summaryCollapsedByDefault" to true, "showFloatingAdd" to true, "floatingAddText" to "新增商品", "onUpdate:selectionMode" to handleSelectionModeChange, "onUpdate:selectedItems" to handleSelectedProductIdsChange, "onSelectionExit" to handleSelectionExit, "onBatchAction" to handleBatchToolbarAction, "onItemClick" to handleItemClick, "onSubtitleClick" to handleSubtitleClick, "onMetaClick" to handleMetaClick, "onFieldClick" to handleFieldClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleFloatingAdd), null, 8, _uA(
                                 "items",
                                 "tagColorMap",
                                 "fields",
@@ -1136,10 +1474,93 @@ open class GenPagesTabbarProducts : BasePage {
                                 "currentPage",
                                 "totalPages",
                                 "totalCount",
+                                "selectionMode",
+                                "selectedItems",
+                                "batchActions",
+                                "batchInfoText",
                                 "summaryItems"
                             ))
                         ))
-                    ), 4)
+                    ), 4),
+                    _cV(_component_page_container, _uM("show" to unref(batchEditorVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 240, "overlay-style" to "background-color: rgba(15, 23, 42, 0.42);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closeBatchEditor), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "batch-panel"), _uA(
+                                _cE("view", _uM("class" to "batch-handle")),
+                                _cE("view", _uM("class" to "batch-head"), _uA(
+                                    _cE("view", null, _uA(
+                                        _cE("text", _uM("class" to "batch-title"), _tD(batchEditorTitle.value), 1),
+                                        _cE("text", _uM("class" to "batch-subtitle"), _tD(batchEditorSubtitle.value), 1)
+                                    )),
+                                    _cE("view", _uM("class" to "batch-close", "onClick" to closeBatchEditor), _uA(
+                                        _cE("text", _uM("class" to "batch-close-text"), "关闭")
+                                    ))
+                                )),
+                                if (unref(batchEditorType) == "update-category") {
+                                    _cE("view", _uM("key" to 0, "class" to "batch-field"), _uA(
+                                        _cE("text", _uM("class" to "batch-label"), "目标分类"),
+                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to unref(batchCategoryValue), "valueText" to unref(batchCategoryText), "title" to "批量修改分类", "placeholder" to "请选择分类", "searchPlaceholder" to "请输入分类名称", "emptyText" to "暂无分类", "tree" to true, "checkStrictly" to false, "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchCategoryFilterOptions, "onChange" to handleBatchCategoryChange), null, 8, _uA(
+                                            "value",
+                                            "valueText"
+                                        ))
+                                    ))
+                                } else {
+                                    if (unref(batchEditorType) == "update-supplier") {
+                                        _cE("view", _uM("key" to 1, "class" to "batch-field"), _uA(
+                                            _cE("text", _uM("class" to "batch-label"), "目标供应商"),
+                                            _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to unref(batchSupplierValue), "valueText" to unref(batchSupplierText), "title" to "批量修改供应商", "placeholder" to "请选择供应商", "searchPlaceholder" to "请输入供应商名称", "emptyText" to "暂无供应商", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchSupplierFilterOptions, "onChange" to handleBatchSupplierChange), null, 8, _uA(
+                                                "value",
+                                                "valueText"
+                                            ))
+                                        ))
+                                    } else {
+                                        if (unref(batchEditorType) == "update-status") {
+                                            _cE("view", _uM("key" to 2, "class" to "batch-field"), _uA(
+                                                _cE("text", _uM("class" to "batch-label"), "目标状态"),
+                                                _cE("view", _uM("class" to "batch-status-options"), _uA(
+                                                    _cE(Fragment, null, RenderHelpers.renderList(unref(productStatusOptions), fun(option, __key, __index, _cached): Any {
+                                                        return _cE("view", _uM("key" to option.value, "class" to _nC(if (isBatchStatusSelected(option)) {
+                                                            "batch-status-option batch-status-option-active"
+                                                        } else {
+                                                            "batch-status-option"
+                                                        }), "onClick" to fun(){
+                                                            selectBatchStatus(option)
+                                                        }), _uA(
+                                                            _cE("text", _uM("class" to _nC(if (isBatchStatusSelected(option)) {
+                                                                "batch-status-option-text batch-status-option-text-active"
+                                                            } else {
+                                                                "batch-status-option-text"
+                                                            })), _tD(option.text), 3)
+                                                        ), 10, _uA(
+                                                            "onClick"
+                                                        ))
+                                                    }), 128)
+                                                ))
+                                            ))
+                                        } else {
+                                            _cC("v-if", true)
+                                        }
+                                    }
+                                }
+                                ,
+                                _cE("view", _uM("class" to "batch-actions"), _uA(
+                                    _cE("view", _uM("class" to "batch-secondary-btn", "onClick" to closeBatchEditor), _uA(
+                                        _cE("text", _uM("class" to "batch-secondary-text"), "取消")
+                                    )),
+                                    _cE("view", _uM("class" to "batch-primary-btn", "onClick" to confirmBatchEditor), _uA(
+                                        _cE("text", _uM("class" to "batch-primary-text"), _tD(if (unref(batchSubmitting)) {
+                                            "处理中..."
+                                        } else {
+                                            "确认修改"
+                                        }
+                                        ), 1)
+                                    ))
+                                ))
+                            ))
+                        )
+                    }
+                    ), "_" to 1), 8, _uA(
+                        "show"
+                    ))
                 ))
             }
         }
@@ -1150,7 +1571,7 @@ open class GenPagesTabbarProducts : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "paddingLeft" to 18, "paddingRight" to 18, "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#B42318", "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")), "product-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "product-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "product-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "product-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "product-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "product-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "product-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "product-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "product-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "product-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "product-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "product-filter-groups" to _pS(_uM("marginBottom" to 6)), "product-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "product-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "product-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "product-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "product-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "product-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "marginTop" to 0, "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingLeft" to 6, "paddingRight" to 6, "paddingTop" to 6, "paddingBottom" to 96)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 14, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "paddingLeft" to 18, "paddingRight" to 18, "borderTopLeftRadius" to 20, "borderTopRightRadius" to 20, "borderBottomRightRadius" to 20, "borderBottomLeftRadius" to 20, "backgroundColor" to "#B42318", "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")), "product-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "product-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "product-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "product-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "product-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "product-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "product-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "product-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "product-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "product-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "product-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "product-filter-groups" to _pS(_uM("marginBottom" to 6)), "product-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "product-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "product-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "product-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "product-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "product-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "product-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "product-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "marginTop" to 0, "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "batch-panel" to _pS(_uM("paddingLeft" to 18, "paddingRight" to 18, "paddingTop" to 10, "paddingBottom" to 22, "backgroundColor" to "#FFFFFF")), "batch-handle" to _pS(_uM("width" to 42, "height" to 4, "borderTopLeftRadius" to 2, "borderTopRightRadius" to 2, "borderBottomRightRadius" to 2, "borderBottomLeftRadius" to 2, "backgroundColor" to "#CBD5E1", "alignSelf" to "center", "marginBottom" to 14)), "batch-head" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between", "marginBottom" to 18)), "batch-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "bold")), "batch-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B", "marginTop" to 3)), "batch-close" to _pS(_uM("height" to 32, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 16, "borderTopRightRadius" to 16, "borderBottomRightRadius" to 16, "borderBottomLeftRadius" to 16, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "batch-close-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#475569")), "batch-field" to _pS(_uM("marginBottom" to 16)), "batch-label" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold", "marginBottom" to 8)), "batch-status-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap")), "batch-status-option" to _pS(_uM("height" to 36, "minWidth" to 72, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 18, "borderTopRightRadius" to 18, "borderBottomRightRadius" to 18, "borderBottomLeftRadius" to 18, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 8, "marginBottom" to 8)), "batch-status-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "batch-status-option-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#334155")), "batch-status-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "batch-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 4)), "batch-secondary-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 42, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 10)), "batch-primary-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 42, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#0F172A")), "batch-secondary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#475569", "fontWeight" to "bold")), "batch-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

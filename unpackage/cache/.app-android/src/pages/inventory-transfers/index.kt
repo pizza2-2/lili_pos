@@ -82,13 +82,9 @@ open class GenPagesInventoryTransfersIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:231")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:230")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -119,7 +115,7 @@ open class GenPagesInventoryTransfersIndex : BasePage {
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:252")
+                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:251")
                 }
                  catch (error: Throwable) {
                     return null
@@ -140,7 +136,7 @@ open class GenPagesInventoryTransfersIndex : BasePage {
                 }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:266")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:265")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -231,7 +227,7 @@ open class GenPagesInventoryTransfersIndex : BasePage {
             fun gen_buildOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val pageValue = intValue(params["page"])
                 val pageSizeValue = intValue(params["pageSize"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 326, 8), "page" to if (pageValue <= 0) {
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 325, 8), "page" to if (pageValue <= 0) {
                     1
                 } else {
                     pageValue
@@ -292,7 +288,7 @@ open class GenPagesInventoryTransfersIndex : BasePage {
             val compactDate = ::gen_compactDate_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -516,7 +512,7 @@ open class GenPagesInventoryTransfersIndex : BasePage {
                             loadItems()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "操作失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "操作失败"))
                         }
                 })
             }

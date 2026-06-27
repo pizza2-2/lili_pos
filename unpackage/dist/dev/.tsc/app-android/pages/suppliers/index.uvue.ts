@@ -3,6 +3,7 @@ import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/compon
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierMediaFile, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -78,7 +79,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:201")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/index.uvue:202")
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
@@ -142,7 +143,7 @@ function fieldStringFromObject(obj: UTSJSONObject, key: string) : string {
 
 function batchActionCandidatesFromSupplier(item: SupplierItem) : string[] {
 	const rawItemText = JSON.stringify(item)
-	const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:265")
+	const rawItem = rawItemText == null || rawItemText == '' ? null : UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawItemText), " at pages/suppliers/index.uvue:266")
 	if (rawItem == null) {
 		return []
 	}
@@ -151,7 +152,7 @@ function batchActionCandidatesFromSupplier(item: SupplierItem) : string[] {
 		return []
 	}
 	const text = JSON.stringify(rawActions)
-	const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:274")
+	const parsed = text == null || text == '' ? null : UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/suppliers/index.uvue:275")
 	if (parsed == null) {
 		return []
 	}
@@ -204,7 +205,7 @@ async function loadSuppliers() {
 			is_active: selectedIsActive.value,
 			has_arrears: selectedHasArrears.value,
 		})
-		console.log(response, " at pages/suppliers/index.uvue:327")
+		console.log(response, " at pages/suppliers/index.uvue:328")
 		applySupplierResponse(response)
 	} catch (error) {
 		suppliers.value = []
@@ -265,7 +266,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 	if (ids.length == 0) {
 		uni.showToast({
 			title: '请先选择供应商',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -279,7 +280,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 		} else {
 			uni.showToast({
 				title: '暂不支持该操作',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -291,10 +292,7 @@ async function executeSupplierBatchAction(actionKey: string) {
 		loadSuppliers()
 		loadSupplierGlobalStatistics()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -317,7 +315,7 @@ function openSupplierBatchActionSheet() {
 	if (availableActions.length == 0) {
 		uni.showToast({
 			title: '暂无可执行操作',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -479,7 +477,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -590,7 +588,7 @@ function handleItemClick(payload: UTSJSONObject) {
 	const text = name == null ? '供应商' : (name as string)
 	uni.showToast({
 		title: text,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -665,10 +663,7 @@ async function confirmDeleteSupplier(supplierId: string) {
 		})
 		loadSuppliers()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -676,14 +671,14 @@ function navigateToTransactionsPage(pagePath: string, supplierId: string, suppli
 	if (supplierId == '') {
 		uni.showToast({
 			title: '供应商ID缺失',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
 
 	let url = pagePath + '?supplier_id=' + supplierId
 	if (supplierName != '' && pagePath.indexOf('/pages/transactions/index') >= 0) {
-		url = url + '&supplier_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(supplierName), " at pages/suppliers/index.uvue:806")
+		url = url + '&supplier_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(supplierName), " at pages/suppliers/index.uvue:801")
 	}
 
 	uni.navigateTo({
@@ -753,7 +748,7 @@ function handleMenu(payload: UTSJSONObject) {
 		if (phoneText == '' || phoneText == '-') {
 			uni.showToast({
 				title: '暂无电话',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}

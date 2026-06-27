@@ -4,9 +4,12 @@ export type KsefInvoiceListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	supplier: string | null
+	supplier_id: string | null
 	sync_status: string | null
 	is_paid: string | null
 	has_xml: string | null
+	payment_review_status: string | null
 	ordering: string | null
 }
 
@@ -39,6 +42,12 @@ export type KsefInvoiceItem = {
 	paid_amount: string
 	paid_at: string
 	remark: string
+	payment_review_status: string
+	payment_review_status_display: string
+	payment_review_note: string
+	payment_reviewed_by: number
+	payment_reviewed_by_name: string
+	payment_reviewed_at: string
 	sync_status: string
 	raw_xml_downloaded_at: string
 	files_count: number
@@ -76,6 +85,12 @@ export type KsefInvoiceDetail = {
 	paid_amount: string
 	paid_at: string
 	remark: string
+	payment_review_status: string
+	payment_review_status_display: string
+	payment_review_note: string
+	payment_reviewed_by: number
+	payment_reviewed_by_name: string
+	payment_reviewed_at: string
 	sync_status: string
 	raw_xml_downloaded_at: string
 	files_count: number
@@ -96,6 +111,11 @@ export type KsefPaymentUpdateData = {
 	paid_at: string | null
 	payment_note: string
 	remark: string
+}
+
+export type KsefPaymentReviewData = {
+	payment_review_status: string
+	payment_review_note: string
 }
 
 export type KsefVoucherUploadResponse = {
@@ -264,6 +284,12 @@ function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
 	}
+	if (data.supplier != null && data.supplier != '') {
+		query['supplier'] = data.supplier
+	}
+	if (data.supplier_id != null && data.supplier_id != '') {
+		query['supplier_id'] = data.supplier_id
+	}
 	if (data.sync_status != null && data.sync_status != '') {
 		query['sync_status'] = data.sync_status
 	}
@@ -272,6 +298,9 @@ function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 	}
 	if (data.has_xml != null && data.has_xml != '') {
 		query['has_xml'] = data.has_xml
+	}
+	if (data.payment_review_status != null && data.payment_review_status != '') {
+		query['payment_review_status'] = data.payment_review_status
 	}
 	if (data.ordering != null && data.ordering != '') {
 		query['ordering'] = data.ordering
@@ -309,6 +338,12 @@ function buildInvoiceItem(rawObject: UTSJSONObject): KsefInvoiceItem {
 		paid_amount: stringValue(rawObject['paid_amount']),
 		paid_at: stringValue(rawObject['paid_at']),
 		remark: stringValue(rawObject['remark']),
+		payment_review_status: stringValue(rawObject['payment_review_status']),
+		payment_review_status_display: stringValue(rawObject['payment_review_status_display']),
+		payment_review_note: stringValue(rawObject['payment_review_note']),
+		payment_reviewed_by: intValue(rawObject['payment_reviewed_by']),
+		payment_reviewed_by_name: stringValue(rawObject['payment_reviewed_by_name']),
+		payment_reviewed_at: stringValue(rawObject['payment_reviewed_at']),
 		sync_status: stringValue(rawObject['sync_status']),
 		raw_xml_downloaded_at: stringValue(rawObject['raw_xml_downloaded_at']),
 		files_count: intValue(rawObject['files_count']),
@@ -354,6 +389,12 @@ function buildInvoiceDetail(raw: any): KsefInvoiceDetail {
 		paid_amount: item.paid_amount,
 		paid_at: item.paid_at,
 		remark: item.remark,
+		payment_review_status: item.payment_review_status,
+		payment_review_status_display: item.payment_review_status_display,
+		payment_review_note: item.payment_review_note,
+		payment_reviewed_by: item.payment_reviewed_by,
+		payment_reviewed_by_name: item.payment_reviewed_by_name,
+		payment_reviewed_at: item.payment_reviewed_at,
 		sync_status: item.sync_status,
 		raw_xml_downloaded_at: item.raw_xml_downloaded_at,
 		files_count: item.files_count,
@@ -596,6 +637,15 @@ export async function updateKsefInvoicePayment(id: number | string, data: KsefPa
 		remark: data.remark,
 	} as UTSJSONObject
 	const raw = await request(ksefInvoicePath(id) + 'update_payment/', 'PATCH', payload, true)
+	return buildInvoiceDetail(raw)
+}
+
+export async function reviewKsefInvoicePayment(id: number | string, data: KsefPaymentReviewData): Promise<KsefInvoiceDetail> {
+	const payload = {
+		payment_review_status: data.payment_review_status,
+		payment_review_note: data.payment_review_note,
+	} as UTSJSONObject
+	const raw = await request(ksefInvoicePath(id) + 'review-payment/', 'PATCH', payload, true)
 	return buildInvoiceDetail(raw)
 }
 

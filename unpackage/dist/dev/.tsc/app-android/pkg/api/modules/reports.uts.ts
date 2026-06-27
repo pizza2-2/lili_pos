@@ -1,4 +1,4 @@
-import { request } from '../index.uts'
+import { baseUrl, request } from '../index.uts'
 
 export type ReportPeriod = string
 
@@ -52,6 +52,8 @@ export type ReportRankItem = {
 	line_count: number
 	share: string
 	type: string
+	product_image: string
+	product_media_files: UTSJSONObject[]
 }
 
 export type DashboardReport = {
@@ -64,6 +66,33 @@ export type DashboardReport = {
 	top_kasa_categories: ReportRankItem[]
 	inventory: ReportInventory
 	alerts: ReportAlert[]
+}
+
+export type ProductSalesQuery = {
+	period: ReportPeriod
+	search: string | null
+	ordering: string
+	page: number
+	page_size: number
+}
+
+export type ProductSalesSummary = {
+	sales_amount: string
+	order_count: number
+	product_count: number
+	quantity: string
+	amount: string
+}
+
+export type ProductSalesResponse = {
+	period: UTSJSONObject
+	summary: ProductSalesSummary
+	results: ReportRankItem[]
+	count: number
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
 }
 
 function intValue(value: any | null): number {
@@ -92,6 +121,29 @@ function arrayValue(value: any | null): UTSJSONObject[] {
 	return parsed == null ? ([] as UTSJSONObject[]) : parsed!
 }
 
+function normalizeServerUrl(url: string): string {
+	if (url == '') return ''
+	if (url.startsWith('http://localhost:8000')) return baseUrl + url.substring('http://localhost:8000'.length)
+	if (url.startsWith('https://localhost:8000')) return baseUrl + url.substring('https://localhost:8000'.length)
+	if (url.startsWith('http://127.0.0.1:8000')) return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	if (url.startsWith('https://127.0.0.1:8000')) return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	return url
+}
+
+function buildRankMediaFiles(value: any | null): UTSJSONObject[] {
+	const rows = arrayValue(value)
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		row['file_url'] = normalizeServerUrl(stringValue(row['file_url']))
+		row['thumbnail_url'] = normalizeServerUrl(stringValue(row['thumbnail_url']))
+		row['signed_url'] = normalizeServerUrl(stringValue(row['signed_url']))
+		row['signed_thumbnail_url'] = normalizeServerUrl(stringValue(row['signed_thumbnail_url']))
+		result.push(row)
+	}
+	return result
+}
+
 function rawDataObject(raw: any): UTSJSONObject {
 	const rawText = JSON.stringify(raw)
 	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
@@ -99,7 +151,7 @@ function rawDataObject(raw: any): UTSJSONObject {
 	const dataValue = rawObject!['data']
 	if (dataValue != null) {
 		const dataObject = objectValue(dataValue)
-		if (dataObject['overview'] != null) return dataObject
+		if (dataObject['overview'] != null || dataObject['summary'] != null || dataObject['results'] != null) return dataObject
 	}
 	return rawObject!
 }
@@ -187,9 +239,34 @@ function buildRankItems(value: any | null): ReportRankItem[] {
 			line_count: intValue(row['line_count']),
 			share: stringValue(row['share']),
 			type: stringValue(row['type']),
+			product_image: normalizeServerUrl(stringValue(row['product_image'])),
+			product_media_files: buildRankMediaFiles(row['product_media_files']),
 		} as ReportRankItem)
 	}
 	return result
+}
+
+function buildProductSalesSummary(raw: UTSJSONObject): ProductSalesSummary {
+	return {
+		sales_amount: stringValue(raw['sales_amount']),
+		order_count: intValue(raw['order_count']),
+		product_count: intValue(raw['product_count']),
+		quantity: stringValue(raw['quantity']),
+		amount: stringValue(raw['amount']),
+	} as ProductSalesSummary
+}
+
+function buildProductSalesQuery(query: ProductSalesQuery): UTSJSONObject {
+	const params = {
+		period: query.period,
+		ordering: query.ordering,
+		page: query.page,
+		page_size: query.page_size,
+	} as UTSJSONObject
+	if (query.search != null && query.search != '') {
+		params['search'] = query.search
+	}
+	return params
 }
 
 export function buildDashboardReport(raw: any): DashboardReport {
@@ -207,7 +284,26 @@ export function buildDashboardReport(raw: any): DashboardReport {
 	} as DashboardReport
 }
 
+export function buildProductSalesResponse(raw: any): ProductSalesResponse {
+	const rawObject = rawDataObject(raw)
+	return {
+		period: objectValue(rawObject['period']),
+		summary: buildProductSalesSummary(objectValue(rawObject['summary'])),
+		results: buildRankItems(rawObject['results']),
+		count: intValue(rawObject['count']),
+		total_count: intValue(rawObject['total_count']),
+		total_pages: intValue(rawObject['total_pages']),
+		current_page: intValue(rawObject['current_page']),
+		page_size: intValue(rawObject['page_size']),
+	} as ProductSalesResponse
+}
+
 export async function getDashboardReport(period: ReportPeriod): Promise<DashboardReport> {
 	const raw = await request('/api/reports/dashboard/', 'GET', { period: period } as UTSJSONObject, true)
 	return buildDashboardReport(raw)
+}
+
+export async function getProductSalesReport(query: ProductSalesQuery): Promise<ProductSalesResponse> {
+	const raw = await request('/api/reports/product-sales/', 'GET', buildProductSalesQuery(query), true)
+	return buildProductSalesResponse(raw)
 }

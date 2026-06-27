@@ -3,8 +3,9 @@ import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/compon
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteKasaCategory, getKasaCategoryList, getKasaCategoryStatistics, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryListResponse, KasaCategoryStatisticsResponse, KasaCategoryTaxRatesResponse, patchKasaCategory } from '@/pkg/api/modules/kasa_category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/index.uvue", 135, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/index.uvue", 136, 6>;
 	value: string
 	text: string
 }
@@ -88,13 +89,9 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any): string {
 	let message = '收银分类列表加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:217")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:214")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -351,7 +348,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -477,7 +474,7 @@ async function executeBatchAction(actionKey: string) {
 	if (items.length == 0) {
 		uni.showToast({
 			title: '请先选择收银分类',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -509,10 +506,7 @@ async function executeBatchAction(actionKey: string) {
 		loadKasaCategories()
 		loadStatistics()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -574,10 +568,7 @@ async function confirmDelete(id: string) {
 		loadKasaCategories()
 		loadStatistics()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -593,10 +584,7 @@ async function toggleSingleStatus(id: string, currentActive: boolean) {
 		loadKasaCategories()
 		loadStatistics()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 

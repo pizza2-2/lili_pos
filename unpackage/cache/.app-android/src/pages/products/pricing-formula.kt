@@ -637,12 +637,7 @@ open class GenPagesProductsPricingFormula : BasePage {
             val applyFormula = ::gen_applyFormula_fn
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
-                if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
-                }
+                if (error != null) {}
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
@@ -830,16 +825,16 @@ open class GenPagesProductsPricingFormula : BasePage {
                         val nameText = name.value.trim()
                         val codeText = code.value.trim()
                         if (nameText == "") {
-                            uni_showToast(ShowToastOptions(title = "公式名称不能为空", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "公式名称不能为空", icon = "none", duration = 3500))
                             return@w1
                         }
                         if (codeText == "") {
-                            uni_showToast(ShowToastOptions(title = "公式编码不能为空", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "公式编码不能为空", icon = "none", duration = 3500))
                             return@w1
                         }
                         val expression = resolveSaveExpression()
                         if (expression == "") {
-                            uni_showToast(ShowToastOptions(title = "请完善公式步骤", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请完善公式步骤", icon = "none", duration = 3500))
                             return@w1
                         }
                         submitting.value = true
@@ -852,7 +847,7 @@ open class GenPagesProductsPricingFormula : BasePage {
                             parseWarning.value = ""
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "价格公式保存失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "价格公式保存失败"))
                         }
                          finally {
                             submitting.value = false

@@ -38,8 +38,8 @@ open class GenPagesOrdersIndex : BasePage {
             val filterOptionsError = ref("")
             val filterOptions = ref<OrderFilterOptionsResponse?>(null)
             val selectedFilters = ref(_uA<OrderSelectedFilter>())
-            val datePresetValue = ref("today")
-            val datePresetOptions = ref(_uA<DatePresetOption>(DatePresetOption(key = "today", text = "今天"), DatePresetOption(key = "week", text = "本周"), DatePresetOption(key = "month", text = "本月"), DatePresetOption(key = "year", text = "本年"), DatePresetOption(key = "all", text = "全部")))
+            val datePresetValue = ref("all")
+            val datePresetOptions = ref(_uA<DatePresetOption>(DatePresetOption(key = "all", text = "全部"), DatePresetOption(key = "today", text = "今天"), DatePresetOption(key = "week", text = "本周"), DatePresetOption(key = "month", text = "本月"), DatePresetOption(key = "year", text = "本年")))
             val statistics = ref<OrderStatistics>(OrderStatistics(total_count = 0, inventory_deducted_count = 0, inventory_pending_count = 0, received_count = 0, processed_count = 0, failed_count = 0))
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "shopText", "label" to "店铺:"), _uO("key" to "cashierText", "label" to "收银员:"), _uO("key" to "itemsText", "label" to "商品:"), _uO("key" to "amountDetailText", "label" to "金额:"), _uO("key" to "inventoryText", "label" to "库存:")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "detail", "text" to "详情"), _uO("key" to "copy", "text" to "复制单号")))
@@ -56,13 +56,9 @@ open class GenPagesOrdersIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/index.uvue:191")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/index.uvue:189")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -82,7 +78,7 @@ open class GenPagesOrdersIndex : BasePage {
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -434,7 +430,7 @@ open class GenPagesOrdersIndex : BasePage {
             val handleFilterOpen = ::gen_handleFilterOpen_fn
             fun gen_handleFilterReset_fn() {
                 selectedFilters.value = _uA<OrderSelectedFilter>()
-                datePresetValue.value = "today"
+                datePresetValue.value = "all"
                 filterVisible.value = false
                 reloadFirstPage()
             }
@@ -524,7 +520,7 @@ open class GenPagesOrdersIndex : BasePage {
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
-                return selectedFilters.value.length > 0 || datePresetValue.value != "today"
+                return selectedFilters.value.length > 0 || datePresetValue.value != "all"
             }
             )
             val filterDefinitions = computed(fun(): UTSArray<OrderFilterDefinition> {

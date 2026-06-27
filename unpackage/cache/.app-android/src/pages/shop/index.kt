@@ -50,13 +50,9 @@ open class GenPagesShopIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any): String {
                 var message = "商店列表加载失败"
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:107")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/index.uvue:103")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -132,7 +128,7 @@ open class GenPagesShopIndex : BasePage {
             val shopToListItem = ::gen_shopToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String): Unit {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -145,7 +141,7 @@ open class GenPagesShopIndex : BasePage {
                 if (shopId == "") {
                     return
                 }
-                uni_navigateTo(NavigateToOptions(url = "/pages/shop/media?shop_id=" + shopId + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:208")))
+                uni_navigateTo(NavigateToOptions(url = "/pages/shop/media?shop_id=" + shopId + "&shop_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(shopName), " at pages/shop/index.uvue:204")))
             }
             val goToShopMedia = ::gen_goToShopMedia_fn
             fun gen_consumeShopListRefreshNeeded_fn(): Boolean {
@@ -192,7 +188,7 @@ open class GenPagesShopIndex : BasePage {
             val handlePageChange = ::gen_handlePageChange_fn
             fun gen_handleItemClick_fn(payload: UTSJSONObject): Unit {
                 val itemName = stringValue(payload["name"], "商店")
-                uni_showToast(ShowToastOptions(title = itemName, icon = "none"))
+                uni_showToast(ShowToastOptions(title = itemName, icon = "none", duration = 3500))
             }
             val handleItemClick = ::gen_handleItemClick_fn
             fun gen_handleSubtitleClick_fn(payload: UTSJSONObject): Unit {

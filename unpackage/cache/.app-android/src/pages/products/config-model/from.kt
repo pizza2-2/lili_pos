@@ -94,12 +94,7 @@ open class GenPagesProductsConfigModelFrom : BasePage {
             val goBackToList = ::gen_goBackToList_fn
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
-                if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
-                }
+                if (error != null) {}
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
@@ -186,7 +181,7 @@ open class GenPagesProductsConfigModelFrom : BasePage {
                             initialData.value = normalizeDetail(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, resourceTitle() + "详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, resourceTitle() + "详情加载失败"))
                         }
                 })
             }
@@ -274,7 +269,7 @@ open class GenPagesProductsConfigModelFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "保存失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "保存失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -311,11 +306,11 @@ open class GenPagesProductsConfigModelFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "请先到属性类型页面新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请先到属性类型页面新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "请先到属性类型页面编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请先到属性类型页面编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             val homePath = computed(fun(): String {

@@ -81,28 +81,28 @@ const __sfc__ = defineComponent({
             if (item.key == 'book') {
                 uni.showToast({
                     title: '账本管理待接入',
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
                 return;
             }
             if (item.key == 'service') {
                 uni.showToast({
                     title: '联系客服待接入',
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
                 return;
             }
             if (item.key == 'share') {
                 uni.showToast({
                     title: '分享应用待接入',
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
                 return;
             }
             if (item.key == 'desktop') {
                 uni.showToast({
                     title: '添加桌面待接入',
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
             }
         }

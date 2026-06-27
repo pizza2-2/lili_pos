@@ -4,6 +4,7 @@ export type ProductListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	ordering: string
 	filters: ProductSelectedFilter[]
 }
 
@@ -41,6 +42,7 @@ export type ProductItem = {
 	description: string
 	media_files: ProductMediaFile[]
 	category: any | null
+	category_kasa_kod: string
 	supplier: number | null
 	supplier_name: string
 	purchase_price: string
@@ -271,6 +273,9 @@ function buildListQuery(data: ProductListQuery): UTSJSONObject {
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
 	}
+	if (data.ordering != '') {
+		query['ordering'] = data.ordering
+	}
 
 	for (let filterIndex = 0; filterIndex < data.filters.length; filterIndex += 1) {
 		const filter = data.filters[filterIndex]
@@ -474,6 +479,7 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		description: stringValue(rawObject['description']),
 		media_files: buildProductMediaFilesFromValue(rawObject['media_files']),
 		category: rawObject['category'],
+		category_kasa_kod: stringValue(rawObject['category_kasa_kod']),
 		supplier: rawObject['supplier'] == null ? null : intValue(rawObject['supplier']),
 		supplier_name: stringValue(rawObject['supplier_name']),
 		purchase_price: stringValue(rawObject['purchase_price']),

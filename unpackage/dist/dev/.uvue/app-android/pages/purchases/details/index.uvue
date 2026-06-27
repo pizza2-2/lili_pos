@@ -2,12 +2,15 @@ import { PurchaseDetailListQuery } from "../../../pkg/api/modules/purchases";
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue';
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue';
 import { computed } from 'vue';
-import { takeLatestResponseMessage } from '@/pkg/api/index.uts';
+import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue';
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts';
+import { batchUpdateProductCategory, ProductBatchActionResponse } from '@/pkg/api/modules/products.uts';
+import { showErrorToast } from '@/pkg/util/toast.uts';
 import { checkPurchaseProduct, deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts';
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan';
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key';
 type PurchaseDetailSelectedFilter = {
-    __$originalPosition?: UTSSourceMapPosition<"PurchaseDetailSelectedFilter", "pages/purchases/details/index.uvue", 123, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"PurchaseDetailSelectedFilter", "pages/purchases/details/index.uvue", 188, 6>;
     param: string;
     value: string;
 };
@@ -39,6 +42,12 @@ const __sfc__ = defineComponent({
         const filterContentHeight = ref(356);
         const volumeScanLocked = ref(false);
         const scanLookupRunning = ref(false);
+        const selectionMode = ref(false);
+        const selectedDetailIds = ref<string[]>([]);
+        const batchCategoryVisible = ref(false);
+        const batchSubmitting = ref(false);
+        const batchCategoryValue = ref('');
+        const batchCategoryText = ref('');
         let volumeKeyStartTimer = 0;
         const fieldConfig = ref<UTSJSONObject[]>([
             { key: 'skuText', label: 'SKU:' } as UTSJSONObject,
@@ -50,6 +59,9 @@ const __sfc__ = defineComponent({
             { key: 'receive', text: '收货' } as UTSJSONObject,
             { key: 'delete', text: '删除' } as UTSJSONObject,
         ]);
+        const batchToolbarActions = ref<UTSJSONObject[]>([
+            { key: 'update-category', text: '改分类' } as UTSJSONObject,
+        ]);
         function stringValue(value: any | null, fallback: string = ''): string {
             if (value == null)
                 return fallback;
@@ -58,28 +70,72 @@ const __sfc__ = defineComponent({
                 return fallback;
             return text;
         }
-        function parseErrorMessage(error: any, fallback: string): string {
-            let message = fallback;
-            if (error != null) {
-                const directMessage = (error as Error).message;
-                if (directMessage != null && directMessage != '')
-                    message = directMessage;
-                const errorText = JSON.stringify(error);
-                if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:178");
-                    if (parsedError != null) {
-                        const rawMessage = parsedError['message'];
-                        if (rawMessage != null) {
-                            const parsedMessage = rawMessage as string;
-                            if (parsedMessage != '')
-                                message = parsedMessage;
-                        }
-                    }
-                    if (message == fallback)
-                        message = errorText;
+        function booleanValue(value: any | null): boolean {
+            if (value == null)
+                return false;
+            const text = ('' + value).toLowerCase();
+            return text == 'true' || text == '1' || text == 'yes';
+        }
+        function numberValue(value: any | null): number {
+            if (value == null)
+                return 0;
+            const parsed = parseInt('' + value);
+            if (isNaN(parsed))
+                return 0;
+            return parsed;
+        }
+        function parseObject(value: any | null): UTSJSONObject | null {
+            if (value == null)
+                return null;
+            const text = JSON.stringify(value);
+            if (text == null || text == '')
+                return null;
+            return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/details/index.uvue:263");
+        }
+        function parseObjectArray(value: any | null): UTSJSONObject[] {
+            if (value == null)
+                return [] as UTSJSONObject[];
+            const text = JSON.stringify(value);
+            if (text == null || text == '')
+                return [] as UTSJSONObject[];
+            const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/details/index.uvue:270");
+            if (parsed == null)
+                return [] as UTSJSONObject[];
+            return parsed!;
+        }
+        function normalizeErrorText(text: string): string {
+            if (text.startsWith('Error: '))
+                return text.substring(7);
+            return text;
+        }
+        function readErrorMessageFromObject(errorObject: UTSJSONObject): string {
+            const keys: string[] = ['message', 'detail', 'error', 'errMsg', 'msg'];
+            for (let index = 0; index < keys.length; index += 1) {
+                const rawMessage = errorObject[keys[index]];
+                if (rawMessage != null) {
+                    const message = normalizeErrorText(stringValue(rawMessage));
+                    if (message != '')
+                        return message;
                 }
             }
-            return message;
+            return '';
+        }
+        function parseErrorMessage(error: any, fallback: string): string {
+            if (error == null)
+                return fallback;
+            const directText = normalizeErrorText(stringValue(error));
+            if (directText != '' && directText != '[object Object]' && directText != '{}')
+                return directText;
+            const errorText = JSON.stringify(error);
+            if (errorText == null || errorText == '' || errorText == '{}')
+                return fallback;
+            const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:298");
+            if (parsedError != null) {
+                const parsedMessage = readErrorMessageFromObject(parsedError);
+                if (parsedMessage != '')
+                    return parsedMessage;
+            }
+            return errorText;
         }
         function updateFilterPanelLayout() {
             const info = uni.getWindowInfo();
@@ -139,6 +195,114 @@ const __sfc__ = defineComponent({
             }
             return result;
         }
+        function extractCategoryTreeSource(value: any | null): UTSJSONObject[] {
+            const rawObject = parseObject(value);
+            if (rawObject == null)
+                return [] as UTSJSONObject[];
+            const groups = parseObjectArray(rawObject['groups']);
+            for (let index = 0; index < groups.length; index += 1) {
+                const group = groups[index];
+                if (stringValue(group['key']) == 'parent') {
+                    return parseObjectArray(group['items']);
+                }
+            }
+            if (groups.length > 0) {
+                return parseObjectArray(groups[0]['items']);
+            }
+            return parseObjectArray(rawObject['items']);
+        }
+        function buildOptionValue(item: UTSJSONObject): string {
+            const directValue = stringValue(item['value']);
+            if (directValue != '')
+                return directValue;
+            const idValue = stringValue(item['id']);
+            if (idValue != '')
+                return idValue;
+            const codeValue = stringValue(item['code']);
+            if (codeValue != '')
+                return codeValue;
+            return stringValue(item['key']);
+        }
+        function buildOptionText(item: UTSJSONObject): string {
+            const textValue = stringValue(item['text']);
+            if (textValue != '')
+                return textValue;
+            const labelValue = stringValue(item['label']);
+            if (labelValue != '')
+                return labelValue;
+            const fullNameValue = stringValue(item['full_name']);
+            if (fullNameValue != '')
+                return fullNameValue;
+            const nameValue = stringValue(item['name']);
+            if (nameValue != '')
+                return nameValue;
+            const nameCn = stringValue(item['name_cn']);
+            if (nameCn != '')
+                return nameCn;
+            return buildOptionValue(item);
+        }
+        function buildTreeSelectItem(item: UTSJSONObject): UTSJSONObject {
+            const rawChildren = parseObjectArray(item['children']);
+            const children: UTSJSONObject[] = [];
+            for (let index = 0; index < rawChildren.length; index += 1) {
+                children.push(buildTreeSelectItem(rawChildren[index]));
+            }
+            const label = stringValue(item['label'], buildOptionText(item));
+            const fullName = stringValue(item['full_name']);
+            return {
+                value: buildOptionValue(item),
+                text: label,
+                label: label,
+                full_name: fullName == '' ? label : fullName,
+                code: stringValue(item['code']),
+                level: stringValue(item['level']),
+                parent_value: stringValue(item['parent_value']),
+                disabled: booleanValue(item['disabled']),
+                has_children: booleanValue(item['has_children']) || children.length > 0,
+                children: children,
+            } as UTSJSONObject;
+        }
+        function buildCategoryTreeResponse(raw: any): UTSJSONObject {
+            let source = extractCategoryTreeSource(raw);
+            if (source.length == 0) {
+                const rawObject = parseObject(raw);
+                if (rawObject != null) {
+                    let items = parseObjectArray(rawObject['items']);
+                    if (items.length == 0)
+                        items = parseObjectArray(rawObject['results']);
+                    if (items.length == 0)
+                        items = parseObjectArray(rawObject['data']);
+                    source = items;
+                }
+            }
+            const result: UTSJSONObject[] = [];
+            for (let index = 0; index < source.length; index += 1) {
+                result.push(buildTreeSelectItem(source[index]));
+            }
+            return {
+                data: result,
+                total: result.length,
+            } as UTSJSONObject;
+        }
+        async function fetchCategoryOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+            const keywordValue = stringValue(params['keyword']);
+            const pageValue = stringValue(params['page'], '1');
+            const parentValue = stringValue(params['parent']);
+            const pageSizeValue = stringValue(params['pageSize'], '20');
+            const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/purchases/details/index.uvue", 453, 8),
+                key: 'parent',
+                page: parseInt(pageValue == '' ? '1' : pageValue),
+                page_size: parseInt(pageSizeValue),
+            } as UTSJSONObject;
+            if (keywordValue != '') {
+                queryParams['search'] = keywordValue;
+            }
+            if (parentValue != '') {
+                queryParams['parent'] = parentValue;
+            }
+            const raw = await request('/api/categories/categories/options/', 'GET', queryParams, true);
+            return buildCategoryTreeResponse(raw);
+        }
         function applyResponse(response: PurchaseDetailListResponse) {
             details.value = response.results;
             currentPage.value = response.current_page;
@@ -153,6 +317,47 @@ const __sfc__ = defineComponent({
             }
             pageTotalAmount.value = total.toFixed(2);
         }
+        function clearSelectionState() {
+            selectionMode.value = false;
+            selectedDetailIds.value = [] as string[];
+        }
+        function handleSelectionModeChange(value: boolean) {
+            selectionMode.value = value;
+            if (!value) {
+                selectedDetailIds.value = [] as string[];
+            }
+        }
+        function handleSelectedDetailIdsChange(value: string[]) {
+            const nextIds: string[] = [];
+            for (let index = 0; index < value.length; index += 1) {
+                nextIds.push(value[index]);
+            }
+            selectedDetailIds.value = nextIds;
+        }
+        function handleSelectionExit(payload: UTSJSONObject) {
+            clearSelectionState();
+        }
+        function selectedProductIds(): string[] {
+            const result: string[] = [];
+            for (let detailIndex = 0; detailIndex < details.value.length; detailIndex += 1) {
+                const detail = details.value[detailIndex];
+                const detailId = detail.id.toString(10);
+                if (selectedDetailIds.value.includes(detailId)) {
+                    const productId = detail.product.toString(10);
+                    if (productId != '' && !result.includes(productId)) {
+                        result.push(productId);
+                    }
+                }
+            }
+            return result;
+        }
+        function ensureBatchSelection(): boolean {
+            if (selectedDetailIds.value.length > 0 && selectedProductIds().length > 0) {
+                return true;
+            }
+            uni.showToast({ title: '请先选择采购明细', icon: 'none', duration: 3500 });
+            return false;
+        }
         async function loadPurchaseInfo(): Promise<void> {
             if (purchaseId.value == '')
                 return;
@@ -162,7 +367,20 @@ const __sfc__ = defineComponent({
             catch (error: any) {
             }
         }
-        async function loadDetails(): Promise<void> {
+        function openDetailForm(id: string) {
+            if (id == '')
+                return;
+            uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + id });
+        }
+        function openUniqueSearchResult(response: PurchaseDetailListResponse, autoOpenUnique: boolean) {
+            if (!autoOpenUnique)
+                return;
+            if (response.total_count != 1 || response.results.length != 1)
+                return;
+            const detail = response.results[0];
+            openDetailForm(detail.id.toString(10));
+        }
+        async function loadDetails(autoOpenUnique: boolean = false): Promise<void> {
             if (isLoading.value)
                 return;
             if (purchaseId.value == '') {
@@ -182,6 +400,7 @@ const __sfc__ = defineComponent({
                 } as PurchaseDetailListQuery);
                 applyResponse(response);
                 await loadPurchaseInfo();
+                openUniqueSearchResult(response, autoOpenUnique);
             }
             catch (error: any) {
                 details.value = [];
@@ -229,13 +448,13 @@ const __sfc__ = defineComponent({
             } as UTSJSONObject;
         }
         function handleSearchInput(value: string) { keyword.value = value; }
-        function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadDetails(); }
+        function handleSearchConfirm(value: string) { keyword.value = value; currentPage.value = 1; loadDetails(value.trim() != ''); }
         function handleSearchClear() { keyword.value = ''; currentPage.value = 1; loadDetails(); }
         function searchByScannedBarcode(barcode: string) {
             keyword.value = barcode;
             currentPage.value = 1;
             closeFilterDrawer();
-            loadDetails();
+            loadDetails(barcode.trim() != '');
         }
         async function handleFilterOpen(): Promise<void> {
             if (filterOptions.value != null || filterOptionsLoading.value)
@@ -300,7 +519,7 @@ const __sfc__ = defineComponent({
                 const result = await checkPurchaseProduct(purchaseId.value, barcode, '');
                 if (result.exists && result.purchase_detail_id > 0) {
                     closeFilterDrawer();
-                    uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + result.purchase_detail_id.toString(10) });
+                    openDetailForm(result.purchase_detail_id.toString(10));
                     return;
                 }
                 searchByScannedBarcode(barcode);
@@ -323,7 +542,7 @@ const __sfc__ = defineComponent({
                 },
                 fail: (res: GeneralCallbackResult) => {
                     const message = res.errMsg == '' ? '扫码失败' : res.errMsg;
-                    uni.showToast({ title: message, icon: 'none' });
+                    uni.showToast({ title: message, icon: 'none', duration: 3500 });
                 },
             } as ScanCodeOption);
         }
@@ -369,8 +588,7 @@ const __sfc__ = defineComponent({
         function handleCreate() { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }); }
         function handleItemClick(payload: UTSJSONObject) {
             const id = stringValue(payload['rawId'], stringValue(payload['id']));
-            if (id != '')
-                uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + id });
+            openDetailForm(id);
         }
         function handlePageChange(payload: UTSJSONObject) {
             const pageValue = payload['page'];
@@ -390,7 +608,7 @@ const __sfc__ = defineComponent({
                 loadDetails();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '删除失败'));
             }
         }
         function confirmDelete(id: string) {
@@ -405,7 +623,107 @@ const __sfc__ = defineComponent({
                 loadDetails();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '收货失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '收货失败'));
+            }
+        }
+        function handleBatchCategoryChange(payload: UTSJSONObject) {
+            batchCategoryValue.value = stringValue(payload['value']);
+            batchCategoryText.value = stringValue(payload['text']);
+        }
+        function openBatchCategoryPopup() {
+            if (!ensureBatchSelection())
+                return;
+            batchCategoryValue.value = '';
+            batchCategoryText.value = '';
+            batchCategoryVisible.value = true;
+        }
+        function closeBatchCategoryPopup() {
+            if (batchSubmitting.value)
+                return;
+            batchCategoryVisible.value = false;
+            batchCategoryValue.value = '';
+            batchCategoryText.value = '';
+        }
+        function batchResultMessage(response: ProductBatchActionResponse, fallback: string): string {
+            let message = takeLatestResponseMessage(fallback);
+            if (message == '')
+                message = fallback;
+            const summaryObject = parseObject(response.data['summary']);
+            if (summaryObject == null)
+                return message;
+            const successCount = numberValue(summaryObject['success_count']);
+            const failureCount = numberValue(summaryObject['failure_count']);
+            const skippedCount = numberValue(summaryObject['skipped_count']);
+            if (failureCount > 0)
+                return '成功' + successCount.toString(10) + '，失败' + failureCount.toString(10);
+            if (skippedCount > 0)
+                return '成功' + successCount.toString(10) + '，跳过' + skippedCount.toString(10);
+            return message;
+        }
+        function batchResultHasIssue(response: ProductBatchActionResponse): boolean {
+            const summaryObject = parseObject(response.data['summary']);
+            if (summaryObject == null)
+                return false;
+            return numberValue(summaryObject['failure_count']) > 0 || numberValue(summaryObject['skipped_count']) > 0;
+        }
+        async function executeBatchUpdateCategory(): Promise<void> {
+            if (batchSubmitting.value)
+                return;
+            if (!ensureBatchSelection())
+                return;
+            if (batchCategoryValue.value == '') {
+                uni.showToast({ title: '请选择分类', icon: 'none', duration: 3500 });
+                return;
+            }
+            const productIds = selectedProductIds();
+            batchSubmitting.value = true;
+            try {
+                const response = await batchUpdateProductCategory(productIds, batchCategoryValue.value);
+                const message = batchResultMessage(response, '批量修改分类成功');
+                const hasIssue = batchResultHasIssue(response);
+                if (hasIssue) {
+                    showErrorToast(message);
+                }
+                else {
+                    uni.showToast({ title: message, icon: 'success', duration: 1500 });
+                }
+                batchCategoryVisible.value = false;
+                batchCategoryValue.value = '';
+                batchCategoryText.value = '';
+                clearSelectionState();
+                loadDetails();
+            }
+            catch (error: any) {
+                showErrorToast(parseErrorMessage(error, '批量修改分类失败'));
+            }
+            finally {
+                batchSubmitting.value = false;
+            }
+        }
+        function confirmBatchUpdateCategory() {
+            if (!ensureBatchSelection())
+                return;
+            if (batchCategoryValue.value == '') {
+                uni.showToast({ title: '请选择分类', icon: 'none', duration: 3500 });
+                return;
+            }
+            uni.showModal({
+                title: '批量修改分类',
+                content: '确定将选中的 ' + selectedDetailIds.value.length.toString(10) + ' 条采购明细对应商品修改到该分类吗？',
+                success: (res) => {
+                    if (!res.confirm)
+                        return;
+                    executeBatchUpdateCategory();
+                },
+            });
+        }
+        function handleBatchToolbarAction(payload: UTSJSONObject) {
+            const actionValue = payload['action'];
+            if (actionValue == null)
+                return;
+            const actionKey = stringValue((actionValue as UTSJSONObject)['key']);
+            if (actionKey == 'update-category') {
+                openBatchCategoryPopup();
             }
         }
         function promptReceive(item: UTSJSONObject) {
@@ -422,7 +740,7 @@ const __sfc__ = defineComponent({
                     const inputText = res.content == null ? defaultValue : ('' + res.content!);
                     const quantity = parseInt(inputText);
                     if (isNaN(quantity) || quantity <= 0) {
-                        uni.showToast({ title: '请输入有效收货数量', icon: 'none' });
+                        uni.showToast({ title: '请输入有效收货数量', icon: 'none', duration: 3500 });
                         return;
                     }
                     runReceive(id, quantity);
@@ -440,7 +758,7 @@ const __sfc__ = defineComponent({
             if (id == '')
                 return;
             if (actionKey == 'edit') {
-                uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value + '&id=' + id });
+                openDetailForm(id);
                 return;
             }
             if (actionKey == 'receive')
@@ -462,6 +780,9 @@ const __sfc__ = defineComponent({
                 result.push(row);
             }
             return result;
+        });
+        const batchInfoText = computed((): string => {
+            return '已选 ' + selectedDetailIds.value.length.toString(10) + ' 条明细';
         });
         const hasActiveFilter = computed((): boolean => {
             return keyword.value != '' || selectedFilters.value.length > 0;
@@ -519,6 +840,7 @@ const __sfc__ = defineComponent({
         return (): any | null => {
             const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", _easycom_lili_universal_filter);
             const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", _easycom_lili_UniversalList);
+            const _component_page_container = resolveComponent("page-container");
             return _cE("view", _uM({ class: "page" }), [
                 _cV(_component_lili_universal_filter, _uM({
                     title: pageTitle.value,
@@ -627,10 +949,10 @@ const __sfc__ = defineComponent({
                                 _cE("text", _uM({ class: "error-desc" }), _tD(unref(errorMessage)), 1 /* TEXT */),
                                 _cE("view", _uM({
                                     class: "retry-btn",
-                                    onClick: loadDetails
+                                    onClick: () => { loadDetails(); }
                                 }), [
                                     _cE("text", _uM({ class: "retry-btn-text" }), "重新加载")
-                                ])
+                                ], 8 /* PROPS */, ["onClick"])
                             ])
                             : _cC("v-if", true),
                         _cV(_component_lili_UniversalList, _uM({
@@ -654,21 +976,92 @@ const __sfc__ = defineComponent({
                             currentPage: unref(currentPage),
                             totalPages: unref(totalPages),
                             totalCount: unref(totalCount),
+                            selectionMode: unref(selectionMode),
+                            selectedItems: unref(selectedDetailIds),
+                            batchActions: unref(batchToolbarActions),
+                            batchInfoText: batchInfoText.value,
                             summaryTitle: "明细概览",
                             summaryItems: summaryItems.value,
                             showFloatingAdd: true,
                             floatingAddText: "新增明细",
+                            "onUpdate:selectionMode": handleSelectionModeChange,
+                            "onUpdate:selectedItems": handleSelectedDetailIdsChange,
+                            onSelectionExit: handleSelectionExit,
+                            onBatchAction: handleBatchToolbarAction,
                             onItemClick: handleItemClick,
                             onMenu: handleMenu,
                             onPageChange: handlePageChange,
                             onFloatingAdd: handleCreate
-                        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
+                        }), null, 8 /* PROPS */, ["items", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "selectionMode", "selectedItems", "batchActions", "batchInfoText", "summaryItems"])
                     ])
-                ], 4 /* STYLE */)
+                ], 4 /* STYLE */),
+                _cV(_component_page_container, _uM({
+                    show: unref(batchCategoryVisible),
+                    position: "bottom",
+                    round: true,
+                    overlay: true,
+                    duration: 240,
+                    "overlay-style": "background-color: rgba(15, 23, 42, 0.42);",
+                    "custom-style": "background-color: #FFFFFF;",
+                    onClickoverlay: closeBatchCategoryPopup
+                }), _uM({
+                    default: withSlotCtx((): any[] => [
+                        _cE("view", _uM({ class: "batch-panel" }), [
+                            _cE("view", _uM({ class: "batch-handle" })),
+                            _cE("view", _uM({ class: "batch-head" }), [
+                                _cE("view", null, [
+                                    _cE("text", _uM({ class: "batch-title" }), "批量修改分类"),
+                                    _cE("text", _uM({ class: "batch-subtitle" }), _tD(batchInfoText.value), 1 /* TEXT */)
+                                ]),
+                                _cE("view", _uM({
+                                    class: "batch-close",
+                                    onClick: closeBatchCategoryPopup
+                                }), [
+                                    _cE("text", _uM({ class: "batch-close-text" }), "关闭")
+                                ])
+                            ]),
+                            _cE("view", _uM({ class: "batch-field" }), [
+                                _cE("text", _uM({ class: "batch-label" }), "目标分类"),
+                                _cV(unref(liliBottomSelect), _uM({
+                                    value: unref(batchCategoryValue),
+                                    valueText: unref(batchCategoryText),
+                                    title: "选择分类",
+                                    placeholder: "请选择分类",
+                                    searchPlaceholder: "请输入分类名称",
+                                    emptyText: "暂无分类",
+                                    tree: true,
+                                    checkStrictly: false,
+                                    expandOnClickNode: true,
+                                    selectableLevel: 2,
+                                    selectableLevelMessage: "只能选择二级分类",
+                                    showAddAction: false,
+                                    showEditAction: false,
+                                    fetchData: fetchCategoryOptions,
+                                    onChange: handleBatchCategoryChange
+                                }), null, 8 /* PROPS */, ["value", "valueText"])
+                            ]),
+                            _cE("view", _uM({ class: "batch-actions" }), [
+                                _cE("view", _uM({
+                                    class: "batch-secondary-btn",
+                                    onClick: closeBatchCategoryPopup
+                                }), [
+                                    _cE("text", _uM({ class: "batch-secondary-text" }), "取消")
+                                ]),
+                                _cE("view", _uM({
+                                    class: "batch-primary-btn",
+                                    onClick: confirmBatchUpdateCategory
+                                }), [
+                                    _cE("text", _uM({ class: "batch-primary-text" }), _tD(unref(batchSubmitting) ? '处理中...' : '确认修改'), 1 /* TEXT */)
+                                ])
+                            ])
+                        ])
+                    ]),
+                    _: 1 /* STABLE */
+                }), 8 /* PROPS */, ["show"])
             ]);
         };
     }
 });
 export default __sfc__;
-const GenPagesPurchasesDetailsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingTop", 6], ["paddingRight", 6], ["paddingBottom", 96], ["paddingLeft", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["purchase-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["purchase-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["purchase-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["purchase-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["purchase-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["purchase-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["purchase-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["purchase-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["purchase-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["purchase-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["purchase-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["purchase-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["purchase-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))], ["purchase-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["purchase-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["purchase-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["purchase-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))]])];
+const GenPagesPurchasesDetailsIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingTop", 6], ["paddingRight", 6], ["paddingBottom", 96], ["paddingLeft", 6]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))], ["purchase-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["purchase-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["purchase-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["purchase-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["purchase-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["purchase-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["purchase-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["purchase-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["purchase-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["purchase-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["purchase-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["purchase-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["purchase-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))], ["purchase-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["purchase-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["purchase-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["purchase-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["purchase-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))], ["batch-panel", _pS(_uM([["paddingLeft", 18], ["paddingRight", 18], ["paddingTop", 10], ["paddingBottom", 22], ["backgroundColor", "#FFFFFF"]]))], ["batch-handle", _pS(_uM([["width", 42], ["height", 4], ["borderTopLeftRadius", 2], ["borderTopRightRadius", 2], ["borderBottomRightRadius", 2], ["borderBottomLeftRadius", 2], ["backgroundColor", "#CBD5E1"], ["alignSelf", "center"], ["marginBottom", 14]]))], ["batch-head", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"], ["marginBottom", 18]]))], ["batch-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["batch-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 3]]))], ["batch-close", _pS(_uM([["height", 32], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#F1F5F9"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["batch-close-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#475569"]]))], ["batch-field", _pS(_uM([["marginBottom", 16]]))], ["batch-label", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"], ["marginBottom", 8]]))], ["batch-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 4]]))], ["batch-secondary-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 42], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 10]]))], ["batch-primary-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 42], ["borderTopLeftRadius", 10], ["borderTopRightRadius", 10], ["borderBottomRightRadius", 10], ["borderBottomLeftRadius", 10], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#0F172A"]]))], ["batch-secondary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#475569"], ["fontWeight", "bold"]]))], ["batch-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))]])];
 //# sourceMappingURL=index.uvue.map

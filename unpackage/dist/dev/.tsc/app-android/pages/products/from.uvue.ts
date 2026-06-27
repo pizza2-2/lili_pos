@@ -1,13 +1,15 @@
 import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/components/lili-universal-filter/lili-universal-filter.uvue'
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
+import _easycom_lili_print_confirm_popup from '@/uni_modules/lili-print-confirm-popup/components/lili-print-confirm-popup/lili-print-confirm-popup.uvue'
 import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { ProductItem, ProductMutationData, createProduct, getProductConfigList, getProductDetail, productDiscountsPath, removeProductDiscountFromProduct, updateProduct } from '@/pkg/api/modules/products.uts'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { authState } from '@/store/auth'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/products/from.uvue", 125, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/products/from.uvue", 135, 6>;
 	value: string
 	text: string
 }
@@ -25,14 +27,18 @@ const productDiscountSelectionStorageKey = 'selected_discount_for_product:'
 
 const formMode = ref('create')
 const productId = ref('')
+const copySourceId = ref('')
+const productFormRef = ref<ComponentPublicInstance|null>(null)
 const leaveSignal = ref(0)
 const dirtySignal = ref(0)
 const submitting = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
+const printPopupVisible = ref(false)
 const pageTaskGuard = createAsyncGuard()
 const discountCards = ref<UTSJSONObject[]>([])
 const discountCardsLoading = ref(false)
+const categoryTaxRateCache = ref<UTSJSONObject>({} as UTSJSONObject)
 
 const initialData = ref<UTSJSONObject>({
 	sku: '',
@@ -43,6 +49,7 @@ const initialData = ref<UTSJSONObject>({
 	description: '',
 	category_id: '',
 	category_text: '',
+	category_kasa_kod: '',
 	supplier_id: '',
 	supplier_name: '',
 	purchase_price: '0.00',
@@ -91,9 +98,69 @@ function openProductPrintPage() {
 	if (productId.value == '') {
 		return
 	}
-	uni.navigateTo({
-		url: '/pages/label-templates/index?mode=print&product=' + productId.value,
-	})
+	printPopupVisible.value = true
+}
+
+function handlePrintPopupVisibleChange(value: boolean) {
+	printPopupVisible.value = value
+}
+
+function productPrintField(key: string, fallback: string = ''): string {
+	return stringValue(initialData.value[key], fallback)
+}
+
+function productPrintNameText(): string {
+	const nameCn = productPrintField('name_cn')
+	if (nameCn != '') return nameCn
+	const nameEn = productPrintField('name_en')
+	if (nameEn != '') return nameEn
+	const nameOther = productPrintField('name_other')
+	if (nameOther != '') return nameOther
+	return '未命名商品'
+}
+
+function productPrintPriceText(): string {
+	const discountPrice = productPrintField('discounted_base_sales_price')
+	if (discountPrice != '' && discountPrice != '0.00') return discountPrice
+	return productPrintField('base_sales_price', '0.00')
+}
+
+function productPrintKodText(fallback: string): string {
+	return productPrintField('category_kasa_kod', fallback)
+}
+
+const productPrintData = computed((): UTSJSONObject => {
+	const data = { __$originalPosition: new UTSSourceMapPosition("data", "pages/products/from.uvue", 245, 8), } as UTSJSONObject
+	data['name'] = productPrintNameText()
+	data['name_cn'] = productPrintField('name_cn')
+	data['name_en'] = productPrintField('name_en')
+	data['name_other'] = productPrintField('name_other')
+	data['price'] = productPrintPriceText()
+	data['base_sales_price'] = productPrintField('base_sales_price', '0.00')
+	data['discount_price'] = productPrintPriceText()
+	data['barcode'] = productPrintField('barcode')
+	data['sku'] = productPrintField('sku')
+	data['kod'] = productPrintKodText('')
+	data['category_kasa_kod'] = productPrintKodText('')
+	return data
+})
+
+function resolveProductPrintValue(source: string, fallback: string): string {
+	if (source == 'name') return productPrintNameText()
+	if (source == 'name_cn') return productPrintField('name_cn')
+	if (source == 'name_en') return productPrintField('name_en')
+	if (source == 'name_other') return productPrintField('name_other')
+	if (source == 'price') return productPrintPriceText()
+	if (source == 'base_sales_price') return productPrintField('base_sales_price', '0.00')
+	if (source == 'discount_price') return productPrintPriceText()
+	if (source == 'barcode') {
+		const barcode = productPrintField('barcode')
+		if (barcode != '') return barcode
+		return productPrintField('sku', fallback)
+	}
+	if (source == 'sku') return productPrintField('sku', fallback)
+	if (source == 'kod') return productPrintKodText(fallback)
+	return fallback
 }
 
 function floatValue(value: any | null, fallback: number = 0): number {
@@ -126,6 +193,55 @@ function formatMoneyText(value: string, fallback: string = '0.00'): string {
 		return fallback
 	}
 	return numberValue.toFixed(2)
+}
+
+function normalizeTaxRate(value: any | null): number {
+	let taxRate = floatValue(value, -1)
+	if (taxRate < 0) return -1
+	if (taxRate > 1) {
+		taxRate = taxRate / 100
+	}
+	return taxRate
+}
+
+async function resolveCategoryTaxRate(categoryId: string): Promise<number> {
+	if (categoryId == '') return -1
+	const cachedValue = categoryTaxRateCache.value[categoryId]
+	if (cachedValue != null) {
+		return normalizeTaxRate(cachedValue)
+	}
+	try {
+		const raw = await request('/api/categories/categories/' + categoryId + '/', 'GET', {} as UTSJSONObject, true)
+		const rawObject = parseObject(raw)
+		if (rawObject == null) return -1
+		const taxRate = normalizeTaxRate(rawObject['tax_rate'])
+		if (taxRate >= 0) {
+			categoryTaxRateCache.value[categoryId] = taxRate
+		}
+		return taxRate
+	} catch (error) {
+		return -1
+	}
+}
+
+function applyPurchasePriceSync(formDataObject: UTSJSONObject, taxRate: number, sourceKey: string): boolean {
+	if (taxRate < 0) return false
+	const multiplier = 1 + taxRate
+	if (multiplier <= 0) return false
+
+	const grossPrice = floatValue(formDataObject['purchase_price'], 0)
+	const netPrice = floatValue(formDataObject['net_purchase_price'], 0)
+	const canFillNet = sourceKey == 'category_id' || sourceKey == 'purchase_price'
+	const canFillGross = sourceKey == 'category_id' || sourceKey == 'net_purchase_price'
+	if (canFillNet && grossPrice > 0 && netPrice <= 0) {
+		formDataObject['net_purchase_price'] = formatMoneyText((grossPrice / multiplier).toString())
+		return true
+	}
+	if (canFillGross && netPrice > 0 && grossPrice <= 0) {
+		formDataObject['purchase_price'] = formatMoneyText((netPrice * multiplier).toString())
+		return true
+	}
+	return false
 }
 
 function calculateDiscountedPriceText(productSalesPriceText: string, discountRule: UTSJSONObject): string {
@@ -167,7 +283,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (text == null || text == '') {
 		return null
 	}
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:274")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:398")
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
@@ -178,7 +294,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (text == null || text == '') {
 		return [] as UTSJSONObject[]
 	}
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:285")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:409")
 	if (parsed == null) {
 		return [] as UTSJSONObject[]
 	}
@@ -188,13 +304,9 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:301")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:421")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -210,7 +322,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 }
 
 function buildUploadHeaders(): UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/products/from.uvue", 317, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/products/from.uvue", 437, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -332,7 +444,7 @@ async function fetchStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject>
 
 function buildSupplierOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const keywordValue = stringValue(params['keyword'])
-	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/products/from.uvue", 439, 8), 
+	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/products/from.uvue", 559, 8), 
 		key: 'supplier',
 		limit: 50,
 	} as UTSJSONObject
@@ -360,7 +472,7 @@ function convertCategoryTreeItems(items: UTSJSONObject[]): UTSJSONObject[] {
 		const children = parseObjectArray(item['children'])
 		const treeChildren = convertCategoryTreeItems(children)
 		const label = buildOptionText(item)
-		const option: UTSJSONObject = {__$originalPosition: new UTSSourceMapPosition("option", "pages/products/from.uvue", 467, 9),
+		const option: UTSJSONObject = {__$originalPosition: new UTSSourceMapPosition("option", "pages/products/from.uvue", 587, 9),
 			value: buildOptionValue(item),
 			text: label,
 			label: label,
@@ -412,7 +524,7 @@ async function fetchCategoryOptions(params: UTSJSONObject): Promise<UTSJSONObjec
 	const parentValue = getStringField(params, 'parent')
 	const pageValue = getStringField(params, 'page', '1')
 	const pageSizeValue = getStringField(params, 'pageSize', '20')
-	const queryParams = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 519, 8), 
+	const queryParams = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 639, 8), 
 		key: 'parent',
 		page: intValue(pageValue, 1),
 		page_size: intValue(pageSizeValue, 20),
@@ -553,6 +665,7 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		description: item.description,
 		category_id: categoryId,
 		category_text: categoryText,
+		category_kasa_kod: item.category_kasa_kod,
 		supplier_id: supplierId,
 		supplier_name: item.supplier_name,
 		purchase_price: item.purchase_price == '' ? '0.00' : item.purchase_price,
@@ -570,6 +683,18 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		images: images,
 		imageItems: imageItems,
 	} as UTSJSONObject
+}
+
+function buildCopiedInitialDataFromProduct(item: ProductItem, categoryTextOverride: string = ''): UTSJSONObject {
+	const data = buildInitialDataFromProduct(item, categoryTextOverride)
+	data['sku'] = ''
+	data['barcode'] = ''
+	data['discount_rule'] = ''
+	data['discount_rule_id'] = ''
+	data['discounted_base_sales_price'] = '0.00'
+	data['images'] = [] as string[]
+	data['imageItems'] = [] as UTSJSONObject[]
+	return data
 }
 
 const formSections = ref<UTSJSONObject[]>([
@@ -759,6 +884,7 @@ const formSections = ref<UTSJSONObject[]>([
 ])
 
 const pageTitle = computed((): string => {
+	if (formMode.value == 'create' && copySourceId.value != '') return '复制商品'
 	return formMode.value == 'edit' ? '编辑商品' : '新建商品'
 })
 
@@ -791,10 +917,7 @@ async function loadProductDiscountCards(): Promise<void> {
 		}
 	} catch (error) {
 		discountCards.value = [] as UTSJSONObject[]
-		uni.showToast({
-			title: parseErrorMessage(error, '折扣规则加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '折扣规则加载失败'))
 	} finally {
 		discountCardsLoading.value = false
 	}
@@ -814,9 +937,38 @@ async function loadProductDetailData(idText: string): Promise<void> {
 		initialData.value = buildInitialDataFromProduct(detail, categoryText)
 		await loadProductDiscountCards()
 	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '商品详情加载失败'))
+	}
+}
+
+async function loadCopiedProductData(idText: string): Promise<void> {
+	if (idText == '') {
+		return
+	}
+	let loaded = false
+	try {
+		uni.showLoading({
+			title: '复制中',
+			mask: true,
+		})
+		const detail = await getProductDetail(idText)
+		let categoryText = ''
+		const categoryId = extractCategoryIdFromProduct(detail)
+		if (categoryId != '') {
+			categoryText = await resolveCategoryOptionText(categoryId)
+		}
+		initialData.value = buildCopiedInitialDataFromProduct(detail, categoryText)
+		discountCards.value = [] as UTSJSONObject[]
+		loaded = true
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '复制商品加载失败'))
+	} finally {
+		uni.hideLoading()
+	}
+	if (loaded) {
 		uni.showToast({
-			title: parseErrorMessage(error, '商品详情加载失败'),
-			icon: 'none',
+			title: '已填入商品信息',
+			icon: 'success',
 		})
 	}
 }
@@ -866,7 +1018,7 @@ function upsertDiscountCardFromSelection(selected: UTSJSONObject): void {
 	if (discountId == '') {
 		return
 	}
-	const nextCard = { __$originalPosition: new UTSSourceMapPosition("nextCard", "pages/products/from.uvue", 973, 8), 
+	const nextCard = { __$originalPosition: new UTSSourceMapPosition("nextCard", "pages/products/from.uvue", 1133, 8), 
 		id: discountId,
 		name: getStringField(selected, 'discount_name', getStringField(selected, 'name', '未命名折扣')),
 		discount_type: getStringField(selected, 'discount_type'),
@@ -910,10 +1062,7 @@ async function removeDiscountFromProduct(discountId: string): Promise<void> {
 			icon: 'success',
 		})
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '折扣删除失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '折扣删除失败'))
 	} finally {
 		uni.hideLoading()
 	}
@@ -953,7 +1102,7 @@ function parseStoredJson(value: any): UTSJSONObject | null {
 	if (rawText == '') {
 		return null
 	}
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pages/products/from.uvue:1060")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pages/products/from.uvue:1217")
 	if (parsed != null) {
 		return parsed
 	}
@@ -962,7 +1111,7 @@ function parseStoredJson(value: any): UTSJSONObject | null {
 
 function cloneInitialData(): UTSJSONObject {
 	const source = initialData.value
-	const result = { __$originalPosition: new UTSSourceMapPosition("result", "pages/products/from.uvue", 1069, 8), } as UTSJSONObject
+	const result = { __$originalPosition: new UTSSourceMapPosition("result", "pages/products/from.uvue", 1226, 8), } as UTSJSONObject
 	for (const key in source) {
 		result[key] = source[key]
 	}
@@ -1014,7 +1163,7 @@ function openDiscountSelector() {
 	if (safeProductId == '') {
 		uni.showToast({
 			title: '请先保存商品后再选择折扣',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1023,7 +1172,7 @@ function openDiscountSelector() {
 		baseSalesPrice = '0.00'
 	}
 	uni.navigateTo({
-		url: '/pages/products/config-model/index?resource=discount&mode=select&product_id=' + safeProductId + '&base_sales_price=' + UTSAndroid.consoleDebugError(encodeURIComponent(baseSalesPrice), " at pages/products/from.uvue:1130"),
+		url: '/pages/products/config-model/index?resource=discount&mode=select&product_id=' + safeProductId + '&base_sales_price=' + UTSAndroid.consoleDebugError(encodeURIComponent(baseSalesPrice), " at pages/products/from.uvue:1287"),
 	})
 }
 
@@ -1152,7 +1301,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 	if (nameCn == '') {
 		uni.showToast({
 			title: '中文名称不能为空',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1202,10 +1351,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
 		}
-		uni.showToast({
-			title: parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, isEditing ? '商品保存失败' : '商品创建失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			savingVisible.value = false
@@ -1239,24 +1385,39 @@ function handleDiscardLeave(payload: UTSJSONObject) {
 function handleDirtyChange(value: boolean) {
 }
 
+async function handleFieldChange(payload: UTSJSONObject): Promise<void> {
+	const keyValue = getStringField(payload, 'key')
+	if (keyValue != 'category_id' && keyValue != 'purchase_price' && keyValue != 'net_purchase_price') {
+		return
+	}
+	const formDataValue = payload['formData']
+	if (formDataValue == null) return
+	const formDataObject = formDataValue as UTSJSONObject
+	const categoryId = getStringField(formDataObject, 'category_id').trim()
+	if (categoryId == '') return
+	const taxRate = await resolveCategoryTaxRate(categoryId)
+	if (getStringField(formDataObject, 'category_id').trim() != categoryId) return
+	applyPurchasePriceSync(formDataObject, taxRate, keyValue)
+}
+
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleUpload(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '图片已加入待保存列表',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -1275,14 +1436,14 @@ function handleUploadError(payload: UTSJSONObject) {
 		if (message != '') {
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
 	}
 	uni.showToast({
 		title: '图片上传失败',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -1290,7 +1451,7 @@ function openPriceCalculator() {
 	if (productId.value == '') {
 		uni.showToast({
 			title: '请先保存商品后再计算',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1309,11 +1470,8 @@ function applyCalculatedPrice() {
 		return
 	}
 	uni.removeStorageSync(storageKey)
-	const currentData = cloneInitialData()
 	const nextBaseSalesPrice = calculatedPrice.trim()
-	currentData['base_sales_price'] = nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice
-	initialData.value = currentData
-	dirtySignal.value = dirtySignal.value + 1
+	productFormRef.value?.$callMethod('setFieldValue', 'base_sales_price', nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice)
 	uni.showToast({
 		title: '基础售价已填入计算结果',
 		icon: 'success',
@@ -1324,10 +1482,14 @@ onLoad((event: OnLoadOptions) => {
 	pageTaskGuard.reset()
 	leaveSignal.value = 0
 	const idValue = event['id']
+	const copyValue = event['copy_id']
 	productId.value = idValue == null ? '' : (idValue as string)
+	copySourceId.value = copyValue == null ? '' : (copyValue as string)
 	formMode.value = productId.value == '' ? 'create' : 'edit'
 	if (formMode.value == 'edit') {
 		loadProductDetailData(productId.value)
+	} else if (copySourceId.value != '') {
+		loadCopiedProductData(copySourceId.value)
 	}
 })
 
@@ -1345,6 +1507,7 @@ return (): any | null => {
 
 const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
 const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_easycom_lili_UniversaForm)
+const _component_lili_print_confirm_popup = resolveEasyComponent("lili-print-confirm-popup",_easycom_lili_print_confirm_popup)
 
   return _cE("view", _uM({ class: "page" }), [
     _cV(_component_lili_universal_filter, _uM({
@@ -1360,6 +1523,8 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
     }), null, 8 /* PROPS */, ["title", "showRightText"]),
     _cE("view", _uM({ class: "page-content" }), [
       _cV(_component_lili_UniversaForm, _uM({
+        ref_key: "productFormRef",
+        ref: productFormRef,
         mode: unref(formMode),
         formSections: unref(formSections),
         initialData: unref(initialData),
@@ -1370,6 +1535,7 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
         onCancel: handleCancel,
         onDiscardLeave: handleDiscardLeave,
         onSaveRequest: handleSaveRequest,
+        onFieldChange: handleFieldChange,
         onDirtyChange: handleDirtyChange,
         onBottomSelectAdd: handleBottomSelectAdd,
         onBottomSelectEdit: handleBottomSelectEdit,
@@ -1471,7 +1637,13 @@ const _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm",_e
             _cE("text", _uM({ class: "page-saving-text" }), _tD(unref(savingText)), 1 /* TEXT */)
           ])
         ])
-      : _cC("v-if", true)
+      : _cC("v-if", true),
+    _cV(_component_lili_print_confirm_popup, _uM({
+      visible: unref(printPopupVisible),
+      templateType: "product_label",
+      printData: productPrintData.value,
+      "onUpdate:visible": handlePrintPopupVisibleChange
+    }), null, 8 /* PROPS */, ["visible", "printData"])
   ])
 }
 }

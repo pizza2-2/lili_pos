@@ -65,6 +65,9 @@ open class GenPagesInventoryManagementIndex : BasePage {
             val scanLookupRunning = ref(false)
             val productFilterId = ref("")
             val productFilterName = ref("")
+            val movementPeriodFilter = ref("all")
+            val draftMovementPeriod = ref("all")
+            val movementPeriodPanelVisible = ref(false)
             var volumeKeyStartTimer: Number = 0
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "quantityText", "label" to "库存:"), _uO("key" to "availableText", "label" to "可用:"), _uO("key" to "costText", "label" to "成本:"), _uO("key" to "categoryText", "label" to "分类:")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "adjust", "text" to "调整库存"), _uO("key" to "reload", "text" to "刷新")))
@@ -80,6 +83,12 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 SelectOption__8(value = "", label = "全部"),
                 SelectOption__8(value = "true", label = "上架"),
                 SelectOption__8(value = "false", label = "下架")
+            )
+            val movementPeriodOptions = _uA(
+                SelectOption__8(value = "all", label = "全部时间"),
+                SelectOption__8(value = "today", label = "今日"),
+                SelectOption__8(value = "week", label = "本周"),
+                SelectOption__8(value = "month", label = "本月")
             )
             fun stringValue(value: Any?, fallback: String = ""): String {
                 if (value == null) {
@@ -102,24 +111,44 @@ open class GenPagesInventoryManagementIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
+                    var errorText = ""
+                    try {
+                        val text = JSON.stringify(error)
+                        if (text != null) {
+                            errorText = text
+                        }
                     }
-                    val errorText = JSON.stringify(error)
+                     catch (stringifyError: Throwable) {
+                        errorText = ""
+                    }
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-management/index.uvue:290")
+                        var parsedError: UTSJSONObject? = null
+                        try {
+                            val trimmedText = errorText.trim()
+                            if (trimmedText != "" && trimmedText.substring(0, 1) == "{") {
+                                parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-management/index.uvue:349")
+                            }
+                        }
+                         catch (parseError: Throwable) {
+                            parsedError = null
+                        }
                         if (parsedError != null) {
-                            val rawMessage = parsedError["message"]
+                            val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
-                                val parsedMessage = rawMessage as String
+                                val parsedMessage = stringValue(rawMessage)
                                 if (parsedMessage != "") {
                                     message = parsedMessage
                                 }
                             }
                         }
-                        if (message == fallback && errorText != "{}") {
+                        if (message == fallback && errorText != "{}" && errorText != "null") {
                             message = errorText
+                        }
+                    }
+                    if (message == fallback) {
+                        val textMessage = stringValue(error)
+                        if (textMessage != "" && textMessage != "[object Object]") {
+                            message = textMessage
                         }
                     }
                 }
@@ -134,8 +163,12 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
+                val trimmedText = text.trim()
+                if (trimmedText == "" || trimmedText.substring(0, 1) != "{") {
+                    return null
+                }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-management/index.uvue:309")
+                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-management/index.uvue:377")
                 }
                  catch (error: Throwable) {
                     return null
@@ -150,9 +183,13 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 if (text == null || text == "") {
                     return _uA<UTSJSONObject>()
                 }
+                val trimmedText = text.trim()
+                if (trimmedText == "" || trimmedText.substring(0, 1) != "[") {
+                    return _uA<UTSJSONObject>()
+                }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/inventory-management/index.uvue:321")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-management/index.uvue:391")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -171,9 +208,13 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 if (text == null || text == "") {
                     return _uA<String>()
                 }
+                val trimmedText = text.trim()
+                if (trimmedText == "" || trimmedText.substring(0, 1) != "[") {
+                    return _uA<String>()
+                }
                 var parsed: UTSArray<String>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<String>(text), " at pages/inventory-management/index.uvue:335")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<String>(trimmedText), " at pages/inventory-management/index.uvue:407")
                 }
                  catch (error: Throwable) {
                     return _uA<String>()
@@ -184,6 +225,11 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 return parsed!!
             }
             val parseStringArray = ::gen_parseStringArray_fn
+            fun gen_booleanValue_fn(value: Any?): Boolean {
+                val text = stringValue(value).toLowerCase()
+                return text == "true" || text == "1" || text == "yes"
+            }
+            val booleanValue = ::gen_booleanValue_fn
             fun gen_firstStringField_fn(obj: UTSJSONObject, keys: UTSArray<String>): String {
                 run {
                     var index: Number = 0
@@ -221,7 +267,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
             val closeFilterDrawer = ::gen_closeFilterDrawer_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -251,16 +297,68 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 if (itemsArray.length > 0) {
                     return itemsArray
                 }
+                val groups = parseObjectArray(rawObject!!["groups"])
+                run {
+                    var index: Number = 0
+                    while(index < groups.length){
+                        val groupItems = parseObjectArray(groups[index]["items"])
+                        if (groupItems.length > 0) {
+                            return groupItems
+                        }
+                        index += 1
+                    }
+                }
                 val dataObject = parseObject(rawObject!!["data"])
                 if (dataObject != null) {
                     val nestedResults = parseObjectArray(dataObject!!["results"])
                     if (nestedResults.length > 0) {
                         return nestedResults
                     }
+                    val nestedGroups = parseObjectArray(dataObject!!["groups"])
+                    run {
+                        var index: Number = 0
+                        while(index < nestedGroups.length){
+                            val nestedItems = parseObjectArray(nestedGroups[index]["items"])
+                            if (nestedItems.length > 0) {
+                                return nestedItems
+                            }
+                            index += 1
+                        }
+                    }
                 }
                 return _uA<UTSJSONObject>()
             }
             val extractRows = ::gen_extractRows_fn
+            fun gen_extractCategoryTreeSource_fn(raw: Any?): UTSArray<UTSJSONObject> {
+                val rawObject = parseObject(raw)
+                if (rawObject == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                val groups = parseObjectArray(rawObject!!["groups"])
+                run {
+                    var index: Number = 0
+                    while(index < groups.length){
+                        val group = groups[index]
+                        if (stringValue(group["key"]) == "parent") {
+                            return parseObjectArray(group["items"])
+                        }
+                        index += 1
+                    }
+                }
+                if (groups.length > 0) {
+                    return parseObjectArray(groups[0]["items"])
+                }
+                var items = parseObjectArray(rawObject!!["items"])
+                if (items.length > 0) {
+                    return items
+                }
+                items = parseObjectArray(rawObject!!["results"])
+                if (items.length > 0) {
+                    return items
+                }
+                return parseObjectArray(rawObject!!["data"])
+            }
+            val extractCategoryTreeSource = ::gen_extractCategoryTreeSource_fn
             fun gen_getChildren_fn(item: UTSJSONObject): UTSArray<UTSJSONObject> {
                 val children = parseObjectArray(item["children"])
                 if (children.length > 0) {
@@ -286,6 +384,10 @@ open class GenPagesInventoryManagementIndex : BasePage {
                     "name_cn",
                     "title"
                 ))
+                val fullName = firstStringField(item, _uA(
+                    "full_name",
+                    "fullName"
+                ))
                 if (text == "") {
                     text = value
                 }
@@ -298,7 +400,12 @@ open class GenPagesInventoryManagementIndex : BasePage {
                         index += 1
                     }
                 }
-                return _uO("value" to value, "text" to text, "children" to normalizedChildren, "has_children" to (normalizedChildren.length > 0))
+                return _uO("value" to value, "text" to text, "label" to text, "full_name" to if (fullName == "") {
+                    text
+                } else {
+                    fullName
+                }
+                , "code" to stringValue(item["code"]), "level" to stringValue(item["level"]), "parent_value" to stringValue(item["parent_value"]), "disabled" to booleanValue(item["disabled"]), "children" to normalizedChildren, "has_children" to (normalizedChildren.length > 0 || booleanValue(item["has_children"])))
             }
             val normalizeOptionNode = ::gen_normalizeOptionNode_fn
             fun gen_buildBottomSelectResponse_fn(raw: Any?, params: UTSJSONObject): UTSJSONObject {
@@ -314,10 +421,23 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 return _uO("data" to normalized, "results" to normalized, "total" to normalized.length, "total_count" to normalized.length)
             }
             val buildBottomSelectResponse = ::gen_buildBottomSelectResponse_fn
+            fun gen_buildCategoryTreeResponse_fn(raw: Any?): UTSJSONObject {
+                val source = extractCategoryTreeSource(raw)
+                val normalized: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < source.length){
+                        normalized.push(normalizeOptionNode(source[index]))
+                        index += 1
+                    }
+                }
+                return _uO("data" to normalized, "results" to normalized, "total" to normalized.length, "total_count" to normalized.length)
+            }
+            val buildCategoryTreeResponse = ::gen_buildCategoryTreeResponse_fn
             fun gen_buildOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val pageValue = intValue(params["page"])
                 val pageSizeValue = intValue(params["pageSize"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-management/index.uvue", 431, 8), "page" to if (pageValue <= 0) {
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-management/index.uvue", 553, 8), "page" to if (pageValue <= 0) {
                     1
                 } else {
                     pageValue
@@ -346,15 +466,20 @@ open class GenPagesInventoryManagementIndex : BasePage {
             val buildOptionQuery = ::gen_buildOptionQuery_fn
             fun gen_fetchSupplierFilterOptions_fn(params: UTSJSONObject): UTSPromise<UTSJSONObject> {
                 return wrapUTSPromise(suspend w1@{
-                        val raw = await(request("/api/procurement/suppliers/options/", "GET", buildOptionQuery(params), true))
+                        val query = buildOptionQuery(params)
+                        query["key"] = "supplier"
+                        query["limit"] = 50
+                        val raw = await(request("/api/procurement/suppliers/options/", "GET", query, true))
                         return@w1 buildBottomSelectResponse(raw, _uO("keyword" to ""))
                 })
             }
             val fetchSupplierFilterOptions = ::gen_fetchSupplierFilterOptions_fn
             fun gen_fetchCategoryFilterOptions_fn(params: UTSJSONObject): UTSPromise<UTSJSONObject> {
                 return wrapUTSPromise(suspend w1@{
-                        val raw = await(request("/api/categories/categories/options/", "GET", buildOptionQuery(params), true))
-                        return@w1 buildBottomSelectResponse(raw, params)
+                        val query = buildOptionQuery(params)
+                        query["key"] = "parent"
+                        val raw = await(request("/api/categories/categories/options/", "GET", query, true))
+                        return@w1 buildCategoryTreeResponse(raw)
                 })
             }
             val fetchCategoryFilterOptions = ::gen_fetchCategoryFilterOptions_fn
@@ -394,6 +519,19 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 return "上架"
             }
             val listedText = ::gen_listedText_fn
+            fun gen_movementPeriodText_fn(value: String): String {
+                if (value == "today") {
+                    return "今日"
+                }
+                if (value == "week") {
+                    return "本周"
+                }
+                if (value == "month") {
+                    return "本月"
+                }
+                return "全部时间"
+            }
+            val movementPeriodText = ::gen_movementPeriodText_fn
             fun gen_numberText_fn(value: Any?): String {
                 val text = stringValue(value)
                 if (text == "") {
@@ -594,6 +732,11 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 } else {
                     productFilterId.value
                 }
+                , movement_period = if (movementPeriodFilter.value == "all") {
+                    null
+                } else {
+                    movementPeriodFilter.value
+                }
                 , transaction_type = null, location_type = null, is_active = null)
             }
             val buildQuery = ::gen_buildQuery_fn
@@ -690,6 +833,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 locationFilterText.value = ""
                 alertStatusFilter.value = ""
                 listedStatusFilter.value = ""
+                movementPeriodFilter.value = "all"
                 draftSupplierValue.value = ""
                 draftSupplierText.value = ""
                 draftCategoryValues.value = _uA<String>()
@@ -697,6 +841,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 draftLocationText.value = ""
                 draftAlertStatus.value = ""
                 draftListedStatus.value = ""
+                draftMovementPeriod.value = "all"
                 keyword.value = ""
                 currentPage.value = 1
                 closeFilterDrawer()
@@ -716,6 +861,34 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 loadStocks()
             }
             val applySelectedFilters = ::gen_applySelectedFilters_fn
+            fun gen_openMovementPeriodPanel_fn() {
+                draftMovementPeriod.value = movementPeriodFilter.value
+                movementPeriodPanelVisible.value = true
+            }
+            val openMovementPeriodPanel = ::gen_openMovementPeriodPanel_fn
+            fun gen_closeMovementPeriodPanel_fn() {
+                movementPeriodPanelVisible.value = false
+            }
+            val closeMovementPeriodPanel = ::gen_closeMovementPeriodPanel_fn
+            fun gen_selectDraftMovementPeriod_fn(value: String) {
+                draftMovementPeriod.value = value
+            }
+            val selectDraftMovementPeriod = ::gen_selectDraftMovementPeriod_fn
+            fun gen_applyMovementPeriod_fn() {
+                movementPeriodFilter.value = draftMovementPeriod.value
+                currentPage.value = 1
+                closeMovementPeriodPanel()
+                loadStocks()
+            }
+            val applyMovementPeriod = ::gen_applyMovementPeriod_fn
+            fun gen_resetMovementPeriod_fn() {
+                draftMovementPeriod.value = "all"
+                movementPeriodFilter.value = "all"
+                currentPage.value = 1
+                closeMovementPeriodPanel()
+                loadStocks()
+            }
+            val resetMovementPeriod = ::gen_resetMovementPeriod_fn
             fun gen_handlePageChange_fn(payload: UTSJSONObject) {
                 val pageValue = payload["page"]
                 if (pageValue == null) {
@@ -750,14 +923,14 @@ open class GenPagesInventoryManagementIndex : BasePage {
                     productName
                 }
                 if (titleText != "") {
-                    url = url + separator + "productName=" + UTSAndroid.consoleDebugError(encodeURIComponent(titleText), " at pages/inventory-management/index.uvue:719")
+                    url = url + separator + "productName=" + UTSAndroid.consoleDebugError(encodeURIComponent(titleText), " at pages/inventory-management/index.uvue:884")
                 }
                 return url
             }
             val buildInventoryDetailUrl = ::gen_buildInventoryDetailUrl_fn
             fun gen_navigateToInventoryDetail_fn(stockId: String, mode: String, productName: String) {
                 if (stockId == "" && productFilterId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "缺少商品或库存记录", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "缺少商品或库存记录", icon = "none", duration = 3500))
                     return
                 }
                 uni_navigateTo(NavigateToOptions(url = buildInventoryDetailUrl(stockId, mode, productName)))
@@ -765,7 +938,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
             val navigateToInventoryDetail = ::gen_navigateToInventoryDetail_fn
             fun gen_navigateToCreateStock_fn() {
                 if (productFilterId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "请先从商品页进入库存", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请先从商品页进入库存", icon = "none", duration = 3500))
                     return
                 }
                 navigateToInventoryDetail("", "create", productFilterName.value)
@@ -852,7 +1025,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                     } else {
                         res.errMsg
                     }
-                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                 }
                 ))
             }
@@ -959,6 +1132,21 @@ open class GenPagesInventoryManagementIndex : BasePage {
                 return "商品库存"
             }
             )
+            val movementPeriodLabel = computed(fun(): String {
+                return movementPeriodText(movementPeriodFilter.value)
+            }
+            )
+            val movementPeriodButtonText = computed(fun(): String {
+                if (movementPeriodFilter.value == "all") {
+                    return "时间"
+                }
+                return movementPeriodLabel.value
+            }
+            )
+            val productStockSubtitle = computed(fun(): String {
+                return movementPeriodLabel.value + " · 记录 " + totalCount.value.toString(10) + " · 本页库存 " + totalQuantityText.value
+            }
+            )
             val listItems = computed(fun(): UTSArray<UTSJSONObject> {
                 val result: UTSArray<UTSJSONObject> = _uA()
                 run {
@@ -972,7 +1160,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
-                return keyword.value != "" || supplierFilterValue.value != "" || categoryFilterValues.value.length > 0 || locationFilterValue.value != "" || alertStatusFilter.value != "" || listedStatusFilter.value != ""
+                return keyword.value != "" || supplierFilterValue.value != "" || categoryFilterValues.value.length > 0 || locationFilterValue.value != "" || alertStatusFilter.value != "" || listedStatusFilter.value != "" || movementPeriodFilter.value != "all"
             }
             )
             val emptyText = computed(fun(): String {
@@ -993,8 +1181,12 @@ open class GenPagesInventoryManagementIndex : BasePage {
                     _uO("key" to "total", "label" to "库存记录", "value" to totalCount.value.toString(10)),
                     _uO("key" to "quantity", "label" to "本页库存", "value" to totalQuantityText.value),
                     _uO("key" to "alerts", "label" to "本页预警", "value" to alertCountText.value),
-                    _uO("key" to "page", "label" to "页码", "value" to (currentPage.value.toString(10) + "/" + totalPages.value.toString(10)))
+                    _uO("key" to "time", "label" to "时间", "value" to movementPeriodLabel.value)
                 )
+            }
+            )
+            val inventorySummaryTitle = computed(fun(): String {
+                return "库存概览 · " + movementPeriodLabel.value + " · 记录 " + totalCount.value.toString(10) + " · 本页库存 " + totalQuantityText.value
             }
             )
             val filterPanelStyle = computed(fun(): String {
@@ -1030,8 +1222,9 @@ open class GenPagesInventoryManagementIndex : BasePage {
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass)
+                val _component_page_container = resolveComponent("page-container")
                 return _cE("view", _uM("class" to "page"), _uA(
-                    _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "searchPlaceholder" to "商品名、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to true, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to true, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "homePath" to homePath.value, "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
+                    _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "searchPlaceholder" to "商品名、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to true, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to true, "showRightText" to true, "rightText" to movementPeriodButtonText.value, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "homePath" to homePath.value, "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onRight" to openMovementPeriodPanel, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
                         return _uA(
                             _cE("view", _uM("class" to "inventory-filter-panel", "style" to _nS(filterPanelStyle.value)), _uA(
                                 _cE("scroll-view", _uM("scroll-y" to "true", "class" to "inventory-filter-content-scroll", "style" to _nS(filterContentScrollStyle.value)), _uA(
@@ -1131,6 +1324,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                         "title",
                         "searchValue",
                         "filterVisible",
+                        "rightText",
                         "filterActive",
                         "homePath"
                     )),
@@ -1140,7 +1334,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                                 _cE("view", _uM("key" to 0, "class" to "product-stock-header"), _uA(
                                     _cE("view", _uM("class" to "product-stock-title-wrap"), _uA(
                                         _cE("text", _uM("class" to "product-stock-title"), _tD(productStockTitle.value), 1),
-                                        _cE("text", _uM("class" to "product-stock-subtitle"), "统一管理该商品在所有库存位置的数量")
+                                        _cE("text", _uM("class" to "product-stock-subtitle"), _tD(productStockSubtitle.value), 1)
                                     )),
                                     _cE("view", _uM("class" to "product-stock-action", "onClick" to navigateToCreateStock), _uA(
                                         _cE("text", _uM("class" to "product-stock-action-text"), "新增库存")
@@ -1162,7 +1356,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "subtitle", "metaField" to "locationText", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载库存", "keepContentOnLoading" to true, "inlineLoadingText" to "库存刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "库存概览", "summaryItems" to summaryItems.value, "showFloatingAdd" to productMode.value, "floatingAddText" to "新增库存", "onItemClick" to handleItemClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onSubtitleClick" to handleSubtitleClick, "onFieldClick" to handleFieldClick, "onMetaClick" to handleMetaClick, "onFloatingAdd" to navigateToCreateStock), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "subtitle", "metaField" to "locationText", "tagField" to "tags", "tagColorMap" to unref(tagColorMap), "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载库存", "keepContentOnLoading" to true, "inlineLoadingText" to "库存刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to inventorySummaryTitle.value, "summaryItems" to summaryItems.value, "showFloatingAdd" to productMode.value, "floatingAddText" to "新增库存", "onItemClick" to handleItemClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onSubtitleClick" to handleSubtitleClick, "onFieldClick" to handleFieldClick, "onMetaClick" to handleMetaClick, "onFloatingAdd" to navigateToCreateStock), null, 8, _uA(
                                 "items",
                                 "tagColorMap",
                                 "fields",
@@ -1172,11 +1366,59 @@ open class GenPagesInventoryManagementIndex : BasePage {
                                 "currentPage",
                                 "totalPages",
                                 "totalCount",
+                                "summaryTitle",
                                 "summaryItems",
                                 "showFloatingAdd"
                             ))
                         ))
-                    ), 4)
+                    ), 4),
+                    _cV(_component_page_container, _uM("show" to unref(movementPeriodPanelVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 240, "overlay-style" to "background-color: rgba(15, 23, 42, 0.38);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closeMovementPeriodPanel), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "movement-panel"), _uA(
+                                _cE("view", _uM("class" to "movement-panel-handle")),
+                                _cE("view", _uM("class" to "movement-panel-head"), _uA(
+                                    _cE("text", _uM("class" to "movement-panel-title"), "库存时间"),
+                                    _cE("view", _uM("class" to "movement-panel-close", "onClick" to closeMovementPeriodPanel), _uA(
+                                        _cE("text", _uM("class" to "movement-panel-close-text"), "关闭")
+                                    ))
+                                )),
+                                _cE("view", _uM("class" to "movement-options"), _uA(
+                                    _cE(Fragment, null, RenderHelpers.renderList(movementPeriodOptions, fun(option, __key, __index, _cached): Any {
+                                        return _cE("view", _uM("key" to option.value, "class" to _nC(if (unref(draftMovementPeriod) == option.value) {
+                                            "movement-option movement-option-active"
+                                        } else {
+                                            "movement-option"
+                                        }
+                                        ), "onClick" to fun(){
+                                            selectDraftMovementPeriod(option.value)
+                                        }
+                                        ), _uA(
+                                            _cE("text", _uM("class" to _nC(if (unref(draftMovementPeriod) == option.value) {
+                                                "movement-option-text movement-option-text-active"
+                                            } else {
+                                                "movement-option-text"
+                                            }
+                                            )), _tD(option.label), 3)
+                                        ), 10, _uA(
+                                            "onClick"
+                                        ))
+                                    }
+                                    ), 64)
+                                )),
+                                _cE("view", _uM("class" to "movement-panel-actions"), _uA(
+                                    _cE("view", _uM("class" to "movement-panel-btn movement-panel-btn-light", "onClick" to resetMovementPeriod), _uA(
+                                        _cE("text", _uM("class" to "movement-panel-btn-light-text"), "全部")
+                                    )),
+                                    _cE("view", _uM("class" to "movement-panel-btn movement-panel-btn-primary", "onClick" to applyMovementPeriod), _uA(
+                                        _cE("text", _uM("class" to "movement-panel-btn-primary-text"), "应用")
+                                    ))
+                                ))
+                            ))
+                        )
+                    }
+                    ), "_" to 1), 8, _uA(
+                        "show"
+                    ))
                 ))
             }
         }
@@ -1187,7 +1429,7 @@ open class GenPagesInventoryManagementIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "inventory-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "inventory-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "inventory-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "inventory-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "inventory-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "inventory-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "inventory-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "inventory-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "inventory-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "inventory-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "inventory-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "inventory-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "inventory-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "inventory-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "inventory-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "inventory-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "inventory-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "inventory-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "inventory-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "product-stock-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 12, "paddingRight" to 12, "paddingBottom" to 12, "paddingLeft" to 12, "marginBottom" to 8)), "product-stock-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingRight" to 10)), "product-stock-title" to _pS(_uM("fontSize" to 17, "lineHeight" to "23px", "color" to "#0F172A", "fontWeight" to "bold")), "product-stock-subtitle" to _pS(_uM("marginTop" to 3, "fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "product-stock-action" to _pS(_uM("height" to 38, "paddingLeft" to 14, "paddingRight" to 14, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "product-stock-action-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF", "fontWeight" to "bold")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "inventory-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "inventory-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "inventory-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "inventory-filter-select-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "inventory-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "inventory-filter-select-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "inventory-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "inventory-filter-select-wrap" to _pS(_uM("marginTop" to 8)), "inventory-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "inventory-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "inventory-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "inventory-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "inventory-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "inventory-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "inventory-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "inventory-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "inventory-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "inventory-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "inventory-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "product-stock-header" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 9, "paddingRight" to 9, "paddingBottom" to 9, "paddingLeft" to 9, "marginBottom" to 6)), "product-stock-title-wrap" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "paddingRight" to 8)), "product-stock-title" to _pS(_uM("fontSize" to 15, "lineHeight" to "20px", "color" to "#0F172A", "fontWeight" to "bold")), "product-stock-subtitle" to _pS(_uM("marginTop" to 2, "fontSize" to 11, "lineHeight" to "15px", "color" to "#64748B")), "product-stock-action" to _pS(_uM("height" to 32, "paddingLeft" to 11, "paddingRight" to 11, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "alignItems" to "center", "justifyContent" to "center")), "product-stock-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#FFFFFF", "fontWeight" to "bold")), "movement-panel" to _pS(_uM("paddingLeft" to 14, "paddingRight" to 14, "paddingTop" to 8, "paddingBottom" to 14, "backgroundColor" to "#FFFFFF")), "movement-panel-handle" to _pS(_uM("width" to 40, "height" to 4, "borderTopLeftRadius" to 2, "borderTopRightRadius" to 2, "borderBottomRightRadius" to 2, "borderBottomLeftRadius" to 2, "backgroundColor" to "#CBD5E1", "alignSelf" to "center", "marginBottom" to 10)), "movement-panel-head" to _pS(_uM("flexDirection" to "row", "alignItems" to "center", "justifyContent" to "space-between", "marginBottom" to 10)), "movement-panel-title" to _pS(_uM("fontSize" to 15, "lineHeight" to "20px", "color" to "#0F172A", "fontWeight" to "bold")), "movement-panel-close" to _pS(_uM("height" to 28, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#F1F5F9")), "movement-panel-close-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#475569")), "movement-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap")), "movement-option" to _pS(_uM("height" to 30, "minWidth" to 66, "paddingLeft" to 11, "paddingRight" to 11, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "marginRight" to 7, "marginBottom" to 7, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0")), "movement-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "movement-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#334155")), "movement-option-text-active" to _pS(_uM("color" to "#FFFFFF", "fontWeight" to "bold")), "movement-panel-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 6)), "movement-panel-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 34, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "alignItems" to "center", "justifyContent" to "center")), "movement-panel-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "movement-panel-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "movement-panel-btn-light-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#475569")), "movement-panel-btn-primary-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "16px", "color" to "#FFFFFF", "fontWeight" to "bold")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

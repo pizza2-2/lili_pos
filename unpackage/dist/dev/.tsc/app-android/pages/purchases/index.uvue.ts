@@ -5,8 +5,9 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { autoGeneratePurchasePrices, deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
 import { getProductPricingFormulaList, ProductPricingFormulaListQuery } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type PurchaseSelectOption = { __$originalPosition?: UTSSourceMapPosition<"PurchaseSelectOption", "pages/purchases/index.uvue", 200, 6>;
+type PurchaseSelectOption = { __$originalPosition?: UTSSourceMapPosition<"PurchaseSelectOption", "pages/purchases/index.uvue", 201, 6>;
 	value: string
 	text: string
 }
@@ -29,7 +30,7 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(20)
-const pageTotalAmount = ref('0.00')
+const pageNetTotalAmount = ref('0.00')
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<PurchaseFilterOptionsResponse | null>(null)
@@ -79,11 +80,9 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/index.uvue:269")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/index.uvue:268")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -159,14 +158,14 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) return null
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return null
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/index.uvue:345")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/index.uvue:344")
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (value == null) return [] as UTSJSONObject[]
 	const text = JSON.stringify(value)
 	if (text == null || text == '') return [] as UTSJSONObject[]
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/index.uvue:352")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/index.uvue:351")
 	if (parsed == null) return [] as UTSJSONObject[]
 	return parsed!
 }
@@ -281,7 +280,7 @@ function buildBottomSelectResponse(source: PurchaseSelectOption[], params: UTSJS
 
 function buildSupplierOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const keywordValue = stringValue(params['keyword'])
-	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/purchases/index.uvue", 467, 8), 
+	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/purchases/index.uvue", 466, 8), 
 		key: 'supplier',
 		limit: 50,
 	} as UTSJSONObject
@@ -330,10 +329,10 @@ function applyResponse(response: PurchaseListResponse) {
 	pageSize.value = response.page_size
 	let total = 0.0
 	for (let index = 0; index < response.results.length; index += 1) {
-		const amount = parseFloat(response.results[index].total_amount)
+		const amount = parseFloat(response.results[index].net_total_amount)
 		if (!isNaN(amount)) total = total + amount
 	}
-	pageTotalAmount.value = total.toFixed(2)
+	pageNetTotalAmount.value = total.toFixed(2)
 }
 
 async function loadPurchases() {
@@ -359,7 +358,7 @@ async function loadPurchases() {
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
-		pageTotalAmount.value = '0.00'
+		pageNetTotalAmount.value = '0.00'
 		errorMessage.value = parseErrorMessage(error, '采购单加载失败')
 	} finally {
 		isLoading.value = false
@@ -492,7 +491,7 @@ async function runAction(id: string, actionName: string) {
 		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '操作失败'))
 	}
 }
 
@@ -506,7 +505,7 @@ async function runDelete(id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '删除失败'))
 	}
 }
 
@@ -548,7 +547,7 @@ async function confirmPriceCalculation() {
 	if (priceCalculating.value) return
 	if (pricePurchaseId.value == '') return
 	if (priceFormulaValue.value == '') {
-		uni.showToast({ title: '请选择售价公式', icon: 'none' })
+		uni.showToast({ title: '请选择售价公式', icon: 'none', duration: 3500 })
 		return
 	}
 	priceCalculating.value = true
@@ -559,7 +558,7 @@ async function confirmPriceCalculation() {
 		uni.showToast({ title: takeLatestResponseMessage('价格计算完成'), icon: 'success' })
 		loadPurchases()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '价格计算失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '价格计算失败'))
 	} finally {
 		priceCalculating.value = false
 	}
@@ -580,7 +579,7 @@ function handleMenu(payload: UTSJSONObject) {
 	if (actionKey == 'quick_input') {
 		const statusValue = stringValue(itemObject['statusValue'])
 		if (statusValue != 'DRAFT' && statusValue != 'draft') {
-			uni.showToast({ title: '只能在草稿采购单录入', icon: 'none' })
+			uni.showToast({ title: '只能在草稿采购单录入', icon: 'none', duration: 3500 })
 			return
 		}
 		uni.navigateTo({ url: '/pages/purchases/details/quick-input?purchase=' + id })
@@ -589,12 +588,12 @@ function handleMenu(payload: UTSJSONObject) {
 	if (actionKey == 'excel_upload') {
 		const statusValue = stringValue(itemObject['statusValue'])
 		if (statusValue != 'DRAFT' && statusValue != 'draft') {
-			uni.showToast({ title: '只能向草稿采购单上传', icon: 'none' })
+			uni.showToast({ title: '只能向草稿采购单上传', icon: 'none', duration: 3500 })
 			return
 		}
 		const importStatusValue = stringValue(itemObject['importStatusValue']).toLowerCase()
 		if (isActiveImportStatusValue(importStatusValue)) {
-			uni.showToast({ title: stringValue(itemObject['importStatusMessage'], '该采购单正在后台导入'), icon: 'none' })
+			uni.showToast({ title: stringValue(itemObject['importStatusMessage'], '该采购单正在后台导入'), icon: 'none', duration: 3500 })
 			return
 		}
 		uni.navigateTo({ url: '/pages/purchases/details/excel-upload?purchase=' + id })
@@ -633,7 +632,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '采购单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'amount', label: '本页不含税', value: '¥ ' + pageNetTotalAmount.value } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

@@ -36,7 +36,7 @@ open class GenPagesPurchasesIndex : BasePage {
             val totalPages = ref(1)
             val totalCount = ref(0)
             val pageSize = ref(20)
-            val pageTotalAmount = ref("0.00")
+            val pageNetTotalAmount = ref("0.00")
             val filterOptionsLoading = ref(false)
             val filterOptionsError = ref("")
             val filterOptions = ref<PurchaseFilterOptionsResponse?>(null)
@@ -71,13 +71,9 @@ open class GenPagesPurchasesIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/index.uvue:269")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/index.uvue:268")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -183,7 +179,7 @@ open class GenPagesPurchasesIndex : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/index.uvue:345")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/index.uvue:344")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -194,7 +190,7 @@ open class GenPagesPurchasesIndex : BasePage {
                 if (text == null || text == "") {
                     return _uA<UTSJSONObject>()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/index.uvue:352")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/index.uvue:351")
                 if (parsed == null) {
                     return _uA<UTSJSONObject>()
                 }
@@ -374,7 +370,7 @@ open class GenPagesPurchasesIndex : BasePage {
             val buildBottomSelectResponse = ::gen_buildBottomSelectResponse_fn
             fun gen_buildSupplierOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val keywordValue = stringValue(params["keyword"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/purchases/index.uvue", 467, 8), "key" to "supplier", "limit" to 50)
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/purchases/index.uvue", 466, 8), "key" to "supplier", "limit" to 50)
                 if (keywordValue != "") {
                     query["search"] = keywordValue
                     query["keyword"] = keywordValue
@@ -430,14 +426,14 @@ open class GenPagesPurchasesIndex : BasePage {
                 run {
                     var index: Number = 0
                     while(index < response.results.length){
-                        val amount = parseFloat(response.results[index].total_amount)
+                        val amount = parseFloat(response.results[index].net_total_amount)
                         if (!isNaN(amount)) {
                             total = total + amount
                         }
                         index += 1
                     }
                 }
-                pageTotalAmount.value = total.toFixed(2)
+                pageNetTotalAmount.value = total.toFixed(2)
             }
             val applyResponse = ::gen_applyResponse_fn
             fun gen_loadPurchases_fn(): UTSPromise<Unit> {
@@ -476,7 +472,7 @@ open class GenPagesPurchasesIndex : BasePage {
                             currentPage.value = 1
                             totalPages.value = 1
                             totalCount.value = 0
-                            pageTotalAmount.value = "0.00"
+                            pageNetTotalAmount.value = "0.00"
                             errorMessage.value = parseErrorMessage(error, "采购单加载失败")
                         }
                          finally {
@@ -650,7 +646,7 @@ open class GenPagesPurchasesIndex : BasePage {
                             loadPurchases()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "操作失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "操作失败"))
                         }
                 })
             }
@@ -672,7 +668,7 @@ open class GenPagesPurchasesIndex : BasePage {
                             loadPurchases()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "删除失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "删除失败"))
                         }
                 })
             }
@@ -727,7 +723,7 @@ open class GenPagesPurchasesIndex : BasePage {
                             return@w1
                         }
                         if (priceFormulaValue.value == "") {
-                            uni_showToast(ShowToastOptions(title = "请选择售价公式", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请选择售价公式", icon = "none", duration = 3500))
                             return@w1
                         }
                         priceCalculating.value = true
@@ -739,7 +735,7 @@ open class GenPagesPurchasesIndex : BasePage {
                             loadPurchases()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "价格计算失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "价格计算失败"))
                         }
                          finally {
                             priceCalculating.value = false
@@ -766,7 +762,7 @@ open class GenPagesPurchasesIndex : BasePage {
                 if (actionKey == "quick_input") {
                     val statusValue = stringValue(itemObject["statusValue"])
                     if (statusValue != "DRAFT" && statusValue != "draft") {
-                        uni_showToast(ShowToastOptions(title = "只能在草稿采购单录入", icon = "none"))
+                        uni_showToast(ShowToastOptions(title = "只能在草稿采购单录入", icon = "none", duration = 3500))
                         return
                     }
                     uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/quick-input?purchase=" + id))
@@ -775,12 +771,12 @@ open class GenPagesPurchasesIndex : BasePage {
                 if (actionKey == "excel_upload") {
                     val statusValue = stringValue(itemObject["statusValue"])
                     if (statusValue != "DRAFT" && statusValue != "draft") {
-                        uni_showToast(ShowToastOptions(title = "只能向草稿采购单上传", icon = "none"))
+                        uni_showToast(ShowToastOptions(title = "只能向草稿采购单上传", icon = "none", duration = 3500))
                         return
                     }
                     val importStatusValue = stringValue(itemObject["importStatusValue"]).toLowerCase()
                     if (isActiveImportStatusValue(importStatusValue)) {
-                        uni_showToast(ShowToastOptions(title = stringValue(itemObject["importStatusMessage"], "该采购单正在后台导入"), icon = "none"))
+                        uni_showToast(ShowToastOptions(title = stringValue(itemObject["importStatusMessage"], "该采购单正在后台导入"), icon = "none", duration = 3500))
                         return
                     }
                     uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/excel-upload?purchase=" + id))
@@ -837,7 +833,7 @@ open class GenPagesPurchasesIndex : BasePage {
             val summaryItems = computed(fun(): UTSArray<UTSJSONObject> {
                 return _uA(
                     _uO("key" to "total", "label" to "采购单数", "value" to totalCount.value.toString(10)),
-                    _uO("key" to "amount", "label" to "本页金额", "value" to ("¥ " + pageTotalAmount.value)),
+                    _uO("key" to "amount", "label" to "本页不含税", "value" to ("¥ " + pageNetTotalAmount.value)),
                     _uO("key" to "page", "label" to "页码", "value" to (currentPage.value.toString(10) + "/" + totalPages.value.toString(10)))
                 )
             }

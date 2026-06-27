@@ -50,13 +50,9 @@ open class GenPagesOrdersFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:193")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/from.uvue:191")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -82,7 +78,7 @@ open class GenPagesOrdersFrom : BasePage {
                 if (text == null || text == "") {
                     return _uA<UTSJSONObject>()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:211")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/orders/from.uvue:209")
                 if (parsed == null) {
                     return _uA<UTSJSONObject>()
                 }
@@ -97,7 +93,7 @@ open class GenPagesOrdersFrom : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/orders/from.uvue:220")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/orders/from.uvue:218")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_boolText_fn(value: Boolean): String {
@@ -271,7 +267,7 @@ open class GenPagesOrdersFrom : BasePage {
             val quantityText = ::gen_quantityText_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){

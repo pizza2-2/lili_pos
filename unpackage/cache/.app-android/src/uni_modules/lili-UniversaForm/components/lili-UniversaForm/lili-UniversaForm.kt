@@ -125,7 +125,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val getObjectField = ::gen_getObjectField_fn
             fun gen_cloneObject_fn(source: UTSJSONObject): UTSJSONObject {
-                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 313, 8))
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 314, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     target[key] = source[key]
                 }
@@ -418,6 +418,17 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return ""
             }
             val getDefaultValue = ::gen_getDefaultValue_fn
+            fun gen_shouldUseDefaultValue_fn(field: UTSJSONObject, incoming: Any?): Boolean {
+                if (incoming == null) {
+                    return true
+                }
+                val fieldType = getFieldType(field)
+                if (fieldType == "datetime" && getBooleanField(field, "defaultToToday", false)) {
+                    return ("" + incoming) == ""
+                }
+                return false
+            }
+            val shouldUseDefaultValue = ::gen_shouldUseDefaultValue_fn
             fun gen_getFieldValue_fn(field: UTSJSONObject): Any {
                 val key = getFieldKey(field)
                 if (key == "") {
@@ -643,6 +654,10 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 return getBooleanField(field, "showScan", false)
             }
             val showBottomSelectScan = ::gen_showBottomSelectScan_fn
+            fun gen_getBottomSelectAutoSelectUnique_fn(field: UTSJSONObject): Boolean {
+                return getBooleanField(field, "autoSelectUnique", false)
+            }
+            val getBottomSelectAutoSelectUnique = ::gen_getBottomSelectAutoSelectUnique_fn
             fun gen_getBottomSelectScanOnlyFromCamera_fn(field: UTSJSONObject): Boolean {
                 return getBooleanField(field, "scanOnlyFromCamera", true)
             }
@@ -763,13 +778,13 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val clearFieldError = ::gen_clearFieldError_fn
             fun gen_emitFieldChange_fn(field: UTSJSONObject, value: Any) {
-                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 848, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
+                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 862, 8), "field" to field, "key" to getFieldKey(field), "value" to value, "mode" to props.mode, "formData" to formData.value)
                 emit("field-change", payload)
                 emit("form-change", payload)
             }
             val emitFieldChange = ::gen_emitFieldChange_fn
             fun gen_serializeState_fn(): String {
-                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 860, 8), "mode" to props.mode, "formData" to formData.value)
+                val state: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 874, 8), "mode" to props.mode, "formData" to formData.value)
                 return JSON.stringify(state)
             }
             val serializeState = ::gen_serializeState_fn
@@ -797,7 +812,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val markDirty = ::gen_markDirty_fn
             fun gen_applyInitialValues_fn() {
-                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 891, 8))
+                val nextData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 905, 8))
                 run {
                     var i: Number = 0
                     while(i < props.formSections.length){
@@ -812,10 +827,10 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                     continue
                                 }
                                 val incoming = props.initialData[key]
-                                if (incoming != null) {
-                                    nextData[key] = incoming
-                                } else {
+                                if (shouldUseDefaultValue(field, incoming)) {
                                     nextData[key] = getDefaultValue(field)
+                                } else {
+                                    nextData[key] = incoming
                                 }
                                 val textKey = getBottomSelectTextKey(field)
                                 if (textKey != "") {
@@ -1001,7 +1016,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                 if (editPath != "") {
                     val value = getStringFieldValue(field)
                     if (value == "") {
-                        uni_showToast(ShowToastOptions(title = "请先选择要编辑的项目", icon = "none"))
+                        uni_showToast(ShowToastOptions(title = "请先选择要编辑的项目", icon = "none", duration = 3500))
                         return
                     }
                     navigateToBottomSelectPath(appendQueryValue(editPath, getBottomSelectEditQueryKey(field), value))
@@ -1038,7 +1053,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     var index: Number = 0
                     while(index < sourceItems.length){
                         val sourceItem = sourceItems[index]
-                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1087, 9))
+                        val clonedItem: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1101, 9))
                         for(key in resolveUTSKeyIterator(sourceItem)){
                             clonedItem[key] = sourceItem[key]
                         }
@@ -1102,7 +1117,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             }
             val validateField = ::gen_validateField_fn
             fun gen_validate_fn(): Boolean {
-                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1159, 8))
+                val errors: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1173, 8))
                 var hasError = false
                 run {
                     var i: Number = 0
@@ -1152,7 +1167,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
             val confirmLeave = ::gen_confirmLeave_fn
             fun gen_handleSubmit_fn() {
                 if (!validate()) {
-                    uni_showToast(ShowToastOptions(title = "请检查必填项", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请检查必填项", icon = "none", duration = 3500))
                     return
                 }
                 emit("submit", buildSubmitPayload())
@@ -1200,7 +1215,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                     } else {
                         res.errMsg
                     }
-                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                 }
                 ))
             }
@@ -1587,7 +1602,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                             } else {
                                                                                 if (isTrue(isBottomSelectField(field))) {
                                                                                     _cE("view", _uM("key" to 5, "class" to "uf-bottom-select-wrap"), _uA(
-                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "valueText" to getBottomSelectValueText(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "imageKey" to getBottomSelectImageKey(field), "subtitleKey" to getBottomSelectSubtitleKey(field), "valueImage" to getBottomSelectValueImage(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "tree" to getFieldTree(field), "childrenKey" to getFieldChildrenKey(field), "expandOnClickNode" to getFieldExpandOnClickNode(field), "selectableLevel" to getFieldSelectableLevel(field), "selectableLevelMessage" to getFieldSelectableLevelMessage(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "showScan" to showBottomSelectScan(field), "scanOnlyFromCamera" to getBottomSelectScanOnlyFromCamera(field), "addPath" to getBottomSelectAddPath(field), "editPath" to getBottomSelectEditPath(field), "editQueryKey" to getBottomSelectEditQueryKey(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
+                                                                                        _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to getStringFieldValue(field), "valueText" to getBottomSelectValueText(field), "title" to getBottomSelectTitle(field), "placeholder" to getFieldPlaceholder(field), "searchPlaceholder" to getBottomSelectSearchPlaceholder(field), "emptyText" to getBottomSelectEmptyText(field), "disabled" to isReadonly(field), "labelKey" to getBottomSelectLabelKey(field), "valueKey" to getBottomSelectValueKey(field), "imageKey" to getBottomSelectImageKey(field), "subtitleKey" to getBottomSelectSubtitleKey(field), "valueImage" to getBottomSelectValueImage(field), "pageSize" to getBottomSelectPageSize(field), "searchDelay" to getBottomSelectSearchDelay(field), "tree" to getFieldTree(field), "childrenKey" to getFieldChildrenKey(field), "expandOnClickNode" to getFieldExpandOnClickNode(field), "selectableLevel" to getFieldSelectableLevel(field), "selectableLevelMessage" to getFieldSelectableLevelMessage(field), "showEditAction" to showBottomSelectEdit(field), "showAddAction" to showBottomSelectAdd(field), "showScan" to showBottomSelectScan(field), "autoSelectUnique" to getBottomSelectAutoSelectUnique(field), "scanOnlyFromCamera" to getBottomSelectScanOnlyFromCamera(field), "addPath" to getBottomSelectAddPath(field), "editPath" to getBottomSelectEditPath(field), "editQueryKey" to getBottomSelectEditQueryKey(field), "fetchData" to getFieldFetchData(field), "onChange" to fun(`$event`: Any){
                                                                                             handleBottomSelectChange(field, `$event`)
                                                                                         }, "onEdit" to fun(){
                                                                                             handleBottomSelectEdit(field)
@@ -1616,6 +1631,7 @@ open class GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFo
                                                                                             "showEditAction",
                                                                                             "showAddAction",
                                                                                             "showScan",
+                                                                                            "autoSelectUnique",
                                                                                             "scanOnlyFromCamera",
                                                                                             "addPath",
                                                                                             "editPath",

@@ -41,7 +41,6 @@ open class GenPagesTabbarSettings : BasePage {
             )), MenuGroup(label = "收银与店务配置", items = _uA(
                 MenuItem(label = "收银台", icon = "", iconPath = "/static/menu-icons/cash-register.svg", path = null, action = "todo", disabled = true),
                 MenuItem(label = "打印机设置", icon = "", iconPath = "/static/menu-icons/printer.svg", path = "/pages/printer-settings/index", action = "navigateTo", disabled = false),
-                MenuItem(label = "标签打印", icon = "", iconPath = "/static/menu-icons/printer.svg", path = "/pages/label-print/index", action = "navigateTo", disabled = false),
                 MenuItem(label = "支付", icon = "", iconPath = "/static/menu-icons/payment.svg", path = null, action = "todo", disabled = true),
                 MenuItem(label = "权限", icon = "", iconPath = "/static/menu-icons/permission.svg", path = null, action = "todo", disabled = true)
             )), MenuGroup(label = "库存与盘点", items = _uA(
@@ -56,7 +55,7 @@ open class GenPagesTabbarSettings : BasePage {
             ))))
             fun gen_handleTap_fn(item: MenuItem) {
                 if (item.disabled) {
-                    uni_showToast(ShowToastOptions(title = "该功能正在开发中", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "该功能正在开发中", icon = "none", duration = 3500))
                     return
                 }
                 if (item.action == "switchTab" && item.path != null) {

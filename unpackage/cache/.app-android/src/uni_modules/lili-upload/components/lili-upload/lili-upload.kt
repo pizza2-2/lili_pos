@@ -82,11 +82,42 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                 }
                 return "" + value
             }
+            fun gen_safeErrorMessage_fn(error: Any?, fallback: String): String {
+                if (error == null) {
+                    return fallback
+                }
+                val text = JSON.stringify(error)
+                if (text == null || text == "" || text == "{}") {
+                    return fallback
+                }
+                try {
+                    val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:125")
+                    if (parsed != null) {
+                        val message = getStringField(parsed!!, "message")
+                        if (message != "") {
+                            return message
+                        }
+                        val detail = getStringField(parsed!!, "detail")
+                        if (detail != "") {
+                            return detail
+                        }
+                        val errors = getStringField(parsed!!, "errors")
+                        if (errors != "") {
+                            return errors
+                        }
+                    }
+                }
+                 catch (parseError: Throwable) {
+                    return text
+                }
+                return text
+            }
+            val safeErrorMessage = ::gen_safeErrorMessage_fn
             fun buildFileItem(path: String, id: String = ""): UTSJSONObject {
                 return _uO("path" to path, "url" to path, "previewUrl" to path, "id" to id, "isRemote" to (id != ""))
             }
             fun gen_buildSyncedFileItem_fn(path: String, metaItem: UTSJSONObject): UTSJSONObject {
-                val item: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 131, 8))
+                val item: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 151, 8))
                 for(key in resolveUTSKeyIterator(metaItem)){
                     item[key] = metaItem[key]
                 }
@@ -194,7 +225,7 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:242") as UTSJSONObject
+                    return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:262") as UTSJSONObject
                 }
                  catch (e: Throwable) {
                     return null
@@ -230,28 +261,24 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
             }
             val endUploading = ::gen_endUploading_fn
             fun gen_uploadImage_fn(path: String, index: Number) {
-                console.log("lili-upload uploadImage start:", index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:285")
+                console.log("lili-upload uploadImage start:", index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:305")
                 beginUploading()
                 try {
                     uni_uploadFile(UploadFileOptions(url = props.action, filePath = path, name = props.name, header = props.headers, formData = props.formData, success = fun(res){
-                        console.log("lili-upload uploadImage success:", index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:295")
+                        console.log("lili-upload uploadImage success:", index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:315")
                         emit("upload", buildUploadPayload(index, path, res.data))
                         endUploading()
                     }
                     , fail = fun(err){
                         val message = err.errMsg
-                        console.log("lili-upload uploadImage fail:", index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:301")
+                        console.log("lili-upload uploadImage fail:", index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:321")
                         emitError("upload", path, message)
                         endUploading()
                     }
                     ))
                 }
                  catch (error: Throwable) {
-                    val message = if (error == null) {
-                        "上传失败"
-                    } else {
-                        (error as UTSError).message
-                    }
+                    val message = safeErrorMessage(error, "上传失败")
                     emitError("upload", path, if (message == "") {
                         "上传失败"
                     } else {
@@ -267,12 +294,12 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                     return
                 }
                 if (uploadingCount.value > 0) {
-                    uni_showToast(ShowToastOptions(title = "图片上传中，请稍后", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "图片上传中，请稍后", icon = "none", duration = 3500))
                     return
                 }
                 val remain = props.max - imageList.value.length
                 if (remain <= 0) {
-                    uni_showToast(ShowToastOptions(title = "已达到最大数量", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "已达到最大数量", icon = "none", duration = 3500))
                     return
                 }
                 uni_chooseImage(ChooseImageOptions(count = remain, sizeType = _uA(
@@ -358,7 +385,7 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
             val removeImageAt = ::gen_removeImageAt_fn
             fun gen_handleDelete_fn(index: Number) {
                 if (uploadingCount.value > 0) {
-                    uni_showToast(ShowToastOptions(title = "图片上传中，请稍后", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "图片上传中，请稍后", icon = "none", duration = 3500))
                     return
                 }
                 if (index < 0 || index >= imageList.value.length) {
@@ -399,11 +426,7 @@ open class GenUniModulesLiliUploadComponentsLiliUploadLiliUpload : VueComponent 
                             pendingDeleteIndex.value = -1
                         }
                          catch (error: Throwable) {
-                            val message = if (error == null) {
-                                "删除图片失败"
-                            } else {
-                                (error as UTSError).message
-                            }
+                            val message = safeErrorMessage(error, "删除图片失败")
                             emitError("delete", imageList.value[index], if (message == "") {
                                 "删除图片失败"
                             } else {

@@ -79,6 +79,26 @@ function getStringField(obj: UTSJSONObject, key: string, fallback: string = '') 
 	return '' + value
 }
 
+function safeErrorMessage(error: any | null, fallback: string) : string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:125")
+		if (parsed != null) {
+			const message = getStringField(parsed!, 'message')
+			if (message != '') return message
+			const detail = getStringField(parsed!, 'detail')
+			if (detail != '') return detail
+			const errors = getStringField(parsed!, 'errors')
+			if (errors != '') return errors
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
 function buildFileItem(path: string, id: string = '') : UTSJSONObject {
 	return {
 		path: path,
@@ -90,7 +110,7 @@ function buildFileItem(path: string, id: string = '') : UTSJSONObject {
 }
 
 function buildSyncedFileItem(path: string, metaItem: UTSJSONObject) : UTSJSONObject {
-	const item = { __$originalPosition: new UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 131, 8), } as UTSJSONObject
+	const item = { __$originalPosition: new UTSSourceMapPosition("item", "uni_modules/lili-upload/components/lili-upload/lili-upload.uvue", 151, 8), } as UTSJSONObject
 	for (const key in metaItem) {
 		item[key] = metaItem[key]
 	}
@@ -201,7 +221,7 @@ function tryParseResponse(text: string) : UTSJSONObject | null {
 		return null
 	}
 	try {
-		return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:242") as UTSJSONObject
+		return UTSAndroid.consoleDebugError(JSON.parse(text), " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:262") as UTSJSONObject
 	} catch (e) {
 		return null
 	}
@@ -244,7 +264,7 @@ function endUploading() {
 }
 
 function uploadImage(path: string, index: number) {
-	console.log('lili-upload uploadImage start:', index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:285")
+	console.log('lili-upload uploadImage start:', index, path, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:305")
 	beginUploading()
 	try {
 		uni.uploadFile({
@@ -254,19 +274,19 @@ function uploadImage(path: string, index: number) {
 			header: props.headers,
 			formData: props.formData,
 			success: (res) => {
-				console.log('lili-upload uploadImage success:', index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:295")
+				console.log('lili-upload uploadImage success:', index, path, res.statusCode, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:315")
 				emit('upload', buildUploadPayload(index, path, res.data))
 				endUploading()
 			},
 			fail: (err) => {
 				const message = err.errMsg
-				console.log('lili-upload uploadImage fail:', index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:301")
+				console.log('lili-upload uploadImage fail:', index, path, message, " at uni_modules/lili-upload/components/lili-upload/lili-upload.uvue:321")
 				emitError('upload', path, message)
 				endUploading()
 			},
 		})
 	} catch (error) {
-		const message = error == null ? '上传失败' : (error as Error).message
+		const message = safeErrorMessage(error, '上传失败')
 		emitError('upload', path, message == '' ? '上传失败' : message)
 		endUploading()
 	}
@@ -279,7 +299,7 @@ function handleChoose() {
 	if (uploadingCount.value > 0) {
 		uni.showToast({
 			title: '图片上传中，请稍后',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -287,7 +307,7 @@ function handleChoose() {
 	if (remain <= 0) {
 		uni.showToast({
 			title: '已达到最大数量',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -370,7 +390,7 @@ function handleDelete(index: number) {
 	if (uploadingCount.value > 0) {
 		uni.showToast({
 			title: '图片上传中，请稍后',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -406,7 +426,7 @@ async function confirmDelete() {
 		deletePopupVisible.value = false
 		pendingDeleteIndex.value = -1
 	} catch (error) {
-		const message = error == null ? '删除图片失败' : (error as Error).message
+		const message = safeErrorMessage(error, '删除图片失败')
 		emitError('delete', imageList.value[index], message == '' ? '删除图片失败' : message)
 	} finally {
 		deleting.value = false

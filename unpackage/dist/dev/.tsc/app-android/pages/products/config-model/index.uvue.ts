@@ -11,6 +11,7 @@ import {
 	productDiscountsPath,
 } from '@/pkg/api/modules/products.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -134,20 +135,20 @@ async function handleDiscountSelect(discountItem: UTSJSONObject) {
 	if (discountId == '') {
 		uni.showToast({
 			title: '无法读取折扣信息',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
 	if (selectionProductId.value == '') {
 		uni.showToast({
 			title: '未找到商品信息',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
 	const baseSalesPrice = selectionBaseSalesPrice.value == '' ? '0.00' : selectionBaseSalesPrice.value
 	const finalPrice = calculateDiscountedPriceText(baseSalesPrice, discountItem)
-	const selection = { __$originalPosition: new UTSSourceMapPosition("selection", "pages/products/config-model/index.uvue", 252, 8), 
+	const selection = { __$originalPosition: new UTSSourceMapPosition("selection", "pages/products/config-model/index.uvue", 253, 8), 
 		product_id: selectionProductId.value,
 		discount_id: discountId,
 		discount_name: getStringField(discountItem, 'name', getStringField(discountItem, 'discount_name')),
@@ -177,7 +178,7 @@ async function handleDiscountSelect(discountItem: UTSJSONObject) {
 	} catch (error) {
 		uni.showToast({
 			title: takeLatestResponseMessage('折扣添加失败'),
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 	} finally {
 		uni.hideLoading()
@@ -232,8 +233,6 @@ function openForm(id: string) {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 	}
 	return message
 }
@@ -259,7 +258,7 @@ async function loadItems() {
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
-		const extra = { __$originalPosition: new UTSSourceMapPosition("extra", "pages/products/config-model/index.uvue", 364, 9), } as UTSJSONObject
+		const extra = { __$originalPosition: new UTSSourceMapPosition("extra", "pages/products/config-model/index.uvue", 363, 9), } as UTSJSONObject
 		if (resource.value == 'attribute-value' && parentAttributeTypeId.value != '') {
 			extra['attribute_type'] = parentAttributeTypeId.value
 		}
@@ -420,7 +419,7 @@ function selectDiscountListItem(itemObject: UTSJSONObject) {
 	if (rawId == '') {
 		uni.showToast({
 			title: '无法读取折扣信息',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -428,7 +427,7 @@ function selectDiscountListItem(itemObject: UTSJSONObject) {
 	if (sourceItem == null) {
 		uni.showToast({
 			title: '该折扣信息已失效',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -462,7 +461,7 @@ async function confirmDelete(id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '删除失败'))
 	}
 }
 

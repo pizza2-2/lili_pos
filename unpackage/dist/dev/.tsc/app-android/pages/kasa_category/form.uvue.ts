@@ -3,8 +3,9 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createKasaCategory, getKasaCategoryDetail, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryMutationData, KasaCategoryTaxRatesResponse, updateKasaCategory } from '@/pkg/api/modules/kasa_category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/form.uvue", 41, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/kasa_category/form.uvue", 42, 6>;
 	value: string
 	text: string
 }
@@ -54,13 +55,9 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:89")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/form.uvue:86")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -190,7 +187,7 @@ async function loadTaxRateOptions() {
 	}
 	try {
 		taxRateResponse.value = await getKasaCategoryTaxRates()
-		console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:219")
+		console.log(taxRateResponse.value, " at pages/kasa_category/form.uvue:216")
 	} catch (error) {
 		taxRateResponse.value = null
 	}
@@ -257,13 +254,10 @@ async function loadDetailData(idText: string) {
 	try {
 		await loadTaxRateOptions()
 		const detail = await getKasaCategoryDetail(idText)
-		console.log(detail, " at pages/kasa_category/form.uvue:286")
+		console.log(detail, " at pages/kasa_category/form.uvue:283")
 		initialData.value = buildInitialDataFromDetail(detail)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '收银分类详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '收银分类详情加载失败'))
 	}
 }
 
@@ -334,10 +328,7 @@ async function persistForm(payload: UTSJSONObject) {
 		})
 		goBackToList()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, actionText + '失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		savingVisible.value = false
 		uni.hideLoading()
@@ -372,14 +363,14 @@ function handleDirtyChange(value: boolean) {
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 

@@ -16,6 +16,7 @@ import io.dcloud.uniapp.extapi.getStorageSync as uni_getStorageSync
 import io.dcloud.uniapp.extapi.getWindowInfo as uni_getWindowInfo
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.removeStorageSync as uni_removeStorageSync
+import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesInventoryChecksIndex : BasePage {
@@ -52,14 +53,12 @@ open class GenPagesInventoryChecksIndex : BasePage {
                 SelectOption__12(value = "", label = "全部"),
                 SelectOption__12(value = "DRAFT", label = "草稿"),
                 SelectOption__12(value = "IN_PROGRESS", label = "盘点中"),
-                SelectOption__12(value = "PENDING_REVIEW", label = "待审核"),
-                SelectOption__12(value = "APPROVED", label = "已审核"),
-                SelectOption__12(value = "ADJUSTED", label = "已调整"),
+                SelectOption__12(value = "ADJUSTED", label = "已完成"),
                 SelectOption__12(value = "CANCELLED", label = "已取消")
             )
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "categoryText", "label" to "分类:"), _uO("key" to "progressText", "label" to "进度:"), _uO("key" to "totalItemsText", "label" to "明细:"), _uO("key" to "discrepancyText", "label" to "差异:")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "details", "text" to "明细"), _uO("key" to "edit", "text" to "编辑"), _uO("key" to "start-check", "text" to "开始"), _uO("key" to "submit-check", "text" to "提交"), _uO("key" to "approve-check", "text" to "审核"), _uO("key" to "adjust-check", "text" to "调整库存"), _uO("key" to "reload", "text" to "刷新")))
-            val tagColorMap = ref<UTSJSONObject>(_uO("草稿" to "muted", "盘点中" to "warning", "待审核" to "info", "已审核" to "success", "已调整" to "success", "已取消" to "danger", "DRAFT" to "muted", "IN_PROGRESS" to "warning", "PENDING_REVIEW" to "info", "APPROVED" to "success", "ADJUSTED" to "success", "CANCELLED" to "danger"))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "details", "text" to "明细"), _uO("key" to "reload", "text" to "刷新")))
+            val tagColorMap = ref<UTSJSONObject>(_uO("草稿" to "muted", "盘点中" to "warning", "待完成" to "info", "已完成" to "success", "已取消" to "danger", "DRAFT" to "muted", "IN_PROGRESS" to "warning", "PENDING_REVIEW" to "info", "APPROVED" to "success", "ADJUSTED" to "success", "CANCELLED" to "danger"))
             fun stringValue(value: Any?, fallback: String = ""): String {
                 if (value == null) {
                     return fallback
@@ -86,17 +85,22 @@ open class GenPagesInventoryChecksIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
+                    var errorText = ""
+                    try {
+                        val text = JSON.stringify(error)
+                        if (text != null) {
+                            errorText = text
+                        }
                     }
-                    val errorText = JSON.stringify(error)
+                     catch (stringifyError: Throwable) {
+                        errorText = ""
+                    }
                     if (errorText != null && errorText != "") {
                         var parsedError: UTSJSONObject? = null
                         try {
                             val trimmedText = errorText.trim()
                             if (trimmedText != "" && trimmedText.substring(0, 1) == "{") {
-                                parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:239")
+                                parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:236")
                             }
                         }
                          catch (parseError: Throwable) {
@@ -105,14 +109,20 @@ open class GenPagesInventoryChecksIndex : BasePage {
                         if (parsedError != null) {
                             val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
-                                val parsedMessage = rawMessage as String
+                                val parsedMessage = stringValue(rawMessage)
                                 if (parsedMessage != "") {
                                     message = parsedMessage
                                 }
                             }
                         }
-                        if (message == fallback && errorText != "{}") {
+                        if (message == fallback && errorText != "{}" && errorText != "null") {
                             message = errorText
+                        }
+                    }
+                    if (message == fallback) {
+                        val textMessage = stringValue(error)
+                        if (textMessage != "" && textMessage != "[object Object]") {
+                            message = textMessage
                         }
                     }
                 }
@@ -132,7 +142,7 @@ open class GenPagesInventoryChecksIndex : BasePage {
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:263")
+                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:264")
                 }
                  catch (error: Throwable) {
                     return null
@@ -153,7 +163,7 @@ open class GenPagesInventoryChecksIndex : BasePage {
                 }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:277")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/index.uvue:278")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -316,7 +326,7 @@ open class GenPagesInventoryChecksIndex : BasePage {
             fun gen_buildOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val pageValue = intValue(params["page"])
                 val pageSizeValue = intValue(params["pageSize"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-checks/index.uvue", 377, 8), "page" to if (pageValue <= 0) {
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-checks/index.uvue", 378, 8), "page" to if (pageValue <= 0) {
                     1
                 } else {
                     pageValue
@@ -361,9 +371,6 @@ open class GenPagesInventoryChecksIndex : BasePage {
             }
             val fetchCategoryFilterOptions = ::gen_fetchCategoryFilterOptions_fn
             fun gen_statusText_fn(status: String, display: String): String {
-                if (display != "") {
-                    return display
-                }
                 if (status == "DRAFT") {
                     return "草稿"
                 }
@@ -371,16 +378,19 @@ open class GenPagesInventoryChecksIndex : BasePage {
                     return "盘点中"
                 }
                 if (status == "PENDING_REVIEW") {
-                    return "待审核"
+                    return "待完成"
                 }
                 if (status == "APPROVED") {
-                    return "已审核"
+                    return "待完成"
                 }
                 if (status == "ADJUSTED") {
-                    return "已调整"
+                    return "已完成"
                 }
                 if (status == "CANCELLED") {
                     return "已取消"
+                }
+                if (display != "") {
+                    return display
                 }
                 return if (status == "") {
                     "-"
@@ -389,6 +399,21 @@ open class GenPagesInventoryChecksIndex : BasePage {
                 }
             }
             val statusText = ::gen_statusText_fn
+            fun gen_menuActionsForStatus_fn(status: String): UTSArray<UTSJSONObject> {
+                val actions = _uA(
+                    _uO("key" to "details", "text" to "明细")
+                ) as UTSArray<UTSJSONObject>
+                if (status == "DRAFT") {
+                    actions.push(_uO("key" to "edit", "text" to "编辑"))
+                    actions.push(_uO("key" to "start-check", "text" to "开始盘点"))
+                } else if (status == "IN_PROGRESS" || status == "PENDING_REVIEW" || status == "APPROVED") {
+                    actions.push(_uO("key" to "complete-check", "text" to "完成盘点"))
+                }
+                actions.push(_uO("key" to "delete", "text" to "删除"))
+                actions.push(_uO("key" to "reload", "text" to "刷新"))
+                return actions
+            }
+            val menuActionsForStatus = ::gen_menuActionsForStatus_fn
             fun gen_compactDate_fn(value: String): String {
                 if (value == "") {
                     return "-"
@@ -560,7 +585,8 @@ open class GenPagesInventoryChecksIndex : BasePage {
             }
             val handlePageChange = ::gen_handlePageChange_fn
             fun gen_checkItem_fn(item: UTSJSONObject): UTSJSONObject {
-                val status = statusText(stringValue(item["status"]), stringValue(item["status_display"]))
+                val statusValue = stringValue(item["status"])
+                val status = statusText(statusValue, stringValue(item["status_display"]))
                 val total = intValue(item["total_items"])
                 val checked = intValue(item["checked_items"])
                 val progress = if (total <= 0) {
@@ -568,7 +594,7 @@ open class GenPagesInventoryChecksIndex : BasePage {
                 } else {
                     stringValue(item["progress_pct"], "0") + "%"
                 }
-                return _uO("id" to stringValue(item["id"]), "rawId" to stringValue(item["id"]), "title" to stringValue(item["check_number"], "盘点单"), "subtitle" to stringValue(item["location_name"], "-"), "meta" to compactDate(stringValue(item["planned_date"])), "statusText" to status, "categoryText" to stringValue(item["category_names"], "-"), "progressText" to (checked.toString(10) + "/" + total.toString(10) + " (" + progress + ")"), "totalItemsText" to total.toString(10), "discrepancyText" to stringValue(item["discrepancy_items"], "0"), "tags" to _uA<String>(status))
+                return _uO("id" to stringValue(item["id"]), "rawId" to stringValue(item["id"]), "statusValue" to statusValue, "title" to stringValue(item["check_number"], "盘点单"), "subtitle" to stringValue(item["location_name"], "-"), "meta" to compactDate(stringValue(item["planned_date"])), "statusText" to status, "categoryText" to stringValue(item["category_names"], "-"), "progressText" to (checked.toString(10) + "/" + total.toString(10) + " (" + progress + ")"), "totalItemsText" to total.toString(10), "discrepancyText" to stringValue(item["discrepancy_items"], "0"), "tags" to _uA<String>(status), "menuActions" to menuActionsForStatus(statusValue))
             }
             val checkItem = ::gen_checkItem_fn
             fun gen_navigateToEdit_fn(id: String) {
@@ -589,36 +615,78 @@ open class GenPagesInventoryChecksIndex : BasePage {
                 navigateToDetails(stringValue(payload["rawId"], stringValue(payload["id"])))
             }
             val handleItemClick = ::gen_handleItemClick_fn
-            fun gen_runAction_fn(actionName: String, id: String): UTSPromise<Unit> {
+            fun gen_showCompleteNavigatePrompt_fn() {
+                uni_showModal(ShowModalOptions(title = "盘点已完成", content = "库存已按盘点差异更新，点击确定查看库存。", showCancel = false, confirmText = "查看库存", success = fun(res){
+                    if (res.confirm) {
+                        uni_navigateTo(NavigateToOptions(url = "/pages/inventory-management/index"))
+                    }
+                }
+                ))
+            }
+            val showCompleteNavigatePrompt = ::gen_showCompleteNavigatePrompt_fn
+            fun gen_runDelete_fn(id: String): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend {
+                        try {
+                            await(deleteInventoryCheck(id))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("删除成功"), icon = "success"))
+                            loadItems()
+                        }
+                         catch (error: Throwable) {
+                            showErrorToast(parseErrorMessage(error, "删除失败"))
+                        }
+                })
+            }
+            val runDelete = ::gen_runDelete_fn
+            fun gen_runAction_fn(actionName: String, id: String, statusValue: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
                         try {
                             if (actionName == "start-check") {
                                 await(startInventoryCheck(id))
-                            } else if (actionName == "submit-check") {
-                                await(submitInventoryCheck(id))
-                            } else if (actionName == "approve-check") {
-                                await(approveInventoryCheck(id))
-                            } else if (actionName == "adjust-check") {
-                                await(adjustInventoryCheck(id))
+                                uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("操作成功"), icon = "success"))
+                                loadItems()
+                                return@w1
+                            }
+                            if (actionName == "complete-check") {
+                                if (statusValue == "PENDING_REVIEW") {
+                                    await(approveInventoryCheck(id))
+                                    await(adjustInventoryCheck(id))
+                                } else if (statusValue == "APPROVED") {
+                                    await(adjustInventoryCheck(id))
+                                } else {
+                                    await(completeInventoryCheck(id))
+                                }
+                                uni_setStorageSync(refreshStorageKey, "1")
+                                loadItems()
+                                showCompleteNavigatePrompt()
+                                return@w1
                             }
                             uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("操作成功"), icon = "success"))
                             loadItems()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "操作失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "操作失败"))
                         }
                 })
             }
             val runAction = ::gen_runAction_fn
-            fun gen_confirmRunAction_fn(actionKey: String, id: String, title: String, content: String) {
+            fun gen_confirmRunAction_fn(actionKey: String, id: String, statusValue: String, title: String, content: String) {
                 uni_showModal(ShowModalOptions(title = title, content = content, success = fun(res){
                     if (res.confirm) {
-                        runAction(actionKey, id)
+                        runAction(actionKey, id, statusValue)
                     }
                 }
                 ))
             }
             val confirmRunAction = ::gen_confirmRunAction_fn
+            fun gen_confirmDelete_fn(id: String) {
+                uni_showModal(ShowModalOptions(title = "删除盘点单", content = "确定删除这张盘点单吗？删除后盘点明细也会一起删除。", success = fun(res){
+                    if (res.confirm) {
+                        runDelete(id)
+                    }
+                }
+                ))
+            }
+            val confirmDelete = ::gen_confirmDelete_fn
             fun gen_handleMenu_fn(payload: UTSJSONObject) {
                 val action = payload["action"]
                 val item = payload["item"]
@@ -626,19 +694,19 @@ open class GenPagesInventoryChecksIndex : BasePage {
                     return
                 }
                 val actionKey = stringValue((action as UTSJSONObject)["key"])
-                val id = stringValue((item as UTSJSONObject)["rawId"])
+                val itemObject = item as UTSJSONObject
+                val id = stringValue(itemObject["rawId"])
+                val statusValue = stringValue(itemObject["statusValue"])
                 if (actionKey == "details") {
                     navigateToDetails(id)
                 } else if (actionKey == "edit") {
                     navigateToEdit(id)
                 } else if (actionKey == "start-check") {
-                    confirmRunAction(actionKey, id, "开始盘点", "确定开始这张盘点单吗？")
-                } else if (actionKey == "submit-check") {
-                    confirmRunAction(actionKey, id, "提交盘点", "确定提交这张盘点单吗？")
-                } else if (actionKey == "approve-check") {
-                    confirmRunAction(actionKey, id, "审核盘点", "确定审核通过这张盘点单吗？")
-                } else if (actionKey == "adjust-check") {
-                    confirmRunAction(actionKey, id, "调整库存", "确定按盘点差异调整库存吗？")
+                    confirmRunAction(actionKey, id, statusValue, "开始盘点", "确定开始这张盘点单吗？")
+                } else if (actionKey == "complete-check") {
+                    confirmRunAction(actionKey, id, statusValue, "完成盘点", "完成后会直接按差异调整库存，并跳转到库存管理。确定继续吗？")
+                } else if (actionKey == "delete") {
+                    confirmDelete(id)
                 } else if (actionKey == "reload") {
                     loadItems()
                 }

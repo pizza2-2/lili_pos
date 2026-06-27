@@ -193,7 +193,7 @@ const aiModalVisible = ref(false)
 const aiResultText = ref('')
 const aiParsedRows = ref<AIParsedRow[]>([])
 const columnsSwapped = ref(false)
-const priceType = ref('gross')
+const priceType = ref('net')
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback

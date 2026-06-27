@@ -14,6 +14,7 @@
 
 		<view class="page-content">
 			<lili-UniversaForm
+				ref="productFormRef"
 				:mode="formMode"
 				:formSections="formSections"
 				:initialData="initialData"
@@ -113,7 +114,7 @@
 		<lili-print-confirm-popup
 			:visible="printPopupVisible"
 			templateType="product_label"
-			:valueResolver="resolveProductPrintValue"
+			:printData="productPrintData"
 			@update:visible="handlePrintPopupVisibleChange"
 		/>
 	</view>
@@ -138,6 +139,8 @@ type SelectOption = {
 
 const formMode = ref('create')
 const productId = ref('')
+const copySourceId = ref('')
+const productFormRef = ref<ComponentPublicInstance|null>(null)
 const leaveSignal = ref(0)
 const dirtySignal = ref(0)
 const submitting = ref(false)
@@ -158,6 +161,7 @@ const initialData = ref<UTSJSONObject>({
 	description: '',
 	category_id: '',
 	category_text: '',
+	category_kasa_kod: '',
 	supplier_id: '',
 	supplier_name: '',
 	purchase_price: '0.00',
@@ -233,8 +237,31 @@ function productPrintPriceText(): string {
 	return productPrintField('base_sales_price', '0.00')
 }
 
+function productPrintKodText(fallback: string): string {
+	return productPrintField('category_kasa_kod', fallback)
+}
+
+const productPrintData = computed((): UTSJSONObject => {
+	const data = {} as UTSJSONObject
+	data['name'] = productPrintNameText()
+	data['name_cn'] = productPrintField('name_cn')
+	data['name_en'] = productPrintField('name_en')
+	data['name_other'] = productPrintField('name_other')
+	data['price'] = productPrintPriceText()
+	data['base_sales_price'] = productPrintField('base_sales_price', '0.00')
+	data['discount_price'] = productPrintPriceText()
+	data['barcode'] = productPrintField('barcode')
+	data['sku'] = productPrintField('sku')
+	data['kod'] = productPrintKodText('')
+	data['category_kasa_kod'] = productPrintKodText('')
+	return data
+})
+
 function resolveProductPrintValue(source: string, fallback: string): string {
 	if (source == 'name') return productPrintNameText()
+	if (source == 'name_cn') return productPrintField('name_cn')
+	if (source == 'name_en') return productPrintField('name_en')
+	if (source == 'name_other') return productPrintField('name_other')
 	if (source == 'price') return productPrintPriceText()
 	if (source == 'base_sales_price') return productPrintField('base_sales_price', '0.00')
 	if (source == 'discount_price') return productPrintPriceText()
@@ -243,7 +270,8 @@ function resolveProductPrintValue(source: string, fallback: string): string {
 		if (barcode != '') return barcode
 		return productPrintField('sku', fallback)
 	}
-	if (source == 'sku' || source == 'kod') return productPrintField('sku', fallback)
+	if (source == 'sku') return productPrintField('sku', fallback)
+	if (source == 'kod') return productPrintKodText(fallback)
 	return fallback
 }
 
@@ -749,6 +777,7 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		description: item.description,
 		category_id: categoryId,
 		category_text: categoryText,
+		category_kasa_kod: item.category_kasa_kod,
 		supplier_id: supplierId,
 		supplier_name: item.supplier_name,
 		purchase_price: item.purchase_price == '' ? '0.00' : item.purchase_price,
@@ -766,6 +795,18 @@ function buildInitialDataFromProduct(item: ProductItem, categoryTextOverride: st
 		images: images,
 		imageItems: imageItems,
 	} as UTSJSONObject
+}
+
+function buildCopiedInitialDataFromProduct(item: ProductItem, categoryTextOverride: string = ''): UTSJSONObject {
+	const data = buildInitialDataFromProduct(item, categoryTextOverride)
+	data['sku'] = ''
+	data['barcode'] = ''
+	data['discount_rule'] = ''
+	data['discount_rule_id'] = ''
+	data['discounted_base_sales_price'] = '0.00'
+	data['images'] = [] as string[]
+	data['imageItems'] = [] as UTSJSONObject[]
+	return data
 }
 
 const formSections = ref<UTSJSONObject[]>([
@@ -955,6 +996,7 @@ const formSections = ref<UTSJSONObject[]>([
 ])
 
 const pageTitle = computed((): string => {
+	if (formMode.value == 'create' && copySourceId.value != '') return '复制商品'
 	return formMode.value == 'edit' ? '编辑商品' : '新建商品'
 })
 
@@ -1008,6 +1050,38 @@ async function loadProductDetailData(idText: string): Promise<void> {
 		await loadProductDiscountCards()
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error, '商品详情加载失败'))
+	}
+}
+
+async function loadCopiedProductData(idText: string): Promise<void> {
+	if (idText == '') {
+		return
+	}
+	let loaded = false
+	try {
+		uni.showLoading({
+			title: '复制中',
+			mask: true,
+		})
+		const detail = await getProductDetail(idText)
+		let categoryText = ''
+		const categoryId = extractCategoryIdFromProduct(detail)
+		if (categoryId != '') {
+			categoryText = await resolveCategoryOptionText(categoryId)
+		}
+		initialData.value = buildCopiedInitialDataFromProduct(detail, categoryText)
+		discountCards.value = [] as UTSJSONObject[]
+		loaded = true
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '复制商品加载失败'))
+	} finally {
+		uni.hideLoading()
+	}
+	if (loaded) {
+		uni.showToast({
+			title: '已填入商品信息',
+			icon: 'success',
+		})
 	}
 }
 
@@ -1508,11 +1582,8 @@ function applyCalculatedPrice() {
 		return
 	}
 	uni.removeStorageSync(storageKey)
-	const currentData = cloneInitialData()
 	const nextBaseSalesPrice = calculatedPrice.trim()
-	currentData['base_sales_price'] = nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice
-	initialData.value = currentData
-	dirtySignal.value = dirtySignal.value + 1
+	productFormRef.value?.$callMethod('setFieldValue', 'base_sales_price', nextBaseSalesPrice == '' ? '0.00' : nextBaseSalesPrice)
 	uni.showToast({
 		title: '基础售价已填入计算结果',
 		icon: 'success',
@@ -1523,10 +1594,14 @@ onLoad((event: OnLoadOptions) => {
 	pageTaskGuard.reset()
 	leaveSignal.value = 0
 	const idValue = event['id']
+	const copyValue = event['copy_id']
 	productId.value = idValue == null ? '' : (idValue as string)
+	copySourceId.value = copyValue == null ? '' : (copyValue as string)
 	formMode.value = productId.value == '' ? 'create' : 'edit'
 	if (formMode.value == 'edit') {
 		loadProductDetailData(productId.value)
+	} else if (copySourceId.value != '') {
+		loadCopiedProductData(copySourceId.value)
 	}
 })
 

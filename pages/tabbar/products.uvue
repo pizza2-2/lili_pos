@@ -61,6 +61,20 @@
 								</view>
 							</view>
 
+							<view class="product-filter-select-group">
+								<text class="product-filter-select-title">排序</text>
+								<view class="product-filter-options">
+									<view
+										v-for="option in productSortOptions"
+										:key="option.value"
+										:class="sortOrdering == option.value ? 'product-filter-option product-filter-option-active' : 'product-filter-option'"
+										@click="selectSortOption(option)"
+									>
+										<text :class="sortOrdering == option.value ? 'product-filter-option-text product-filter-option-text-active' : 'product-filter-option-text'">{{ option.text }}</text>
+									</view>
+								</view>
+							</view>
+
 							<view v-if="filterOptionsLoading" class="product-filter-state">
 								<text class="product-filter-state-text">筛选选项加载中...</text>
 							</view>
@@ -267,6 +281,11 @@ type ProductStatusOption = {
 	text: string
 }
 
+type ProductSortOption = {
+	value: string
+	text: string
+}
+
 const keyword = ref('')
 const filterVisible = ref(false)
 const isLoading = ref(false)
@@ -283,6 +302,7 @@ const selectedFilters = ref<ProductSelectedFilter[]>([])
 const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
+const sortOrdering = ref('-updated_at')
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 const volumeScanLocked = ref(false)
@@ -308,6 +328,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'copy-product', text: '复制商品' } as UTSJSONObject,
 	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
 ])
@@ -324,6 +345,17 @@ const productStatusOptions = ref<ProductStatusOption[]>([
 	{ value: 'ACTIVE', text: '启用' } as ProductStatusOption,
 	{ value: 'INACTIVE', text: '停用' } as ProductStatusOption,
 	{ value: 'DISCONTINUED', text: '停产' } as ProductStatusOption,
+])
+
+const productSortOptions = ref<ProductSortOption[]>([
+	{ value: '-updated_at', text: '最近更新' } as ProductSortOption,
+	{ value: '-created_at', text: '最新创建' } as ProductSortOption,
+	{ value: 'sort_order', text: '手动排序' } as ProductSortOption,
+	{ value: 'name_cn', text: '名称正序' } as ProductSortOption,
+	{ value: '-total_stock_quantity', text: '库存最多' } as ProductSortOption,
+	{ value: '-total_sales_quantity', text: '销量最高' } as ProductSortOption,
+	{ value: 'base_sales_price', text: '售价最低' } as ProductSortOption,
+	{ value: '-base_sales_price', text: '售价最高' } as ProductSortOption,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
@@ -472,6 +504,7 @@ async function loadProducts() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
+			ordering: sortOrdering.value,
 			filters: selectedFilters.value,
 		})
 		applyProductResponse(response)
@@ -1312,6 +1345,10 @@ function toggleFilterOption(param: string, value: string, multiple: boolean) {
 	setSelectedFilterValue(param, nextValues.join(','))
 }
 
+function selectSortOption(option: ProductSortOption) {
+	sortOrdering.value = option.value
+}
+
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
 	if (pageValue == null) {
@@ -1332,6 +1369,7 @@ function handleFilterReset() {
 	supplierFilterValue.value = ''
 	supplierFilterText.value = ''
 	categoryFilterValues.value = []
+	sortOrdering.value = '-updated_at'
 	keyword.value = ''
 	currentPage.value = 1
 	closeFilterDrawer()
@@ -1454,6 +1492,17 @@ function handleMenu(payload: UTSJSONObject) {
 		})
 		return
 	}
+	if (key == 'copy-product') {
+		const rawId = stringValue(item['rawId'])
+		if (rawId == '') {
+			uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
+			return
+		}
+		uni.navigateTo({
+			url: '/pages/products/from?copy_id=' + rawId,
+		})
+		return
+	}
 	if (key == 'inventory') {
 		navigateToProductInventory(item)
 		return
@@ -1519,7 +1568,7 @@ const summaryItems = computed((): UTSJSONObject[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedFilters.value.length > 0
+	return keyword.value != '' || selectedFilters.value.length > 0 || sortOrdering.value != '-updated_at'
 })
 
 const emptyText = computed((): string => {

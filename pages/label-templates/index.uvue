@@ -112,7 +112,7 @@
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { ProductItem, PrintTemplateItem, PrintTemplateListResponse, getProductDetail, getPrintTemplateList, setDefaultPrintTemplate } from '@/pkg/api/modules/products.uts'
-import { getConnectedPrinter, printLabelBitmap } from '@/uni_modules/lili-label-printer/index.uts'
+import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type PrintPreviewField = {
@@ -219,6 +219,24 @@ function productNameRawText(): string {
 	return ''
 }
 
+function productNameCnRawText(): string {
+	const product = activeProduct()
+	if (product == null) return ''
+	return product.name_cn
+}
+
+function productNameEnRawText(): string {
+	const product = activeProduct()
+	if (product == null) return ''
+	return product.name_en
+}
+
+function productNameOtherRawText(): string {
+	const product = activeProduct()
+	if (product == null) return ''
+	return product.name_other
+}
+
 function productNameText(): string {
 	const name = productNameRawText()
 	if (name != '') return name
@@ -272,6 +290,17 @@ function productSkuText(): string {
 	return product.sku == '' ? '-' : product.sku
 }
 
+function productKodRawText(): string {
+	const product = activeProduct()
+	if (product == null) return ''
+	return product.category_kasa_kod
+}
+
+function productKodText(): string {
+	const kod = productKodRawText()
+	return kod == '' ? '-' : kod
+}
+
 function onlyDigits(value: string): string {
 	let result = ''
 	for (let index = 0; index < value.length; index += 1) {
@@ -309,6 +338,10 @@ function isSupportedPrintElementType(type: string): boolean {
 function isBlankPrintText(value: string): boolean {
 	const text = value.trim()
 	return text == '' || text == '-'
+}
+
+function isOptionalPrintSource(source: string): boolean {
+	return source == 'name_cn' || source == 'name_en' || source == 'name_other'
 }
 
 function isValidMoneyText(value: string): boolean {
@@ -371,20 +404,27 @@ function validateElementLayout(source: UTSJSONObject, index: number, paperWidth:
 
 function productRequiredValueForSource(source: string): string {
 	if (source == 'name') return productNameRawText()
+	if (source == 'name_cn') return productNameCnRawText()
+	if (source == 'name_en') return productNameEnRawText()
+	if (source == 'name_other') return productNameOtherRawText()
 	if (isPriceSource(source)) return productPriceRawText(source)
 	if (source == 'barcode') return productBarcodeRawText()
-	if (source == 'sku' || source == 'kod') return productSkuText()
+	if (source == 'sku') return productSkuText()
+	if (source == 'kod') return productKodRawText()
 	return ''
 }
 
 function printValueForSource(source: string, fallback: string): string {
 	if (source == 'name') return productNameText()
+	if (source == 'name_cn') return productNameCnRawText()
+	if (source == 'name_en') return productNameEnRawText()
+	if (source == 'name_other') return productNameOtherRawText()
 	if (source == 'price') return productDiscountPriceText()
 	if (source == 'base_sales_price') return productOriginalPriceText()
 	if (source == 'discount_price') return productDiscountPriceText()
 	if (source == 'barcode') return productBarcodeText()
 	if (source == 'sku') return productSkuText()
-	if (source == 'kod') return productSkuText()
+	if (source == 'kod') return productKodText()
 	return fallback
 }
 
@@ -403,11 +443,11 @@ function validatePrintElements(item: PrintTemplateItem): string {
 		const fallbackContent = stringValue(source['content'])
 		if (!isGraphicElementType(type) && elementSource != '' && elementSource != 'custom') {
 			const requiredValue = productRequiredValueForSource(elementSource)
-			if (isBlankPrintText(requiredValue)) return elementDisplayName(source, index) + ' 缺失，无法打印'
+			if (!isOptionalPrintSource(elementSource) && isBlankPrintText(requiredValue)) return elementDisplayName(source, index) + ' 缺失，无法打印'
 			if (isPriceSource(elementSource) && !isValidMoneyText(requiredValue)) return elementDisplayName(source, index) + ' 不是有效金额'
 		}
 		const content = printValueForSource(elementSource, fallbackContent)
-		if (!isGraphicElementType(type) && isBlankPrintText(content)) return elementDisplayName(source, index) + ' 内容为空'
+		if (!isGraphicElementType(type) && !isOptionalPrintSource(elementSource) && isBlankPrintText(content)) return elementDisplayName(source, index) + ' 内容为空'
 		const barcodeType = stringValue(source['barcodeType'], stringValue(source['barcode_type'], 'EAN13')).toUpperCase()
 		if (type == 'barcode' && barcodeType == 'EAN13' && !isValidEan13Input(content)) {
 			return elementDisplayName(source, index) + ' 不是有效 EAN13，请使用 12 位数字或正确校验位的 13 位数字'
@@ -424,6 +464,9 @@ function printLabelForSource(source: UTSJSONObject, index: number): string {
 	if (elementLabel != '') return elementLabel
 	const elementSource = stringValue(source['source'])
 	if (elementSource == 'name') return '商品名称'
+	if (elementSource == 'name_cn') return '中文名'
+	if (elementSource == 'name_en') return '英文名'
+	if (elementSource == 'name_other') return '其他名'
 	if (elementSource == 'price') return '打印价格'
 	if (elementSource == 'base_sales_price') return '原价'
 	if (elementSource == 'discount_price') return '折扣价'
@@ -648,6 +691,8 @@ function closePrintPopup() {
 function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 	const elementSource = stringValue(source['source'])
 	const fallbackContent = stringValue(source['content'])
+	const fontWeight = stringValue(source['fontWeight'], stringValue(source['font_weight'])).toLowerCase()
+	const isBold = boolValue(source['isBold'], boolValue(source['bold'], fontWeight == 'bold' || fontWeight == '700'))
 	return {
 		type: stringValue(source['type'], 'text'),
 		x: numberValue(source['x'], 0),
@@ -660,6 +705,9 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		barcodeType: stringValue(source['barcodeType'], stringValue(source['barcode_type'], 'EAN13')),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
+		isBold: isBold,
+		fontWeight: isBold ? 'bold' : 'normal',
+		textAlign: stringValue(source['textAlign'], stringValue(source['text_align'], 'left')),
 	} as UTSJSONObject
 }
 
@@ -683,12 +731,7 @@ function printCopiesValue(): number {
 }
 
 function connectedPrinterAddress(): string {
-	const connected = getConnectedPrinter()
-	if (!connected.success || connected.data == null) {
-		return ''
-	}
-	const data = connected.data as UTSJSONObject
-	return stringValue(data['address'])
+	return getPreferredPrinterAddress()
 }
 
 function goPrinterSettings() {
@@ -700,7 +743,23 @@ function goPrinterSettings() {
 	}, 450)
 }
 
-function confirmPrintProduct() {
+function promptChoosePrinterAfterPrintFailure(message: string) {
+	const detail = message == '' ? '打印机连接失败，请确认打印机在附近并已开机。' : message
+	uni.showModal({
+		title: '打印失败',
+		content: detail + '\n是否选择新的打印机？',
+		confirmText: '选择打印机',
+		cancelText: '取消',
+		success: (modal) => {
+			if (modal.confirm) {
+				closePrintPopup()
+				uni.navigateTo({ url: '/pages/printer-settings/index' })
+			}
+		}
+	})
+}
+
+async function confirmPrintProduct() {
 	if (printing.value) return
 	const item = selectedPrintTemplate.value
 	if (item == null) return
@@ -716,23 +775,34 @@ function confirmPrintProduct() {
 		return
 	}
 	printing.value = true
-	const response = printLabelBitmap({
-		address: address,
-		paperWidthMm: numberValue(item.paper_width_mm, 30),
-		paperHeightMm: numberValue(item.paper_height_mm, 20),
-		dotsPerMm: item.dots_per_mm,
-		elements: buildProductPrintElements(item),
-		chunkSize: 1024,
-		delayMs: 20,
-		copies: printCopiesValue(),
-	})
-	printing.value = false
-	if (response.success) {
-		uni.showToast({ title: '已发送打印', icon: 'success' })
-		closePrintPopup()
-		return
+	let shouldClose = false
+	let responseSuccess = false
+	let responseMessage = ''
+	uni.showLoading({ title: '打印中', mask: true })
+	try {
+		const response = await printLabelBitmapAsync({
+			address: address,
+			paperWidthMm: numberValue(item.paper_width_mm, 30),
+			paperHeightMm: numberValue(item.paper_height_mm, 20),
+			dotsPerMm: item.dots_per_mm,
+			elements: buildProductPrintElements(item),
+			chunkSize: 1024,
+			delayMs: 20,
+			copies: printCopiesValue(),
+		} as UTSJSONObject)
+		responseSuccess = response.success
+		responseMessage = response.message
+	} finally {
+		printing.value = false
+		uni.hideLoading()
 	}
-	showErrorToast(response.message == '' ? '打印失败' : response.message)
+	if (responseSuccess) {
+		uni.showToast({ title: responseMessage == '' ? '已发送打印' : responseMessage, icon: 'success' })
+		shouldClose = true
+	} else {
+		promptChoosePrinterAfterPrintFailure(responseMessage)
+	}
+	if (shouldClose) closePrintPopup()
 }
 
 function handleSearchInput(value: string) {

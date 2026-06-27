@@ -59,13 +59,9 @@ open class GenPagesShopFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:104")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/from.uvue:101")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -81,7 +77,7 @@ open class GenPagesShopFrom : BasePage {
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/shop/from.uvue", 120, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/shop/from.uvue", 117, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -167,7 +163,7 @@ open class GenPagesShopFrom : BasePage {
                             initialData.value = buildInitialDataFromMedia(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "商店资料详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "商店资料详情加载失败"))
                         }
                 })
             }
@@ -303,11 +299,11 @@ open class GenPagesShopFrom : BasePage {
                         val shopIdValue = getStringField(data, "shop_id")
                         val title = getStringField(data, "title").trim()
                         if (shopIdValue == "") {
-                            uni_showToast(ShowToastOptions(title = "请选择商店", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请选择商店", icon = "none", duration = 3500))
                             return@w1
                         }
                         if (title == "") {
-                            uni_showToast(ShowToastOptions(title = "资料标题不能为空", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "资料标题不能为空", icon = "none", duration = 3500))
                             return@w1
                         }
                         val taskToken = pageTaskGuard.begin()
@@ -358,12 +354,12 @@ open class GenPagesShopFrom : BasePage {
                             if (!pageTaskGuard.canApply(taskToken)) {
                                 return@w1
                             }
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, if (isEditing) {
+                            showErrorToast(parseErrorMessage(error, if (isEditing) {
                                 "资料保存失败"
                             } else {
                                 "资料创建失败"
                             }
-                            ), icon = "none"))
+                            ))
                         }
                          finally {
                             if (pageTaskGuard.canApply(taskToken)) {
@@ -403,15 +399,15 @@ open class GenPagesShopFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             fun gen_handleUpload_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none", duration = 3500))
             }
             val handleUpload = ::gen_handleUpload_fn
             fun gen_handleUploadDelete_fn(payload: UTSJSONObject) {
@@ -424,11 +420,11 @@ open class GenPagesShopFrom : BasePage {
                     val payloadObject = rawPayload as UTSJSONObject
                     val message = getStringField(payloadObject, "message")
                     if (message != "") {
-                        uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                        uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                         return
                     }
                 }
-                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none", duration = 3500))
             }
             val handleUploadError = ::gen_handleUploadError_fn
             fun gen_initializeForm_fn(event: OnLoadOptions): UTSPromise<Unit> {
@@ -458,7 +454,7 @@ open class GenPagesShopFrom : BasePage {
                         }
                         var initialShopName = ""
                         if (shopNameValue != null) {
-                            val decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as String), " at pages/shop/from.uvue:552")
+                            val decodedShopName = UTSAndroid.consoleDebugError(decodeURIComponent(shopNameValue as String), " at pages/shop/from.uvue:543")
                             initialShopName = if (decodedShopName == null) {
                                 ""
                             } else {
@@ -469,7 +465,7 @@ open class GenPagesShopFrom : BasePage {
                             initialShopName = await(resolveShopName(initialShopId))
                         }
                         if (initialShopId == "") {
-                            uni_showToast(ShowToastOptions(title = "请先从商店资料页进入", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请先从商店资料页进入", icon = "none", duration = 3500))
                             setTimeout(fun(){
                                 uni_navigateBack(NavigateBackOptions(delta = 1, fail = fun(_){
                                     uni_navigateTo(NavigateToOptions(url = "/pages/shop/index"))

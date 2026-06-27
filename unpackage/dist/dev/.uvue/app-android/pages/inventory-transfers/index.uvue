@@ -4,8 +4,9 @@ import { computed } from 'vue';
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue';
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts';
 import { approveInventoryTransfer, cancelInventoryTransfer, completeInventoryTransfer, getInventoryTransfers, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory';
+import { showErrorToast } from '@/pkg/util/toast.uts';
 type SelectOption = {
-    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-transfers/index.uvue", 146, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-transfers/index.uvue", 147, 6>;
     value: string;
     label: string;
 };
@@ -87,12 +88,9 @@ const __sfc__ = defineComponent({
         function parseErrorMessage(error: any, fallback: string): string {
             let message = fallback;
             if (error != null) {
-                const directMessage = (error as Error).message;
-                if (directMessage != null && directMessage != '')
-                    message = directMessage;
                 const errorText = JSON.stringify(error);
                 if (errorText != null && errorText != '') {
-                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:231");
+                    const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:230");
                     if (parsedError != null) {
                         const rawMessage = parsedError['message'];
                         if (rawMessage != null) {
@@ -117,7 +115,7 @@ const __sfc__ = defineComponent({
             if (trimmedText == '' || trimmedText.substring(0, 1) != '{')
                 return null;
             try {
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:252");
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:251");
             }
             catch (error: any) {
                 return null;
@@ -134,7 +132,7 @@ const __sfc__ = defineComponent({
                 return [] as UTSJSONObject[];
             let parsed: UTSJSONObject[] | null = null;
             try {
-                parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:266");
+                parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:265");
             }
             catch (error: any) {
                 return [] as UTSJSONObject[];
@@ -200,7 +198,7 @@ const __sfc__ = defineComponent({
         function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
             const pageValue = intValue(params['page']);
             const pageSizeValue = intValue(params['pageSize']);
-            const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 326, 8),
+            const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 325, 8),
                 page: pageValue <= 0 ? 1 : pageValue,
                 page_size: pageSizeValue <= 0 ? 50 : pageSizeValue,
             } as UTSJSONObject;
@@ -237,7 +235,7 @@ const __sfc__ = defineComponent({
         }
         function copyText(text: string, successTitle: string, emptyTitle: string) {
             if (text == '' || text == '-') {
-                uni.showToast({ title: emptyTitle, icon: 'none' });
+                uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 });
                 return;
             }
             uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }); } });
@@ -417,7 +415,7 @@ const __sfc__ = defineComponent({
                 loadItems();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '操作失败'));
             }
         }
         function confirmRunAction(actionKey: string, id: string, title: string, content: string) {

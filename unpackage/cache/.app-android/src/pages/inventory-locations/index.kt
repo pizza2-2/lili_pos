@@ -56,16 +56,12 @@ open class GenPagesInventoryLocationsIndex : BasePage {
                 if (error == null) {
                     return fallback
                 }
-                val directMessage = (error as UTSError).message
-                if (directMessage != null && directMessage != "") {
-                    return directMessage
-                }
                 val text = JSON.stringify(error)
                 if (text == null || text == "" || text == "{}") {
                     return fallback
                 }
                 try {
-                    val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:156")
+                    val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:154")
                     if (parsed != null) {
                         val message = stringField(parsed!!, "message")
                         if (message != "") {
@@ -89,7 +85,7 @@ open class GenPagesInventoryLocationsIndex : BasePage {
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -158,7 +154,7 @@ open class GenPagesInventoryLocationsIndex : BasePage {
                             totalCount.value = 0
                             val message = parseErrorMessage(error, "库存位置加载失败")
                             errorMessage.value = message
-                            uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                            uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                         }
                          finally {
                             isLoading.value = false

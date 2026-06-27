@@ -3,7 +3,13 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue';
 import { computed } from 'vue';
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts';
-import { downloadKsefInvoiceXml, enqueueKsefAutoSync, getKsefAutoSyncStatus, getKsefInvoiceList, KsefAutoSyncStatus, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef';
+import { downloadKsefInvoiceXml, getKsefAutoSyncStatus, getKsefInvoiceFilterOptions, getKsefInvoiceList, KsefAutoSyncStatus, KsefFilterDefinition, KsefFilterOption, KsefFilterOptionsResponse, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef';
+import { showErrorToast } from '@/pkg/util/toast.uts';
+type KsefSelectedFilter = {
+    __$originalPosition?: UTSSourceMapPosition<"KsefSelectedFilter", "pages/ksef/index.uvue", 120, 6>;
+    param: string;
+    value: string;
+};
 const __sfc__ = defineComponent({
     __name: 'index',
     setup(__props) {
@@ -15,30 +21,98 @@ const __sfc__ = defineComponent({
         const filterVisible = ref(false);
         const isLoading = ref(false);
         const errorMessage = ref('');
-        const statusError = ref('');
         const invoices = ref<KsefInvoiceItem[]>([]);
         const status = ref<KsefAutoSyncStatus | null>(null);
+        const supplierFilterId = ref('');
+        const supplierFilterName = ref('');
         const currentPage = ref(1);
         const totalPages = ref(1);
         const totalCount = ref(0);
         const pageSize = ref(20);
-        const selectedSyncStatus = ref<string | null>(null);
-        const selectedPaymentStatus = ref<string | null>(null);
+        const filterOptionsLoading = ref(false);
+        const filterOptionsError = ref('');
+        const filterOptions = ref<KsefFilterOptionsResponse | null>(null);
+        const selectedFilters = ref<KsefSelectedFilter[]>([]);
         const fieldConfig = ref<UTSJSONObject[]>([
-            { key: 'seller_name', label: '卖方' } as UTSJSONObject,
             { key: 'supplier_name', label: '供应商' } as UTSJSONObject,
-            { key: 'seller_nip', label: '卖方NIP' } as UTSJSONObject,
-            { key: 'gross_amount_text', label: '总额' } as UTSJSONObject,
-            { key: 'amount_due_text', label: '待付' } as UTSJSONObject,
             { key: 'payment_due_text', label: '到期日' } as UTSJSONObject,
+            { key: 'payment_review_text', label: '审核' } as UTSJSONObject,
             { key: 'bank_account_text', label: '银行账号' } as UTSJSONObject,
-            { key: 'sync_status_text', label: '详情状态' } as UTSJSONObject,
         ]);
         const menuActions = ref<UTSJSONObject[]>([
             { key: 'view_detail', text: '付款详情' } as UTSJSONObject,
             { key: 'download_xml', text: '同步详情' } as UTSJSONObject,
             { key: 'copy_account', text: '复制账号' } as UTSJSONObject,
             { key: 'copy_ksef', text: '复制KSeF号' } as UTSJSONObject,
+        ]);
+        const defaultFilterDefinitions = ref<KsefFilterDefinition[]>([
+            {
+                key: 'sync_status',
+                param: 'sync_status',
+                label: '同步状态',
+                control: 'select',
+                aliases: [] as string[],
+                multiple: false,
+                options: [
+                    { value: 'METADATA_ONLY', label: '待详情' } as KsefFilterOption,
+                    { value: 'XML_DOWNLOADED', label: '已完成' } as KsefFilterOption,
+                    { value: 'SYNC_ERROR', label: '异常' } as KsefFilterOption,
+                ],
+            } as KsefFilterDefinition,
+            {
+                key: 'is_paid',
+                param: 'is_paid',
+                label: '付款状态',
+                control: 'boolean',
+                aliases: [] as string[],
+                multiple: false,
+                options: [
+                    { value: 'false', label: '未付款' } as KsefFilterOption,
+                    { value: 'true', label: '已付款' } as KsefFilterOption,
+                ],
+            } as KsefFilterDefinition,
+            {
+                key: 'payment_review_status',
+                param: 'payment_review_status',
+                label: '支付审核',
+                control: 'select',
+                aliases: [] as string[],
+                multiple: false,
+                options: [
+                    { value: 'PENDING', label: '待审核' } as KsefFilterOption,
+                    { value: 'PAYABLE', label: '可支付' } as KsefFilterOption,
+                    { value: 'NOT_PAYABLE', label: '不支付' } as KsefFilterOption,
+                ],
+            } as KsefFilterDefinition,
+            {
+                key: 'has_xml',
+                param: 'has_xml',
+                label: 'XML 状态',
+                control: 'boolean',
+                aliases: [] as string[],
+                multiple: false,
+                options: [
+                    { value: 'false', label: '未下载' } as KsefFilterOption,
+                    { value: 'true', label: '已下载' } as KsefFilterOption,
+                ],
+            } as KsefFilterDefinition,
+            {
+                key: 'ordering',
+                param: 'ordering',
+                label: '排序方式',
+                control: 'select',
+                aliases: [] as string[],
+                multiple: false,
+                options: [
+                    { value: 'payment_due_date', label: '到期日最近' } as KsefFilterOption,
+                    { value: '-payment_due_date', label: '到期日最远' } as KsefFilterOption,
+                    { value: '-issue_date', label: '开票日期最新' } as KsefFilterOption,
+                    { value: 'issue_date', label: '开票日期最早' } as KsefFilterOption,
+                    { value: '-gross_amount', label: '金额最高' } as KsefFilterOption,
+                    { value: 'gross_amount', label: '金额最低' } as KsefFilterOption,
+                    { value: '-created_at', label: '最近创建' } as KsefFilterOption,
+                ],
+            } as KsefFilterDefinition,
         ]);
         function parseErrorMessage(error: any, fallback: string = '操作失败'): string {
             let message = fallback;
@@ -57,6 +131,63 @@ const __sfc__ = defineComponent({
             totalCount.value = response.total_count;
             pageSize.value = response.page_size;
         }
+        function setSelectedFilterValue(param: string, value: string) {
+            const nextFilters: KsefSelectedFilter[] = [];
+            let updated = false;
+            for (let index = 0; index < selectedFilters.value.length; index += 1) {
+                const filter = selectedFilters.value[index];
+                if (filter.param == param) {
+                    if (value != '') {
+                        nextFilters.push({ param: param, value: value } as KsefSelectedFilter);
+                    }
+                    updated = true;
+                    continue;
+                }
+                nextFilters.push(filter);
+            }
+            if (!updated && value != '') {
+                nextFilters.push({ param: param, value: value } as KsefSelectedFilter);
+            }
+            selectedFilters.value = nextFilters;
+        }
+        function selectedFilterValue(param: string): string {
+            for (let index = 0; index < selectedFilters.value.length; index += 1) {
+                const filter = selectedFilters.value[index];
+                if (filter.param == param)
+                    return filter.value;
+            }
+            return '';
+        }
+        function filterValueOrNull(param: string): string | null {
+            const value = selectedFilterValue(param);
+            return value == '' ? null : value;
+        }
+        function isFilterOptionSelected(param: string, value: string): boolean {
+            return selectedFilterValue(param) == value;
+        }
+        function clearFilterOption(param: string) {
+            setSelectedFilterValue(param, '');
+        }
+        function toggleFilterOption(param: string, value: string) {
+            const currentValue = selectedFilterValue(param);
+            setSelectedFilterValue(param, currentValue == value ? '' : value);
+        }
+        async function loadFilterOptions(): Promise<void> {
+            if (filterOptionsLoading.value)
+                return;
+            filterOptionsLoading.value = true;
+            filterOptionsError.value = '';
+            try {
+                filterOptions.value = await getKsefInvoiceFilterOptions();
+            }
+            catch (error: any) {
+                filterOptions.value = null;
+                filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败');
+            }
+            finally {
+                filterOptionsLoading.value = false;
+            }
+        }
         async function loadInvoices(): Promise<void> {
             if (isLoading.value) {
                 return;
@@ -68,8 +199,13 @@ const __sfc__ = defineComponent({
                     search: keyword.value == '' ? null : keyword.value,
                     page: currentPage.value,
                     page_size: pageSize.value,
-                    sync_status: selectedSyncStatus.value,
-                    is_paid: selectedPaymentStatus.value,
+                    supplier: supplierFilterId.value == '' ? null : supplierFilterId.value,
+                    supplier_id: supplierFilterId.value == '' ? null : supplierFilterId.value,
+                    sync_status: filterValueOrNull('sync_status'),
+                    is_paid: filterValueOrNull('is_paid'),
+                    has_xml: filterValueOrNull('has_xml'),
+                    payment_review_status: filterValueOrNull('payment_review_status'),
+                    ordering: filterValueOrNull('ordering'),
                 } as KsefInvoiceListQuery);
                 applyListResponse(response);
             }
@@ -82,17 +218,18 @@ const __sfc__ = defineComponent({
             }
         }
         async function loadAutoSyncStatus(): Promise<void> {
-            statusError.value = '';
             try {
                 status.value = await getKsefAutoSyncStatus();
             }
             catch (error: any) {
                 status.value = null;
-                statusError.value = parseErrorMessage(error, '自动同步状态加载失败');
             }
         }
         function handleFilterVisibleChange(value: boolean) {
             filterVisible.value = value;
+        }
+        function handleFilterOpen() {
+            loadFilterOptions();
         }
         function handleSearchInput(value: string) {
             keyword.value = value;
@@ -107,15 +244,8 @@ const __sfc__ = defineComponent({
             currentPage.value = 1;
             loadInvoices();
         }
-        function selectSyncStatus(value: string | null) {
-            selectedSyncStatus.value = value;
-        }
-        function selectPaymentStatus(value: string | null) {
-            selectedPaymentStatus.value = value;
-        }
         function handleFilterReset() {
-            selectedSyncStatus.value = null;
-            selectedPaymentStatus.value = null;
+            selectedFilters.value = [] as KsefSelectedFilter[];
             keyword.value = '';
             currentPage.value = 1;
             filterVisible.value = false;
@@ -138,22 +268,17 @@ const __sfc__ = defineComponent({
             currentPage.value = nextPage;
             loadInvoices();
         }
-        function statusText(value: string): string {
-            if (value == 'XML_DOWNLOADED')
-                return '已同步详情';
-            if (value == 'SYNC_ERROR')
-                return '同步异常';
-            return '待同步详情';
-        }
-        function statusTag(value: string): string {
-            if (value == 'XML_DOWNLOADED')
-                return '已完成';
-            if (value == 'SYNC_ERROR')
-                return '异常';
-            return '待详情';
-        }
         function paidText(value: boolean): string {
             return value ? '已付款' : '未付款';
+        }
+        function reviewStatusText(item: KsefInvoiceItem): string {
+            if (item.payment_review_status_display != '')
+                return item.payment_review_status_display;
+            if (item.payment_review_status == 'PAYABLE')
+                return '可支付';
+            if (item.payment_review_status == 'NOT_PAYABLE')
+                return '不支付';
+            return '待审核';
         }
         function supplierText(item: KsefInvoiceItem): string {
             if (item.supplier_name != '')
@@ -189,28 +314,29 @@ const __sfc__ = defineComponent({
             return result == '' ? value : result;
         }
         function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
+            const statusTags: string[] = [paidText(item.is_paid), reviewStatusText(item)];
+            if (item.sync_status == 'SYNC_ERROR') {
+                statusTags.push('异常');
+            }
             return {
                 id: item.id.toString(10),
                 name: displayText(item.invoice_number),
                 codeText: displayText(item.seller_name),
-                metaText: displayText(item.amount_due) + ' ' + displayText(item.currency) + ' / ' + paidText(item.is_paid),
-                seller_name: displayText(item.seller_name),
+                metaText: displayText(item.amount_due) + ' ' + displayText(item.currency) + ' · ' + paidText(item.is_paid),
                 supplier_name: supplierText(item),
                 seller_nip: displayText(item.seller_nip),
-                gross_amount_text: displayText(item.gross_amount) + ' ' + displayText(item.currency),
-                amount_due_text: displayText(item.amount_due) + ' ' + displayText(item.currency),
                 payment_due_text: compactDate(item.payment_due_date),
+                payment_review_text: reviewStatusText(item),
                 bank_account_text: displayText(normalizeAccount(item.bank_account_number)),
-                sync_status_text: statusText(item.sync_status),
                 rawId: item.id.toString(10),
                 rawKsefNumber: item.ksef_number,
                 rawBankAccount: normalizeAccount(item.bank_account_number),
-                tags: [item.supplier > 0 ? '已关联供应商' : '未关联供应商', paidText(item.is_paid), statusTag(item.sync_status)] as string[],
+                tags: statusTags,
             } as UTSJSONObject;
         }
         function copyText(text: string, successTitle: string, emptyTitle: string) {
             if (text == '' || text == '-') {
-                uni.showToast({ title: emptyTitle, icon: 'none' });
+                uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 });
                 return;
             }
             uni.setClipboardData({
@@ -220,16 +346,6 @@ const __sfc__ = defineComponent({
                 },
             });
         }
-        async function handleEnqueueAutoSync(): Promise<void> {
-            try {
-                await enqueueKsefAutoSync();
-                uni.showToast({ title: takeLatestResponseMessage('已加入队列'), icon: 'success' });
-                loadAutoSyncStatus();
-            }
-            catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '任务加入队列失败'), icon: 'none' });
-            }
-        }
         async function handleDownloadXml(invoiceId: string): Promise<void> {
             try {
                 await downloadKsefInvoiceXml(invoiceId);
@@ -238,7 +354,7 @@ const __sfc__ = defineComponent({
                 loadAutoSyncStatus();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '详情同步失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '详情同步失败'));
             }
         }
         function openInvoiceDetail(invoiceId: string) {
@@ -318,8 +434,13 @@ const __sfc__ = defineComponent({
             }
             return result;
         });
+        const filterDefinitions = computed((): KsefFilterDefinition[] => {
+            if (filterOptions.value != null && filterOptions.value!.filters.length > 0)
+                return filterOptions.value!.filters;
+            return defaultFilterDefinitions.value;
+        });
         const hasActiveFilter = computed((): boolean => {
-            return keyword.value != '' || selectedSyncStatus.value != null || selectedPaymentStatus.value != null;
+            return keyword.value != '' || selectedFilters.value.length > 0 || supplierFilterId.value != '';
         });
         const emptyText = computed((): string => {
             if (isLoading.value)
@@ -333,32 +454,36 @@ const __sfc__ = defineComponent({
                 return '-';
             return status.value!.pending_xml_count.toString(10);
         });
-        const batchLimitText = computed((): string => {
-            if (status.value == null)
-                return '-';
-            return status.value!.xml_batch_size.toString(10) + '张/' + status.value!.xml_delay_seconds.toString(10) + '秒';
-        });
         const lastSuccessText = computed((): string => {
             if (status.value == null)
                 return '-';
             return compactDate(status.value!.last_success_at);
         });
-        const autoSyncSubtitle = computed((): string => {
-            if (status.value == null)
-                return '读取自动同步配置中';
-            if (!status.value!.enabled)
-                return '自动同步已关闭';
-            return '每 5 小时增量同步，详情分批自动回填';
-        });
         const summaryItems = computed((): UTSJSONObject[] => {
+            const paymentFilter = selectedFilterValue('is_paid');
+            const reviewFilter = selectedFilterValue('payment_review_status');
             return [
                 { key: 'total', label: '发票总数', value: totalCount.value.toString(10) } as UTSJSONObject,
+                { key: 'supplier', label: '供应商', value: supplierFilterId.value == '' ? '全部' : (supplierFilterName.value == '' ? ('#' + supplierFilterId.value) : supplierFilterName.value) } as UTSJSONObject,
                 { key: 'pending', label: '待详情', value: pendingXmlText.value } as UTSJSONObject,
-                { key: 'payment', label: '付款筛选', value: selectedPaymentStatus.value == null ? '全部' : (selectedPaymentStatus.value == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
+                { key: 'payment', label: '付款筛选', value: paymentFilter == '' ? '全部' : (paymentFilter == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
+                { key: 'review', label: '支付审核', value: reviewFilter == '' ? '全部' : (reviewFilter == 'PAYABLE' ? '可支付' : (reviewFilter == 'NOT_PAYABLE' ? '不支付' : '待审核')) } as UTSJSONObject,
                 { key: 'last', label: '最近成功', value: lastSuccessText.value } as UTSJSONObject,
             ];
         });
-        onLoad((_options) => {
+        onLoad((event: OnLoadOptions) => {
+            const supplierIdValue = event['supplier_id'] == null ? event['supplier'] : event['supplier_id'];
+            supplierFilterId.value = supplierIdValue == null ? '' : (supplierIdValue as string);
+            const supplierNameValue = event['supplier_name'];
+            if (supplierNameValue != null) {
+                const decodedSupplierName = UTSAndroid.consoleDebugError(decodeURIComponent(supplierNameValue as string), " at pages/ksef/index.uvue:612");
+                supplierFilterName.value = decodedSupplierName == null ? '' : decodedSupplierName;
+            }
+            const searchValue = event['search'];
+            if (searchValue != null && searchValue != '') {
+                const decodedSearch = UTSAndroid.consoleDebugError(decodeURIComponent(searchValue as string), " at pages/ksef/index.uvue:617");
+                keyword.value = decodedSearch == null ? '' : decodedSearch;
+            }
             loadAutoSyncStatus();
             loadInvoices();
         });
@@ -389,84 +514,71 @@ const __sfc__ = defineComponent({
                     onSearchInput: handleSearchInput,
                     onSearchConfirm: handleSearchConfirm,
                     onSearchClear: handleSearchClear,
-                    "onUpdate:filterVisible": handleFilterVisibleChange
+                    "onUpdate:filterVisible": handleFilterVisibleChange,
+                    onFilterOpen: handleFilterOpen
                 }), _uM({
                     "filter-panel": withSlotCtx((): any[] => [
-                        _cE("view", _uM({ class: "filter-panel" }), [
-                            _cE("text", _uM({ class: "filter-title" }), "同步状态"),
-                            _cE("view", _uM({ class: "filter-row" }), [
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedSyncStatus) == null ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectSyncStatus(null); }
+                        _cE("view", _uM({ class: "list-filter-panel" }), [
+                            isTrue(unref(filterOptionsLoading))
+                                ? _cE("view", _uM({
+                                    key: 0,
+                                    class: "list-filter-state"
                                 }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedSyncStatus) == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "全部", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"]),
+                                    _cE("text", _uM({ class: "list-filter-state-text" }), "筛选选项加载中...")
+                                ])
+                                : unref(filterOptionsError) != ''
+                                    ? _cE("view", _uM({
+                                        key: 1,
+                                        class: "list-filter-state"
+                                    }), [
+                                        _cE("text", _uM({ class: "list-filter-state-text" }), _tD(unref(filterOptionsError)), 1 /* TEXT */)
+                                    ])
+                                    : _cE("view", _uM({
+                                        key: 2,
+                                        class: "list-filter-groups"
+                                    }), [
+                                        _cE(Fragment, null, RenderHelpers.renderList(filterDefinitions.value, (filter, __key, __index, _cached): any => {
+                                            return _cE("view", _uM({
+                                                key: filter.key,
+                                                class: "list-filter-group"
+                                            }), [
+                                                _cE("text", _uM({ class: "list-filter-group-title" }), _tD(filter.label), 1 /* TEXT */),
+                                                _cE("view", _uM({ class: "list-filter-options" }), [
+                                                    _cE("view", _uM({
+                                                        class: _nC(isFilterOptionSelected(filter.param, '') ? 'list-filter-option list-filter-option-active' : 'list-filter-option'),
+                                                        onClick: () => { clearFilterOption(filter.param); }
+                                                    }), [
+                                                        _cE("text", _uM({
+                                                            class: _nC(isFilterOptionSelected(filter.param, '') ? 'list-filter-option-text list-filter-option-text-active' : 'list-filter-option-text')
+                                                        }), "全部", 2 /* CLASS */)
+                                                    ], 10 /* CLASS, PROPS */, ["onClick"]),
+                                                    _cE(Fragment, null, RenderHelpers.renderList(filter.options, (option, __key, __index, _cached): any => {
+                                                        return _cE("view", _uM({
+                                                            key: filter.key + '-' + option.value,
+                                                            class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'list-filter-option list-filter-option-active' : 'list-filter-option'),
+                                                            onClick: () => { toggleFilterOption(filter.param, option.value); }
+                                                        }), [
+                                                            _cE("text", _uM({
+                                                                class: _nC(isFilterOptionSelected(filter.param, option.value) ? 'list-filter-option-text list-filter-option-text-active' : 'list-filter-option-text')
+                                                            }), _tD(option.label), 3 /* TEXT, CLASS */)
+                                                        ], 10 /* CLASS, PROPS */, ["onClick"]);
+                                                    }), 128 /* KEYED_FRAGMENT */)
+                                                ])
+                                            ]);
+                                        }), 128 /* KEYED_FRAGMENT */)
+                                    ]),
+                            _cE("view", _uM({ class: "list-filter-actions" }), [
                                 _cE("view", _uM({
-                                    class: _nC(unref(selectedSyncStatus) == 'METADATA_ONLY' ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectSyncStatus('METADATA_ONLY'); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedSyncStatus) == 'METADATA_ONLY' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "待详情", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"]),
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedSyncStatus) == 'XML_DOWNLOADED' ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectSyncStatus('XML_DOWNLOADED'); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedSyncStatus) == 'XML_DOWNLOADED' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "已完成", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"]),
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedSyncStatus) == 'SYNC_ERROR' ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectSyncStatus('SYNC_ERROR'); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedSyncStatus) == 'SYNC_ERROR' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "异常", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"])
-                            ]),
-                            _cE("text", _uM({ class: "filter-title filter-title-spaced" }), "付款状态"),
-                            _cE("view", _uM({ class: "filter-row" }), [
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedPaymentStatus) == null ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectPaymentStatus(null); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedPaymentStatus) == null ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "全部", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"]),
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedPaymentStatus) == 'false' ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectPaymentStatus('false'); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedPaymentStatus) == 'false' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "未付款", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"]),
-                                _cE("view", _uM({
-                                    class: _nC(unref(selectedPaymentStatus) == 'true' ? 'filter-chip filter-chip-active' : 'filter-chip'),
-                                    onClick: () => { selectPaymentStatus('true'); }
-                                }), [
-                                    _cE("text", _uM({
-                                        class: _nC(unref(selectedPaymentStatus) == 'true' ? 'filter-chip-text filter-chip-text-active' : 'filter-chip-text')
-                                    }), "已付款", 2 /* CLASS */)
-                                ], 10 /* CLASS, PROPS */, ["onClick"])
-                            ]),
-                            _cE("view", _uM({ class: "filter-actions" }), [
-                                _cE("view", _uM({
-                                    class: "filter-btn filter-btn-light",
+                                    class: "list-filter-btn list-filter-btn-light",
                                     onClick: handleFilterReset
                                 }), [
-                                    _cE("text", _uM({ class: "filter-btn-light-text" }), "重置")
+                                    _cE("text", _uM({ class: "list-filter-btn-light-text" }), "重置")
                                 ]),
                                 _cE("view", _uM({
-                                    class: "filter-btn filter-btn-primary",
+                                    class: "list-filter-btn list-filter-btn-primary",
                                     onClick: applyFilter
                                 }), [
-                                    _cE("text", _uM({ class: "filter-btn-primary-text" }), "应用")
+                                    _cE("text", _uM({ class: "list-filter-btn-primary-text" }), "应用")
                                 ])
                             ])
                         ])
@@ -478,40 +590,6 @@ const __sfc__ = defineComponent({
                     class: "page-scroll"
                 }), [
                     _cE("view", _uM({ class: "page-content" }), [
-                        _cE("view", _uM({ class: "status-card" }), [
-                            _cE("view", _uM({ class: "status-head" }), [
-                                _cE("view", null, [
-                                    _cE("text", _uM({ class: "status-title" }), "自动同步"),
-                                    _cE("text", _uM({ class: "status-subtitle" }), _tD(autoSyncSubtitle.value), 1 /* TEXT */)
-                                ]),
-                                _cE("view", _uM({
-                                    class: "sync-btn",
-                                    onClick: handleEnqueueAutoSync
-                                }), [
-                                    _cE("text", _uM({ class: "sync-btn-text" }), "立即排队")
-                                ])
-                            ]),
-                            _cE("view", _uM({ class: "status-grid" }), [
-                                _cE("view", _uM({ class: "status-cell" }), [
-                                    _cE("text", _uM({ class: "status-value" }), _tD(pendingXmlText.value), 1 /* TEXT */),
-                                    _cE("text", _uM({ class: "status-label" }), "待详情")
-                                ]),
-                                _cE("view", _uM({ class: "status-cell" }), [
-                                    _cE("text", _uM({ class: "status-value" }), _tD(batchLimitText.value), 1 /* TEXT */),
-                                    _cE("text", _uM({ class: "status-label" }), "每批限制")
-                                ]),
-                                _cE("view", _uM({ class: "status-cell" }), [
-                                    _cE("text", _uM({ class: "status-value" }), _tD(lastSuccessText.value), 1 /* TEXT */),
-                                    _cE("text", _uM({ class: "status-label" }), "最近成功")
-                                ])
-                            ]),
-                            unref(statusError) != ''
-                                ? _cE("text", _uM({
-                                    key: 0,
-                                    class: "status-error"
-                                }), _tD(unref(statusError)), 1 /* TEXT */)
-                                : _cC("v-if", true)
-                        ]),
                         isTrue(unref(errorMessage) != '' && !unref(isLoading))
                             ? _cE("view", _uM({
                                 key: 0,
@@ -551,7 +629,7 @@ const __sfc__ = defineComponent({
                             showFloatingAdd: false,
                             summaryTitle: "KSeF 汇总",
                             summaryItems: summaryItems.value,
-                            summaryCollapsedByDefault: false,
+                            summaryCollapsedByDefault: true,
                             onItemClick: handleItemClick,
                             onMenu: handleMenu,
                             onPageChange: handlePageChange,
@@ -565,5 +643,5 @@ const __sfc__ = defineComponent({
     }
 });
 export default __sfc__;
-const GenPagesKsefIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["status-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 14], ["paddingRight", 14], ["paddingBottom", 14], ["paddingLeft", 14], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"]]))], ["status-head", _pS(_uM([["flexDirection", "row"], ["justifyContent", "space-between"], ["alignItems", "center"]]))], ["status-title", _pS(_uM([["fontSize", 17], ["lineHeight", "22px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["status-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 2]]))], ["sync-btn", _pS(_uM([["height", 36], ["paddingLeft", 14], ["paddingRight", 14], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["sync-btn-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#FFFFFF"]]))], ["status-grid", _pS(_uM([["flexDirection", "row"], ["marginTop", 12]]))], ["status-cell", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F8FAFC"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 10], ["paddingBottom", 10], ["paddingLeft", 8], ["paddingRight", 8], ["marginRight", 6]]))], ["status-value", _pS(_uM([["fontSize", 15], ["lineHeight", "20px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["status-label", _pS(_uM([["fontSize", 11], ["lineHeight", "16px"], ["color", "#64748B"], ["marginTop", 2]]))], ["status-error", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#B42318"], ["marginTop", 8]]))], ["filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["filter-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["filter-title-spaced", _pS(_uM([["marginTop", 8]]))], ["filter-row", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["filter-chip", _pS(_uM([["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["filter-chip-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["filter-chip-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["filter-chip-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["filter-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 8]]))], ["filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"]]))], ["filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))]])];
+const GenPagesKsefIndexStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["list-filter-panel", _pS(_uM([["paddingBottom", 8]]))], ["list-filter-state", _pS(_uM([["minHeight", 64], ["alignItems", "center"], ["justifyContent", "center"]]))], ["list-filter-state-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#64748B"]]))], ["list-filter-groups", _pS(_uM([["paddingBottom", 2]]))], ["list-filter-group", _pS(_uM([["marginBottom", 10]]))], ["list-filter-group-title", _pS(_uM([["fontSize", 14], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["list-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 10]]))], ["list-filter-option", _pS(_uM([["height", 34], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["list-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["list-filter-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "13px"], ["color", "#475569"]]))], ["list-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["list-filter-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 8]]))], ["list-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["alignItems", "center"], ["justifyContent", "center"]]))], ["list-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["list-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["list-filter-btn-light-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#475569"]]))], ["list-filter-btn-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "14px"], ["color", "#FFFFFF"]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 10], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["borderTopLeftRadius", 8], ["borderTopRightRadius", 8], ["borderBottomRightRadius", 8], ["borderBottomLeftRadius", 8], ["backgroundColor", "#0F172A"], ["paddingLeft", 18], ["paddingRight", 18], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["color", "#FFFFFF"]]))]])];
 //# sourceMappingURL=index.uvue.map

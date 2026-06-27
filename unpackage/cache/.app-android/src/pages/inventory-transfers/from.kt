@@ -64,15 +64,11 @@ open class GenPagesInventoryTransfersFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val text = JSON.stringify(error)
                     if (text != null && text != "") {
                         var parsedError: UTSJSONObject? = null
                         try {
-                            parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-transfers/from.uvue:116")
+                            parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-transfers/from.uvue:115")
                         }
                          catch (parseError: Throwable) {
                             parsedError = null
@@ -107,7 +103,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:140")
+                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:139")
                 }
                  catch (error: Throwable) {
                     return null
@@ -128,7 +124,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                 }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:154")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:153")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -228,7 +224,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
             fun gen_buildOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val pageValue = intValue(params["page"])
                 val pageSizeValue = intValue(params["pageSize"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-transfers/from.uvue", 211, 8), "page" to if (pageValue <= 0) {
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-transfers/from.uvue", 210, 8), "page" to if (pageValue <= 0) {
                     1
                 } else {
                     pageValue
@@ -433,7 +429,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                             liveFormData.value = data
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "调拨单详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "调拨单详情加载失败"))
                         }
                 })
             }
@@ -443,18 +439,18 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                 val toLocation = intValue(data["to_location"])
                 val transferDate = stringValue(data["transfer_date"], todayDateText())
                 if (fromLocation <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择调出位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择调出位置", icon = "none", duration = 3500))
                     return null
                 }
                 if (toLocation <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择调入位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择调入位置", icon = "none", duration = 3500))
                     return null
                 }
                 if (fromLocation == toLocation) {
-                    uni_showToast(ShowToastOptions(title = "调入位置不能与调出位置相同", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "调入位置不能与调出位置相同", icon = "none", duration = 3500))
                     return null
                 }
-                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pages/inventory-transfers/from.uvue", 413, 8), "from_location" to fromLocation, "to_location" to toLocation, "transfer_date" to transferDate, "remark" to stringValue(data["remark"]))
+                val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pages/inventory-transfers/from.uvue", 412, 8), "from_location" to fromLocation, "to_location" to toLocation, "transfer_date" to transferDate, "remark" to stringValue(data["remark"]))
                 return InventoryMutationData(payload = payload)
             }
             val buildPayload = ::gen_buildPayload_fn
@@ -474,7 +470,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                             return@w1
                         }
                         if (itemId.value == "") {
-                            uni_showToast(ShowToastOptions(title = "缺少调拨单 ID", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "缺少调拨单 ID", icon = "none", duration = 3500))
                             return@w1
                         }
                         val actionText = "保存调拨单"
@@ -487,7 +483,7 @@ open class GenPagesInventoryTransfersFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -530,11 +526,11 @@ open class GenPagesInventoryTransfersFrom : BasePage {
             }
             val handleFormChange = ::gen_handleFormChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             onLoad(fun(query: OnLoadOptions){

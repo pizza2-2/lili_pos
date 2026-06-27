@@ -46,8 +46,8 @@
 	import { accountLogin, getProfile, ProfileResponse } from '@/pkg/api/modules/login'
 	import { clearAuthState, setAuthToken, setAuthUserInfo } from '@/store/auth'
 
-	const username = ref('733063605')
-	const password = ref('Luochaowei88')
+	const username = ref('')
+	const password = ref('')
 	const showPassword = ref(false)
 	const isSubmitting = ref(false)
 

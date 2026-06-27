@@ -101,7 +101,7 @@ open class GenPagesSuppliersFrom : BasePage {
             }
             val buildInitialDataFromSupplier = ::gen_buildInitialDataFromSupplier_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 138, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/suppliers/from.uvue", 139, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -111,13 +111,9 @@ open class GenPagesSuppliersFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:154")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/suppliers/from.uvue:151")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -174,11 +170,11 @@ open class GenPagesSuppliersFrom : BasePage {
                         }
                         try {
                             val detail = await(getSupplierDetail(idText))
-                            console.log(detail, " at pages/suppliers/from.uvue:291")
+                            console.log(detail, " at pages/suppliers/from.uvue:288")
                             initialData.value = buildInitialDataFromSupplier(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "供应商详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "供应商详情加载失败"))
                         }
                 })
             }
@@ -360,7 +356,7 @@ open class GenPagesSuppliersFrom : BasePage {
                             if (!pageTaskGuard.canApply(taskToken)) {
                                 return@w1
                             }
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             if (pageTaskGuard.canApply(taskToken)) {
@@ -401,15 +397,15 @@ open class GenPagesSuppliersFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "状态字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "状态字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "状态字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "状态字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             fun gen_handleUpload_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none", duration = 3500))
             }
             val handleUpload = ::gen_handleUpload_fn
             fun gen_handleUploadDelete_fn(payload: UTSJSONObject) {
@@ -422,11 +418,11 @@ open class GenPagesSuppliersFrom : BasePage {
                     val payloadObject = rawPayload as UTSJSONObject
                     val message = getStringField(payloadObject, "message")
                     if (message != "") {
-                        uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                        uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                         return
                     }
                 }
-                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none", duration = 3500))
             }
             val handleUploadError = ::gen_handleUploadError_fn
             onLoad(fun(event: OnLoadOptions){

@@ -1,0 +1,675 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="商品销售"
+			searchPlaceholder="商品名、条码、分类"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+			backgroundColor="#F6F7FB"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="control-strip">
+					<view class="period-tabs">
+						<view
+							v-for="item in periodOptions"
+							:key="item.key"
+							:class="selectedPeriod == item.key ? 'period-tab period-tab-active' : 'period-tab'"
+							@click="selectPeriod(item.key)"
+						>
+							<text :class="selectedPeriod == item.key ? 'period-text period-text-active' : 'period-text'">{{ item.label }}</text>
+						</view>
+					</view>
+					<view class="refresh-action" @click="loadRows">
+						<text class="refresh-action-text">刷新</text>
+					</view>
+				</view>
+
+				<scroll-view scroll-x="true" class="sort-scroll">
+					<view class="sort-row">
+						<view
+							v-for="item in sortOptions"
+							:key="item.key"
+							:class="selectedOrdering == item.key ? 'sort-chip sort-chip-active' : 'sort-chip'"
+							@click="selectOrdering(item.key)"
+						>
+							<text :class="selectedOrdering == item.key ? 'sort-chip-text sort-chip-text-active' : 'sort-chip-text'">{{ item.label }}</text>
+						</view>
+					</view>
+				</scroll-view>
+
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<view class="error-copy">
+						<text class="error-title">加载失败</text>
+						<text class="error-desc">{{ errorMessage }}</text>
+					</view>
+					<view class="retry-btn" @click="loadRows">
+						<text class="retry-btn-text">重试</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="subtitle"
+					metaField="amountText"
+					imageField="image"
+					imageListField="images"
+					previewImageField="previewCover"
+					previewImageListField="previewImages"
+					mediaIdListField="mediaIds"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载商品销售"
+					:keepContentOnLoading="true"
+					inlineLoadingText="销售数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					:summaryTitle="summaryTitle"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="true"
+					:showFloatingAdd="false"
+					@item-click="handleItemClick"
+					@subtitle-click="handleSubtitleClick"
+					@meta-click="handleMetaClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { ProductSalesQuery, ProductSalesResponse, ProductSalesSummary, ReportPeriod, ReportRankItem, getProductSalesReport } from '@/pkg/api/modules/reports.uts'
+
+type PeriodOption = {
+	key: ReportPeriod
+	label: string
+}
+
+type SortOption = {
+	key: string
+	label: string
+}
+
+const periodOptions = [
+	{ key: 'today', label: '今日' } as PeriodOption,
+	{ key: 'week', label: '本周' } as PeriodOption,
+	{ key: 'month', label: '本月' } as PeriodOption,
+] as PeriodOption[]
+
+const sortOptions = [
+	{ key: '-amount', label: '销售额最高' } as SortOption,
+	{ key: '-quantity', label: '件数最多' } as SortOption,
+	{ key: '-order_count', label: '订单最多' } as SortOption,
+	{ key: 'label', label: '商品名称' } as SortOption,
+] as SortOption[]
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'quantityText', label: '件数:' } as UTSJSONObject,
+	{ key: 'orderText', label: '订单:' } as UTSJSONObject,
+	{ key: 'shareText', label: '占比:' } as UTSJSONObject,
+	{ key: 'lineText', label: '行数:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑商品' } as UTSJSONObject,
+	{ key: 'inventory', text: '库存记录' } as UTSJSONObject,
+	{ key: 'copy-code', text: '复制条码' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const tagColorMap = ref<UTSJSONObject>({
+	今日: 'info',
+	本周: 'info',
+	本月: 'info',
+	未匹配: 'danger',
+})
+
+const keyword = ref('')
+const selectedPeriod = ref<ReportPeriod>('today')
+const selectedOrdering = ref('-amount')
+const rows = ref<ReportRankItem[]>([] as ReportRankItem[])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(20)
+const summary = ref<ProductSalesSummary>({
+	sales_amount: '0.00',
+	order_count: 0,
+	product_count: 0,
+	quantity: '0',
+	amount: '0.00',
+} as ProductSalesSummary)
+
+const currentPeriodLabel = computed((): string => {
+	for (let index = 0; index < periodOptions.length; index += 1) {
+		if (periodOptions[index].key == selectedPeriod.value) return periodOptions[index].label
+	}
+	return '今日'
+})
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function firstStringField(obj: UTSJSONObject, keys: string[]): string {
+	for (let index = 0; index < keys.length; index += 1) {
+		const value = stringValue(obj[keys[index]])
+		if (value != '') return value
+	}
+	return ''
+}
+
+function moneyText(value: string): string {
+	if (value == '') return '¥ 0.00'
+	return '¥ ' + value
+}
+
+function codeText(value: string): string {
+	if (value == '') return '无条码'
+	return '条码：' + value
+}
+
+function rankNumber(index: number): number {
+	return (currentPage.value - 1) * pageSize.value + index + 1
+}
+
+function rankProductIdByKey(key: string): string {
+	if (!key.startsWith('product:')) return ''
+	return key.substring('product:'.length)
+}
+
+function rankProductId(item: ReportRankItem): string {
+	if (item.type != 'product') return ''
+	return rankProductIdByKey(item.key)
+}
+
+function mediaImageList(item: ReportRankItem, keys: string[]): string[] {
+	const result: string[] = []
+	if (item.product_image != '') result.push(item.product_image)
+	for (let index = 0; index < item.product_media_files.length; index += 1) {
+		const image = firstStringField(item.product_media_files[index], keys)
+		if (image != '' && result.indexOf(image) < 0) result.push(image)
+	}
+	return result
+}
+
+function imageListFromRankItem(item: ReportRankItem): string[] {
+	return mediaImageList(item, ['signed_thumbnail_url', 'thumbnail_url', 'signed_url', 'signed_download_url', 'file_url', 'url', 'image'])
+}
+
+function previewImageListFromRankItem(item: ReportRankItem): string[] {
+	const result = mediaImageList(item, ['signed_url', 'signed_download_url', 'file_url', 'url', 'image', 'signed_thumbnail_url', 'thumbnail_url'])
+	if (result.length == 0 && item.product_image != '') result.push(item.product_image)
+	return result
+}
+
+function mediaIdListFromRankItem(item: ReportRankItem): string[] {
+	const result: string[] = []
+	for (let index = 0; index < item.product_media_files.length; index += 1) {
+		const mediaId = firstStringField(item.product_media_files[index], ['id', 'pk'])
+		if (mediaId != '' && result.indexOf(mediaId) < 0) result.push(mediaId)
+	}
+	return result
+}
+
+function buildRankTags(item: ReportRankItem, index: number): string[] {
+	const tags = ['#' + rankNumber(index).toString(), currentPeriodLabel.value] as string[]
+	if (rankProductId(item) == '') tags.push('未匹配')
+	return tags
+}
+
+function rankToListItem(item: ReportRankItem, index: number): UTSJSONObject {
+	const images = imageListFromRankItem(item)
+	const previewImages = previewImageListFromRankItem(item)
+	const productId = rankProductId(item)
+	let actions: UTSJSONObject[] = menuActions.value
+	if (productId == '') {
+		actions = [
+			{ key: 'copy-code', text: '复制条码' } as UTSJSONObject,
+			{ key: 'reload', text: '刷新' } as UTSJSONObject,
+		] as UTSJSONObject[]
+	}
+	return {
+		id: item.key,
+		rawKey: item.key,
+		productId: productId,
+		name: item.label,
+		subtitle: item.subtitle,
+		barcode: item.code,
+		barcodeText: codeText(item.code),
+		amountText: moneyText(item.amount),
+		quantityText: item.quantity,
+		orderText: item.order_count.toString(),
+		lineText: item.line_count.toString(),
+		shareText: item.share + '%',
+		rankText: '#' + rankNumber(index).toString(),
+		image: images.length > 0 ? images[0] : '',
+		images: images,
+		previewCover: previewImages.length > 0 ? previewImages[0] : '',
+		previewImages: previewImages,
+		mediaIds: mediaIdListFromRankItem(item),
+		tags: buildRankTags(item, index),
+		menuActions: actions,
+	} as UTSJSONObject
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '无条码') {
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function navigateToProductEdit(productId: string) {
+	if (productId == '') {
+		uni.showToast({ title: '未匹配商品档案', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.navigateTo({ url: '/pages/products/from?id=' + productId })
+}
+
+function navigateToProductInventory(productId: string, productName: string) {
+	if (productId == '') {
+		uni.showToast({ title: '未匹配商品档案', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.navigateTo({ url: '/pages/inventory-management/index?product=' + productId + '&productName=' + encodeURIComponent(productName) })
+}
+
+function isAllowedPeriod(value: string): boolean {
+	return value == 'today' || value == 'week' || value == 'month'
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '商品销售数据加载失败'
+	if (error != null) {
+		let errorText = ''
+		try {
+			const text = JSON.stringify(error)
+			if (text != null) errorText = text
+		} catch (stringifyError) {
+			errorText = ''
+		}
+		if (errorText != '') {
+			let parsedError: UTSJSONObject | null = null
+			try {
+				const trimmedText = errorText.trim()
+				if (trimmedText != '' && trimmedText.substring(0, 1) == '{') parsedError = JSON.parseObject<UTSJSONObject>(trimmedText)
+			} catch (parseError) {
+				parsedError = null
+			}
+			if (parsedError != null) {
+				const rawMessage = parsedError!['message']
+				if (rawMessage != null) {
+					const parsedMessage = stringValue(rawMessage)
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == '商品销售数据加载失败' && errorText != '{}' && errorText != 'null') message = errorText
+		}
+		if (message == '商品销售数据加载失败') {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
+		}
+	}
+	return message
+}
+
+function applyResponse(data: ProductSalesResponse) {
+	rows.value = data.results
+	summary.value = data.summary
+	totalCount.value = data.total_count
+	totalPages.value = data.total_pages <= 0 ? 1 : data.total_pages
+	currentPage.value = data.current_page <= 0 ? 1 : data.current_page
+	pageSize.value = data.page_size <= 0 ? 20 : data.page_size
+}
+
+async function loadRows() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const query = {
+			period: selectedPeriod.value,
+			search: keyword.value == '' ? null : keyword.value,
+			ordering: selectedOrdering.value,
+			page: currentPage.value,
+			page_size: pageSize.value,
+		} as ProductSalesQuery
+		applyResponse(await getProductSalesReport(query))
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function selectPeriod(period: ReportPeriod) {
+	if (selectedPeriod.value == period) return
+	selectedPeriod.value = period
+	currentPage.value = 1
+	loadRows()
+}
+
+function selectOrdering(ordering: string) {
+	if (selectedOrdering.value == ordering) return
+	selectedOrdering.value = ordering
+	currentPage.value = 1
+	loadRows()
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadRows()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadRows()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadRows()
+}
+
+function handleItemClick(item: UTSJSONObject) {
+	navigateToProductEdit(stringValue(item['productId']))
+}
+
+function handleSubtitleClick(payload: UTSJSONObject) {
+	const item = payload['item']
+	if (item == null) return
+	copyText(stringValue((item as UTSJSONObject)['barcode']), '条码已复制', '暂无条码')
+}
+
+function handleMetaClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '销售额已复制', '暂无销售额')
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	const value = stringValue(payload['value'])
+	const label = stringValue(payload['label'], '内容')
+	copyText(value, label.replace(':', '') + '已复制', '暂无内容')
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	const itemValue = payload['item']
+	if (actionValue == null) return
+	const actionKey = stringValue((actionValue as UTSJSONObject)['key'])
+	if (actionKey == 'reload') {
+		loadRows()
+		return
+	}
+	if (itemValue == null) return
+	const item = itemValue as UTSJSONObject
+	if (actionKey == 'edit') {
+		navigateToProductEdit(stringValue(item['productId']))
+		return
+	}
+	if (actionKey == 'inventory') {
+		navigateToProductInventory(stringValue(item['productId']), stringValue(item['name']))
+		return
+	}
+	if (actionKey == 'copy-code') {
+		copyText(stringValue(item['barcode']), '条码已复制', '暂无条码')
+	}
+}
+
+function applyRouteQuery(query: OnLoadOptions) {
+	const periodValue = query['period']
+	if (periodValue == null) return
+	const periodText = '' + periodValue
+	if (isAllowedPeriod(periodText)) selectedPeriod.value = periodText
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < rows.value.length; index += 1) result.push(rankToListItem(rows.value[index], index))
+	return result
+})
+
+const hasActiveSearch = computed((): boolean => {
+	return keyword.value != ''
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (hasActiveSearch.value) return '没有匹配的商品销售'
+	return currentPeriodLabel.value + '暂无商品销售记录'
+})
+
+const summaryTitle = computed((): string => {
+	return currentPeriodLabel.value + '商品概览'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'amount', label: '销售额', value: moneyText(summary.value.amount) } as UTSJSONObject,
+		{ key: 'quantity', label: '销售件数', value: summary.value.quantity } as UTSJSONObject,
+		{ key: 'products', label: '商品数', value: summary.value.product_count.toString() } as UTSJSONObject,
+		{ key: 'orders', label: '订单数', value: summary.value.order_count.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad((query: OnLoadOptions) => {
+	applyRouteQuery(query)
+	loadRows()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-top: 6px;
+	padding-right: 6px;
+	padding-bottom: 22px;
+	padding-left: 6px;
+}
+
+.control-strip {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.period-tabs {
+	flex: 1;
+	flex-direction: row;
+	padding: 2px;
+	border-radius: 8px;
+	background-color: #E5E7EB;
+}
+
+.period-tab {
+	flex: 1;
+	height: 28px;
+	border-radius: 6px;
+	align-items: center;
+	justify-content: center;
+	transition-property: background-color, transform;
+	transition-duration: 180ms;
+}
+
+.period-tab-active {
+	background-color: #FFFFFF;
+	transform: scale(1.02);
+}
+
+.period-text {
+	font-size: 11px;
+	color: #64748B;
+}
+
+.period-text-active {
+	font-weight: 700;
+	color: #111827;
+}
+
+.refresh-action {
+	height: 32px;
+	margin-left: 6px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #111827;
+	transition-property: transform, background-color;
+	transition-duration: 180ms;
+}
+
+.refresh-action:active {
+	transform: scale(0.96);
+	background-color: #334155;
+}
+
+.refresh-action-text {
+	font-size: 11px;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+
+.sort-scroll {
+	height: 32px;
+	margin-bottom: 4px;
+}
+
+.sort-row {
+	flex-direction: row;
+	align-items: center;
+	height: 32px;
+}
+
+.sort-chip {
+	height: 26px;
+	margin-right: 6px;
+	padding-left: 9px;
+	padding-right: 9px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	background-color: #FFFFFF;
+	transition-property: transform, border-color, background-color;
+	transition-duration: 180ms;
+}
+
+.sort-chip-active {
+	border-color: #2563EB;
+	background-color: #EFF6FF;
+	transform: scale(1.02);
+}
+
+.sort-chip-text {
+	font-size: 11px;
+	color: #475569;
+}
+
+.sort-chip-text-active {
+	font-weight: 700;
+	color: #1D4ED8;
+}
+
+.error-card {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 6px;
+	padding: 8px;
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	background-color: #FFFFFF;
+}
+
+.error-copy {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.error-title {
+	font-size: 12px;
+	line-height: 17px;
+	font-weight: 700;
+	color: #B91C1C;
+}
+
+.error-desc {
+	margin-top: 2px;
+	font-size: 10px;
+	line-height: 15px;
+	color: #7F1D1D;
+}
+
+.retry-btn {
+	height: 28px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #111827;
+}
+
+.retry-btn-text {
+	font-size: 11px;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+</style>

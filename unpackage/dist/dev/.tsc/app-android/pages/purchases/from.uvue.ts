@@ -3,6 +3,7 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createPurchase, getPurchaseDetail, getPurchaseOptionList, PurchaseItem, PurchaseMutationData, PurchaseOptionItem, updatePurchase } from '@/pkg/api/modules/purchases.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -38,11 +39,9 @@ function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''):
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/from.uvue:57")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/from.uvue:56")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -144,7 +143,7 @@ async function loadDetail(idText: string) {
 		const detail = await getPurchaseDetail(idText)
 		initialData.value = buildInitialDataFromPurchase(detail)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '采购单详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '采购单详情加载失败'))
 	}
 }
 
@@ -166,11 +165,11 @@ async function persistForm(payload: UTSJSONObject) {
 	try {
 		body = buildPayload(data)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '采购明细不完整'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '采购明细不完整'))
 		return
 	}
 	if (body.purchase_date == '' || body.shop == '' || body.supplier == '') {
-		uni.showToast({ title: '请填写采购日期、店铺和供应商', icon: 'none' })
+		uni.showToast({ title: '请填写采购日期、店铺和供应商', icon: 'none', duration: 3500 })
 		return
 	}
 	const actionText = formMode.value == 'edit' ? '保存采购单' : '创建采购单'
@@ -189,7 +188,7 @@ async function persistForm(payload: UTSJSONObject) {
 		if (formMode.value == 'edit') goBackToList()
 		else goToCreatedPurchaseDetail(savedPurchaseId)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -201,8 +200,8 @@ async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(pay
 function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
 function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
 function handleDirtyChange(value: boolean) {}
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请在对应模块维护选项', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none', duration: 3500 }) }
 
 onLoad((query: OnLoadOptions) => {
 	initialData.value = initialCreateData()

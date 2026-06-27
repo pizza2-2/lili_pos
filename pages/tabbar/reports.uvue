@@ -83,7 +83,9 @@
 			<view class="section surface-animate">
 				<view class="section-header">
 					<text class="section-title">最佳商品</text>
-					<text class="section-meta">按销售额</text>
+					<view class="section-action" @click="openProductSalesDetail">
+						<text class="section-action-text">查看明细</text>
+					</view>
 				</view>
 				<view v-if="topProducts.length == 0" class="empty-row">
 					<text class="empty-text">暂无商品排行</text>
@@ -443,6 +445,10 @@ function changePeriod(period: ReportPeriod) {
 	loadReport()
 }
 
+function openProductSalesDetail() {
+	uni.navigateTo({ url: '/pages/reports/product-sales?period=' + selectedPeriod.value })
+}
+
 onLoad(() => {
 	loadReport()
 })
@@ -659,6 +665,29 @@ onShow(() => {
 .section-meta {
 	font-size: 11px;
 	color: #94A3B8;
+}
+
+.section-action {
+	height: 28px;
+	padding-left: 10px;
+	padding-right: 10px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #EEF2FF;
+	transition-property: transform, background-color;
+	transition-duration: 180ms;
+}
+
+.section-action:active {
+	transform: scale(0.96);
+	background-color: #DBEAFE;
+}
+
+.section-action-text {
+	font-size: 11px;
+	font-weight: 700;
+	color: #1D4ED8;
 }
 
 .best-grid {

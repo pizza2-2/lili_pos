@@ -33,9 +33,9 @@
         "default": {}
       },
       "abiFilters": [
-        "armeabi-v7a",
-        "arm64-v8a",
         "x86",
+        "arm64-v8a",
+        "armeabi-v7a",
         "x86_64"
       ]
     }

@@ -86,6 +86,7 @@
 					:showFloatingAdd="true"
 					floatingAddText="添加商品"
 					@item-click="handleItemClick"
+					@field-click="handleListFieldClick"
 					@page-change="handlePageChange"
 					@floating-add="openAddPopup"
 				/>
@@ -136,6 +137,13 @@
 						editPath="/pages/products/from"
 						@change="handleDraftProductChange"
 					/>
+				</view>
+
+				<view v-if="draftExistingQuantity != ''" class="add-field">
+					<text class="add-label">现有数量</text>
+					<view class="existing-fill" @click="fillDraftActualFromExisting">
+						<text class="existing-fill-value">{{ draftExistingQuantity }}</text>
+					</view>
 				</view>
 
 				<view class="add-field">
@@ -276,6 +284,7 @@ const draftStockValue = ref('')
 const draftProductText = ref('')
 const draftProductImage = ref('')
 const draftProductSubtitle = ref('')
+const draftExistingQuantity = ref('')
 const draftActualQuantity = ref('0')
 const draftNotes = ref('')
 const editingItemId = ref('')
@@ -297,7 +306,7 @@ let volumeKeyStartTimer = 0
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'skuText', label: 'SKU:' } as UTSJSONObject,
-	{ key: 'systemText', label: '系统:' } as UTSJSONObject,
+	{ key: 'existingText', label: '现有数量:' } as UTSJSONObject,
 	{ key: 'actualText', label: '实际:' } as UTSJSONObject,
 	{ key: 'differenceText', label: '差异:' } as UTSJSONObject,
 ])
@@ -736,6 +745,7 @@ function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 		previewImages: previewImages,
 		mediaIds: productMediaIdListFromItem(item),
 		skuText: sku == '' ? '-' : sku,
+		existingText: stringValue(item['system_quantity'], '0'),
 		systemText: stringValue(item['system_quantity'], '0'),
 		actualText: stringValue(item['actual_quantity'], '0'),
 		differenceText: stringValue(item['difference_quantity'], '0'),
@@ -792,33 +802,34 @@ async function findExistingCheckItemByStock(stockId: string): Promise<UTSJSONObj
 	return response.results[0]
 }
 
-function fillDraftFromExistingItem(item: UTSJSONObject, showHint: boolean) {
+function fillDraftFromExistingItem(item: UTSJSONObject, showHint: boolean, fillActualFromExisting: boolean = false) {
 	const images = productImageListFromItem(item)
-	const checked = stringValue(item['is_checked']) == 'true'
 	const stockId = stringValue(item['stock'])
+	const existingQuantity = stringValue(item['system_quantity'], '0')
 	editingItemId.value = stringValue(item['id'])
 	draftProductValue.value = stringValue(item['product'], stockId)
 	draftStockValue.value = stockId
 	draftProductText.value = stringValue(item['product_name'], '库存 #' + stockId)
 	draftProductImage.value = images.length > 0 ? images[0] : ''
-	draftProductSubtitle.value = '系统 ' + stringValue(item['system_quantity'], '0') + ' / 已在盘点明细中'
-	draftActualQuantity.value = checked ? stringValue(item['actual_quantity'], '0') : stringValue(item['system_quantity'], '0')
+	draftProductSubtitle.value = '现有 ' + existingQuantity + ' / 已在盘点明细中'
+	draftExistingQuantity.value = existingQuantity
+	draftActualQuantity.value = fillActualFromExisting ? existingQuantity : stringValue(item['actual_quantity'], '0')
 	draftNotes.value = stringValue(item['notes'])
 	if (showHint) uni.showToast({ title: '商品已在盘点中，将修改数量', icon: 'none', duration: 3500 })
 }
 
-function openEditPopupFromRawItem(item: UTSJSONObject, showHint: boolean = false) {
-	fillDraftFromExistingItem(item, showHint)
+function openEditPopupFromRawItem(item: UTSJSONObject, showHint: boolean = false, fillActualFromExisting: boolean = false) {
+	fillDraftFromExistingItem(item, showHint, fillActualFromExisting)
 	addPopupVisible.value = true
 }
 
-function openEditPopupById(itemId: string) {
+function openEditPopupById(itemId: string, fillActualFromExisting: boolean = false) {
 	const item = findRawItemById(itemId)
 	if (item == null) {
 		uni.showToast({ title: '未找到盘点明细', icon: 'none', duration: 3500 })
 		return
 	}
-	openEditPopupFromRawItem(item!)
+	openEditPopupFromRawItem(item!, false, fillActualFromExisting)
 }
 
 function resetDraft() {
@@ -827,6 +838,7 @@ function resetDraft() {
 	draftProductText.value = ''
 	draftProductImage.value = ''
 	draftProductSubtitle.value = ''
+	draftExistingQuantity.value = ''
 	draftActualQuantity.value = '0'
 	draftNotes.value = ''
 	editingItemId.value = ''
@@ -855,7 +867,8 @@ async function openPopupWithStock(stock: UTSJSONObject) {
 	draftProductText.value = stringValue(option['text'])
 	draftProductImage.value = stringValue(option['image'])
 	draftProductSubtitle.value = stringValue(option['subtitle'])
-	draftActualQuantity.value = stringValue(option['system_quantity'], '0')
+	draftExistingQuantity.value = stringValue(option['system_quantity'], '0')
+	draftActualQuantity.value = '0'
 	draftNotes.value = ''
 	addPopupVisible.value = true
 }
@@ -1043,6 +1056,7 @@ async function findProductByBarcode(barcode: string): Promise<ProductItem | null
 		search: barcode,
 		page: 1,
 		page_size: 20,
+		ordering: '-updated_at',
 		filters: [] as ProductSelectedFilter[],
 	})
 	for (let index = 0; index < response.results.length; index += 1) {
@@ -1156,10 +1170,12 @@ async function handleDraftProductChange(payload: UTSJSONObject) {
 		const option = item as UTSJSONObject
 		draftStockValue.value = stringValue(option['stock_id'])
 		draftProductSubtitle.value = stringValue(option['subtitle'])
-		draftActualQuantity.value = stringValue(option['system_quantity'], draftActualQuantity.value)
+		draftExistingQuantity.value = stringValue(option['system_quantity'], '0')
+		draftActualQuantity.value = '0'
 	} else {
 		draftStockValue.value = ''
 		draftProductSubtitle.value = ''
+		draftExistingQuantity.value = ''
 	}
 	if (draftStockValue.value == '') {
 		editingItemId.value = ''
@@ -1173,6 +1189,11 @@ async function handleDraftProductChange(payload: UTSJSONObject) {
 function handleDraftActualQuantityChange(value: any) {
 	const quantity = intValue(value)
 	draftActualQuantity.value = quantity < 0 ? '0' : quantity.toString()
+}
+
+function fillDraftActualFromExisting() {
+	if (draftExistingQuantity.value == '') return
+	draftActualQuantity.value = draftExistingQuantity.value
 }
 
 function handleDraftNotesInput(event: any) {
@@ -1329,6 +1350,14 @@ function handleItemClick(payload: UTSJSONObject) {
 	openEditPopupById(stringValue(payload['rawId'], stringValue(payload['id'])))
 }
 
+function handleListFieldClick(payload: UTSJSONObject) {
+	if (stringValue(payload['key']) != 'existingText') return
+	const itemValue = payload['item']
+	if (itemValue == null) return
+	const item = itemValue as UTSJSONObject
+	openEditPopupById(stringValue(item['rawId'], stringValue(item['id'])), true)
+}
+
 function unlockVolumeScanSoon() {
 	setTimeout(() => {
 		volumeScanLocked.value = false
@@ -1464,6 +1493,8 @@ onUnload(() => {
 .add-close-text { font-size: 12px; line-height: 16px; color: #475569; }
 .add-field { margin-top: 12px; }
 .add-label { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; margin-bottom: 8px; }
+.existing-fill { height: 38px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #CBD5E1; align-items: center; justify-content: center; }
+.existing-fill-value { font-size: 16px; line-height: 20px; color: #0F172A; font-weight: bold; }
 .add-notes { height: 76px; padding: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; font-size: 13px; color: #0F172A; }
 .add-actions { flex-direction: row; margin-top: 16px; }
 .add-secondary-btn { flex: 1; height: 42px; border-radius: 8px; background-color: #F1F5F9; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 10px; }

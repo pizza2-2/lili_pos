@@ -3,8 +3,9 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue';
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts';
 import { createInventoryLocation, getInventoryLocationDetail, InventoryMutationData, updateInventoryLocation } from '@/pkg/api/modules/inventory';
+import { showErrorToast } from '@/pkg/util/toast.uts';
 type SelectOption = {
-    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-locations/from.uvue", 15, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-locations/from.uvue", 16, 6>;
     value: string;
     text: string;
 };
@@ -118,7 +119,7 @@ const __sfc__ = defineComponent({
                 } as UTSJSONObject;
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, '库存位置详情加载失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, '库存位置详情加载失败'));
             }
         }
         async function persistForm(payload: UTSJSONObject): Promise<void> {
@@ -127,7 +128,7 @@ const __sfc__ = defineComponent({
             const rawData = payload['formData'];
             const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject);
             if (getStringField(data, 'name') == '' || getStringField(data, 'code') == '') {
-                uni.showToast({ title: '请填写位置名称和位置编码', icon: 'none' });
+                uni.showToast({ title: '请填写位置名称和位置编码', icon: 'none', duration: 3500 });
                 return;
             }
             const actionText = formMode.value == 'edit' ? '保存库存位置' : '创建库存位置';
@@ -143,7 +144,7 @@ const __sfc__ = defineComponent({
                 goBackToList();
             }
             catch (error: any) {
-                uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' });
+                showErrorToast(parseErrorMessage(error, actionText + '失败'));
             }
             finally {
                 uni.hideLoading();
@@ -156,8 +157,8 @@ const __sfc__ = defineComponent({
             return; goBackToList(); }
         function handleDiscardLeave(payload: UTSJSONObject) { goBackToList(); }
         function handleDirtyChange(value: boolean) { }
-        function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }); }
-        function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }); }
+        function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }); }
+        function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }); }
         onLoad((query: OnLoadOptions) => {
             const idValue = query['id'];
             if (idValue != null && idValue != '') {

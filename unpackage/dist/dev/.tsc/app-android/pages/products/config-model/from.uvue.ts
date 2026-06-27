@@ -12,6 +12,7 @@ import {
 	productDiscountsPath,
 	updateProductConfig,
 } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -76,8 +77,6 @@ function goBackToList() {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 	}
 	return message
 }
@@ -192,7 +191,7 @@ async function loadDetail(idText: string) {
 		const detail = await getProductConfigDetail(resourceBasePath(), idText)
 		initialData.value = normalizeDetail(detail)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, resourceTitle() + '详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, resourceTitle() + '详情加载失败'))
 	}
 }
 
@@ -304,7 +303,7 @@ async function persistForm(payload: UTSJSONObject) {
 		markListRefreshNeeded()
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '保存失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '保存失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -334,11 +333,11 @@ function handleDirtyChange(value: boolean) {
 }
 
 function handleBottomSelectAdd(payload: UTSJSONObject) {
-	uni.showToast({ title: '请先到属性类型页面新增', icon: 'none' })
+	uni.showToast({ title: '请先到属性类型页面新增', icon: 'none', duration: 3500 })
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
-	uni.showToast({ title: '请先到属性类型页面编辑', icon: 'none' })
+	uni.showToast({ title: '请先到属性类型页面编辑', icon: 'none', duration: 3500 })
 }
 
 const homePath = computed((): string => {

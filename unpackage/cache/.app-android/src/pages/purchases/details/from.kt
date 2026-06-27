@@ -17,6 +17,7 @@ import io.dcloud.uniapp.extapi.navigateBack as uni_navigateBack
 import io.dcloud.uniapp.extapi.navigateTo as uni_navigateTo
 import io.dcloud.uniapp.extapi.setStorageSync as uni_setStorageSync
 import io.dcloud.uniapp.extapi.showLoading as uni_showLoading
+import io.dcloud.uniapp.extapi.showModal as uni_showModal
 import io.dcloud.uniapp.extapi.showToast as uni_showToast
 open class GenPagesPurchasesDetailsFrom : BasePage {
     constructor(__ins: ComponentInternalInstance, __renderer: String?) : super(__ins, __renderer) {}
@@ -43,6 +44,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
             val printing = ref(false)
             val printCopiesText = ref("1")
             val quickPrintLoading = ref(false)
+            val printPayloadData = ref<UTSJSONObject>(_uO())
             val productCategoryInfo = ref<ProductCategoryQuickInfo>(ProductCategoryQuickInfo(id = "", name = "", kasaCode = "", kasaText = ""))
             val productInfoLoading = ref(false)
             val productInfoError = ref("")
@@ -72,7 +74,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 if (errorText == null || errorText == "") {
                     return fallback
                 }
-                val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/from.uvue:174")
+                val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/from.uvue:137")
                 if (parsedError == null) {
                     return errorText
                 }
@@ -102,7 +104,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 if (text.indexOf("{") != 0) {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/details/from.uvue:188")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/details/from.uvue:151")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -113,7 +115,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 if (text == null || text == "") {
                     return _uA<UTSJSONObject>()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/details/from.uvue:195")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/details/from.uvue:158")
                 if (parsed == null) {
                     return _uA<UTSJSONObject>()
                 }
@@ -261,7 +263,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 return wrapUTSPromise(suspend w1@{
                         val keyword = getStringField(params, "keyword")
                         val id = getStringField(params, "id")
-                        val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/purchases/details/from.uvue", 275, 8), "page" to if (intValue(params["page"]) <= 0) {
+                        val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/purchases/details/from.uvue", 238, 8), "page" to if (intValue(params["page"]) <= 0) {
                             1
                         } else {
                             intValue(params["page"])
@@ -375,7 +377,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 return _uO("product" to item.product.toString(10), "product_text" to productText, "product_image" to productImage, "quantity" to item.quantity.toString(10), "received_quantity" to item.received_quantity.toString(10), "notes" to item.notes)
             }
             val buildInitialDataFromDetail = ::gen_buildInitialDataFromDetail_fn
-            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "明细信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "product", "textKey" to "product_text", "imageValueKey" to "product_image", "label" to "商品", "type" to "bottomSelect", "required" to true, "title" to "选择商品", "placeholder" to "请选择商品", "searchPlaceholder" to "扫码或输入商品名/条码", "imageKey" to "image", "subtitleKey" to "subtitle", "showScan" to true, "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/products/from", "editPath" to "/pages/products/from", "fetchData" to fetchProductOptions), _uO("key" to "quantity", "label" to "采购数量", "type" to "number", "required" to true, "placeholder" to "请输入采购数量"), _uO("key" to "received_quantity", "label" to "已收货数量", "type" to "number", "showStepper" to false, "placeholder" to "通常由收货操作更新", "showAdd" to true, "addText" to "全部收货", "fillFromKey" to "quantity"), _uO("key" to "notes", "label" to "备注", "type" to "textarea", "placeholder" to "请输入备注")))))
+            val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "明细信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "product", "textKey" to "product_text", "imageValueKey" to "product_image", "label" to "商品", "type" to "bottomSelect", "required" to true, "title" to "选择商品", "placeholder" to "请选择商品", "searchPlaceholder" to "扫码或输入商品名/条码", "imageKey" to "image", "subtitleKey" to "subtitle", "showScan" to true, "autoSelectUnique" to true, "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/products/from", "editPath" to "/pages/products/from", "fetchData" to fetchProductOptions), _uO("key" to "quantity", "label" to "采购数量", "type" to "number", "required" to true, "placeholder" to "请输入采购数量"), _uO("key" to "received_quantity", "label" to "已收货数量", "type" to "number", "showStepper" to false, "placeholder" to "通常由收货操作更新", "showAdd" to true, "addText" to "全部收货", "fillFromKey" to "quantity"), _uO("key" to "notes", "label" to "备注", "type" to "textarea", "placeholder" to "请输入备注")))))
             val homePath = computed(fun(): String {
                 return "/pages/purchases/details/index?purchase=" + purchaseId.value
             }
@@ -529,7 +531,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                             markLeaveConfirmRequired()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "采购明细加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "采购明细加载失败"))
                         }
                 })
             }
@@ -555,6 +557,30 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 return "未命名商品"
             }
             val productNameText = ::gen_productNameText_fn
+            fun gen_productNameCnText_fn(): String {
+                val product = activePrintProduct()
+                if (product == null) {
+                    return ""
+                }
+                return product.name_cn
+            }
+            val productNameCnText = ::gen_productNameCnText_fn
+            fun gen_productNameEnText_fn(): String {
+                val product = activePrintProduct()
+                if (product == null) {
+                    return ""
+                }
+                return product.name_en
+            }
+            val productNameEnText = ::gen_productNameEnText_fn
+            fun gen_productNameOtherText_fn(): String {
+                val product = activePrintProduct()
+                if (product == null) {
+                    return ""
+                }
+                return product.name_other
+            }
+            val productNameOtherText = ::gen_productNameOtherText_fn
             fun gen_productOriginalPriceText_fn(): String {
                 val product = activePrintProduct()
                 if (product == null) {
@@ -609,6 +635,19 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 }
             }
             val productSkuText = ::gen_productSkuText_fn
+            fun gen_productKodText_fn(): String {
+                val product = activePrintProduct()
+                if (product != null && product.category_kasa_kod != "") {
+                    return product.category_kasa_kod
+                }
+                val code = productCategoryInfo.value.kasaCode
+                return if (code == "") {
+                    "-"
+                } else {
+                    code
+                }
+            }
+            val productKodText = ::gen_productKodText_fn
             val productInfoVisible = computed(fun(): Boolean {
                 return productInfoLoading.value || productInfoError.value != "" || printProduct.value != null || printProductId.value != ""
             }
@@ -647,9 +686,88 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 }
             }
             )
+            fun gen_payloadFieldValue_fn(key: String): String {
+                return getStringField(printPayloadData.value, key)
+            }
+            val payloadFieldValue = ::gen_payloadFieldValue_fn
+            fun gen_purchaseQuantityText_fn(): String {
+                val payloadQuantity = payloadFieldValue("quantity")
+                if (payloadQuantity != "") {
+                    return payloadQuantity
+                }
+                val initialQuantity = getStringField(initialData.value, "quantity")
+                if (initialQuantity != "") {
+                    return initialQuantity
+                }
+                val detail = currentDetail.value
+                if (detail != null) {
+                    return detail.quantity.toString(10)
+                }
+                return "-"
+            }
+            val purchaseQuantityText = ::gen_purchaseQuantityText_fn
+            fun gen_receivedQuantityText_fn(): String {
+                val payloadQuantity = payloadFieldValue("received_quantity")
+                if (payloadQuantity != "") {
+                    return payloadQuantity
+                }
+                val initialQuantity = getStringField(initialData.value, "received_quantity")
+                if (initialQuantity != "") {
+                    return initialQuantity
+                }
+                val detail = currentDetail.value
+                if (detail != null) {
+                    return detail.received_quantity.toString(10)
+                }
+                return "-"
+            }
+            val receivedQuantityText = ::gen_receivedQuantityText_fn
+            fun gen_normalizedPrintCopiesText_fn(value: String): String {
+                val copies = parseInt(value)
+                if (isNaN(copies) || copies <= 0) {
+                    return "1"
+                }
+                if (copies > 999) {
+                    return "999"
+                }
+                return copies.toString(10)
+            }
+            val normalizedPrintCopiesText = ::gen_normalizedPrintCopiesText_fn
+            val quickPrintCopiesText = computed(fun(): String {
+                return normalizedPrintCopiesText(purchaseQuantityText())
+            }
+            )
+            val purchasePrintData = computed(fun(): UTSJSONObject {
+                val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "pages/purchases/details/from.uvue", 575, 8))
+                data["name"] = productNameText()
+                data["name_cn"] = productNameCnText()
+                data["name_en"] = productNameEnText()
+                data["name_other"] = productNameOtherText()
+                data["price"] = productDiscountPriceText()
+                data["base_sales_price"] = productOriginalPriceText()
+                data["discount_price"] = productDiscountPriceText()
+                data["barcode"] = productBarcodeText()
+                data["sku"] = productSkuText()
+                data["kod"] = productKodText()
+                data["category_kasa_kod"] = productKodText()
+                data["quantity"] = purchaseQuantityText()
+                data["purchase_quantity"] = purchaseQuantityText()
+                data["received_quantity"] = receivedQuantityText()
+                return data
+            }
+            )
             fun gen_printValueForSource_fn(source: String, fallback: String): String {
                 if (source == "name") {
                     return productNameText()
+                }
+                if (source == "name_cn") {
+                    return productNameCnText()
+                }
+                if (source == "name_en") {
+                    return productNameEnText()
+                }
+                if (source == "name_other") {
+                    return productNameOtherText()
                 }
                 if (source == "price") {
                     return productDiscountPriceText()
@@ -667,11 +785,25 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                     return productSkuText()
                 }
                 if (source == "kod") {
-                    return productSkuText()
+                    return productKodText()
+                }
+                if (source == "quantity" || source == "purchase_quantity") {
+                    return purchaseQuantityText()
+                }
+                if (source == "received_quantity") {
+                    return receivedQuantityText()
                 }
                 return fallback
             }
             val printValueForSource = ::gen_printValueForSource_fn
+            fun gen_resolvePurchaseDetailPrintValue_fn(source: String, fallback: String): String {
+                return printValueForSource(source, fallback)
+            }
+            val resolvePurchaseDetailPrintValue = ::gen_resolvePurchaseDetailPrintValue_fn
+            fun gen_handlePrintPopupVisibleChange_fn(value: Boolean) {
+                printPopupVisible.value = value
+            }
+            val handlePrintPopupVisibleChange = ::gen_handlePrintPopupVisibleChange_fn
             fun gen_printLabelForSource_fn(source: UTSJSONObject, index: Number): String {
                 val elementLabel = getStringField(source, "label")
                 if (elementLabel != "") {
@@ -680,6 +812,15 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 val elementSource = getStringField(source, "source")
                 if (elementSource == "name") {
                     return "商品名称"
+                }
+                if (elementSource == "name_cn") {
+                    return "中文名"
+                }
+                if (elementSource == "name_en") {
+                    return "英文名"
+                }
+                if (elementSource == "name_other") {
+                    return "其他名"
                 }
                 if (elementSource == "price") {
                     return "打印价格"
@@ -716,7 +857,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 return source == "price" || source == "discount_price" || source == "base_sales_price"
             }
             val isEmphasisPrintSource = ::gen_isEmphasisPrintSource_fn
-            fun gen_hasPreviewField_fn(fields: UTSArray<PrintPreviewField__1>, key: String): Boolean {
+            fun gen_hasPreviewField_fn(fields: UTSArray<PrintPreviewField__2>, key: String): Boolean {
                 run {
                     var index: Number = 0
                     while(index < fields.length){
@@ -729,12 +870,12 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 return false
             }
             val hasPreviewField = ::gen_hasPreviewField_fn
-            fun gen_buildPrintPreviewFields_fn(): UTSArray<PrintPreviewField__1> {
+            fun gen_buildPrintPreviewFields_fn(): UTSArray<PrintPreviewField__2> {
                 val item = selectedPrintTemplate.value
                 if (item == null) {
-                    return _uA<PrintPreviewField__1>()
+                    return _uA<PrintPreviewField__2>()
                 }
-                val result: UTSArray<PrintPreviewField__1> = _uA()
+                val result: UTSArray<PrintPreviewField__2> = _uA()
                 run {
                     var index: Number = 0
                     while(index < item.elements.length){
@@ -751,21 +892,28 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                         }
                         val elementSource = getStringField(source, "source")
                         val fallbackContent = getStringField(source, "content")
-                        result.push(PrintPreviewField__1(key = key, label = printLabelForSource(source, index), value = printValueForSource(elementSource, fallbackContent), emphasis = isEmphasisPrintSource(elementSource)))
+                        result.push(PrintPreviewField__2(key = key, label = printLabelForSource(source, index), value = printValueForSource(elementSource, fallbackContent), emphasis = isEmphasisPrintSource(elementSource)))
                         index += 1
                     }
                 }
                 return result
             }
             val buildPrintPreviewFields = ::gen_buildPrintPreviewFields_fn
-            val printPreviewFields = computed(fun(): UTSArray<PrintPreviewField__1> {
+            val printPreviewFields = computed(fun(): UTSArray<PrintPreviewField__2> {
                 return buildPrintPreviewFields()
             }
             )
             fun gen_mappedPrintElement_fn(source: UTSJSONObject): UTSJSONObject {
                 val elementSource = getStringField(source, "source")
                 val fallbackContent = getStringField(source, "content")
-                return _uO("type" to getStringField(source, "type", "text"), "x" to numberValue(source["x"], 0), "y" to numberValue(source["y"], 0), "width" to numberValue(source["width"], 10), "height" to numberValue(source["height"], 6), "fontSize" to numberValue(source["fontSize"], 4), "content" to printValueForSource(elementSource, fallbackContent), "source" to elementSource, "barcodeType" to getStringField(source, "barcodeType", "EAN13"), "showText" to boolValue(source["showText"], true), "lineWidth" to numberValue(source["lineWidth"], 1))
+                val fontWeight = getStringField(source, "fontWeight", getStringField(source, "font_weight")).toLowerCase()
+                val isBold = boolValue(source["isBold"], boolValue(source["bold"], fontWeight == "bold" || fontWeight == "700"))
+                return _uO("type" to getStringField(source, "type", "text"), "x" to numberValue(source["x"], 0), "y" to numberValue(source["y"], 0), "width" to numberValue(source["width"], 10), "height" to numberValue(source["height"], 6), "fontSize" to numberValue(source["fontSize"], 4), "content" to printValueForSource(elementSource, fallbackContent), "source" to elementSource, "barcodeType" to getStringField(source, "barcodeType", "EAN13"), "showText" to boolValue(source["showText"], true), "lineWidth" to numberValue(source["lineWidth"], 1), "isBold" to isBold, "fontWeight" to if (isBold) {
+                    "bold"
+                } else {
+                    "normal"
+                }
+                , "textAlign" to getStringField(source, "textAlign", getStringField(source, "text_align", "left")))
             }
             val mappedPrintElement = ::gen_mappedPrintElement_fn
             fun gen_buildProductPrintElements_fn(item: PrintTemplateItem): UTSArray<UTSJSONObject> {
@@ -796,16 +944,11 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
             }
             val printCopiesValue = ::gen_printCopiesValue_fn
             fun gen_connectedPrinterAddress_fn(): String {
-                val connected = getConnectedPrinter()
-                if (!connected.success || connected.data == null) {
-                    return ""
-                }
-                val data = connected.data as UTSJSONObject
-                return getStringField(data, "address")
+                return getPreferredPrinterAddress()
             }
             val connectedPrinterAddress = ::gen_connectedPrinterAddress_fn
             fun gen_goPrinterSettings_fn() {
-                uni_showToast(ShowToastOptions(title = "请先连接打印机", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请先连接打印机", icon = "none", duration = 3500))
                 setTimeout(fun(){
                     uni_navigateTo(NavigateToOptions(url = "/pages/printer-settings/index"))
                 }
@@ -819,34 +962,64 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 printPopupVisible.value = false
             }
             val closePrintPopup = ::gen_closePrintPopup_fn
-            fun gen_confirmPrintProduct_fn() {
-                if (printing.value) {
-                    return
-                }
-                val item = selectedPrintTemplate.value
-                if (item == null) {
-                    return
-                }
-                val address = connectedPrinterAddress()
-                if (address == "") {
-                    closePrintPopup()
-                    goPrinterSettings()
-                    return
-                }
-                printing.value = true
-                val response = printLabelBitmap(_uO("address" to address, "paperWidthMm" to numberValue(item.paper_width_mm, 30), "paperHeightMm" to numberValue(item.paper_height_mm, 20), "dotsPerMm" to item.dots_per_mm, "elements" to buildProductPrintElements(item), "chunkSize" to 1024, "delayMs" to 20, "copies" to printCopiesValue()))
-                printing.value = false
-                if (response.success) {
-                    uni_showToast(ShowToastOptions(title = "已发送打印", icon = "success"))
-                    closePrintPopup()
-                    return
-                }
-                uni_showToast(ShowToastOptions(title = if (response.message == "") {
-                    "打印失败"
+            fun gen_promptChoosePrinterAfterPrintFailure_fn(message: String) {
+                val detail = if (message == "") {
+                    "打印机连接失败，请确认打印机在附近并已开机。"
                 } else {
-                    response.message
+                    message
                 }
-                , icon = "none"))
+                uni_showModal(ShowModalOptions(title = "打印失败", content = detail + "\n是否选择新的打印机？", confirmText = "选择打印机", cancelText = "取消", success = fun(modal){
+                    if (modal.confirm) {
+                        closePrintPopup()
+                        uni_navigateTo(NavigateToOptions(url = "/pages/printer-settings/index"))
+                    }
+                }
+                ))
+            }
+            val promptChoosePrinterAfterPrintFailure = ::gen_promptChoosePrinterAfterPrintFailure_fn
+            fun gen_confirmPrintProduct_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (printing.value) {
+                            return@w1
+                        }
+                        val item = selectedPrintTemplate.value
+                        if (item == null) {
+                            return@w1
+                        }
+                        val address = connectedPrinterAddress()
+                        if (address == "") {
+                            closePrintPopup()
+                            goPrinterSettings()
+                            return@w1
+                        }
+                        printing.value = true
+                        var shouldClose = false
+                        var responseSuccess = false
+                        var responseMessage = ""
+                        uni_showLoading(ShowLoadingOptions(title = "打印中", mask = true))
+                        try {
+                            val response = await(printLabelBitmapAsync(_uO("address" to address, "paperWidthMm" to numberValue(item.paper_width_mm, 30), "paperHeightMm" to numberValue(item.paper_height_mm, 20), "dotsPerMm" to item.dots_per_mm, "elements" to buildProductPrintElements(item), "chunkSize" to 1024, "delayMs" to 20, "copies" to printCopiesValue())))
+                            responseSuccess = response.success
+                            responseMessage = response.message
+                        }
+                         finally {
+                            printing.value = false
+                            uni_hideLoading(null)
+                        }
+                        if (responseSuccess) {
+                            uni_showToast(ShowToastOptions(title = if (responseMessage == "") {
+                                "已发送打印"
+                            } else {
+                                responseMessage
+                            }, icon = "success"))
+                            shouldClose = true
+                        } else {
+                            promptChoosePrinterAfterPrintFailure(responseMessage)
+                        }
+                        if (shouldClose) {
+                            closePrintPopup()
+                        }
+                })
             }
             val confirmPrintProduct = ::gen_confirmPrintProduct_fn
             fun gen_productIdFromPayload_fn(payload: UTSJSONObject): String {
@@ -875,12 +1048,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                         if (currentProductId != "") {
                             return@w1 currentProductId
                         }
-                        if (detailId.value == "") {
-                            return@w1 ""
-                        }
-                        val detail = await(getPurchaseDetailItem(detailId.value))
-                        currentDetail.value = detail
-                        return@w1 detail.product.toString(10)
+                        return@w1 ""
                 })
             }
             val resolveProductIdForPrint = ::gen_resolveProductIdForPrint_fn
@@ -889,8 +1057,8 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                         if (productIdText == "") {
                             return@w1 false
                         }
-                        await(loadProductInfo(productIdText))
-                        return@w1 printProduct.value != null && printProductId.value == productIdText
+                        val product = printProduct.value
+                        return@w1 product != null && product.id.toString(10) == productIdText
                 })
             }
             val ensurePrintProduct = ::gen_ensurePrintProduct_fn
@@ -925,37 +1093,32 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
             val getDefaultProductPrintTemplate = ::gen_getDefaultProductPrintTemplate_fn
             fun gen_handleQuickPrint_fn(payload: UTSJSONObject): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
-                        if (quickPrintLoading.value || printing.value) {
+                        if (quickPrintLoading.value) {
                             return@w1
                         }
                         quickPrintLoading.value = true
                         uni_showLoading(ShowLoadingOptions(title = "准备打印...", mask = true))
                         try {
+                            val rawData = payload["formData"]
+                            printPayloadData.value = if (rawData == null) {
+                                (_uO())
+                            } else {
+                                (rawData as UTSJSONObject)
+                            }
                             val productIdText = await(resolveProductIdForPrint(payload))
                             if (productIdText == "") {
-                                uni_showToast(ShowToastOptions(title = "当前明细缺少商品，无法打印", icon = "none"))
+                                uni_showToast(ShowToastOptions(title = "当前明细缺少商品，无法打印", icon = "none", duration = 3500))
                                 return@w1
                             }
                             val productReady = await(ensurePrintProduct(productIdText))
                             if (!productReady) {
-                                uni_showToast(ShowToastOptions(title = "商品信息加载失败，无法打印", icon = "none"))
+                                showErrorToast("商品信息加载失败，无法打印")
                                 return@w1
-                            }
-                            val template = await(getDefaultProductPrintTemplate())
-                            if (template == null) {
-                                uni_showToast(ShowToastOptions(title = "未设置默认商品价签模板", icon = "none"))
-                                return@w1
-                            }
-                            selectedPrintTemplate.value = template
-                            printCopiesText.value = if (template.copies_default <= 0) {
-                                "1"
-                            } else {
-                                template.copies_default.toString(10)
                             }
                             printPopupVisible.value = true
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "快速打印准备失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "快速打印准备失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -992,7 +1155,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                         val body = buildPayload(data)
                         val quantity = parseInt(body.quantity)
                         if (body.purchase == "" || body.product == "" || isNaN(quantity) || quantity <= 0) {
-                            uni_showToast(ShowToastOptions(title = "请填写商品和有效采购数量", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请填写商品和有效采购数量", icon = "none", duration = 3500))
                             return@w1
                         }
                         val actionText = if (formMode.value == "edit") {
@@ -1013,7 +1176,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -1032,7 +1195,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 val quantity = getStringField(data, "quantity")
                 val quantityNumber = parseInt(quantity)
                 if (quantity == "" || isNaN(quantityNumber) || quantityNumber <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请先填写有效采购数量", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请先填写有效采购数量", icon = "none", duration = 3500))
                     return false
                 }
                 data["received_quantity"] = quantity
@@ -1091,15 +1254,15 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                 if (!fillReceivedQuantityFromQuantity(data)) {
                     return
                 }
-                uni_showToast(ShowToastOptions(title = "已填入采购数量", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "已填入采购数量", icon = "none", duration = 3500))
             }
             val handleInputAdd = ::gen_handleInputAdd_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "请在对应模块维护选项", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请在对应模块维护选项", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             onLoad(fun(query: OnLoadOptions){
@@ -1140,8 +1303,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm", GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormClass)
-                val _component_lili_print_copies_stepper = resolveEasyComponent("lili-print-copies-stepper", GenUniModulesLiliPrintCopiesStepperComponentsLiliPrintCopiesStepperLiliPrintCopiesStepperClass)
-                val _component_page_container = resolveComponent("page-container")
+                val _component_lili_print_confirm_popup = resolveEasyComponent("lili-print-confirm-popup", GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopupClass)
                 return _cE("view", _uM("class" to "page"), _uA(
                     _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "showBack" to true, "showSearch" to false, "showHome" to true, "homePath" to homePath.value, "backgroundColor" to "#EEF2F7"), null, 8, _uA(
                         "title",
@@ -1192,7 +1354,7 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                         } else {
                             "快速打印"
                         }
-                        , "floatingActionDisabled" to (unref(quickPrintLoading) || unref(printing)), "leaveConfirmContent" to "是否已收到全部数量", "leaveConfirmConfirmText" to "确认", "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onDirtyChange" to handleDirtyChange, "onFieldChange" to handleFieldChange, "onInputAdd" to handleInputAdd, "onFloatingAction" to handleQuickPrint, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit), null, 8, _uA(
+                        , "floatingActionDisabled" to unref(quickPrintLoading), "leaveConfirmContent" to "是否已收到全部数量", "leaveConfirmConfirmText" to "确认", "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onDirtyChange" to handleDirtyChange, "onFieldChange" to handleFieldChange, "onInputAdd" to handleInputAdd, "onFloatingAction" to handleQuickPrint, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit), null, 8, _uA(
                             "mode",
                             "formSections",
                             "initialData",
@@ -1203,64 +1365,10 @@ open class GenPagesPurchasesDetailsFrom : BasePage {
                             "floatingActionDisabled"
                         ))
                     )),
-                    _cV(_component_page_container, _uM("show" to unref(printPopupVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 240, "overlay-style" to "background-color: rgba(15, 23, 42, 0.42);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closePrintPopup), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
-                        return _uA(
-                            _cE("view", _uM("class" to "print-panel"), _uA(
-                                _cE("view", _uM("class" to "print-handle")),
-                                _cE("view", _uM("class" to "print-head"), _uA(
-                                    _cE("view", null, _uA(
-                                        _cE("text", _uM("class" to "print-title"), "确认打印"),
-                                        _cE("text", _uM("class" to "print-subtitle"), _tD(selectedTemplateName.value), 1)
-                                    )),
-                                    _cE("view", _uM("class" to "print-close", "onClick" to closePrintPopup), _uA(
-                                        _cE("text", _uM("class" to "print-close-text"), "关闭")
-                                    ))
-                                )),
-                                _cE("view", _uM("class" to "print-content-card"), _uA(
-                                    if (printPreviewFields.value.length == 0) {
-                                        _cE("view", _uM("key" to 0, "class" to "print-empty-row"), _uA(
-                                            _cE("text", _uM("class" to "print-empty-text"), "当前模板没有需要核对的字段")
-                                        ))
-                                    } else {
-                                        _cC("v-if", true)
-                                    }
-                                    ,
-                                    _cE(Fragment, null, RenderHelpers.renderList(printPreviewFields.value, fun(field, __key, __index, _cached): Any {
-                                        return _cE("view", _uM("key" to field.key, "class" to "print-row"), _uA(
-                                            _cE("text", _uM("class" to "print-label"), _tD(field.label), 1),
-                                            _cE("text", _uM("class" to _nC(if (field.emphasis) {
-                                                "print-value print-value-emphasis"
-                                            } else {
-                                                "print-value"
-                                            }
-                                            )), _tD(field.value), 3)
-                                        ))
-                                    }
-                                    ), 128)
-                                )),
-                                _cE("view", _uM("class" to "print-copies-wrap"), _uA(
-                                    _cV(_component_lili_print_copies_stepper, _uM("value" to unref(printCopiesText), "title" to "打印页数", "desc" to "一个商品可一次贴上多张价格", "onChange" to handlePrintCopiesChange), null, 8, _uA(
-                                        "value"
-                                    ))
-                                )),
-                                _cE("view", _uM("class" to "print-actions"), _uA(
-                                    _cE("view", _uM("class" to "print-secondary-btn", "onClick" to closePrintPopup), _uA(
-                                        _cE("text", _uM("class" to "print-secondary-text"), "取消")
-                                    )),
-                                    _cE("view", _uM("class" to "print-primary-btn", "onClick" to confirmPrintProduct), _uA(
-                                        _cE("text", _uM("class" to "print-primary-text"), _tD(if (unref(printing)) {
-                                            "打印中..."
-                                        } else {
-                                            "打印"
-                                        }
-                                        ), 1)
-                                    ))
-                                ))
-                            ))
-                        )
-                    }
-                    ), "_" to 1), 8, _uA(
-                        "show"
+                    _cV(_component_lili_print_confirm_popup, _uM("visible" to unref(printPopupVisible), "templateType" to "product_label", "defaultCopies" to quickPrintCopiesText.value, "copiesTitle" to "打印数量", "copiesDesc" to "默认按当前采购数量打印，可手动调整", "printData" to purchasePrintData.value, "onUpdate:visible" to handlePrintPopupVisibleChange), null, 8, _uA(
+                        "visible",
+                        "defaultCopies",
+                        "printData"
                     ))
                 ))
             }

@@ -21,6 +21,7 @@ export class UniAppConfig extends io.dcloud.uniapp.appframe.AppConfig {
 }
 import GenPagesLoginLoginClass from './pages/login/login.uvue';
 import GenPagesTabbarReportsClass from './pages/tabbar/reports.uvue';
+import GenPagesReportsProductSalesClass from './pages/reports/product-sales.uvue';
 import GenPagesTabbarProductsClass from './pages/tabbar/products.uvue';
 import GenPagesTabbarSettingsClass from './pages/tabbar/settings.uvue';
 import GenPagesTabbarMineClass from './pages/tabbar/mine.uvue';
@@ -46,7 +47,6 @@ import GenPagesProductsPriceCalculatorClass from './pages/products/price-calcula
 import GenPagesProductsPricingFormulaClass from './pages/products/pricing-formula.uvue';
 import GenPagesProductsPricingFormulaIndexClass from './pages/products/pricing-formula/index.uvue';
 import GenPagesProductsPricingFormulaFromClass from './pages/products/pricing-formula/from.uvue';
-import GenPagesLabelPrintIndexClass from './pages/label-print/index.uvue';
 import GenPagesPrinterSettingsIndexClass from './pages/printer-settings/index.uvue';
 import GenPagesLabelTemplatesIndexClass from './pages/label-templates/index.uvue';
 import GenPagesLabelTemplatesFromClass from './pages/label-templates/from.uvue';
@@ -80,6 +80,7 @@ import GenPagesInventoryChecksDetailsIndexClass from './pages/inventory-checks/d
 function definePageRoutes() {
     __uniRoutes.push({ path: "pages/login/login", component: GenPagesLoginLoginClass, meta: { isQuit: true } as UniPageMeta, style: _uM([["navigationStyle", "custom"]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/tabbar/reports", component: GenPagesTabbarReportsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "报表"]]) } as UniPageRoute);
+    __uniRoutes.push({ path: "pages/reports/product-sales", component: GenPagesReportsProductSalesClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "商品销售"]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/tabbar/products", component: GenPagesTabbarProductsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "商品"]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/tabbar/settings", component: GenPagesTabbarSettingsClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "设置"]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/tabbar/mine", component: GenPagesTabbarMineClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", "我的"]]) } as UniPageRoute);
@@ -105,7 +106,6 @@ function definePageRoutes() {
     __uniRoutes.push({ path: "pages/products/pricing-formula", component: GenPagesProductsPricingFormulaClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/products/pricing-formula/index", component: GenPagesProductsPricingFormulaIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/products/pricing-formula/from", component: GenPagesProductsPricingFormulaFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
-    __uniRoutes.push({ path: "pages/label-print/index", component: GenPagesLabelPrintIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/printer-settings/index", component: GenPagesPrinterSettingsIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/label-templates/index", component: GenPagesLabelTemplatesIndexClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);
     __uniRoutes.push({ path: "pages/label-templates/from", component: GenPagesLabelTemplatesFromClass, meta: { isQuit: false } as UniPageMeta, style: _uM([["navigationStyle", "custom"], ["navigationBarTitleText", ""]]) } as UniPageRoute);

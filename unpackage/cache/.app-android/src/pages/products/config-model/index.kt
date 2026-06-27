@@ -151,11 +151,11 @@ open class GenPagesProductsConfigModelIndex : BasePage {
                 return wrapUTSPromise(suspend w1@{
                         val discountId = getStringField(discountItem, "id")
                         if (discountId == "") {
-                            uni_showToast(ShowToastOptions(title = "无法读取折扣信息", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "无法读取折扣信息", icon = "none", duration = 3500))
                             return@w1
                         }
                         if (selectionProductId.value == "") {
-                            uni_showToast(ShowToastOptions(title = "未找到商品信息", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "未找到商品信息", icon = "none", duration = 3500))
                             return@w1
                         }
                         val baseSalesPrice = if (selectionBaseSalesPrice.value == "") {
@@ -164,7 +164,7 @@ open class GenPagesProductsConfigModelIndex : BasePage {
                             selectionBaseSalesPrice.value
                         }
                         val finalPrice = calculateDiscountedPriceText(baseSalesPrice, discountItem)
-                        val selection: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("selection", "pages/products/config-model/index.uvue", 252, 8), "product_id" to selectionProductId.value, "discount_id" to discountId, "discount_name" to getStringField(discountItem, "name", getStringField(discountItem, "discount_name")), "discount_type" to getStringField(discountItem, "discount_type"), "discount_percentage" to getStringField(discountItem, "discount_percentage"), "discount_amount" to getStringField(discountItem, "discount_amount"), "discount_amount_fixed" to getStringField(discountItem, "discount_amount_fixed"), "min_quantity" to getStringField(discountItem, "min_quantity"), "original_price" to baseSalesPrice, "final_price" to finalPrice)
+                        val selection: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("selection", "pages/products/config-model/index.uvue", 253, 8), "product_id" to selectionProductId.value, "discount_id" to discountId, "discount_name" to getStringField(discountItem, "name", getStringField(discountItem, "discount_name")), "discount_type" to getStringField(discountItem, "discount_type"), "discount_percentage" to getStringField(discountItem, "discount_percentage"), "discount_amount" to getStringField(discountItem, "discount_amount"), "discount_amount_fixed" to getStringField(discountItem, "discount_amount_fixed"), "min_quantity" to getStringField(discountItem, "min_quantity"), "original_price" to baseSalesPrice, "final_price" to finalPrice)
                         try {
                             uni_showLoading(ShowLoadingOptions(title = "添加中", mask = true))
                             await(addProductDiscountToProduct(selectionProductId.value, discountId))
@@ -173,7 +173,7 @@ open class GenPagesProductsConfigModelIndex : BasePage {
                             uni_navigateBack(NavigateBackOptions(delta = 1))
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("折扣添加失败"), icon = "none"))
+                            uni_showToast(ShowToastOptions(title = takeLatestResponseMessage("折扣添加失败"), icon = "none", duration = 3500))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -244,12 +244,7 @@ open class GenPagesProductsConfigModelIndex : BasePage {
             val openForm = ::gen_openForm_fn
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
-                if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
-                }
+                if (error != null) {}
                 return message
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
@@ -283,7 +278,7 @@ open class GenPagesProductsConfigModelIndex : BasePage {
                         isLoading.value = true
                         errorMessage.value = ""
                         try {
-                            val extra: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("extra", "pages/products/config-model/index.uvue", 364, 9))
+                            val extra: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("extra", "pages/products/config-model/index.uvue", 363, 9))
                             if (resource.value == "attribute-value" && parentAttributeTypeId.value != "") {
                                 extra["attribute_type"] = parentAttributeTypeId.value
                             }
@@ -441,12 +436,12 @@ open class GenPagesProductsConfigModelIndex : BasePage {
             fun gen_selectDiscountListItem_fn(itemObject: UTSJSONObject) {
                 val rawId = getStringField(itemObject, "rawId")
                 if (rawId == "") {
-                    uni_showToast(ShowToastOptions(title = "无法读取折扣信息", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "无法读取折扣信息", icon = "none", duration = 3500))
                     return
                 }
                 val sourceItem = findDiscountById(rawId)
                 if (sourceItem == null) {
-                    uni_showToast(ShowToastOptions(title = "该折扣信息已失效", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "该折扣信息已失效", icon = "none", duration = 3500))
                     return
                 }
                 handleDiscountSelect(sourceItem)
@@ -483,7 +478,7 @@ open class GenPagesProductsConfigModelIndex : BasePage {
                             loadItems()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "删除失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "删除失败"))
                         }
                 })
             }

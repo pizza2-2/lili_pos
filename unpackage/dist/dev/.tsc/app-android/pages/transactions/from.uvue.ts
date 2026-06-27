@@ -7,8 +7,9 @@ import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { createTransaction, getTransactionDetail, getTransactionOptions, TransactionItem, TransactionMutationData, TransactionOptionGroup, updateTransaction } from '@/pkg/api/modules/transactions.uts'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 51, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/transactions/from.uvue", 52, 6>;
 	value: string
 	text: string
 }
@@ -60,7 +61,7 @@ function getArrayField(obj: UTSJSONObject, key: string) : string[] {
 }
 
 function buildUploadHeaders() : UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 93, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/transactions/from.uvue", 94, 8), } as UTSJSONObject
 	if (authState.token != '') {
 		headers['Authorization'] = authState.token
 	}
@@ -70,13 +71,9 @@ function buildUploadHeaders() : UTSJSONObject {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:109")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/from.uvue:106")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -333,10 +330,7 @@ async function loadTransactionDetailData(idText: string) {
 		supplierId.value = detail.supplier.toString()
 		initialData.value = buildInitialDataFromTransaction(detail)
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '采购记录详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '采购记录详情加载失败'))
 	}
 }
 
@@ -490,10 +484,7 @@ async function persistForm(payload: UTSJSONObject) {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
 		}
-		uni.showToast({
-			title: parseErrorMessage(error, actionText + '失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			savingVisible.value = false
@@ -531,21 +522,21 @@ function handleDirtyChange(value: boolean) {
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '采购类型不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '采购类型不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleUpload(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '图片已加入待保存列表',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -564,14 +555,14 @@ function handleUploadError(payload: UTSJSONObject) {
 		if (message != '') {
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
 	}
 	uni.showToast({
 		title: '图片上传失败',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 

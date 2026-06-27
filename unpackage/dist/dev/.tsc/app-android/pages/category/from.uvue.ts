@@ -4,8 +4,9 @@ import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createCategory, getCategoryDetail, getCategoryList, translateCategoryName, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
 import { getKasaCategoryOptions } from '@/pkg/api/modules/kasa_category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/category/from.uvue", 44, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/category/from.uvue", 45, 6>;
 	value: string
 	text: string
 }
@@ -110,13 +111,9 @@ function intValue(value: any | null, fallback: number = 0): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:147")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:144")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -303,11 +300,11 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (text == null || text == '') {
 		return null
 	}
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:334")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:331")
 }
 
 function cloneFormData(source: UTSJSONObject): UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "pages/category/from.uvue", 338, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "pages/category/from.uvue", 335, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -338,7 +335,7 @@ function copyAiTranslationPrompt() {
 	if (sourceName == '') {
 		uni.showToast({
 			title: '请先填写分类名称',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -371,7 +368,7 @@ async function fillServerTranslation() {
 	if (sourceName == '') {
 		uni.showToast({
 			title: '请先填写分类名称',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -386,7 +383,7 @@ async function fillServerTranslation() {
 		if (translated == '') {
 			uni.showToast({
 				title: '服务器未返回译文',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -396,10 +393,7 @@ async function fillServerTranslation() {
 			icon: 'success',
 		})
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '服务器翻译失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '服务器翻译失败'))
 	} finally {
 		uni.hideLoading()
 		translating.value = false
@@ -476,10 +470,7 @@ async function loadDetailData(idText: string): Promise<void> {
 			text: parentText,
 		} as UTSJSONObject
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, '分类详情加载失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, '分类详情加载失败'))
 	}
 }
 
@@ -565,7 +556,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 	if (name == '') {
 		uni.showToast({
 			title: '分类名称不能为空',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -604,10 +595,7 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		})
 		goBackToList()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error, isEditing ? '分类保存失败' : '分类创建失败'),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error, isEditing ? '分类保存失败' : '分类创建失败'))
 	} finally {
 		savingVisible.value = false
 		uni.hideLoading()
@@ -659,14 +647,14 @@ async function handleInputAction(payload: UTSJSONObject) {
 function handleBottomSelectAdd(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持新增',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
 function handleBottomSelectEdit(payload: UTSJSONObject) {
 	uni.showToast({
 		title: '当前字段不支持编辑',
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -816,7 +804,7 @@ onLoad((event: OnLoadOptions) => {
 		operationMode.value = 'add'
 		formMode.value = 'create'
 		const parentIdText = '' + parentIdValue
-		const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent('' + parentNameValue), " at pages/category/from.uvue:847")
+		const parentNameText = parentNameValue == null ? '' : UTSAndroid.consoleDebugError(decodeURIComponent('' + parentNameValue), " at pages/category/from.uvue:835")
 		parentInfo.value = {
 			id: parentIdText,
 			text: parentNameText == '' ? parentIdText : parentNameText,

@@ -1,11 +1,16 @@
-import { request } from '../index.uts'
+import { baseUrl, buildDownloadHeader, request, timeOut } from '../index.uts'
 
 export type KsefInvoiceListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	supplier: string | null
+	supplier_id: string | null
 	sync_status: string | null
 	is_paid: string | null
+	has_xml: string | null
+	payment_review_status: string | null
+	ordering: string | null
 }
 
 export type KsefInvoiceItem = {
@@ -30,12 +35,19 @@ export type KsefInvoiceItem = {
 	amount_due: string
 	payment_due_date: string
 	payment_method: string
+	payment_method_display: string
 	bank_account_number: string
 	bank_name: string
 	is_paid: boolean
 	paid_amount: string
 	paid_at: string
 	remark: string
+	payment_review_status: string
+	payment_review_status_display: string
+	payment_review_note: string
+	payment_reviewed_by: number
+	payment_reviewed_by_name: string
+	payment_reviewed_at: string
 	sync_status: string
 	raw_xml_downloaded_at: string
 	files_count: number
@@ -66,12 +78,19 @@ export type KsefInvoiceDetail = {
 	amount_due: string
 	payment_due_date: string
 	payment_method: string
+	payment_method_display: string
 	bank_account_number: string
 	bank_name: string
 	is_paid: boolean
 	paid_amount: string
 	paid_at: string
 	remark: string
+	payment_review_status: string
+	payment_review_status_display: string
+	payment_review_note: string
+	payment_reviewed_by: number
+	payment_reviewed_by_name: string
+	payment_reviewed_at: string
 	sync_status: string
 	raw_xml_downloaded_at: string
 	files_count: number
@@ -92,6 +111,22 @@ export type KsefPaymentUpdateData = {
 	paid_at: string | null
 	payment_note: string
 	remark: string
+}
+
+export type KsefPaymentReviewData = {
+	payment_review_status: string
+	payment_review_note: string
+}
+
+export type KsefVoucherUploadResponse = {
+	uploaded: UTSJSONObject[]
+	files_count: number
+	media_files: UTSJSONObject[]
+}
+
+export type KsefPdfDownloadResult = {
+	tempFilePath: string
+	statusCode: number
 }
 
 export type KsefInvoiceListResponse = {
@@ -115,6 +150,27 @@ export type KsefAutoSyncStatus = {
 	last_success_requested_to: string
 	last_failed_at: string
 	last_failed_message: string
+}
+
+export type KsefFilterOption = {
+	value: string
+	label: string
+}
+
+export type KsefFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	aliases: string[]
+	multiple: boolean
+	options: KsefFilterOption[]
+}
+
+export type KsefFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: KsefFilterDefinition[]
 }
 
 function stringValue(value: any | null): string {
@@ -154,6 +210,32 @@ function boolValue(value: any | null): boolean {
 	return text == 'true' || text == '1'
 }
 
+function normalizeServerUrl(url: string): string {
+	if (url == '') return ''
+	if (url.startsWith('http://localhost:8000')) return baseUrl + url.substring('http://localhost:8000'.length)
+	if (url.startsWith('https://localhost:8000')) return baseUrl + url.substring('https://localhost:8000'.length)
+	if (url.startsWith('http://127.0.0.1:8000')) return baseUrl + url.substring('http://127.0.0.1:8000'.length)
+	if (url.startsWith('https://127.0.0.1:8000')) return baseUrl + url.substring('https://127.0.0.1:8000'.length)
+	return url
+}
+
+function normalizeMediaFiles(files: UTSJSONObject[]): UTSJSONObject[] {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < files.length; index += 1) {
+		const source = files[index]
+		const target = {} as UTSJSONObject
+		for (const key in source) {
+			target[key] = source[key]
+		}
+		target['file_url'] = normalizeServerUrl(stringValue(source['file_url']))
+		target['thumbnail_url'] = normalizeServerUrl(stringValue(source['thumbnail_url']))
+		target['signed_url'] = normalizeServerUrl(stringValue(source['signed_url']))
+		target['signed_thumbnail_url'] = normalizeServerUrl(stringValue(source['signed_thumbnail_url']))
+		result.push(target)
+	}
+	return result
+}
+
 function objectValue(value: any | null): UTSJSONObject {
 	if (value == null) {
 		return {} as UTSJSONObject
@@ -178,6 +260,22 @@ function objectArrayValue(value: any | null): UTSJSONObject[] {
 	return parsed!
 }
 
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) {
+		return [] as string[]
+	}
+	const text = JSON.stringify(value)
+	const parsed = text == null || text == '' ? null : JSON.parseArray<any>(text)
+	if (parsed == null) {
+		return [] as string[]
+	}
+	const result: string[] = []
+	for (let index = 0; index < parsed!.length; index += 1) {
+		result.push(stringValue(parsed![index]))
+	}
+	return result
+}
+
 function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 	const query = {
 		page: data.page,
@@ -186,11 +284,26 @@ function buildListQuery(data: KsefInvoiceListQuery): UTSJSONObject {
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
 	}
+	if (data.supplier != null && data.supplier != '') {
+		query['supplier'] = data.supplier
+	}
+	if (data.supplier_id != null && data.supplier_id != '') {
+		query['supplier_id'] = data.supplier_id
+	}
 	if (data.sync_status != null && data.sync_status != '') {
 		query['sync_status'] = data.sync_status
 	}
 	if (data.is_paid != null && data.is_paid != '') {
 		query['is_paid'] = data.is_paid
+	}
+	if (data.has_xml != null && data.has_xml != '') {
+		query['has_xml'] = data.has_xml
+	}
+	if (data.payment_review_status != null && data.payment_review_status != '') {
+		query['payment_review_status'] = data.payment_review_status
+	}
+	if (data.ordering != null && data.ordering != '') {
+		query['ordering'] = data.ordering
 	}
 	return query
 }
@@ -218,16 +331,23 @@ function buildInvoiceItem(rawObject: UTSJSONObject): KsefInvoiceItem {
 		amount_due: stringValue(rawObject['amount_due']),
 		payment_due_date: stringValue(rawObject['payment_due_date']),
 		payment_method: stringValue(rawObject['payment_method']),
+		payment_method_display: stringValue(rawObject['payment_method_display']),
 		bank_account_number: stringValue(rawObject['bank_account_number']),
 		bank_name: stringValue(rawObject['bank_name']),
 		is_paid: boolValue(rawObject['is_paid']),
 		paid_amount: stringValue(rawObject['paid_amount']),
 		paid_at: stringValue(rawObject['paid_at']),
 		remark: stringValue(rawObject['remark']),
+		payment_review_status: stringValue(rawObject['payment_review_status']),
+		payment_review_status_display: stringValue(rawObject['payment_review_status_display']),
+		payment_review_note: stringValue(rawObject['payment_review_note']),
+		payment_reviewed_by: intValue(rawObject['payment_reviewed_by']),
+		payment_reviewed_by_name: stringValue(rawObject['payment_reviewed_by_name']),
+		payment_reviewed_at: stringValue(rawObject['payment_reviewed_at']),
 		sync_status: stringValue(rawObject['sync_status']),
 		raw_xml_downloaded_at: stringValue(rawObject['raw_xml_downloaded_at']),
 		files_count: intValue(rawObject['files_count']),
-		pdf_download_url: stringValue(rawObject['pdf_download_url']),
+		pdf_download_url: normalizeServerUrl(stringValue(rawObject['pdf_download_url'])),
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
 	} as KsefInvoiceItem
@@ -262,12 +382,19 @@ function buildInvoiceDetail(raw: any): KsefInvoiceDetail {
 		amount_due: item.amount_due,
 		payment_due_date: item.payment_due_date,
 		payment_method: item.payment_method,
+		payment_method_display: item.payment_method_display,
 		bank_account_number: item.bank_account_number,
 		bank_name: item.bank_name,
 		is_paid: item.is_paid,
 		paid_amount: item.paid_amount,
 		paid_at: item.paid_at,
 		remark: item.remark,
+		payment_review_status: item.payment_review_status,
+		payment_review_status_display: item.payment_review_status_display,
+		payment_review_note: item.payment_review_note,
+		payment_reviewed_by: item.payment_reviewed_by,
+		payment_reviewed_by_name: item.payment_reviewed_by_name,
+		payment_reviewed_at: item.payment_reviewed_at,
 		sync_status: item.sync_status,
 		raw_xml_downloaded_at: item.raw_xml_downloaded_at,
 		files_count: item.files_count,
@@ -279,7 +406,7 @@ function buildInvoiceDetail(raw: any): KsefInvoiceDetail {
 		last_error: stringValue(rawObject!['last_error']),
 		payment_note: stringValue(rawObject!['payment_note']),
 		xml_summary: objectValue(rawObject!['xml_summary']),
-		media_files: objectArrayValue(rawObject!['media_files']),
+		media_files: normalizeMediaFiles(objectArrayValue(rawObject!['media_files'])),
 	} as KsefInvoiceDetail
 }
 
@@ -375,13 +502,129 @@ function buildAutoSyncStatus(raw: any): KsefAutoSyncStatus {
 	} as KsefAutoSyncStatus
 }
 
+function buildKsefFilterOptionsResponse(raw: any): KsefFilterOptionsResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('KSeF 发票筛选选项解析失败')
+	}
+
+	let filters: KsefFilterDefinition[] = []
+	const rawFilters = rawObject!['filters']
+	if (rawFilters != null) {
+		const filtersText = JSON.stringify(rawFilters)
+		const filterObjects = filtersText == null || filtersText == '' ? null : JSON.parseArray<UTSJSONObject>(filtersText)
+		if (filterObjects != null) {
+			const nextFilters: KsefFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects!.length; filterIndex += 1) {
+				const filterObject = filterObjects![filterIndex]
+				let options: KsefFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionsText = JSON.stringify(rawOptions)
+					const optionObjects = optionsText == null || optionsText == '' ? null : JSON.parseArray<UTSJSONObject>(optionsText)
+					if (optionObjects != null) {
+						const nextOptions: KsefFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects!.length; optionIndex += 1) {
+							const optionObject = optionObjects![optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as KsefFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					aliases: stringArrayValue(filterObject['aliases']),
+					multiple: boolValue(filterObject['multiple']),
+					options: options,
+				} as KsefFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+
+	return {
+		resource: stringValue(rawObject!['resource']),
+		count: intValue(rawObject!['count']),
+		filters: filters,
+	} as KsefFilterOptionsResponse
+}
+
+function ksefInvoicePath(id: number | string): string {
+	return '/api/procurement/ksef-invoices/' + stringValue(id) + '/'
+}
+
+function responseMessageFromText(text: string): string {
+	if (text == '') return ''
+	try {
+		const rootObject = JSON.parseObject<UTSJSONObject>(text)
+		if (rootObject == null) return ''
+		const detailMessage = stringValue(rootObject!['detail'])
+		if (detailMessage != '') return detailMessage
+		const message = stringValue(rootObject!['message'])
+		if (message != '') return message
+		return ''
+	} catch (error) {
+		return ''
+	}
+}
+
+function normalizeUploadFilePath(filePath: string): string {
+	return filePath.trim()
+}
+
+function parseVoucherUploadResponseText(text: string): KsefVoucherUploadResponse {
+	const rootObject = text == '' ? null : JSON.parseObject<UTSJSONObject>(text)
+	if (rootObject == null) {
+		throw new Error('凭证上传响应解析失败')
+	}
+
+	let dataValue: any | null = rootObject
+	const successValue = rootObject!['success']
+	if (successValue != null) {
+		if (!boolValue(successValue)) {
+			let message = stringValue(rootObject!['message'])
+			if (message == '') message = stringValue(rootObject!['detail'])
+			throw new Error(message == '' ? '凭证上传失败' : message)
+		}
+		dataValue = rootObject!['data']
+	}
+	const dataText = dataValue == null ? '' : JSON.stringify(dataValue)
+	const dataObject = dataText == null || dataText == '' ? null : JSON.parseObject<UTSJSONObject>(dataText)
+	if (dataObject == null) {
+		return {
+			uploaded: [] as UTSJSONObject[],
+			files_count: 0,
+			media_files: [] as UTSJSONObject[],
+		} as KsefVoucherUploadResponse
+	}
+	const mediaFiles = normalizeMediaFiles(objectArrayValue(dataObject!['media_files']))
+	return {
+		uploaded: normalizeMediaFiles(objectArrayValue(dataObject!['uploaded'])),
+		files_count: intValue(dataObject!['files_count']),
+		media_files: mediaFiles,
+	} as KsefVoucherUploadResponse
+}
+
 export async function getKsefInvoiceList(data: KsefInvoiceListQuery): Promise<KsefInvoiceListResponse> {
 	const raw = await request('/api/procurement/ksef-invoices/', 'GET', buildListQuery(data), true)
 	return buildListResponse(raw, data)
 }
 
+export async function getKsefInvoiceFilterOptions(): Promise<KsefFilterOptionsResponse> {
+	const raw = await request('/api/procurement/ksef-invoices/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildKsefFilterOptionsResponse(raw)
+}
+
 export async function getKsefInvoiceDetail(id: number | string): Promise<KsefInvoiceDetail> {
-	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/', 'GET', {} as UTSJSONObject, true)
+	const raw = await request(ksefInvoicePath(id), 'GET', {} as UTSJSONObject, true)
 	return buildInvoiceDetail(raw)
 }
 
@@ -393,7 +636,16 @@ export async function updateKsefInvoicePayment(id: number | string, data: KsefPa
 		payment_note: data.payment_note,
 		remark: data.remark,
 	} as UTSJSONObject
-	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/update_payment/', 'PATCH', payload, true)
+	const raw = await request(ksefInvoicePath(id) + 'update_payment/', 'PATCH', payload, true)
+	return buildInvoiceDetail(raw)
+}
+
+export async function reviewKsefInvoicePayment(id: number | string, data: KsefPaymentReviewData): Promise<KsefInvoiceDetail> {
+	const payload = {
+		payment_review_status: data.payment_review_status,
+		payment_review_note: data.payment_review_note,
+	} as UTSJSONObject
+	const raw = await request(ksefInvoicePath(id) + 'review-payment/', 'PATCH', payload, true)
 	return buildInvoiceDetail(raw)
 }
 
@@ -404,7 +656,7 @@ export async function linkKsefInvoiceSupplier(id: number | string, supplierId: s
 	} else {
 		payload['supplier_id'] = supplierId
 	}
-	const raw = await request('/api/procurement/ksef-invoices/' + stringValue(id) + '/link-supplier/', 'POST', payload, true)
+	const raw = await request(ksefInvoicePath(id) + 'link-supplier/', 'POST', payload, true)
 	return buildInvoiceDetail(raw)
 }
 
@@ -418,5 +670,79 @@ export function enqueueKsefAutoSync(): Promise<any> {
 }
 
 export function downloadKsefInvoiceXml(id: number | string): Promise<any> {
-	return request('/api/procurement/ksef-invoices/' + stringValue(id) + '/download_xml/', 'POST', {} as UTSJSONObject, true)
+	return request(ksefInvoicePath(id) + 'download_xml/', 'POST', {} as UTSJSONObject, true)
+}
+
+export function downloadKsefInvoicePdfFile(id: number | string): Promise<KsefPdfDownloadResult> {
+	return new Promise((resolve, reject) => {
+		const url = baseUrl + ksefInvoicePath(id) + 'download_pdf/'
+		uni.downloadFile({
+			url: url,
+			header: buildDownloadHeader(),
+			success: (res) => {
+				const statusCode = res.statusCode
+				const tempFilePath = res.tempFilePath
+				if (statusCode >= 200 && statusCode < 300 && tempFilePath != '') {
+					resolve({
+						tempFilePath: tempFilePath,
+						statusCode: statusCode,
+					} as KsefPdfDownloadResult)
+					return
+				}
+				reject(new Error('PDF加载失败: HTTP ' + statusCode))
+			},
+			fail: (err) => {
+				reject(new Error(stringValue(err.errMsg) == '' ? 'PDF加载失败' : stringValue(err.errMsg)))
+			},
+		})
+	})
+}
+
+export function uploadKsefInvoiceVouchers(id: number | string, filePaths: string[]): Promise<KsefVoucherUploadResponse> {
+	return new Promise((resolve, reject) => {
+		if (filePaths.length == 0) {
+			reject(new Error('请选择付款凭证'))
+			return
+		}
+		const files: UploadFileOptionFiles[] = []
+		for (let index = 0; index < filePaths.length; index += 1) {
+			files.push({
+				name: 'files',
+				uri: normalizeUploadFilePath(filePaths[index]),
+			} as UploadFileOptionFiles)
+		}
+		const url = baseUrl + ksefInvoicePath(id) + 'upload-vouchers/'
+		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
+		try {
+
+			uni.uploadFile({
+				url: url,
+				files: files,
+				header: buildDownloadHeader(),
+				timeout: uploadTimeout,
+				success: (res : UploadFileSuccess) => {
+					if (res.statusCode < 200 || res.statusCode >= 300) {
+						const responseMessage = responseMessageFromText(res.data)
+						reject(new Error(responseMessage == '' ? ('HTTP状态码错误: ' + res.statusCode) : responseMessage))
+						return
+					}
+					try {
+						resolve(parseVoucherUploadResponseText(res.data))
+					} catch (error) {
+						reject(error)
+					}
+				},
+				fail: (err : UploadFileFail) => {
+					const message = stringValue(err.errMsg)
+					reject(new Error(message == '' ? '凭证上传失败' : message))
+				},
+			})
+
+
+
+
+		} catch (error) {
+			reject(error)
+		}
+	})
 }

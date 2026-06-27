@@ -4,21 +4,22 @@ import {
 	type ScanCodeOption,
 	type ScanCodeSuccessCallbackResult,
 } from '@/uni_modules/lime-scan'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectChangePayload = { __$originalPosition?: UTSSourceMapPosition<"SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 184, 6>;
+type SelectChangePayload = { __$originalPosition?: UTSSourceMapPosition<"SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 185, 6>;
 	value: string
 	text: string
 	image: string
 	item: UTSJSONObject
 }
 
-type MultiSelectChangePayload = { __$originalPosition?: UTSSourceMapPosition<"MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 191, 6>;
+type MultiSelectChangePayload = { __$originalPosition?: UTSSourceMapPosition<"MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 192, 6>;
 	values: string[]
 	texts: string[]
 	items: UTSJSONObject[]
 }
 
-type TreeDisplayRow = { __$originalPosition?: UTSSourceMapPosition<"TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 197, 6>;
+type TreeDisplayRow = { __$originalPosition?: UTSSourceMapPosition<"TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 198, 6>;
 	key: string
 	item: UTSJSONObject
 	level: number
@@ -26,7 +27,7 @@ type TreeDisplayRow = { __$originalPosition?: UTSSourceMapPosition<"TreeDisplayR
 	expanded: boolean
 }
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 205, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 206, 6>;
 	fetchData: (params: UTSJSONObject) => Promise<UTSJSONObject>
 
 	/**
@@ -110,6 +111,7 @@ type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/
 	showEditAction?: boolean
 	showAddAction?: boolean
 	showScan?: boolean
+	autoSelectUnique?: boolean
 	scanOnlyFromCamera?: boolean
 	editActionText?: string
 	addActionText?: string
@@ -151,6 +153,7 @@ const __sfc__ = defineComponent({
     showEditAction: { type: Boolean, required: false, default: true },
     showAddAction: { type: Boolean, required: false, default: true },
     showScan: { type: Boolean, required: false, default: false },
+    autoSelectUnique: { type: Boolean, required: false, default: false },
     scanOnlyFromCamera: { type: Boolean, required: false, default: true },
     editActionText: { type: String, required: false, default: '编辑' },
     addActionText: { type: String, required: false, default: '新增' },
@@ -257,7 +260,7 @@ function showUnselectableMessage() {
 	if (message != '') {
 		uni.showToast({
 			title: message,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 	}
 }
@@ -283,7 +286,7 @@ function getBooleanField(obj: UTSJSONObject, key: string) : boolean {
 }
 
 function cloneItem(item: UTSJSONObject) : UTSJSONObject {
-	const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 457, 8), } as UTSJSONObject
+	const next = { __$originalPosition: new UTSSourceMapPosition("next", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 460, 8), } as UTSJSONObject
 	for (const key in item) {
 		next[key] = item[key]
 	}
@@ -302,7 +305,7 @@ function hasTreeChildren(item: UTSJSONObject) : boolean {
 }
 
 function buildFetchParams(page: number, keywordValue: string, id: string, parent: string = '') : UTSJSONObject {
-	const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 476, 8), 
+	const params = { __$originalPosition: new UTSSourceMapPosition("params", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 479, 8), 
 		page: page,
 		pageSize: props.pageSize,
 		keyword: keywordValue,
@@ -453,6 +456,20 @@ function activatePanelAnimation() {
 		panelVisible.value = true
 		enterTimer = null
 	}, 16)
+}
+
+function close() {
+	if (!renderVisible.value) return
+
+	clearAnimationTimers()
+
+	overlayVisible.value = false
+	panelVisible.value = false
+
+	closeTimer = setTimeout(() => {
+		closeTimer = null
+		emit('close')
+	}, PANEL_ANIMATION_DURATION)
 }
 
 function isExpanded(item: UTSJSONObject) : boolean {
@@ -618,8 +635,8 @@ async function ensureTreeChildrenLoaded(item: UTSJSONObject) : Promise<void> {
 		const children = getListField(res, 'data')
 		displayList.value = replaceTreeChildren(displayList.value, parentValue, children)
 	} catch (e) {
-		console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:792")
-		uni.showToast({ title: '子节点加载失败', icon: 'none' })
+		console.error('lili_bottom-select loadTreeChildren 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:809")
+		showErrorToast('子节点加载失败')
 	} finally {
 		removeLoadingChildKey(parentValue)
 	}
@@ -749,7 +766,33 @@ function syncFromList(vals: string[]) {
 	selectedItems.value = next
 }
 
-async function loadData(isReset: boolean) {
+function confirmSingleItem(item: UTSJSONObject) {
+	const value = getItemValue(item)
+	const text = getItemLabel(item)
+	const image = getItemImage(item)
+
+	internalValue.value = value
+	internalText.value = text
+	internalImage.value = image
+	textInitialized.value = true
+
+	emit('change', { value: value, text: text, image: image, item: item } as UTSJSONObject)
+
+	close()
+}
+
+function tryAutoSelectUnique(data: UTSJSONObject[], totalValue: number, autoSelectUnique: boolean) {
+	if (!autoSelectUnique) return
+	if (!props.autoSelectUnique) return
+	if (props.multiple) return
+	if (keyword.value.trim() == '') return
+	if (totalValue != 1 || data.length != 1) return
+	const item = data[0]
+	if (!isItemSelectable(item)) return
+	confirmSingleItem(item)
+}
+
+async function loadData(isReset: boolean, autoSelectUnique: boolean = false) {
 	if (loading.value && !isReset) return
 	if (!isReset && !hasMore.value) return
 
@@ -793,10 +836,14 @@ async function loadData(isReset: boolean) {
 				syncFromList(props.values ?? [])
 			}
 		}
+
+		if (isReset) {
+			tryAutoSelectUnique(data, totalValue, autoSelectUnique)
+		}
 	} catch (e) {
 		if (seq != requestSeq) return
-		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:969")
-		uni.showToast({ title: '数据加载失败', icon: 'none' })
+		console.error('lili_bottom-select loadData 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:1016")
+		showErrorToast('数据加载失败')
 	} finally {
 		if (seq == requestSeq) {
 			loading.value = false
@@ -818,7 +865,7 @@ async function fetchTextByValue(value: string) {
 			textInitialized.value = true
 		}
 	} catch (e) {
-		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:992")
+		console.error('lili_bottom-select fetchTextByValue 失败:', e, " at uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue:1039")
 	}
 }
 
@@ -954,20 +1001,6 @@ async function open() {
 	}
 }
 
-function close() {
-	if (!renderVisible.value) return
-
-	clearAnimationTimers()
-
-	overlayVisible.value = false
-	panelVisible.value = false
-
-	closeTimer = setTimeout(() => {
-		closeTimer = null
-		emit('close')
-	}, PANEL_ANIMATION_DURATION)
-}
-
 function handleOverlayClick() {
 	if (props.closeOnOverlay) {
 		close()
@@ -1013,7 +1046,7 @@ function handleEditAction() {
 		if (value == '') {
 			uni.showToast({
 				title: '请先选择要编辑的项目',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -1033,7 +1066,7 @@ function handleAddAction() {
 	emit('add')
 }
 
-async function triggerSearch() {
+async function runSearch(autoSelectUnique: boolean) {
 	if (searchTimer != null) {
 		clearTimeout(searchTimer!)
 		searchTimer = null
@@ -1044,7 +1077,15 @@ async function triggerSearch() {
 	hasMore.value = true
 	listLoaded.value = false
 
-	await loadData(true)
+	await loadData(true, autoSelectUnique)
+}
+
+async function triggerSearch() {
+	await runSearch(true)
+}
+
+async function triggerTypingSearch() {
+	await runSearch(false)
 }
 
 function onSearchInput() {
@@ -1053,13 +1094,13 @@ function onSearchInput() {
 	}
 
 	searchTimer = setTimeout(() => {
-		triggerSearch()
+		triggerTypingSearch()
 	}, props.searchDelay)
 }
 
 async function clearSearch() {
 	keyword.value = ''
-	await triggerSearch()
+	await runSearch(false)
 }
 
 function loadMore() {
@@ -1111,21 +1152,6 @@ function getSelectIcon(item: UTSJSONObject) : string {
 	return ''
 }
 
-function confirmSingleItem(item: UTSJSONObject) {
-	const value = getItemValue(item)
-	const text = getItemLabel(item)
-	const image = getItemImage(item)
-
-	internalValue.value = value
-	internalText.value = text
-	internalImage.value = image
-	textInitialized.value = true
-
-	emit('change', { value: value, text: text, image: image, item: item } as UTSJSONObject)
-
-	close()
-}
-
 async function applyScanKeyword(scanResult: string) {
 	if (scanResult == '') return
 	keyword.value = scanResult
@@ -1143,7 +1169,7 @@ function handleScanSearch() {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 		},
 	} as ScanCodeOption)

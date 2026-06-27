@@ -15,6 +15,13 @@
 			}
 		},
 		{
+			"path": "pages/reports/product-sales",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText":"商品销售"
+			}
+		},
+		{
 			"path": "pages/tabbar/products",
 			"style": {
 				"navigationStyle":"custom",

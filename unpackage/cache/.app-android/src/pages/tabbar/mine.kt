@@ -82,19 +82,19 @@ open class GenPagesTabbarMine : BasePage {
                     return
                 }
                 if (item.key == "book") {
-                    uni_showToast(ShowToastOptions(title = "账本管理待接入", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "账本管理待接入", icon = "none", duration = 3500))
                     return
                 }
                 if (item.key == "service") {
-                    uni_showToast(ShowToastOptions(title = "联系客服待接入", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "联系客服待接入", icon = "none", duration = 3500))
                     return
                 }
                 if (item.key == "share") {
-                    uni_showToast(ShowToastOptions(title = "分享应用待接入", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "分享应用待接入", icon = "none", duration = 3500))
                     return
                 }
                 if (item.key == "desktop") {
-                    uni_showToast(ShowToastOptions(title = "添加桌面待接入", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "添加桌面待接入", icon = "none", duration = 3500))
                 }
             }
             val handleMenuClick = ::gen_handleMenuClick_fn

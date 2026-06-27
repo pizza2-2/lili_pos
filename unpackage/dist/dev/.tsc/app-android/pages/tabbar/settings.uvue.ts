@@ -49,7 +49,6 @@ const groups = ref<MenuGroup[]>([
 		items: [
 			{ label: '收银台', icon: '', iconPath: '/static/menu-icons/cash-register.svg', path: null, action: 'todo', disabled: true },
 			{ label: '打印机设置', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/printer-settings/index', action: 'navigateTo', disabled: false },
-			{ label: '标签打印', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/label-print/index', action: 'navigateTo', disabled: false },
 			{ label: '支付', icon: '', iconPath: '/static/menu-icons/payment.svg', path: null, action: 'todo', disabled: true },
 			{ label: '权限', icon: '', iconPath: '/static/menu-icons/permission.svg', path: null, action: 'todo', disabled: true },
 		],
@@ -77,7 +76,7 @@ function handleTap(item: MenuItem) {
 	if (item.disabled) {
 		uni.showToast({
 			title: '该功能正在开发中',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}

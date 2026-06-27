@@ -56,9 +56,16 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             val filterContentHeight = ref(356)
             val volumeScanLocked = ref(false)
             val scanLookupRunning = ref(false)
+            val selectionMode = ref(false)
+            val selectedDetailIds = ref(_uA<String>())
+            val batchCategoryVisible = ref(false)
+            val batchSubmitting = ref(false)
+            val batchCategoryValue = ref("")
+            val batchCategoryText = ref("")
             var volumeKeyStartTimer: Number = 0
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "skuText", "label" to "SKU:"), _uO("key" to "quantityText", "label" to "数量:"), _uO("key" to "progressText", "label" to "收货:")))
             val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "receive", "text" to "收货"), _uO("key" to "delete", "text" to "删除")))
+            val batchToolbarActions = ref(_uA<UTSJSONObject>(_uO("key" to "update-category", "text" to "改分类")))
             fun stringValue(value: Any?, fallback: String = ""): String {
                 if (value == null) {
                     return fallback
@@ -69,31 +76,102 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 }
                 return text
             }
-            fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
-                var message = fallback
-                if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
-                    val errorText = JSON.stringify(error)
-                    if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:178")
-                        if (parsedError != null) {
-                            val rawMessage = parsedError["message"]
-                            if (rawMessage != null) {
-                                val parsedMessage = rawMessage as String
-                                if (parsedMessage != "") {
-                                    message = parsedMessage
-                                }
+            fun gen_booleanValue_fn(value: Any?): Boolean {
+                if (value == null) {
+                    return false
+                }
+                val text = ("" + value).toLowerCase()
+                return text == "true" || text == "1" || text == "yes"
+            }
+            val booleanValue = ::gen_booleanValue_fn
+            fun gen_numberValue_fn(value: Any?): Number {
+                if (value == null) {
+                    return 0
+                }
+                val parsed = parseInt("" + value)
+                if (isNaN(parsed)) {
+                    return 0
+                }
+                return parsed
+            }
+            val numberValue = ::gen_numberValue_fn
+            fun gen_parseObject_fn(value: Any?): UTSJSONObject? {
+                if (value == null) {
+                    return null
+                }
+                val text = JSON.stringify(value)
+                if (text == null || text == "") {
+                    return null
+                }
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/purchases/details/index.uvue:263")
+            }
+            val parseObject = ::gen_parseObject_fn
+            fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
+                if (value == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                val text = JSON.stringify(value)
+                if (text == null || text == "") {
+                    return _uA<UTSJSONObject>()
+                }
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/purchases/details/index.uvue:270")
+                if (parsed == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                return parsed!!
+            }
+            val parseObjectArray = ::gen_parseObjectArray_fn
+            fun gen_normalizeErrorText_fn(text: String): String {
+                if (text.startsWith("Error: ")) {
+                    return text.substring(7)
+                }
+                return text
+            }
+            val normalizeErrorText = ::gen_normalizeErrorText_fn
+            fun gen_readErrorMessageFromObject_fn(errorObject: UTSJSONObject): String {
+                val keys = _uA(
+                    "message",
+                    "detail",
+                    "error",
+                    "errMsg",
+                    "msg"
+                ) as UTSArray<String>
+                run {
+                    var index: Number = 0
+                    while(index < keys.length){
+                        val rawMessage = errorObject[keys[index]]
+                        if (rawMessage != null) {
+                            val message = normalizeErrorText(stringValue(rawMessage))
+                            if (message != "") {
+                                return message
                             }
                         }
-                        if (message == fallback) {
-                            message = errorText
-                        }
+                        index += 1
                     }
                 }
-                return message
+                return ""
+            }
+            val readErrorMessageFromObject = ::gen_readErrorMessageFromObject_fn
+            fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
+                if (error == null) {
+                    return fallback
+                }
+                val directText = normalizeErrorText(stringValue(error))
+                if (directText != "" && directText != "[object Object]" && directText != "{}") {
+                    return directText
+                }
+                val errorText = JSON.stringify(error)
+                if (errorText == null || errorText == "" || errorText == "{}") {
+                    return fallback
+                }
+                val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/purchases/details/index.uvue:298")
+                if (parsedError != null) {
+                    val parsedMessage = readErrorMessageFromObject(parsedError)
+                    if (parsedMessage != "") {
+                        return parsedMessage
+                    }
+                }
+                return errorText
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_updateFilterPanelLayout_fn() {
@@ -179,6 +257,137 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 return result
             }
             val splitSelectedValues = ::gen_splitSelectedValues_fn
+            fun gen_extractCategoryTreeSource_fn(value: Any?): UTSArray<UTSJSONObject> {
+                val rawObject = parseObject(value)
+                if (rawObject == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                val groups = parseObjectArray(rawObject["groups"])
+                run {
+                    var index: Number = 0
+                    while(index < groups.length){
+                        val group = groups[index]
+                        if (stringValue(group["key"]) == "parent") {
+                            return parseObjectArray(group["items"])
+                        }
+                        index += 1
+                    }
+                }
+                if (groups.length > 0) {
+                    return parseObjectArray(groups[0]["items"])
+                }
+                return parseObjectArray(rawObject["items"])
+            }
+            val extractCategoryTreeSource = ::gen_extractCategoryTreeSource_fn
+            fun gen_buildOptionValue_fn(item: UTSJSONObject): String {
+                val directValue = stringValue(item["value"])
+                if (directValue != "") {
+                    return directValue
+                }
+                val idValue = stringValue(item["id"])
+                if (idValue != "") {
+                    return idValue
+                }
+                val codeValue = stringValue(item["code"])
+                if (codeValue != "") {
+                    return codeValue
+                }
+                return stringValue(item["key"])
+            }
+            val buildOptionValue = ::gen_buildOptionValue_fn
+            fun gen_buildOptionText_fn(item: UTSJSONObject): String {
+                val textValue = stringValue(item["text"])
+                if (textValue != "") {
+                    return textValue
+                }
+                val labelValue = stringValue(item["label"])
+                if (labelValue != "") {
+                    return labelValue
+                }
+                val fullNameValue = stringValue(item["full_name"])
+                if (fullNameValue != "") {
+                    return fullNameValue
+                }
+                val nameValue = stringValue(item["name"])
+                if (nameValue != "") {
+                    return nameValue
+                }
+                val nameCn = stringValue(item["name_cn"])
+                if (nameCn != "") {
+                    return nameCn
+                }
+                return buildOptionValue(item)
+            }
+            val buildOptionText = ::gen_buildOptionText_fn
+            fun gen_buildTreeSelectItem_fn(item: UTSJSONObject): UTSJSONObject {
+                val rawChildren = parseObjectArray(item["children"])
+                val children: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < rawChildren.length){
+                        children.push(gen_buildTreeSelectItem_fn(rawChildren[index]))
+                        index += 1
+                    }
+                }
+                val label = stringValue(item["label"], buildOptionText(item))
+                val fullName = stringValue(item["full_name"])
+                return _uO("value" to buildOptionValue(item), "text" to label, "label" to label, "full_name" to if (fullName == "") {
+                    label
+                } else {
+                    fullName
+                }
+                , "code" to stringValue(item["code"]), "level" to stringValue(item["level"]), "parent_value" to stringValue(item["parent_value"]), "disabled" to booleanValue(item["disabled"]), "has_children" to (booleanValue(item["has_children"]) || children.length > 0), "children" to children)
+            }
+            val buildTreeSelectItem = ::gen_buildTreeSelectItem_fn
+            fun gen_buildCategoryTreeResponse_fn(raw: Any): UTSJSONObject {
+                var source = extractCategoryTreeSource(raw)
+                if (source.length == 0) {
+                    val rawObject = parseObject(raw)
+                    if (rawObject != null) {
+                        var items = parseObjectArray(rawObject["items"])
+                        if (items.length == 0) {
+                            items = parseObjectArray(rawObject["results"])
+                        }
+                        if (items.length == 0) {
+                            items = parseObjectArray(rawObject["data"])
+                        }
+                        source = items
+                    }
+                }
+                val result: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < source.length){
+                        result.push(buildTreeSelectItem(source[index]))
+                        index += 1
+                    }
+                }
+                return _uO("data" to result, "total" to result.length)
+            }
+            val buildCategoryTreeResponse = ::gen_buildCategoryTreeResponse_fn
+            fun gen_fetchCategoryOptions_fn(params: UTSJSONObject): UTSPromise<UTSJSONObject> {
+                return wrapUTSPromise(suspend w1@{
+                        val keywordValue = stringValue(params["keyword"])
+                        val pageValue = stringValue(params["page"], "1")
+                        val parentValue = stringValue(params["parent"])
+                        val pageSizeValue = stringValue(params["pageSize"], "20")
+                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/purchases/details/index.uvue", 453, 8), "key" to "parent", "page" to parseInt(if (pageValue == "") {
+                            "1"
+                        } else {
+                            pageValue
+                        }
+                        ), "page_size" to parseInt(pageSizeValue))
+                        if (keywordValue != "") {
+                            queryParams["search"] = keywordValue
+                        }
+                        if (parentValue != "") {
+                            queryParams["parent"] = parentValue
+                        }
+                        val raw = await(request("/api/categories/categories/options/", "GET", queryParams, true))
+                        return@w1 buildCategoryTreeResponse(raw)
+                })
+            }
+            val fetchCategoryOptions = ::gen_fetchCategoryOptions_fn
             fun gen_applyResponse_fn(response: PurchaseDetailListResponse) {
                 details.value = response.results
                 currentPage.value = response.current_page
@@ -199,6 +408,61 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 pageTotalAmount.value = total.toFixed(2)
             }
             val applyResponse = ::gen_applyResponse_fn
+            fun gen_clearSelectionState_fn() {
+                selectionMode.value = false
+                selectedDetailIds.value = _uA<String>()
+            }
+            val clearSelectionState = ::gen_clearSelectionState_fn
+            fun gen_handleSelectionModeChange_fn(value: Boolean) {
+                selectionMode.value = value
+                if (!value) {
+                    selectedDetailIds.value = _uA<String>()
+                }
+            }
+            val handleSelectionModeChange = ::gen_handleSelectionModeChange_fn
+            fun gen_handleSelectedDetailIdsChange_fn(value: UTSArray<String>) {
+                val nextIds: UTSArray<String> = _uA()
+                run {
+                    var index: Number = 0
+                    while(index < value.length){
+                        nextIds.push(value[index])
+                        index += 1
+                    }
+                }
+                selectedDetailIds.value = nextIds
+            }
+            val handleSelectedDetailIdsChange = ::gen_handleSelectedDetailIdsChange_fn
+            fun gen_handleSelectionExit_fn(payload: UTSJSONObject) {
+                clearSelectionState()
+            }
+            val handleSelectionExit = ::gen_handleSelectionExit_fn
+            fun gen_selectedProductIds_fn(): UTSArray<String> {
+                val result: UTSArray<String> = _uA()
+                run {
+                    var detailIndex: Number = 0
+                    while(detailIndex < details.value.length){
+                        val detail = details.value[detailIndex]
+                        val detailId = detail.id.toString(10)
+                        if (selectedDetailIds.value.includes(detailId)) {
+                            val productId = detail.product.toString(10)
+                            if (productId != "" && !result.includes(productId)) {
+                                result.push(productId)
+                            }
+                        }
+                        detailIndex += 1
+                    }
+                }
+                return result
+            }
+            val selectedProductIds = ::gen_selectedProductIds_fn
+            fun gen_ensureBatchSelection_fn(): Boolean {
+                if (selectedDetailIds.value.length > 0 && selectedProductIds().length > 0) {
+                    return true
+                }
+                uni_showToast(ShowToastOptions(title = "请先选择采购明细", icon = "none", duration = 3500))
+                return false
+            }
+            val ensureBatchSelection = ::gen_ensureBatchSelection_fn
             fun gen_loadPurchaseInfo_fn(): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (purchaseId.value == "") {
@@ -211,7 +475,25 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 })
             }
             val loadPurchaseInfo = ::gen_loadPurchaseInfo_fn
-            fun gen_loadDetails_fn(): UTSPromise<Unit> {
+            fun gen_openDetailForm_fn(id: String) {
+                if (id == "") {
+                    return
+                }
+                uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value + "&id=" + id))
+            }
+            val openDetailForm = ::gen_openDetailForm_fn
+            fun gen_openUniqueSearchResult_fn(response: PurchaseDetailListResponse, autoOpenUnique: Boolean) {
+                if (!autoOpenUnique) {
+                    return
+                }
+                if (response.total_count != 1 || response.results.length != 1) {
+                    return
+                }
+                val detail = response.results[0]
+                openDetailForm(detail.id.toString(10))
+            }
+            val openUniqueSearchResult = ::gen_openUniqueSearchResult_fn
+            fun loadDetails(autoOpenUnique: Boolean = false): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend w1@{
                         if (isLoading.value) {
                             return@w1
@@ -236,6 +518,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                             )))
                             applyResponse(response)
                             await(loadPurchaseInfo())
+                            openUniqueSearchResult(response, autoOpenUnique)
                         }
                          catch (error: Throwable) {
                             details.value = _uA()
@@ -250,7 +533,6 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                         }
                 })
             }
-            val loadDetails = ::gen_loadDetails_fn
             fun gen_markRefreshNeeded_fn() {
                 uni_setStorageSync(refreshStorageKey + ":" + purchaseId.value, "1")
             }
@@ -289,7 +571,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             fun gen_handleSearchConfirm_fn(value: String) {
                 keyword.value = value
                 currentPage.value = 1
-                loadDetails()
+                loadDetails(value.trim() != "")
             }
             val handleSearchConfirm = ::gen_handleSearchConfirm_fn
             fun gen_handleSearchClear_fn() {
@@ -302,7 +584,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                 keyword.value = barcode
                 currentPage.value = 1
                 closeFilterDrawer()
-                loadDetails()
+                loadDetails(barcode.trim() != "")
             }
             val searchByScannedBarcode = ::gen_searchByScannedBarcode_fn
             fun gen_handleFilterOpen_fn(): UTSPromise<Unit> {
@@ -394,7 +676,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                             val result = await(checkPurchaseProduct(purchaseId.value, barcode, ""))
                             if (result.exists && result.purchase_detail_id > 0) {
                                 closeFilterDrawer()
-                                uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value + "&id=" + result.purchase_detail_id.toString(10)))
+                                openDetailForm(result.purchase_detail_id.toString(10))
                                 return@w1
                             }
                             searchByScannedBarcode(barcode)
@@ -422,7 +704,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                     } else {
                         res.errMsg
                     }
-                    uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                 }
                 ))
             }
@@ -480,9 +762,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             val handleCreate = ::gen_handleCreate_fn
             fun gen_handleItemClick_fn(payload: UTSJSONObject) {
                 val id = stringValue(payload["rawId"], stringValue(payload["id"]))
-                if (id != "") {
-                    uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value + "&id=" + id))
-                }
+                openDetailForm(id)
             }
             val handleItemClick = ::gen_handleItemClick_fn
             fun gen_handlePageChange_fn(payload: UTSJSONObject) {
@@ -507,7 +787,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                             loadDetails()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "删除失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "删除失败"))
                         }
                 })
             }
@@ -530,11 +810,129 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                             loadDetails()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "收货失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "收货失败"))
                         }
                 })
             }
             val runReceive = ::gen_runReceive_fn
+            fun gen_handleBatchCategoryChange_fn(payload: UTSJSONObject) {
+                batchCategoryValue.value = stringValue(payload["value"])
+                batchCategoryText.value = stringValue(payload["text"])
+            }
+            val handleBatchCategoryChange = ::gen_handleBatchCategoryChange_fn
+            fun gen_openBatchCategoryPopup_fn() {
+                if (!ensureBatchSelection()) {
+                    return
+                }
+                batchCategoryValue.value = ""
+                batchCategoryText.value = ""
+                batchCategoryVisible.value = true
+            }
+            val openBatchCategoryPopup = ::gen_openBatchCategoryPopup_fn
+            fun gen_closeBatchCategoryPopup_fn() {
+                if (batchSubmitting.value) {
+                    return
+                }
+                batchCategoryVisible.value = false
+                batchCategoryValue.value = ""
+                batchCategoryText.value = ""
+            }
+            val closeBatchCategoryPopup = ::gen_closeBatchCategoryPopup_fn
+            fun gen_batchResultMessage_fn(response: ProductBatchActionResponse, fallback: String): String {
+                var message = takeLatestResponseMessage(fallback)
+                if (message == "") {
+                    message = fallback
+                }
+                val summaryObject = parseObject(response.data["summary"])
+                if (summaryObject == null) {
+                    return message
+                }
+                val successCount = numberValue(summaryObject["success_count"])
+                val failureCount = numberValue(summaryObject["failure_count"])
+                val skippedCount = numberValue(summaryObject["skipped_count"])
+                if (failureCount > 0) {
+                    return "成功" + successCount.toString(10) + "，失败" + failureCount.toString(10)
+                }
+                if (skippedCount > 0) {
+                    return "成功" + successCount.toString(10) + "，跳过" + skippedCount.toString(10)
+                }
+                return message
+            }
+            val batchResultMessage = ::gen_batchResultMessage_fn
+            fun gen_batchResultHasIssue_fn(response: ProductBatchActionResponse): Boolean {
+                val summaryObject = parseObject(response.data["summary"])
+                if (summaryObject == null) {
+                    return false
+                }
+                return numberValue(summaryObject["failure_count"]) > 0 || numberValue(summaryObject["skipped_count"]) > 0
+            }
+            val batchResultHasIssue = ::gen_batchResultHasIssue_fn
+            fun gen_executeBatchUpdateCategory_fn(): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (batchSubmitting.value) {
+                            return@w1
+                        }
+                        if (!ensureBatchSelection()) {
+                            return@w1
+                        }
+                        if (batchCategoryValue.value == "") {
+                            uni_showToast(ShowToastOptions(title = "请选择分类", icon = "none", duration = 3500))
+                            return@w1
+                        }
+                        val productIds = selectedProductIds()
+                        batchSubmitting.value = true
+                        try {
+                            val response = await(batchUpdateProductCategory(productIds, batchCategoryValue.value))
+                            val message = batchResultMessage(response, "批量修改分类成功")
+                            val hasIssue = batchResultHasIssue(response)
+                            if (hasIssue) {
+                                showErrorToast(message)
+                            } else {
+                                uni_showToast(ShowToastOptions(title = message, icon = "success", duration = 1500))
+                            }
+                            batchCategoryVisible.value = false
+                            batchCategoryValue.value = ""
+                            batchCategoryText.value = ""
+                            clearSelectionState()
+                            loadDetails()
+                        }
+                         catch (error: Throwable) {
+                            showErrorToast(parseErrorMessage(error, "批量修改分类失败"))
+                        }
+                         finally {
+                            batchSubmitting.value = false
+                        }
+                })
+            }
+            val executeBatchUpdateCategory = ::gen_executeBatchUpdateCategory_fn
+            fun gen_confirmBatchUpdateCategory_fn() {
+                if (!ensureBatchSelection()) {
+                    return
+                }
+                if (batchCategoryValue.value == "") {
+                    uni_showToast(ShowToastOptions(title = "请选择分类", icon = "none", duration = 3500))
+                    return
+                }
+                uni_showModal(ShowModalOptions(title = "批量修改分类", content = "确定将选中的 " + selectedDetailIds.value.length.toString(10) + " 条采购明细对应商品修改到该分类吗？", success = fun(res){
+                    if (!res.confirm) {
+                        return
+                    }
+                    executeBatchUpdateCategory()
+                }
+                ))
+            }
+            val confirmBatchUpdateCategory = ::gen_confirmBatchUpdateCategory_fn
+            fun gen_handleBatchToolbarAction_fn(payload: UTSJSONObject) {
+                val actionValue = payload["action"]
+                if (actionValue == null) {
+                    return
+                }
+                val actionKey = stringValue((actionValue as UTSJSONObject)["key"])
+                if (actionKey == "update-category") {
+                    openBatchCategoryPopup()
+                }
+            }
+            val handleBatchToolbarAction = ::gen_handleBatchToolbarAction_fn
             fun gen_promptReceive_fn(item: UTSJSONObject) {
                 val id = stringValue(item["rawId"])
                 val defaultValue = stringValue(item["remainingValue"], "1")
@@ -549,7 +947,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                     }
                     val quantity = parseInt(inputText)
                     if (isNaN(quantity) || quantity <= 0) {
-                        uni_showToast(ShowToastOptions(title = "请输入有效收货数量", icon = "none"))
+                        uni_showToast(ShowToastOptions(title = "请输入有效收货数量", icon = "none", duration = 3500))
                         return
                     }
                     runReceive(id, quantity)
@@ -570,7 +968,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                     return
                 }
                 if (actionKey == "edit") {
-                    uni_navigateTo(NavigateToOptions(url = "/pages/purchases/details/from?purchase=" + purchaseId.value + "&id=" + id))
+                    openDetailForm(id)
                     return
                 }
                 if (actionKey == "receive") {
@@ -601,6 +999,10 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                     }
                 }
                 return result
+            }
+            )
+            val batchInfoText = computed(fun(): String {
+                return "已选 " + selectedDetailIds.value.length.toString(10) + " 条明细"
             }
             )
             val hasActiveFilter = computed(fun(): Boolean {
@@ -681,6 +1083,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList", GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass)
+                val _component_page_container = resolveComponent("page-container")
                 return _cE("view", _uM("class" to "page"), _uA(
                     _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "searchPlaceholder" to "商品名、SKU、条码", "searchValue" to unref(keyword), "filterVisible" to unref(filterVisible), "showBack" to true, "showSearch" to true, "showFilter" to true, "showScan" to true, "showHome" to true, "filterActive" to hasActiveFilter.value, "filterText" to "重置", "homePath" to "/pages/purchases/index", "onSearchInput" to handleSearchInput, "onSearchConfirm" to handleSearchConfirm, "onSearchClear" to handleSearchClear, "onScan" to handleScanSearch, "onUpdate:filterVisible" to handleFilterVisibleChange, "onFilterOpen" to handleFilterOpen), _uM("filter-panel" to withSlotCtx(fun(): UTSArray<Any> {
                         return _uA(
@@ -754,15 +1157,19 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                                 _cE("view", _uM("key" to 0, "class" to "error-card"), _uA(
                                     _cE("text", _uM("class" to "error-title"), "加载失败"),
                                     _cE("text", _uM("class" to "error-desc"), _tD(unref(errorMessage)), 1),
-                                    _cE("view", _uM("class" to "retry-btn", "onClick" to loadDetails), _uA(
+                                    _cE("view", _uM("class" to "retry-btn", "onClick" to fun(){
+                                        loadDetails()
+                                    }), _uA(
                                         _cE("text", _uM("class" to "retry-btn-text"), "重新加载")
+                                    ), 8, _uA(
+                                        "onClick"
                                     ))
                                 ))
                             } else {
                                 _cC("v-if", true)
                             }
                             ,
-                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "subtitle", "metaField" to "amountText", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载采购明细", "keepContentOnLoading" to true, "inlineLoadingText" to "采购明细刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "summaryTitle" to "明细概览", "summaryItems" to summaryItems.value, "showFloatingAdd" to true, "floatingAddText" to "新增明细", "onItemClick" to handleItemClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreate), null, 8, _uA(
+                            _cV(_component_lili_UniversalList, _uM("items" to listItems.value, "keyField" to "id", "titleField" to "title", "subtitleField" to "subtitle", "metaField" to "amountText", "tagField" to "tags", "fields" to unref(fieldConfig), "loading" to unref(isLoading), "loadingText" to "正在加载采购明细", "keepContentOnLoading" to true, "inlineLoadingText" to "采购明细刷新中...", "emptyText" to emptyText.value, "emptyIcon" to "◎", "showMenu" to true, "menuActions" to unref(menuActions), "showChevron" to false, "showPagination" to true, "currentPage" to unref(currentPage), "totalPages" to unref(totalPages), "totalCount" to unref(totalCount), "selectionMode" to unref(selectionMode), "selectedItems" to unref(selectedDetailIds), "batchActions" to unref(batchToolbarActions), "batchInfoText" to batchInfoText.value, "summaryTitle" to "明细概览", "summaryItems" to summaryItems.value, "showFloatingAdd" to true, "floatingAddText" to "新增明细", "onUpdate:selectionMode" to handleSelectionModeChange, "onUpdate:selectedItems" to handleSelectedDetailIdsChange, "onSelectionExit" to handleSelectionExit, "onBatchAction" to handleBatchToolbarAction, "onItemClick" to handleItemClick, "onMenu" to handleMenu, "onPageChange" to handlePageChange, "onFloatingAdd" to handleCreate), null, 8, _uA(
                                 "items",
                                 "fields",
                                 "loading",
@@ -771,10 +1178,53 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
                                 "currentPage",
                                 "totalPages",
                                 "totalCount",
+                                "selectionMode",
+                                "selectedItems",
+                                "batchActions",
+                                "batchInfoText",
                                 "summaryItems"
                             ))
                         ))
-                    ), 4)
+                    ), 4),
+                    _cV(_component_page_container, _uM("show" to unref(batchCategoryVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 240, "overlay-style" to "background-color: rgba(15, 23, 42, 0.42);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closeBatchCategoryPopup), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "batch-panel"), _uA(
+                                _cE("view", _uM("class" to "batch-handle")),
+                                _cE("view", _uM("class" to "batch-head"), _uA(
+                                    _cE("view", null, _uA(
+                                        _cE("text", _uM("class" to "batch-title"), "批量修改分类"),
+                                        _cE("text", _uM("class" to "batch-subtitle"), _tD(batchInfoText.value), 1)
+                                    )),
+                                    _cE("view", _uM("class" to "batch-close", "onClick" to closeBatchCategoryPopup), _uA(
+                                        _cE("text", _uM("class" to "batch-close-text"), "关闭")
+                                    ))
+                                )),
+                                _cE("view", _uM("class" to "batch-field"), _uA(
+                                    _cE("text", _uM("class" to "batch-label"), "目标分类"),
+                                    _cV(unref(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass), _uM("value" to unref(batchCategoryValue), "valueText" to unref(batchCategoryText), "title" to "选择分类", "placeholder" to "请选择分类", "searchPlaceholder" to "请输入分类名称", "emptyText" to "暂无分类", "tree" to true, "checkStrictly" to false, "expandOnClickNode" to true, "selectableLevel" to 2, "selectableLevelMessage" to "只能选择二级分类", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchCategoryOptions, "onChange" to handleBatchCategoryChange), null, 8, _uA(
+                                        "value",
+                                        "valueText"
+                                    ))
+                                )),
+                                _cE("view", _uM("class" to "batch-actions"), _uA(
+                                    _cE("view", _uM("class" to "batch-secondary-btn", "onClick" to closeBatchCategoryPopup), _uA(
+                                        _cE("text", _uM("class" to "batch-secondary-text"), "取消")
+                                    )),
+                                    _cE("view", _uM("class" to "batch-primary-btn", "onClick" to confirmBatchUpdateCategory), _uA(
+                                        _cE("text", _uM("class" to "batch-primary-text"), _tD(if (unref(batchSubmitting)) {
+                                            "处理中..."
+                                        } else {
+                                            "确认修改"
+                                        }
+                                        ), 1)
+                                    ))
+                                ))
+                            ))
+                        )
+                    }
+                    ), "_" to 1), 8, _uA(
+                        "show"
+                    ))
                 ))
             }
         }
@@ -785,7 +1235,7 @@ open class GenPagesPurchasesDetailsIndex : BasePage {
         }
         val styles0: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "purchase-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "purchase-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "purchase-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "purchase-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "purchase-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "purchase-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "purchase-filter-groups" to _pS(_uM("marginBottom" to 6)), "purchase-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "purchase-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "purchase-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "purchase-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "purchase-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "purchase-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "purchase-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "purchase-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "purchase-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "purchase-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")))
+                return _uM("page" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-scroll" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "backgroundColor" to "#F6F7FB")), "page-content" to _pS(_uM("paddingTop" to 6, "paddingRight" to 6, "paddingBottom" to 96, "paddingLeft" to 6)), "error-card" to _pS(_uM("backgroundColor" to "#FFFFFF", "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "paddingTop" to 18, "paddingRight" to 18, "paddingBottom" to 18, "paddingLeft" to 18, "marginBottom" to 10, "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA", "alignItems" to "center")), "error-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#B42318", "fontWeight" to "bold")), "error-desc" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#7F1D1D", "marginTop" to 8, "textAlign" to "center")), "retry-btn" to _pS(_uM("marginTop" to 14, "height" to 40, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#0F172A", "paddingLeft" to 18, "paddingRight" to 18, "alignItems" to "center", "justifyContent" to "center")), "retry-btn-text" to _pS(_uM("fontSize" to 14, "color" to "#FFFFFF")), "purchase-filter-panel" to _pS(_uM("position" to "relative", "paddingTop" to 2)), "purchase-filter-content-scroll" to _pS(_uM("paddingRight" to 2)), "purchase-filter-scroll-inner" to _pS(_uM("paddingBottom" to 58)), "purchase-filter-group" to _pS(_uM("paddingLeft" to 10, "paddingRight" to 10, "paddingTop" to 10, "paddingBottom" to 10, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#FFFFFF", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E5EAF1", "borderRightColor" to "#E5EAF1", "borderBottomColor" to "#E5EAF1", "borderLeftColor" to "#E5EAF1", "marginBottom" to 6)), "purchase-filter-group-title" to _pS(_uM("fontSize" to 13, "lineHeight" to "17px", "color" to "#0F172A", "fontWeight" to "bold")), "purchase-filter-state" to _pS(_uM("height" to 112, "borderTopLeftRadius" to 12, "borderTopRightRadius" to 12, "borderBottomRightRadius" to 12, "borderBottomLeftRadius" to 12, "backgroundColor" to "#F8FAFC", "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-state-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#64748B")), "purchase-filter-groups" to _pS(_uM("marginBottom" to 6)), "purchase-filter-options" to _pS(_uM("flexDirection" to "row", "flexWrap" to "wrap", "marginTop" to 8)), "purchase-filter-option" to _pS(_uM("minWidth" to 48, "height" to 30, "paddingLeft" to 10, "paddingRight" to 10, "borderTopLeftRadius" to 15, "borderTopRightRadius" to 15, "borderBottomRightRadius" to 15, "borderBottomLeftRadius" to 15, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginRight" to 6, "marginBottom" to 6)), "purchase-filter-option-active" to _pS(_uM("backgroundColor" to "#0F172A", "borderTopColor" to "#0F172A", "borderRightColor" to "#0F172A", "borderBottomColor" to "#0F172A", "borderLeftColor" to "#0F172A")), "purchase-filter-option-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#334155")), "purchase-filter-option-text-active" to _pS(_uM("color" to "#FFFFFF")), "purchase-filter-actions" to _pS(_uM("position" to "absolute", "left" to 0, "right" to 0, "bottom" to 0, "flexDirection" to "row", "paddingTop" to 6, "paddingLeft" to 2, "paddingRight" to 2, "paddingBottom" to 4, "borderTopWidth" to 1, "borderTopStyle" to "solid", "borderTopColor" to "rgba(226,232,240,0.78)", "backgroundColor" to "#FFFFFF")), "purchase-filter-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 38, "borderTopLeftRadius" to 11, "borderTopRightRadius" to 11, "borderBottomRightRadius" to 11, "borderBottomLeftRadius" to 11, "alignItems" to "center", "justifyContent" to "center")), "purchase-filter-btn-light" to _pS(_uM("backgroundColor" to "#F3F6FA", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 8)), "purchase-filter-btn-primary" to _pS(_uM("backgroundColor" to "#0F172A")), "purchase-filter-btn-light-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#475569")), "purchase-filter-btn-primary-text" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#FFFFFF")), "batch-panel" to _pS(_uM("paddingLeft" to 18, "paddingRight" to 18, "paddingTop" to 10, "paddingBottom" to 22, "backgroundColor" to "#FFFFFF")), "batch-handle" to _pS(_uM("width" to 42, "height" to 4, "borderTopLeftRadius" to 2, "borderTopRightRadius" to 2, "borderBottomRightRadius" to 2, "borderBottomLeftRadius" to 2, "backgroundColor" to "#CBD5E1", "alignSelf" to "center", "marginBottom" to 14)), "batch-head" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between", "marginBottom" to 18)), "batch-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "bold")), "batch-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B", "marginTop" to 3)), "batch-close" to _pS(_uM("height" to 32, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "batch-close-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#475569")), "batch-field" to _pS(_uM("marginBottom" to 16)), "batch-label" to _pS(_uM("fontSize" to 13, "lineHeight" to "18px", "color" to "#0F172A", "fontWeight" to "bold", "marginBottom" to 8)), "batch-actions" to _pS(_uM("flexDirection" to "row", "marginTop" to 4)), "batch-secondary-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 42, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "marginRight" to 10)), "batch-primary-btn" to _pS(_uM("flexGrow" to 1, "flexShrink" to 1, "flexBasis" to "0%", "height" to 42, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "alignItems" to "center", "justifyContent" to "center", "backgroundColor" to "#0F172A")), "batch-secondary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#475569", "fontWeight" to "bold")), "batch-primary-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#FFFFFF", "fontWeight" to "bold")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

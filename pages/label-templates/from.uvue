@@ -146,10 +146,12 @@ const templateTypeChoices = ref<TemplateChoice[]>([
 ])
 
 const defaultElementsText = `[
-  {"key":"name","label":"商品名称","type":"text","source":"name","content":"ITEM","x":2,"y":1.2,"width":28,"height":3.5,"fontSize":16},
-  {"key":"price","label":"价格","type":"text","source":"price","content":"0.00","x":2,"y":4.7,"width":28,"height":7,"fontSize":52},
-  {"key":"barcode","label":"条码","type":"barcode","source":"barcode","content":"5901234123457","x":2,"y":12.3,"width":28,"height":4.1,"fontSize":12},
-  {"key":"kod","label":"KOD","type":"text","source":"kod","content":"KOD","x":2,"y":16.6,"width":28,"height":2.3,"fontSize":14}
+  {"key":"name_cn","label":"中文名","type":"text","source":"name_cn","content":"中文商品名称","x":2,"y":1,"width":28,"height":2.8,"fontSize":16,"textAlign":"center"},
+  {"key":"name_en","label":"英文名","type":"text","source":"name_en","content":"English product name","x":2,"y":3.8,"width":28,"height":2.3,"fontSize":13,"textAlign":"center"},
+  {"key":"name_other","label":"其他名","type":"text","source":"name_other","content":"Other name","x":2,"y":6.1,"width":28,"height":2,"fontSize":12,"textAlign":"center"},
+  {"key":"price","label":"价格","type":"text","source":"price","content":"0.00","x":2,"y":8.1,"width":28,"height":4.2,"fontSize":34,"isBold":true,"fontWeight":"bold","textAlign":"center"},
+  {"key":"barcode","label":"条码","type":"barcode","source":"barcode","content":"5901234123457","x":2,"y":12.5,"width":28,"height":4.1,"fontSize":12},
+  {"key":"kod","label":"KOD","type":"text","source":"kod","content":"KOD","x":2,"y":16.8,"width":28,"height":2.2,"fontSize":14,"textAlign":"center"}
 ]`
 
 const templateId = ref('')

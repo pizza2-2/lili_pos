@@ -129,6 +129,8 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const invoices = ref<KsefInvoiceItem[]>([])
 const status = ref<KsefAutoSyncStatus | null>(null)
+const supplierFilterId = ref('')
+const supplierFilterName = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
@@ -141,6 +143,7 @@ const selectedFilters = ref<KsefSelectedFilter[]>([])
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'supplier_name', label: '供应商' } as UTSJSONObject,
 	{ key: 'payment_due_text', label: '到期日' } as UTSJSONObject,
+	{ key: 'payment_review_text', label: '审核' } as UTSJSONObject,
 	{ key: 'bank_account_text', label: '银行账号' } as UTSJSONObject,
 ])
 
@@ -175,6 +178,19 @@ const defaultFilterDefinitions = ref<KsefFilterDefinition[]>([
 		options: [
 			{ value: 'false', label: '未付款' } as KsefFilterOption,
 			{ value: 'true', label: '已付款' } as KsefFilterOption,
+		],
+	} as KsefFilterDefinition,
+	{
+		key: 'payment_review_status',
+		param: 'payment_review_status',
+		label: '支付审核',
+		control: 'select',
+		aliases: [] as string[],
+		multiple: false,
+		options: [
+			{ value: 'PENDING', label: '待审核' } as KsefFilterOption,
+			{ value: 'PAYABLE', label: '可支付' } as KsefFilterOption,
+			{ value: 'NOT_PAYABLE', label: '不支付' } as KsefFilterOption,
 		],
 	} as KsefFilterDefinition,
 	{
@@ -298,9 +314,12 @@ async function loadInvoices() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
+			supplier: supplierFilterId.value == '' ? null : supplierFilterId.value,
+			supplier_id: supplierFilterId.value == '' ? null : supplierFilterId.value,
 			sync_status: filterValueOrNull('sync_status'),
 			is_paid: filterValueOrNull('is_paid'),
 			has_xml: filterValueOrNull('has_xml'),
+			payment_review_status: filterValueOrNull('payment_review_status'),
 			ordering: filterValueOrNull('ordering'),
 		})
 		applyListResponse(response)
@@ -375,6 +394,13 @@ function paidText(value: boolean): string {
 	return value ? '已付款' : '未付款'
 }
 
+function reviewStatusText(item: KsefInvoiceItem): string {
+	if (item.payment_review_status_display != '') return item.payment_review_status_display
+	if (item.payment_review_status == 'PAYABLE') return '可支付'
+	if (item.payment_review_status == 'NOT_PAYABLE') return '不支付'
+	return '待审核'
+}
+
 function supplierText(item: KsefInvoiceItem): string {
 	if (item.supplier_name != '') return item.supplier_name
 	return '未关联供应商'
@@ -412,7 +438,7 @@ function normalizeAccount(value: string): string {
 }
 
 function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
-	const statusTags: string[] = [paidText(item.is_paid)]
+	const statusTags: string[] = [paidText(item.is_paid), reviewStatusText(item)]
 	if (item.sync_status == 'SYNC_ERROR') {
 		statusTags.push('异常')
 	}
@@ -424,6 +450,7 @@ function invoiceToListItem(item: KsefInvoiceItem): UTSJSONObject {
 		supplier_name: supplierText(item),
 		seller_nip: displayText(item.seller_nip),
 		payment_due_text: compactDate(item.payment_due_date),
+		payment_review_text: reviewStatusText(item),
 		bank_account_text: displayText(normalizeAccount(item.bank_account_number)),
 		rawId: item.id.toString(),
 		rawKsefNumber: item.ksef_number,
@@ -545,7 +572,7 @@ const filterDefinitions = computed((): KsefFilterDefinition[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedFilters.value.length > 0
+	return keyword.value != '' || selectedFilters.value.length > 0 || supplierFilterId.value != ''
 })
 
 const emptyText = computed((): string => {
@@ -566,15 +593,30 @@ const lastSuccessText = computed((): string => {
 
 const summaryItems = computed((): UTSJSONObject[] => {
 	const paymentFilter = selectedFilterValue('is_paid')
+	const reviewFilter = selectedFilterValue('payment_review_status')
 	return [
 		{ key: 'total', label: '发票总数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'supplier', label: '供应商', value: supplierFilterId.value == '' ? '全部' : (supplierFilterName.value == '' ? ('#' + supplierFilterId.value) : supplierFilterName.value) } as UTSJSONObject,
 		{ key: 'pending', label: '待详情', value: pendingXmlText.value } as UTSJSONObject,
 		{ key: 'payment', label: '付款筛选', value: paymentFilter == '' ? '全部' : (paymentFilter == 'true' ? '已付款' : '未付款') } as UTSJSONObject,
+		{ key: 'review', label: '支付审核', value: reviewFilter == '' ? '全部' : (reviewFilter == 'PAYABLE' ? '可支付' : (reviewFilter == 'NOT_PAYABLE' ? '不支付' : '待审核')) } as UTSJSONObject,
 		{ key: 'last', label: '最近成功', value: lastSuccessText.value } as UTSJSONObject,
 	]
 })
 
-onLoad(() => {
+onLoad((event: OnLoadOptions) => {
+	const supplierIdValue = event['supplier_id'] == null ? event['supplier'] : event['supplier_id']
+	supplierFilterId.value = supplierIdValue == null ? '' : (supplierIdValue as string)
+	const supplierNameValue = event['supplier_name']
+	if (supplierNameValue != null) {
+		const decodedSupplierName = decodeURIComponent(supplierNameValue as string)
+		supplierFilterName.value = decodedSupplierName == null ? '' : decodedSupplierName
+	}
+	const searchValue = event['search']
+	if (searchValue != null && searchValue != '') {
+		const decodedSearch = decodeURIComponent(searchValue as string)
+		keyword.value = decodedSearch == null ? '' : decodedSearch
+	}
 	loadAutoSyncStatus()
 	loadInvoices()
 })

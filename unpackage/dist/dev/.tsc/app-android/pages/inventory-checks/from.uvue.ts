@@ -2,6 +2,7 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { getInventoryCheckDetail, InventoryMutationData, updateInventoryCheck } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -32,25 +33,33 @@ function booleanValue(value: any | null): boolean {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
-		const text = JSON.stringify(error)
+		let text = ''
+		try {
+			const errorText = JSON.stringify(error)
+			if (errorText != null) text = errorText
+		} catch (stringifyError) {
+			text = ''
+		}
 		if (text != null && text != '') {
 			let parsedError: UTSJSONObject | null = null
 			try {
 				const trimmedText = text.trim()
-				if (trimmedText != '' && trimmedText.substring(0, 1) == '{') parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:55")
+				if (trimmedText != '' && trimmedText.substring(0, 1) == '{') parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:60")
 			} catch (parseError) {
 				parsedError = null
 			}
 			if (parsedError != null) {
 				const rawMessage = parsedError!['message']
 				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
+					const parsedMessage = stringValue(rawMessage)
 					if (parsedMessage != '') message = parsedMessage
 				}
 			}
-			if (message == fallback && text != '{}') message = text
+			if (message == fallback && text != '{}' && text != 'null') message = text
+		}
+		if (message == fallback) {
+			const textMessage = stringValue(error)
+			if (textMessage != '' && textMessage != '[object Object]') message = textMessage
 		}
 	}
 	return message
@@ -63,7 +72,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	const trimmedText = text.trim()
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '{') return null
 	try {
-		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:79")
+		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:88")
 	} catch (error) {
 		return null
 	}
@@ -77,7 +86,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as UTSJSONObject[]
 	let parsed: UTSJSONObject[] | null = null
 	try {
-		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:93")
+		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:102")
 	} catch (error) {
 		return [] as UTSJSONObject[]
 	}
@@ -113,7 +122,7 @@ function firstStringField(obj: UTSJSONObject, keys: string[]): string {
 function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const pageValue = intValue(params['page'])
 	const pageSizeValue = intValue(params['pageSize'])
-	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-checks/from.uvue", 129, 8),  page: pageValue <= 0 ? 1 : pageValue, page_size: pageSizeValue <= 0 ? 50 : pageSizeValue } as UTSJSONObject
+	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-checks/from.uvue", 138, 8),  page: pageValue <= 0 ? 1 : pageValue, page_size: pageSizeValue <= 0 ? 50 : pageSizeValue } as UTSJSONObject
 	const keywordValue = stringValue(params['keyword'])
 	if (keywordValue != '') {
 		query['search'] = keywordValue
@@ -192,7 +201,7 @@ function firstArrayValue(value: any | null): string {
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return stringValue(value)
 	let parsed: any[] | null = null
 	try {
-		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<any>(trimmedText), " at pages/inventory-checks/from.uvue:208")
+		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<any>(trimmedText), " at pages/inventory-checks/from.uvue:217")
 	} catch (error) {
 		return ''
 	}
@@ -266,12 +275,12 @@ function goBackToList() {
 function buildPayload(data: UTSJSONObject): InventoryMutationData | null {
 	const locationId = intValue(data['location'])
 	if (locationId <= 0) {
-		uni.showToast({ title: '请选择盘点位置', icon: 'none' })
+		uni.showToast({ title: '请选择盘点位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	const categoryId = intValue(data['category'])
 	if (categoryId <= 0) {
-		uni.showToast({ title: '请选择盘点分类', icon: 'none' })
+		uni.showToast({ title: '请选择盘点分类', icon: 'none', duration: 3500 })
 		return null
 	}
 	return {
@@ -301,7 +310,7 @@ async function loadDetail(idText: string) {
 			description: stringValue(detail['description']),
 		} as UTSJSONObject
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '盘点单详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '盘点单详情加载失败'))
 	}
 }
 
@@ -319,7 +328,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage('保存盘点单成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '保存盘点单失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '保存盘点单失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -335,8 +344,8 @@ function handleFormChange(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	if (rawData != null) liveFormData.value = rawData as UTSJSONObject
 }
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }) }
 
 onLoad((query: OnLoadOptions) => {
 	const idValue = query['id']

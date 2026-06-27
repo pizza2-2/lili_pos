@@ -7,13 +7,14 @@ import {
 	getProductPricingFormulaDetail,
 	updateProductPricingFormula,
 } from '@/pkg/api/modules/products.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type FormulaChoice = { __$originalPosition?: UTSSourceMapPosition<"FormulaChoice", "pages/products/pricing-formula.uvue", 167, 6>;
+type FormulaChoice = { __$originalPosition?: UTSSourceMapPosition<"FormulaChoice", "pages/products/pricing-formula.uvue", 168, 6>;
 	value: string
 	label: string
 }
 
-type FormulaStep = { __$originalPosition?: UTSSourceMapPosition<"FormulaStep", "pages/products/pricing-formula.uvue", 172, 6>;
+type FormulaStep = { __$originalPosition?: UTSSourceMapPosition<"FormulaStep", "pages/products/pricing-formula.uvue", 173, 6>;
 	kind: string
 	operator: string
 	operand: string
@@ -21,7 +22,7 @@ type FormulaStep = { __$originalPosition?: UTSSourceMapPosition<"FormulaStep", "
 	parameter: string
 }
 
-type ParsedFormula = { __$originalPosition?: UTSSourceMapPosition<"ParsedFormula", "pages/products/pricing-formula.uvue", 180, 6>;
+type ParsedFormula = { __$originalPosition?: UTSSourceMapPosition<"ParsedFormula", "pages/products/pricing-formula.uvue", 181, 6>;
 	success: boolean
 	base_variable: string
 	steps: FormulaStep[]
@@ -494,10 +495,6 @@ function applyFormula(item: ProductPricingFormulaItem) {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 	}
 	return message
 }
@@ -638,16 +635,16 @@ async function handleSave() {
 	const nameText = name.value.trim()
 	const codeText = code.value.trim()
 	if (nameText == '') {
-		uni.showToast({ title: '公式名称不能为空', icon: 'none' })
+		uni.showToast({ title: '公式名称不能为空', icon: 'none', duration: 3500 })
 		return
 	}
 	if (codeText == '') {
-		uni.showToast({ title: '公式编码不能为空', icon: 'none' })
+		uni.showToast({ title: '公式编码不能为空', icon: 'none', duration: 3500 })
 		return
 	}
 	const expression = resolveSaveExpression()
 	if (expression == '') {
-		uni.showToast({ title: '请完善公式步骤', icon: 'none' })
+		uni.showToast({ title: '请完善公式步骤', icon: 'none', duration: 3500 })
 		return
 	}
 
@@ -666,7 +663,7 @@ async function handleSave() {
 		parseFailed.value = false
 		parseWarning.value = ''
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '价格公式保存失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '价格公式保存失败'))
 	} finally {
 		submitting.value = false
 	}

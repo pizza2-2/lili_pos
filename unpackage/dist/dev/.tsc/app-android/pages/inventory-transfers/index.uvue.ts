@@ -4,8 +4,9 @@ import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { approveInventoryTransfer, cancelInventoryTransfer, completeInventoryTransfer, getInventoryTransfers, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-transfers/index.uvue", 146, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-transfers/index.uvue", 147, 6>;
 	value: string
 	label: string
 }
@@ -94,11 +95,9 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:231")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/inventory-transfers/index.uvue:230")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -119,7 +118,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	const trimmedText = text.trim()
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '{') return null
 	try {
-		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:252")
+		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:251")
 	} catch (error) {
 		return null
 	}
@@ -133,7 +132,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as UTSJSONObject[]
 	let parsed: UTSJSONObject[] | null = null
 	try {
-		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:266")
+		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/index.uvue:265")
 	} catch (error) {
 		return [] as UTSJSONObject[]
 	}
@@ -193,7 +192,7 @@ function buildBottomSelectResponse(raw: any | null): UTSJSONObject {
 function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const pageValue = intValue(params['page'])
 	const pageSizeValue = intValue(params['pageSize'])
-	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 326, 8), 
+	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/index.uvue", 325, 8), 
 		page: pageValue <= 0 ? 1 : pageValue,
 		page_size: pageSizeValue <= 0 ? 50 : pageSizeValue,
 	} as UTSJSONObject
@@ -227,7 +226,7 @@ function compactDate(value: string): string {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -411,7 +410,7 @@ async function runAction(actionName: string, id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('操作成功'), icon: 'success' })
 		loadItems()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '操作失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '操作失败'))
 	}
 }
 

@@ -3,6 +3,7 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { getInventoryTransferDetail, InventoryMutationData, updateInventoryTransfer } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
 
 const __sfc__ = defineComponent({
@@ -61,13 +62,11 @@ function intValue(value: any | null): number {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const text = JSON.stringify(error)
 		if (text != null && text != '') {
 			let parsedError: UTSJSONObject | null = null
 			try {
-				parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-transfers/from.uvue:116")
+				parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-transfers/from.uvue:115")
 			} catch (parseError) {
 				parsedError = null
 			}
@@ -91,7 +90,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	const trimmedText = text.trim()
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '{') return null
 	try {
-		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:140")
+		return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:139")
 	} catch (error) {
 		return null
 	}
@@ -105,7 +104,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (trimmedText == '' || trimmedText.substring(0, 1) != '[') return [] as UTSJSONObject[]
 	let parsed: UTSJSONObject[] | null = null
 	try {
-		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:154")
+		parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-transfers/from.uvue:153")
 	} catch (error) {
 		return [] as UTSJSONObject[]
 	}
@@ -162,7 +161,7 @@ function statusLabel(status: string, display: string): string {
 function buildOptionQuery(params: UTSJSONObject): UTSJSONObject {
 	const pageValue = intValue(params['page'])
 	const pageSizeValue = intValue(params['pageSize'])
-	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/from.uvue", 211, 8), 
+	const query = { __$originalPosition: new UTSSourceMapPosition("query", "pages/inventory-transfers/from.uvue", 210, 8), 
 		page: pageValue <= 0 ? 1 : pageValue,
 		page_size: pageSizeValue <= 0 ? 50 : pageSizeValue,
 	} as UTSJSONObject
@@ -344,7 +343,7 @@ async function loadDetail(idText: string) {
 		initialData.value = data
 		liveFormData.value = data
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '调拨单详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '调拨单详情加载失败'))
 	}
 }
 
@@ -353,18 +352,18 @@ function buildPayload(data: UTSJSONObject): InventoryMutationData | null {
 	const toLocation = intValue(data['to_location'])
 	const transferDate = stringValue(data['transfer_date'], todayDateText())
 	if (fromLocation <= 0) {
-		uni.showToast({ title: '请选择调出位置', icon: 'none' })
+		uni.showToast({ title: '请选择调出位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	if (toLocation <= 0) {
-		uni.showToast({ title: '请选择调入位置', icon: 'none' })
+		uni.showToast({ title: '请选择调入位置', icon: 'none', duration: 3500 })
 		return null
 	}
 	if (fromLocation == toLocation) {
-		uni.showToast({ title: '调入位置不能与调出位置相同', icon: 'none' })
+		uni.showToast({ title: '调入位置不能与调出位置相同', icon: 'none', duration: 3500 })
 		return null
 	}
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "pages/inventory-transfers/from.uvue", 413, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "pages/inventory-transfers/from.uvue", 412, 8), 
 		from_location: fromLocation,
 		to_location: toLocation,
 		transfer_date: transferDate,
@@ -382,7 +381,7 @@ async function persistForm(payload: UTSJSONObject) {
 	const body = buildPayload(data)
 	if (body == null) return
 	if (itemId.value == '') {
-		uni.showToast({ title: '缺少调拨单 ID', icon: 'none' })
+		uni.showToast({ title: '缺少调拨单 ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const actionText = '保存调拨单'
@@ -394,7 +393,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -410,8 +409,8 @@ function handleFormChange(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	if (rawData != null) liveFormData.value = rawData as UTSJSONObject
 }
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }) }
 
 onLoad((query: OnLoadOptions) => {
 	const idValue = query['id']

@@ -31,13 +31,13 @@ const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<OrderFilterOptionsResponse | null>(null)
 const selectedFilters = ref<OrderSelectedFilter[]>([])
-const datePresetValue = ref('today')
+const datePresetValue = ref('all')
 const datePresetOptions = ref<DatePresetOption[]>([
+	{ key: 'all', text: '全部' } as DatePresetOption,
 	{ key: 'today', text: '今天' } as DatePresetOption,
 	{ key: 'week', text: '本周' } as DatePresetOption,
 	{ key: 'month', text: '本月' } as DatePresetOption,
 	{ key: 'year', text: '本年' } as DatePresetOption,
-	{ key: 'all', text: '全部' } as DatePresetOption,
 ])
 const statistics = ref<OrderStatistics>({
 	total_count: 0,
@@ -71,11 +71,9 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/index.uvue:191")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/orders/index.uvue:189")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -91,7 +89,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -330,7 +328,7 @@ function handleFilterOpen() {
 
 function handleFilterReset() {
 	selectedFilters.value = [] as OrderSelectedFilter[]
-	datePresetValue.value = 'today'
+	datePresetValue.value = 'all'
 	filterVisible.value = false
 	reloadFirstPage()
 }
@@ -400,7 +398,7 @@ const emptyText = computed((): string => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return selectedFilters.value.length > 0 || datePresetValue.value != 'today'
+	return selectedFilters.value.length > 0 || datePresetValue.value != 'all'
 })
 
 const filterDefinitions = computed((): OrderFilterDefinition[] => {

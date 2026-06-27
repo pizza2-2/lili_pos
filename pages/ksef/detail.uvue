@@ -54,6 +54,10 @@
 							<text class="action-title">付款信息</text>
 							<text class="action-desc">{{ paymentInfoActionText }}</text>
 						</view>
+						<view class="action-tile" @click="openPaymentReviewSheet">
+							<text class="action-title">支付审核</text>
+							<text class="action-desc">{{ paymentReviewActionText }}</text>
+						</view>
 						<view class="action-tile" @click="openPaymentEditPopup">
 							<text class="action-title">付款登记</text>
 							<text class="action-desc">{{ paymentEditActionText }}</text>
@@ -130,6 +134,10 @@
 					<view class="info-row">
 						<text class="info-label">付款数据</text>
 						<text class="info-value">{{ paymentDataStatusText }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-label">支付审核</text>
+						<text class="info-value">{{ paymentReviewActionText }}</text>
 					</view>
 					<view class="copy-grid">
 						<view class="copy-btn" @click="copyTransferTitle"><text class="copy-btn-text">复制标题</text></view>
@@ -282,12 +290,25 @@
 					<text class="pdf-loading-text">{{ pdfErrorMessage }}</text>
 					<view class="retry-btn" @click="loadPdfPreview"><text class="retry-btn-text">重新加载</text></view>
 				</view>
-				<view v-if="!pdfLoading && pdfErrorMessage == '' && pdfPreviewSrc != ''" class="pdf-preview-frame" :style="pdfPreviewFrameStyle">
-					<web-view id="ksef-pdf-webview" class="pdf-webview" :src="pdfPreviewSrc"></web-view>
-				</view>
-				<view v-if="!pdfLoading && pdfPreviewSrc != ''" class="pdf-actions">
-					<view class="form-btn form-btn-light" @click="loadPdfPreview"><text class="form-btn-light-text">重新获取</text></view>
-					<view class="form-btn form-btn-primary" @click="openPdfDocument"><text class="form-btn-primary-text">系统打开</text></view>
+				<scroll-view v-if="!pdfLoading && pdfErrorMessage == '' && pdfPreviewPages.length > 0" class="pdf-preview-frame" scroll-y="true" :style="pdfPreviewFrameStyle">
+					<view class="pdf-page-list">
+						<view v-for="page in pdfPreviewPages" :key="page" class="pdf-page-card">
+							<scroll-view class="pdf-page-viewport" scroll-x="true" scroll-y="true" :style="pdfPageViewportStyle" @touchstart="handlePdfPreviewTouchStart($event)" @touchmove="handlePdfPreviewTouchMove($event)" @touchend="handlePdfPreviewTouchEnd($event)" @touchcancel="handlePdfPreviewTouchEnd($event)">
+								<view class="pdf-page-zoom-wrap" :style="pdfPageZoomStyle">
+									<image class="pdf-page-image" :src="page" mode="aspectFit"></image>
+								</view>
+							</scroll-view>
+						</view>
+						<view v-if="pdfPageCount > pdfPreviewPages.length" class="pdf-page-note">
+							<text class="pdf-page-note-text">仅预览前 {{ pdfPreviewPages.length }} / {{ pdfPageCount }} 页</text>
+						</view>
+					</view>
+				</scroll-view>
+				<view v-if="!pdfLoading && pdfPreviewPages.length > 0" class="pdf-actions">
+					<view class="pdf-zoom-btn" @click="zoomPdfOut"><text class="pdf-zoom-btn-text">缩小</text></view>
+					<view class="pdf-zoom-value" @click="resetPdfZoom"><text class="pdf-zoom-value-text">{{ pdfZoomText }}</text></view>
+					<view class="pdf-zoom-btn" @click="zoomPdfIn"><text class="pdf-zoom-btn-text">放大</text></view>
+					<view class="form-btn form-btn-light pdf-refresh-btn" @click="loadPdfPreview"><text class="form-btn-light-text">重新获取</text></view>
 				</view>
 			</view>
 		</page-container>
@@ -298,9 +319,11 @@
 import { computed, watch } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
-import { downloadKsefInvoicePdfFile, downloadKsefInvoiceXml, getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, updateKsefInvoicePayment, uploadKsefInvoiceVouchers } from '@/pkg/api/modules/ksef'
+import { downloadKsefInvoicePdfFile, downloadKsefInvoiceXml, getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, reviewKsefInvoicePayment, updateKsefInvoicePayment, uploadKsefInvoiceVouchers } from '@/pkg/api/modules/ksef'
 import { getSupplierList, SupplierItem } from '@/pkg/api/modules/suppliers'
 import { createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan'
+import { renderPdfPages } from '@/uni_modules/lili-pdf'
+import { type PdfRenderFail, type PdfRenderPagesOptions, type PdfRenderResult } from '@/uni_modules/lili-pdf/utssdk/interface.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:ksef:index'
@@ -329,9 +352,14 @@ const paymentEditPopupVisible = ref(false)
 const supplierPopupVisible = ref(false)
 const attachmentPopupVisible = ref(false)
 const pdfPopupVisible = ref(false)
-const pdfPreviewSrc = ref('')
+const pdfPreviewPages = ref<string[]>([])
+const pdfPageCount = ref(0)
 const popupPanelHeight = ref(620)
 const popupScrollHeight = ref(500)
+const pdfPageViewportHeight = ref(420)
+const pdfZoom = ref(1)
+const pdfPinchStartDistance = ref(0)
+const pdfPinchStartZoom = ref(1)
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
@@ -343,6 +371,14 @@ function intValue(value: any | null, fallback: number): number {
 	if (value == null) return fallback
 	if (typeof value == 'number') return value as number
 	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return fallback
+	return parsed
+}
+
+function floatValue(value: any | null, fallback: number): number {
+	if (value == null) return fallback
+	if (typeof value == 'number') return value as number
+	const parsed = parseFloat('' + value)
 	if (isNaN(parsed)) return fallback
 	return parsed
 }
@@ -373,8 +409,13 @@ function updatePopupLayout() {
 	if (panelHeight < 500) panelHeight = 500
 	let scrollHeight = panelHeight - 118
 	if (scrollHeight < 320) scrollHeight = 320
+	let pageWidth = info.windowWidth - 64
+	if (pageWidth < 240) pageWidth = 240
+	let pageHeight = Math.floor(pageWidth * 1.414)
+	if (pageHeight < 340) pageHeight = 340
 	popupPanelHeight.value = panelHeight
 	popupScrollHeight.value = scrollHeight
+	pdfPageViewportHeight.value = pageHeight
 }
 
 function displayText(value: string): string {
@@ -569,6 +610,12 @@ function hasParsedPaymentInfo(): boolean {
 	return invoice.value.payment_due_date != '' || invoice.value.payment_method != '' || invoice.value.bank_account_number != '' || invoice.value.bank_name != ''
 }
 
+function paymentReviewFallbackText(status: string): string {
+	if (status == 'PAYABLE') return '可支付'
+	if (status == 'NOT_PAYABLE') return '不支付'
+	return '待审核'
+}
+
 function xmlSummaryIntValue(key: string): number {
 	if (invoice.value == null) return 0
 	return intValue(invoice.value.xml_summary[key], 0)
@@ -648,10 +695,30 @@ function closeAttachmentPopup() {
 	attachmentPopupVisible.value = false
 }
 
+function renderPdfPagesAsync(filePath: string): Promise<PdfRenderResult> {
+	return new Promise((resolve, reject) => {
+		const options = {
+			filePath: filePath,
+			scale: 2.0,
+			maxPages: 20,
+			success: (res: PdfRenderResult) => {
+				resolve(res)
+			},
+			fail: (err: PdfRenderFail) => {
+				reject(new Error(err.errMsg == '' ? 'PDF预览渲染失败' : err.errMsg))
+			},
+		} as PdfRenderPagesOptions
+		renderPdfPages(options)
+	})
+}
+
 async function loadPdfPreview() {
 	if (invoiceId.value == '' || pdfLoading.value) return
 	pdfLoading.value = true
 	pdfErrorMessage.value = ''
+	pdfPreviewPages.value = []
+	pdfPageCount.value = 0
+	pdfZoom.value = 1
 	try {
 		if (invoice.value != null && invoice.value.raw_xml == '') {
 			pdfLoadingText.value = '正在同步XML'
@@ -666,9 +733,16 @@ async function loadPdfPreview() {
 		}
 		pdfLoadingText.value = '正在生成PDF'
 		const result = await downloadKsefInvoicePdfFile(invoiceId.value)
-		pdfPreviewSrc.value = result.tempFilePath
+		pdfLoadingText.value = '正在渲染预览'
+		const rendered = await renderPdfPagesAsync(result.tempFilePath)
+		if (rendered.pages.length == 0) {
+			throw new Error('PDF没有可预览页面')
+		}
+		pdfPreviewPages.value = rendered.pages
+		pdfPageCount.value = rendered.pageCount
 	} catch (error) {
-		pdfPreviewSrc.value = ''
+		pdfPreviewPages.value = []
+		pdfPageCount.value = 0
 		pdfErrorMessage.value = parseErrorMessage(error, 'PDF加载失败')
 	} finally {
 		pdfLoading.value = false
@@ -678,7 +752,7 @@ async function loadPdfPreview() {
 function openPdfPopup() {
 	if (invoice.value == null) return
 	pdfPopupVisible.value = true
-	if (pdfPreviewSrc.value == '' && !pdfLoading.value) {
+	if (pdfPreviewPages.value.length == 0 && !pdfLoading.value) {
 		loadPdfPreview()
 	}
 }
@@ -687,18 +761,73 @@ function closePdfPopup() {
 	pdfPopupVisible.value = false
 }
 
-function openPdfDocument() {
-	if (pdfPreviewSrc.value == '') {
-		loadPdfPreview()
-		return
+function setPdfZoom(value: number) {
+	let next = value
+	if (next < 1) next = 1
+	if (next > 4) next = 4
+	pdfZoom.value = Math.round(next * 10) / 10
+}
+
+function zoomPdfIn() {
+	setPdfZoom(pdfZoom.value + 0.25)
+}
+
+function zoomPdfOut() {
+	setPdfZoom(pdfZoom.value - 0.25)
+}
+
+function resetPdfZoom() {
+	setPdfZoom(1)
+}
+
+function pdfTouchPoints(event: any): UTSJSONObject[] {
+	const touchEvent = event as TouchEvent
+	if (touchEvent.touches.length >= 2) {
+		const first = touchEvent.touches[0]
+		const second = touchEvent.touches[1]
+		return [
+			{ x: first.clientX, y: first.clientY } as UTSJSONObject,
+			{ x: second.clientX, y: second.clientY } as UTSJSONObject,
+		]
 	}
-	uni.openDocument({
-		filePath: pdfPreviewSrc.value,
-		fileType: 'pdf',
-		fail: (error) => {
-			showErrorToast(parseErrorMessage(error, 'PDF打开失败'))
-		},
-	})
+	const text = JSON.stringify(event)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const object = JSON.parseObject<UTSJSONObject>(text)
+	if (object == null) return [] as UTSJSONObject[]
+	const current = object as UTSJSONObject
+	const touches = JSON.parseArray<UTSJSONObject>(JSON.stringify(current['touches']))
+	if (touches == null || touches.length < 2) return [] as UTSJSONObject[]
+	return touches
+}
+
+function pdfTouchDistance(event: any): number {
+	const points = pdfTouchPoints(event)
+	if (points.length < 2) return 0
+	const first = points[0]
+	const second = points[1]
+	const dx = floatValue(first['x'], 0) - floatValue(second['x'], 0)
+	const dy = floatValue(first['y'], 0) - floatValue(second['y'], 0)
+	return Math.sqrt(dx * dx + dy * dy)
+}
+
+function handlePdfPreviewTouchStart(event: any) {
+	const distance = pdfTouchDistance(event)
+	if (distance <= 0) return
+	pdfPinchStartDistance.value = distance
+	pdfPinchStartZoom.value = pdfZoom.value
+}
+
+function handlePdfPreviewTouchMove(event: any) {
+	const distance = pdfTouchDistance(event)
+	if (distance <= 0 || pdfPinchStartDistance.value <= 0) return
+	setPdfZoom(pdfPinchStartZoom.value * distance / pdfPinchStartDistance.value)
+}
+
+function handlePdfPreviewTouchEnd(event: any) {
+	const distance = pdfTouchDistance(event)
+	if (distance > 0) return
+	pdfPinchStartDistance.value = 0
+	pdfPinchStartZoom.value = pdfZoom.value
 }
 
 function openAttachment(file: UTSJSONObject) {
@@ -794,6 +923,45 @@ async function savePayment() {
 	}
 }
 
+async function savePaymentReview(status: string) {
+	if (invoiceId.value == '' || saving.value || invoice.value == null) return
+	saving.value = true
+	try {
+		const data = await reviewKsefInvoicePayment(invoiceId.value, {
+			payment_review_status: status,
+			payment_review_note: invoice.value.payment_review_note,
+		})
+		invoice.value = data
+		applyDraft(data)
+		uni.setStorageSync(refreshStorageKey, '1')
+		uni.showToast({ title: takeLatestResponseMessage('审核已保存'), icon: 'success' })
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '审核保存失败'))
+	} finally {
+		saving.value = false
+	}
+}
+
+function openPaymentReviewSheet() {
+	if (invoice.value == null) return
+	uni.showActionSheet({
+		itemList: ['标记可支付', '标记不支付', '设为待审核'],
+		success: (res) => {
+			if (res.tapIndex == 0) {
+				savePaymentReview('PAYABLE')
+				return
+			}
+			if (res.tapIndex == 1) {
+				savePaymentReview('NOT_PAYABLE')
+				return
+			}
+			if (res.tapIndex == 2) {
+				savePaymentReview('PENDING')
+			}
+		},
+	})
+}
+
 async function persistSupplierLink(nextSupplierId: string | null) {
 	if (invoiceId.value == '' || supplierSaving.value) return
 	supplierSaving.value = true
@@ -840,6 +1008,20 @@ const pdfPreviewFrameStyle = computed((): string => {
 	let height = popupPanelHeight.value - 112
 	if (height < 360) height = 360
 	return 'height:' + height.toString() + 'px;'
+})
+
+const pdfPageViewportStyle = computed((): string => {
+	return 'height:' + pdfPageViewportHeight.value.toString() + 'px;'
+})
+
+const pdfPageZoomStyle = computed((): string => {
+	const percent = Math.round(pdfZoom.value * 100)
+	const height = Math.round(pdfPageViewportHeight.value * pdfZoom.value)
+	return 'width:' + percent.toString() + '%;height:' + height.toString() + 'px;'
+})
+
+const pdfZoomText = computed((): string => {
+	return Math.round(pdfZoom.value * 100).toString() + '%'
 })
 
 const invoiceNumberText = computed((): string => {
@@ -988,6 +1170,13 @@ const paymentDataStatusText = computed((): string => {
 	return 'XML未提供付款节点'
 })
 
+const paymentReviewActionText = computed((): string => {
+	if (invoice.value == null) return '-'
+	const statusText = invoice.value.payment_review_status_display == '' ? paymentReviewFallbackText(invoice.value.payment_review_status) : invoice.value.payment_review_status_display
+	if (invoice.value.payment_reviewed_by_name != '') return statusText + ' · ' + invoice.value.payment_reviewed_by_name
+	return statusText
+})
+
 const paymentInfoActionText = computed((): string => {
 	if (invoice.value == null) return '-'
 	return normalizedAccount.value == '' ? paymentDataStatusText.value : displayText(normalizedAccount.value)
@@ -1010,13 +1199,13 @@ const voucherUploadText = computed((): string => {
 const pdfActionText = computed((): string => {
 	if (invoice.value == null) return '-'
 	if (invoice.value.raw_xml == '') return '需先同步XML'
-	return pdfPreviewSrc.value == '' ? '底部预览' : '继续查看'
+	return pdfPreviewPages.value.length == 0 ? '内嵌预览' : '继续查看'
 })
 
 const pdfPopupSubtitle = computed((): string => {
-	if (pdfLoading.value) return '正在调用官方PDF解析'
+	if (pdfLoading.value) return pdfLoadingText.value
 	if (pdfErrorMessage.value != '') return '官方PDF生成失败'
-	if (pdfPreviewSrc.value != '') return '来自后端官方解析插件'
+	if (pdfPreviewPages.value.length > 0) return '已渲染 ' + pdfPreviewPages.value.length.toString() + ' / ' + pdfPageCount.value.toString() + ' 页'
 	return pdfActionText.value
 })
 
@@ -1041,6 +1230,7 @@ const invoiceRows = computed((): UTSJSONObject[] => {
 		{ key: 'gross', label: '总额', value: displayText(invoice.value.gross_amount) + ' ' + displayText(invoice.value.currency) } as UTSJSONObject,
 		{ key: 'files', label: '附件数', value: invoice.value.files_count.toString() } as UTSJSONObject,
 		{ key: 'xml_lines', label: 'XML商品行', value: xmlLineItemsCountText.value } as UTSJSONObject,
+		{ key: 'payment_review', label: '支付审核', value: paymentReviewActionText.value } as UTSJSONObject,
 		{ key: 'payment_source', label: '付款数据', value: paymentDataStatusText.value } as UTSJSONObject,
 		{ key: 'sync', label: '详情状态', value: invoice.value.raw_xml_downloaded_at == '' ? '未下载XML' : compactDate(invoice.value.raw_xml_downloaded_at) } as UTSJSONObject,
 	]
@@ -1566,14 +1756,66 @@ onLoad((event: OnLoadOptions) => {
 .pdf-loading {
 	background-color: #F8FAFC;
 	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	overflow: hidden;
+}
+
+.pdf-loading {
 	align-items: center;
 	justify-content: center;
 }
 
-.pdf-webview {
-	flex: 1;
+.pdf-page-list {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+.pdf-page-card {
+	margin-left: 8px;
+	margin-right: 8px;
+	margin-bottom: 10px;
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	overflow: hidden;
+}
+
+.pdf-page-viewport {
+	width: 100%;
+	background-color: #FFFFFF;
+	overflow: hidden;
+}
+
+.pdf-page-zoom-wrap {
 	width: 100%;
 	height: 100%;
+	align-items: center;
+	justify-content: center;
+	background-color: #FFFFFF;
+}
+
+.pdf-page-image {
+	width: 100%;
+	height: 100%;
+	background-color: #FFFFFF;
+}
+
+.pdf-page-note {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 10px;
+	align-items: center;
+}
+
+.pdf-page-note-text {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	text-align: center;
 }
 
 .pdf-loading-text {
@@ -1588,7 +1830,50 @@ onLoad((event: OnLoadOptions) => {
 .pdf-actions {
 	flex-direction: row;
 	align-items: center;
+	justify-content: space-between;
 	margin-top: 10px;
+}
+
+.pdf-zoom-btn {
+	height: 38px;
+	min-width: 58px;
+	border-radius: 10px;
+	background-color: #EEF2F7;
+	align-items: center;
+	justify-content: center;
+	padding-left: 10px;
+	padding-right: 10px;
+	margin-right: 8px;
+}
+
+.pdf-zoom-btn-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.pdf-zoom-value {
+	height: 38px;
+	min-width: 58px;
+	border-radius: 10px;
+	background-color: #111827;
+	align-items: center;
+	justify-content: center;
+	padding-left: 10px;
+	padding-right: 10px;
+	margin-right: 8px;
+}
+
+.pdf-zoom-value-text {
+	font-size: 13px;
+	line-height: 13px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.pdf-refresh-btn {
+	flex: 1;
 }
 
 .switch-line {

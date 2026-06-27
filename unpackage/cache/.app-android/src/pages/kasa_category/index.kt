@@ -78,13 +78,9 @@ open class GenPagesKasaCategoryIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any): String {
                 var message = "收银分类列表加载失败"
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:217")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/kasa_category/index.uvue:214")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -346,7 +342,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
             val kasaCategoryToListItem = ::gen_kasaCategoryToListItem_fn
             fun gen_copyText_fn(text: String, successTitle: String, emptyTitle: String) {
                 if (text == "" || text == "-") {
-                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = emptyTitle, icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = text, success = fun(_){
@@ -483,7 +479,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                 return wrapUTSPromise(suspend w1@{
                         val items = selectedItems()
                         if (items.length == 0) {
-                            uni_showToast(ShowToastOptions(title = "请先选择收银分类", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请先选择收银分类", icon = "none", duration = 3500))
                             return@w1
                         }
                         try {
@@ -515,7 +511,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                             loadStatistics()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                         }
                 })
             }
@@ -576,7 +572,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                             loadStatistics()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                         }
                 })
             }
@@ -590,7 +586,7 @@ open class GenPagesKasaCategoryIndex : BasePage {
                             loadStatistics()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                         }
                 })
             }

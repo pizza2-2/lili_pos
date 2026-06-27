@@ -78,13 +78,9 @@ open class GenPagesCategoryFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:147")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/from.uvue:144")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -274,11 +270,11 @@ open class GenPagesCategoryFrom : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:334")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/from.uvue:331")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_cloneFormData_fn(source: UTSJSONObject): UTSJSONObject {
-                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pages/category/from.uvue", 338, 8))
+                val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pages/category/from.uvue", 335, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     target[key] = source[key]
                 }
@@ -307,7 +303,7 @@ open class GenPagesCategoryFrom : BasePage {
             fun gen_copyAiTranslationPrompt_fn() {
                 val sourceName = stringValue(getCurrentFormData()["name"]).trim()
                 if (sourceName == "") {
-                    uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none", duration = 3500))
                     return
                 }
                 uni_setClipboardData(SetClipboardDataOptions(data = buildAiTranslationPrompt(sourceName), success = fun(_){
@@ -339,7 +335,7 @@ open class GenPagesCategoryFrom : BasePage {
                         }
                         val sourceName = stringValue(getCurrentFormData()["name"]).trim()
                         if (sourceName == "") {
-                            uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请先填写分类名称", icon = "none", duration = 3500))
                             return@w1
                         }
                         translating.value = true
@@ -348,14 +344,14 @@ open class GenPagesCategoryFrom : BasePage {
                             val response = await(translateCategoryName(sourceName))
                             val translated = extractTranslatedName(response).trim()
                             if (translated == "") {
-                                uni_showToast(ShowToastOptions(title = "服务器未返回译文", icon = "none"))
+                                uni_showToast(ShowToastOptions(title = "服务器未返回译文", icon = "none", duration = 3500))
                                 return@w1
                             }
                             setCurrentFormField("name_en", translated)
                             uni_showToast(ShowToastOptions(title = "波兰语名称已填充", icon = "success"))
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "服务器翻译失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "服务器翻译失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -468,7 +464,7 @@ open class GenPagesCategoryFrom : BasePage {
                             , "text" to parentText)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "分类详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "分类详情加载失败"))
                         }
                 })
             }
@@ -552,7 +548,7 @@ open class GenPagesCategoryFrom : BasePage {
                         }
                         val name = stringValue(data["name"]).trim()
                         if (name == "") {
-                            uni_showToast(ShowToastOptions(title = "分类名称不能为空", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "分类名称不能为空", icon = "none", duration = 3500))
                             return@w1
                         }
                         submitting.value = true
@@ -595,12 +591,12 @@ open class GenPagesCategoryFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, if (isEditing) {
+                            showErrorToast(parseErrorMessage(error, if (isEditing) {
                                 "分类保存失败"
                             } else {
                                 "分类创建失败"
                             }
-                            ), icon = "none"))
+                            ))
                         }
                          finally {
                             savingVisible.value = false
@@ -659,11 +655,11 @@ open class GenPagesCategoryFrom : BasePage {
             }
             val handleInputAction = ::gen_handleInputAction_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "name", "label" to "分类名称", "type" to "input", "required" to true, "placeholder" to "请输入分类名称"), _uO("key" to "name_en", "label" to "波兰语名称", "type" to "input", "placeholder" to "请输入波兰语名称", "leftActionKey" to "copy-ai-translation-prompt", "leftActionIcon" to "/static/icon/ai.svg", "rightActionKey" to "server-translate-name", "rightActionIcon" to "/static/icon/search.svg"), _uO("key" to "code", "label" to "分类编码", "type" to "input", "placeholder" to "留空则自动生成"), _uO("key" to "parent_text", "label" to "当前父分类", "type" to "input", "readonly" to true, "placeholder" to "根分类（无父分类）"), _uO("key" to "parent_id", "label" to "调整父分类", "type" to "bottomSelect", "textKey" to "parent_text", "title" to "选择父分类", "placeholder" to "请选择父分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/category/from", "editPath" to "/pages/category/from", "editOnly" to true, "fetchData" to fetchParentOptions), _uO("key" to "description", "label" to "分类描述", "type" to "textarea", "placeholder" to "请输入分类描述"))), _uO("key" to "relation", "title" to "关联设置", "description" to "", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "kasa_category_id", "label" to "关联收银分类", "type" to "bottomSelect", "textKey" to "kasa_category_text", "title" to "选择收银分类", "placeholder" to "请选择收银分类", "searchPlaceholder" to "请输入收银分类名称", "emptyText" to "暂无收银分类", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/kasa_category/form", "editPath" to "/pages/kasa_category/form", "fetchData" to fetchKasaCategoryOptions), _uO("key" to "tax_rate", "label" to "税率", "type" to "bottomSelect", "textKey" to "tax_rate_text", "title" to "选择税率", "placeholder" to "请选择税率", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchTaxRateOptions), _uO("key" to "sort_order", "label" to "排序号", "type" to "number", "placeholder" to "请输入排序号"))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "is_active", "label" to "启用状态", "type" to "switch", "defaultValue" to true)))))
@@ -706,7 +702,7 @@ open class GenPagesCategoryFrom : BasePage {
                     val parentNameText = if (parentNameValue == null) {
                         ""
                     } else {
-                        UTSAndroid.consoleDebugError(decodeURIComponent("" + parentNameValue), " at pages/category/from.uvue:847")
+                        UTSAndroid.consoleDebugError(decodeURIComponent("" + parentNameValue), " at pages/category/from.uvue:835")
                     }
                     parentInfo.value = _uO("id" to parentIdText, "text" to if (parentNameText == "") {
                         parentIdText

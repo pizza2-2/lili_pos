@@ -1,0 +1,11 @@
+import { PdfRenderErrorCode, PdfRenderFail } from './interface.uts'
+
+export function makePdfRenderFail(code: PdfRenderErrorCode, message: string): PdfRenderFail {
+	return {
+		success: false,
+		code: code,
+		message: message,
+		errCode: code,
+		errMsg: message,
+	} as PdfRenderFail
+}

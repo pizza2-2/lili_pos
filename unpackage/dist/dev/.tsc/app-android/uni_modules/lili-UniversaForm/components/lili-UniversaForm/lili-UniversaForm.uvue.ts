@@ -12,7 +12,7 @@ import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
 
-type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 242, 6>;
+type Props = { __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 243, 6>;
 	mode?: string
 	formSections?: UTSJSONObject[]
 	initialData?: UTSJSONObject
@@ -79,7 +79,7 @@ function getObjectField(obj: UTSJSONObject, key: string) : UTSJSONObject {
 }
 
 function cloneObject(source: UTSJSONObject) : UTSJSONObject {
-	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 313, 8), } as UTSJSONObject
+	const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 314, 8), } as UTSJSONObject
 	for (const key in source) {
 		target[key] = source[key]
 	}
@@ -329,6 +329,15 @@ function getDefaultValue(field: UTSJSONObject) : any {
 	return ''
 }
 
+function shouldUseDefaultValue(field: UTSJSONObject, incoming: any | null) : boolean {
+	if (incoming == null) return true
+	const fieldType = getFieldType(field)
+	if (fieldType == 'datetime' && getBooleanField(field, 'defaultToToday', false)) {
+		return ('' + incoming) == ''
+	}
+	return false
+}
+
 function getFieldValue(field: UTSJSONObject) : any {
 	const key = getFieldKey(field)
 	if (key == '') return getDefaultValue(field)
@@ -508,6 +517,10 @@ function showBottomSelectScan(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'showScan', false)
 }
 
+function getBottomSelectAutoSelectUnique(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'autoSelectUnique', false)
+}
+
 function getBottomSelectScanOnlyFromCamera(field: UTSJSONObject) : boolean {
 	return getBooleanField(field, 'scanOnlyFromCamera', true)
 }
@@ -614,7 +627,7 @@ function clearFieldError(key: string) {
 }
 
 function emitFieldChange(field: UTSJSONObject, value: any) {
-	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 848, 8), 
+	const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 862, 8), 
 		field: field,
 		key: getFieldKey(field),
 		value: value,
@@ -626,7 +639,7 @@ function emitFieldChange(field: UTSJSONObject, value: any) {
 }
 
 function serializeState() : string {
-	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 860, 8), 
+	const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 874, 8), 
 		mode: props.mode,
 		formData: formData.value,
 	} as UTSJSONObject
@@ -657,7 +670,7 @@ function markDirty() {
 }
 
 function applyInitialValues() {
-	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 891, 8), } as UTSJSONObject
+	const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 905, 8), } as UTSJSONObject
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
 		for (let j = 0; j < fields.length; j++) {
@@ -665,10 +678,10 @@ function applyInitialValues() {
 			const key = getFieldKey(field)
 			if (key == '') continue
 			const incoming = props.initialData[key]
-			if (incoming != null) {
-				nextData[key] = incoming
-			} else {
+			if (shouldUseDefaultValue(field, incoming)) {
 				nextData[key] = getDefaultValue(field)
+			} else {
+				nextData[key] = incoming
 			}
 			const textKey = getBottomSelectTextKey(field)
 			if (textKey != '') {
@@ -817,7 +830,7 @@ function handleBottomSelectEdit(field: UTSJSONObject) {
 		if (value == '') {
 			uni.showToast({
 				title: '请先选择要编辑的项目',
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 			return
 		}
@@ -853,7 +866,7 @@ function handleUploadFileItemsChange(field: UTSJSONObject, value: any) {
 	const nextItems: UTSJSONObject[] = []
 	for (let index = 0; index < sourceItems.length; index++) {
 		const sourceItem = sourceItems[index]
-		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1087, 9), } as UTSJSONObject
+		const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1101, 9), } as UTSJSONObject
 		for (const key in sourceItem) {
 			clonedItem[key] = sourceItem[key]
 		}
@@ -925,7 +938,7 @@ function validateField(field: UTSJSONObject) : string {
 }
 
 function validate() : boolean {
-	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1159, 8), } as UTSJSONObject
+	const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1173, 8), } as UTSJSONObject
 	let hasError = false
 	for (let i = 0; i < props.formSections.length; i++) {
 		const fields = getSectionFields(props.formSections[i])
@@ -979,7 +992,7 @@ function handleSubmit() {
 	if (!validate()) {
 		uni.showToast({
 			title: '请检查必填项',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -1029,7 +1042,7 @@ function handleScanClick(field: UTSJSONObject) {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
 			uni.showToast({
 				title: message,
-				icon: 'none',
+				icon: 'none', duration: 3500,
 			})
 		},
 	} as ScanCodeOption)
@@ -1476,6 +1489,7 @@ const _component_switch = resolveComponent("switch")
                                               showEditAction: showBottomSelectEdit(field),
                                               showAddAction: showBottomSelectAdd(field),
                                               showScan: showBottomSelectScan(field),
+                                              autoSelectUnique: getBottomSelectAutoSelectUnique(field),
                                               scanOnlyFromCamera: getBottomSelectScanOnlyFromCamera(field),
                                               addPath: getBottomSelectAddPath(field),
                                               editPath: getBottomSelectEditPath(field),
@@ -1484,7 +1498,7 @@ const _component_switch = resolveComponent("switch")
                                               onChange: ($event: any) => {handleBottomSelectChange(field, $event)},
                                               onEdit: () => {handleBottomSelectEdit(field)},
                                               onAdd: () => {handleBottomSelectAdd(field)}
-                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "imageKey", "subtitleKey", "valueImage", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "showScan", "scanOnlyFromCamera", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
+                                            }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "imageKey", "subtitleKey", "valueImage", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "showScan", "autoSelectUnique", "scanOnlyFromCamera", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
                                           ])
                                         : isTrue(isUploadField(field))
                                           ? _cE("view", _uM({

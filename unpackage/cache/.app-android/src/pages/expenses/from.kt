@@ -51,7 +51,7 @@ open class GenPagesExpensesFrom : BasePage {
             }
             val getArrayField = ::gen_getArrayField_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 81, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 82, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -76,13 +76,9 @@ open class GenPagesExpensesFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:106")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:105")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -280,7 +276,7 @@ open class GenPagesExpensesFrom : BasePage {
                             initialData.value = buildInitialDataFromExpense(detail)
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "支出详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "支出详情加载失败"))
                         }
                 })
             }
@@ -378,11 +374,11 @@ open class GenPagesExpensesFrom : BasePage {
                         }
                         val body = buildMutationPayload(data)
                         if (body.amount == "" || parseFloat(body.amount) <= 0 || isNaN(parseFloat(body.amount))) {
-                            uni_showToast(ShowToastOptions(title = "请输入有效的支出金额", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请输入有效的支出金额", icon = "none", duration = 3500))
                             return@w1
                         }
                         if (body.expenditure_date == "") {
-                            uni_showToast(ShowToastOptions(title = "请选择支出日期", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请选择支出日期", icon = "none", duration = 3500))
                             return@w1
                         }
                         val uploadContentTypeModel = getStringField(payload, "uploadContentTypeModel").trim()
@@ -426,7 +422,7 @@ open class GenPagesExpensesFrom : BasePage {
                             if (!pageTaskGuard.canApply(taskToken)) {
                                 return@w1
                             }
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, actionText + "失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, actionText + "失败"))
                         }
                          finally {
                             if (pageTaskGuard.canApply(taskToken)) {
@@ -465,15 +461,15 @@ open class GenPagesExpensesFrom : BasePage {
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "请先在后台维护支出类型或供应商", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "请先在后台维护支出类型或供应商", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持直接编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             fun gen_handleUpload_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "凭证已加入待保存列表", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "凭证已加入待保存列表", icon = "none", duration = 3500))
             }
             val handleUpload = ::gen_handleUpload_fn
             fun gen_handleUploadDelete_fn(payload: UTSJSONObject) {
@@ -481,7 +477,7 @@ open class GenPagesExpensesFrom : BasePage {
             }
             val handleUploadDelete = ::gen_handleUploadDelete_fn
             fun gen_handleUploadError_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "凭证上传失败", icon = "none"))
+                showErrorToast("凭证上传失败")
             }
             val handleUploadError = ::gen_handleUploadError_fn
             onLoad(fun(event: OnLoadOptions){

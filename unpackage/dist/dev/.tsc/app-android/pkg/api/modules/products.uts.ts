@@ -4,6 +4,7 @@ export type ProductListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	ordering: string
 	filters: ProductSelectedFilter[]
 }
 
@@ -41,6 +42,7 @@ export type ProductItem = {
 	description: string
 	media_files: ProductMediaFile[]
 	category: any | null
+	category_kasa_kod: string
 	supplier: number | null
 	supplier_name: string
 	purchase_price: string
@@ -54,6 +56,7 @@ export type ProductItem = {
 	sort_order: number
 	rating: string
 	variant_count: number
+	total_stock_quantity: number
 	total_sales_quantity: number
 	total_sales_amount: string
 	last_sale_date: string | null
@@ -102,6 +105,12 @@ export type ProductListResponse = {
 	total_pages: number
 	current_page: number
 	page_size: number
+}
+
+export type ProductBatchActionResponse = {
+	success: boolean
+	message: string
+	data: UTSJSONObject
 }
 
 export type ProductFilterOption = {
@@ -263,6 +272,9 @@ function buildListQuery(data: ProductListQuery): UTSJSONObject {
 
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
+	}
+	if (data.ordering != '') {
+		query['ordering'] = data.ordering
 	}
 
 	for (let filterIndex = 0; filterIndex < data.filters.length; filterIndex += 1) {
@@ -467,6 +479,7 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		description: stringValue(rawObject['description']),
 		media_files: buildProductMediaFilesFromValue(rawObject['media_files']),
 		category: rawObject['category'],
+		category_kasa_kod: stringValue(rawObject['category_kasa_kod']),
 		supplier: rawObject['supplier'] == null ? null : intValue(rawObject['supplier']),
 		supplier_name: stringValue(rawObject['supplier_name']),
 		purchase_price: stringValue(rawObject['purchase_price']),
@@ -480,6 +493,7 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		sort_order: intValue(rawObject['sort_order']),
 		rating: stringValue(rawObject['rating']),
 		variant_count: intValue(rawObject['variant_count']),
+		total_stock_quantity: intValue(rawObject['total_stock_quantity']),
 		total_sales_quantity: intValue(rawObject['total_sales_quantity']),
 		total_sales_amount: stringValue(rawObject['total_sales_amount']),
 		last_sale_date: rawObject['last_sale_date'] == null ? null : stringValue(rawObject['last_sale_date']),
@@ -793,6 +807,47 @@ function productDetailPath(id: number | string): string {
 	return productsBasePath + stringValue(id) + '/'
 }
 
+function productBatchActionPath(action: string): string {
+	return productsBasePath + 'batch-actions/' + action + '/'
+}
+
+function buildProductBatchActionResponse(raw: any): ProductBatchActionResponse {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		return {
+			success: true,
+			message: '操作成功',
+			data: {} as UTSJSONObject,
+		} as ProductBatchActionResponse
+	}
+	return {
+		success: true,
+		message: stringValue(rawObject['message']),
+		data: rawObject,
+	} as ProductBatchActionResponse
+}
+
+function buildProductBatchActionBody(ids: string[], remark: string | null = null): UTSJSONObject {
+	const nextIds: any[] = []
+	for (let index = 0; index < ids.length; index += 1) {
+		const text = stringValue(ids[index])
+		const parsed = parseInt(text)
+		if (!isNaN(parsed) && '' + parsed == text) {
+			nextIds.push(parsed)
+		} else {
+			nextIds.push(text)
+		}
+	}
+	const body = {
+		ids: nextIds,
+	} as UTSJSONObject
+	if (remark != null && remark != '') {
+		body['remark'] = remark
+	}
+	return body
+}
+
 function pricingFormulaDetailPath(id: number | string): string {
 	return productPricingFormulasBasePath + stringValue(id) + '/'
 }
@@ -977,6 +1032,52 @@ export async function updateProduct(id: number | string, data: ProductMutationDa
 		true
 	)
 	return normalizeProductItem(buildProductItemResponse(raw))
+}
+
+export async function batchDeleteProducts(ids: string[], remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const raw = await request(
+		productBatchActionPath('delete'),
+		'POST',
+		buildProductBatchActionBody(ids, remark),
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+export async function batchUpdateProductCategory(ids: string[], category: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['category'] = category
+	const raw = await request(
+		productBatchActionPath('update-category'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+export async function batchUpdateProductSupplier(ids: string[], supplier: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['supplier'] = supplier
+	const raw = await request(
+		productBatchActionPath('update-supplier'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+export async function batchUpdateProductStatus(ids: string[], status: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['status'] = status
+	const raw = await request(
+		productBatchActionPath('update-status'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
 }
 
 export async function getProductPricingFormulaDetail(id: number | string): Promise<ProductPricingFormulaItem> {

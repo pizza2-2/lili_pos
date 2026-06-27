@@ -1,7 +1,7 @@
 import { authState, redirectToLogin } from '@/store/auth'
 
 export const baseUrl: string = 'http://43.157.91.24:1996'		//服务器请求接口地址http://43.157.91.24:1996/
-// export const baseUrl: string = 'http://127.0.0.1:8000'		//服务器请求接口地址http://43.157.91.24:1996/
+// export const baseUrl: string = 'http://192.168.1.108:8000'		//服务器请求接口地址http://43.157.91.24:1996/
 export const timeOut: number = 10000							//网络请求超时时间
 const loginApiUrl = '/api/accounts/auth/login/'
 

@@ -103,6 +103,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             val summaryExpanded = ref<Boolean>(!props.summaryCollapsedByDefault)
             val internalSelectionMode = ref<Boolean>(props.selectionMode)
             val internalSelectedItems = ref<UTSArray<String>>(props.selectedItems.slice())
+            val batchActionMenuVisible = ref<Boolean>(false)
             val showBlockingLoading = computed<Boolean>(fun(): Boolean {
                 if (!props.loading) {
                     return false
@@ -158,6 +159,27 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return "" + value
             }
             val stringValue = ::gen_stringValue_fn
+            fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
+                if (value == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                val text = JSON.stringify(value)
+                if (text == null || text == "") {
+                    return _uA<UTSJSONObject>()
+                }
+                var parsed: UTSArray<UTSJSONObject>? = null
+                try {
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue:404")
+                }
+                 catch (error: Throwable) {
+                    return _uA<UTSJSONObject>()
+                }
+                if (parsed == null) {
+                    return _uA<UTSJSONObject>()
+                }
+                return parsed!!
+            }
+            val parseObjectArray = ::gen_parseObjectArray_fn
             fun gen_summaryItemLabel_fn(item: UTSJSONObject): String {
                 return stringValue(item["label"])
             }
@@ -247,6 +269,11 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return stringValue(field["type"])
             }
             val fieldType = ::gen_fieldType_fn
+            fun gen_fieldHideWhenEmpty_fn(field: UTSJSONObject): Boolean {
+                val raw = field["hideWhenEmpty"]
+                return raw == true
+            }
+            val fieldHideWhenEmpty = ::gen_fieldHideWhenEmpty_fn
             fun gen_fieldKey_fn(field: UTSJSONObject, index: Number): String {
                 val key = stringValue(field["key"])
                 if (key != "") {
@@ -271,6 +298,14 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return stringValue(action["text"])
             }
             val menuText = ::gen_menuText_fn
+            fun gen_itemMenuActions_fn(item: UTSJSONObject): UTSArray<UTSJSONObject> {
+                val itemActions = parseObjectArray(item["menuActions"])
+                if (itemActions.length > 0) {
+                    return itemActions
+                }
+                return props.menuActions
+            }
+            val itemMenuActions = ::gen_itemMenuActions_fn
             fun gen_actionIcon_fn(action: UTSJSONObject): String {
                 return stringValue(action["icon"])
             }
@@ -329,6 +364,28 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 return raw
             }
             val displayField = ::gen_displayField_fn
+            fun gen_fieldVisible_fn(item: UTSJSONObject, field: UTSJSONObject): Boolean {
+                if (!fieldHideWhenEmpty(field)) {
+                    return true
+                }
+                return displayField(item, field) != ""
+            }
+            val fieldVisible = ::gen_fieldVisible_fn
+            fun gen_visibleFields_fn(item: UTSJSONObject): UTSArray<UTSJSONObject> {
+                val result: UTSArray<UTSJSONObject> = _uA()
+                run {
+                    var i: Number = 0
+                    while(i < props.fields.length){
+                        val field = props.fields[i]
+                        if (fieldVisible(item, field)) {
+                            result.push(field)
+                        }
+                        i++
+                    }
+                }
+                return result
+            }
+            val visibleFields = ::gen_visibleFields_fn
             fun gen_itemId_fn(item: UTSJSONObject): String {
                 return fieldText(item, props.keyField)
             }
@@ -381,6 +438,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 emit("selection-enter", _uO("item" to seedItem, "selectedItems" to internalSelectedItems.value))
             }
             fun gen_exitSelectionMode_fn() {
+                batchActionMenuVisible.value = false
                 internalSelectionMode.value = false
                 emitSelectedItems(_uA<String>())
                 emit("update:selectionMode", false)
@@ -691,23 +749,24 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             }
             val handleAction = ::gen_handleAction_fn
             fun gen_handleMenu_fn(item: UTSJSONObject) {
-                if (props.menuActions.length == 0) {
+                val actions = itemMenuActions(item)
+                if (actions.length == 0) {
                     return
                 }
                 val itemList: UTSArray<String> = _uA()
                 run {
                     var i: Number = 0
-                    while(i < props.menuActions.length){
-                        itemList.push(menuText(props.menuActions[i]))
+                    while(i < actions.length){
+                        itemList.push(menuText(actions[i]))
                         i++
                     }
                 }
                 uni_showActionSheet(ShowActionSheetOptions(itemList = itemList, success = fun(res){
                     val selectedIndex = res.tapIndex
-                    if (selectedIndex < 0 || selectedIndex >= props.menuActions.length) {
+                    if (selectedIndex < 0 || selectedIndex >= actions.length) {
                         return
                     }
-                    emit("menu", _uO("item" to item, "action" to props.menuActions[selectedIndex], "index" to selectedIndex))
+                    emit("menu", _uO("item" to item, "action" to actions[selectedIndex], "index" to selectedIndex))
                 }
                 ))
             }
@@ -760,6 +819,40 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                 emit("batch-action", _uO("action" to action, "selectedItems" to internalSelectedItems.value, "selectedRows" to selectedItemObjects()))
             }
             val handleBatchAction = ::gen_handleBatchAction_fn
+            fun gen_openBatchActionMenu_fn() {
+                if (props.batchActions.length == 0) {
+                    return
+                }
+                if (props.batchActions.length == 1 && stringValue(props.batchActions[0]["key"]) == "more") {
+                    handleBatchAction(props.batchActions[0])
+                    return
+                }
+                batchActionMenuVisible.value = true
+            }
+            val openBatchActionMenu = ::gen_openBatchActionMenu_fn
+            fun gen_closeBatchActionMenu_fn() {
+                batchActionMenuVisible.value = false
+            }
+            val closeBatchActionMenu = ::gen_closeBatchActionMenu_fn
+            fun gen_handleBatchMenuAction_fn(action: UTSJSONObject) {
+                batchActionMenuVisible.value = false
+                handleBatchAction(action)
+            }
+            val handleBatchMenuAction = ::gen_handleBatchMenuAction_fn
+            fun gen_batchMenuActionClass_fn(action: UTSJSONObject): String {
+                if (stringValue(action["key"]) == "delete") {
+                    return "lul-batch-menu-action lul-batch-menu-action-danger"
+                }
+                return "lul-batch-menu-action"
+            }
+            val batchMenuActionClass = ::gen_batchMenuActionClass_fn
+            fun gen_batchMenuActionTextClass_fn(action: UTSJSONObject): String {
+                if (stringValue(action["key"]) == "delete") {
+                    return "lul-batch-menu-action-text lul-batch-menu-action-text-danger"
+                }
+                return "lul-batch-menu-action-text"
+            }
+            val batchMenuActionTextClass = ::gen_batchMenuActionTextClass_fn
             watch(fun(): UTSArray<String> {
                 return props.selectedItems
             }
@@ -780,6 +873,9 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             }
             , fun(newValue: Boolean){
                 internalSelectionMode.value = newValue
+                if (!newValue) {
+                    batchActionMenuVisible.value = false
+                }
                 if (!newValue && internalSelectedItems.value.length > 0) {
                     internalSelectedItems.value = _uA<String>()
                 }
@@ -791,6 +887,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             ))
             return fun(): Any? {
                 val _component_lili_preview = resolveEasyComponent("lili-preview", GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass)
+                val _component_page_container = resolveComponent("page-container")
                 return _cE("view", _uM("class" to "lul-root"), _uA(
                     if (isTrue(unref(showSummaryBar))) {
                         _cE("view", _uM("key" to 0, "class" to "lul-summary-wrap"), _uA(
@@ -976,7 +1073,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                             )),
                                             if (_ctx.fields.length > 0) {
                                                 _cE("view", _uM("key" to 0, "class" to "lul-fields"), _uA(
-                                                    _cE(Fragment, null, RenderHelpers.renderList(_ctx.fields, fun(field, fieldIndex, __index, _cached): Any {
+                                                    _cE(Fragment, null, RenderHelpers.renderList(visibleFields(item), fun(field, fieldIndex, __index, _cached): Any {
                                                         return _cE("view", _uM("key" to fieldKey(field, fieldIndex), "class" to "lul-field-chip", "onClick" to withModifiers(fun(){
                                                             handleFieldClick(item, field)
                                                         }, _uA(
@@ -1095,15 +1192,13 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                                 )),
                                 _cE("scroll-view", _uM("scroll-x" to "true", "class" to "lul-batch-actions-scroll"), _uA(
                                     _cE("view", _uM("class" to "lul-batch-actions"), _uA(
-                                        _cE(Fragment, null, RenderHelpers.renderList(props.batchActions, fun(action, actionIndex, __index, _cached): Any {
-                                            return _cE("view", _uM("key" to actionKey(action, actionIndex), "class" to "lul-batch-action", "onClick" to fun(){
-                                                handleBatchAction(action)
-                                            }), _uA(
-                                                _cE("text", _uM("class" to "lul-batch-action-text"), _tD(actionText(action)), 1)
-                                            ), 8, _uA(
-                                                "onClick"
+                                        if (props.batchActions.length > 0) {
+                                            _cE("view", _uM("key" to 0, "class" to "lul-batch-action", "onClick" to openBatchActionMenu), _uA(
+                                                _cE("text", _uM("class" to "lul-batch-action-text"), "操作")
                                             ))
-                                        }), 128),
+                                        } else {
+                                            _cC("v-if", true)
+                                        },
                                         _cE("view", _uM("class" to "lul-batch-action lul-batch-action-light", "onClick" to exitSelectionMode), _uA(
                                             _cE("text", _uM("class" to "lul-batch-action-text lul-batch-action-text-light"), "取消")
                                         ))
@@ -1115,6 +1210,36 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
                         _cC("v-if", true)
                     }
                     ,
+                    _cV(_component_page_container, _uM("show" to unref(batchActionMenuVisible), "position" to "bottom", "round" to true, "overlay" to true, "duration" to 240, "overlay-style" to "background-color: rgba(15, 23, 42, 0.42);", "custom-style" to "background-color: #FFFFFF;", "onClickoverlay" to closeBatchActionMenu), _uM("default" to withSlotCtx(fun(): UTSArray<Any> {
+                        return _uA(
+                            _cE("view", _uM("class" to "lul-batch-menu-panel"), _uA(
+                                _cE("view", _uM("class" to "lul-batch-menu-handle")),
+                                _cE("view", _uM("class" to "lul-batch-menu-head"), _uA(
+                                    _cE("view", null, _uA(
+                                        _cE("text", _uM("class" to "lul-batch-menu-title"), "批量操作"),
+                                        _cE("text", _uM("class" to "lul-batch-menu-subtitle"), _tD(unref(batchInfoText)), 1)
+                                    )),
+                                    _cE("view", _uM("class" to "lul-batch-menu-close", "onClick" to closeBatchActionMenu), _uA(
+                                        _cE("text", _uM("class" to "lul-batch-menu-close-text"), "关闭")
+                                    ))
+                                )),
+                                _cE(Fragment, null, RenderHelpers.renderList(props.batchActions, fun(action, actionIndex, __index, _cached): Any {
+                                    return _cE("view", _uM("key" to actionKey(action, actionIndex), "class" to _nC(batchMenuActionClass(action)), "onClick" to fun(){
+                                        handleBatchMenuAction(action)
+                                    }
+                                    ), _uA(
+                                        _cE("text", _uM("class" to _nC(batchMenuActionTextClass(action))), _tD(actionText(action)), 3)
+                                    ), 10, _uA(
+                                        "onClick"
+                                    ))
+                                }
+                                ), 128)
+                            ))
+                        )
+                    }
+                    ), "_" to 1), 8, _uA(
+                        "show"
+                    )),
                     if (isTrue(props.showFloatingAdd && !unref(showBatchBar))) {
                         _cE("view", _uM("key" to 7, "class" to "lul-floating-add", "onClick" to handleFloatingAdd), _uA(
                             _cE("text", _uM("class" to "lul-floating-add-text"), _tD(props.floatingAddText), 1)
@@ -1137,7 +1262,7 @@ open class GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversa
             }
         val styles1: Map<String, Map<String, Map<String, Any>>>
             get() {
-                return _uM("lul-batch-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#FFFFFF", "fontWeight" to "700")), "lul-batch-action-text-light" to _pS(_uM("color" to "#475569")))
+                return _uM("lul-batch-action-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "14px", "color" to "#FFFFFF", "fontWeight" to "700")), "lul-batch-action-text-light" to _pS(_uM("color" to "#475569")), "lul-batch-menu-panel" to _pS(_uM("paddingLeft" to 18, "paddingRight" to 18, "paddingTop" to 10, "paddingBottom" to 24, "backgroundColor" to "#FFFFFF")), "lul-batch-menu-handle" to _pS(_uM("width" to 42, "height" to 4, "borderTopLeftRadius" to 2, "borderTopRightRadius" to 2, "borderBottomRightRadius" to 2, "borderBottomLeftRadius" to 2, "backgroundColor" to "#CBD5E1", "alignSelf" to "center", "marginBottom" to 14)), "lul-batch-menu-head" to _pS(_uM("flexDirection" to "row", "alignItems" to "flex-start", "justifyContent" to "space-between", "marginBottom" to 14)), "lul-batch-menu-title" to _pS(_uM("fontSize" to 18, "lineHeight" to "24px", "color" to "#0F172A", "fontWeight" to "bold")), "lul-batch-menu-subtitle" to _pS(_uM("fontSize" to 12, "lineHeight" to "18px", "color" to "#64748B", "marginTop" to 3)), "lul-batch-menu-close" to _pS(_uM("height" to 32, "paddingLeft" to 12, "paddingRight" to 12, "borderTopLeftRadius" to 8, "borderTopRightRadius" to 8, "borderBottomRightRadius" to 8, "borderBottomLeftRadius" to 8, "backgroundColor" to "#F1F5F9", "alignItems" to "center", "justifyContent" to "center")), "lul-batch-menu-close-text" to _pS(_uM("fontSize" to 12, "lineHeight" to "17px", "color" to "#475569")), "lul-batch-menu-action" to _pS(_uM("height" to 42, "borderTopLeftRadius" to 10, "borderTopRightRadius" to 10, "borderBottomRightRadius" to 10, "borderBottomLeftRadius" to 10, "backgroundColor" to "#F8FAFC", "borderTopWidth" to 1, "borderRightWidth" to 1, "borderBottomWidth" to 1, "borderLeftWidth" to 1, "borderTopStyle" to "solid", "borderRightStyle" to "solid", "borderBottomStyle" to "solid", "borderLeftStyle" to "solid", "borderTopColor" to "#E2E8F0", "borderRightColor" to "#E2E8F0", "borderBottomColor" to "#E2E8F0", "borderLeftColor" to "#E2E8F0", "alignItems" to "center", "justifyContent" to "center", "marginBottom" to 8)), "lul-batch-menu-action-danger" to _pS(_uM("backgroundColor" to "#FEF2F2", "borderTopColor" to "#FECACA", "borderRightColor" to "#FECACA", "borderBottomColor" to "#FECACA", "borderLeftColor" to "#FECACA")), "lul-batch-menu-action-text" to _pS(_uM("fontSize" to 14, "lineHeight" to "20px", "color" to "#0F172A", "fontWeight" to "bold")), "lul-batch-menu-action-text-danger" to _pS(_uM("color" to "#B42318")))
             }
         var inheritAttrs = true
         var inject: Map<String, Map<String, Any?>> = _uM()

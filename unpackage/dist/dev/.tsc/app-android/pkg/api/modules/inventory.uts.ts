@@ -18,6 +18,9 @@ export type InventoryListQuery = {
 	stock?: string | null
 	check_type?: string | null
 	is_checked?: string | null
+	discrepancy?: string | null
+	sort_by?: string | null
+	movement_period?: string | null
 	transaction_type: string | null
 	location_type: string | null
 	is_active: string | null
@@ -84,6 +87,9 @@ function buildQuery(data: InventoryListQuery): UTSJSONObject {
 	if (data.stock != null && data.stock != '') query['stock'] = data.stock
 	if (data.check_type != null && data.check_type != '') query['check_type'] = data.check_type
 	if (data.is_checked != null && data.is_checked != '') query['is_checked'] = data.is_checked
+	if (data.discrepancy != null && data.discrepancy != '') query['discrepancy'] = data.discrepancy
+	if (data.sort_by != null && data.sort_by != '') query['sort_by'] = data.sort_by
+	if (data.movement_period != null && data.movement_period != '') query['movement_period'] = data.movement_period
 	if (data.transaction_type != null && data.transaction_type != '') query['transaction_type'] = data.transaction_type
 	if (data.location_type != null && data.location_type != '') query['location_type'] = data.location_type
 	if (data.is_active != null && data.is_active != '') query['is_active'] = data.is_active
@@ -290,6 +296,10 @@ export function updateInventoryCheck(id: string, data: InventoryMutationData): P
 	return request('/api/inventory/checks/' + stringValue(id) + '/', 'PUT', data.payload, true)
 }
 
+export function deleteInventoryCheck(id: string): Promise<any> {
+	return request('/api/inventory/checks/' + stringValue(id) + '/', 'DELETE', {} as UTSJSONObject, true)
+}
+
 export function createInventoryCheckItem(data: InventoryMutationData): Promise<any> {
 	return request('/api/inventory/check-items/', 'POST', data.payload, true)
 }
@@ -336,4 +346,8 @@ export function approveInventoryCheck(id: string): Promise<any> {
 
 export function adjustInventoryCheck(id: string): Promise<any> {
 	return request('/api/inventory/checks/' + stringValue(id) + '/adjust/', 'POST', {} as UTSJSONObject, true)
+}
+
+export function completeInventoryCheck(id: string): Promise<any> {
+	return request('/api/inventory/checks/' + stringValue(id) + '/complete/', 'POST', {} as UTSJSONObject, true)
 }

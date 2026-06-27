@@ -53,17 +53,22 @@ open class GenPagesInventoryChecksFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
+                    var text = ""
+                    try {
+                        val errorText = JSON.stringify(error)
+                        if (errorText != null) {
+                            text = errorText
+                        }
                     }
-                    val text = JSON.stringify(error)
+                     catch (stringifyError: Throwable) {
+                        text = ""
+                    }
                     if (text != null && text != "") {
                         var parsedError: UTSJSONObject? = null
                         try {
                             val trimmedText = text.trim()
                             if (trimmedText != "" && trimmedText.substring(0, 1) == "{") {
-                                parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:55")
+                                parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:60")
                             }
                         }
                          catch (parseError: Throwable) {
@@ -72,14 +77,20 @@ open class GenPagesInventoryChecksFrom : BasePage {
                         if (parsedError != null) {
                             val rawMessage = parsedError!!["message"]
                             if (rawMessage != null) {
-                                val parsedMessage = rawMessage as String
+                                val parsedMessage = stringValue(rawMessage)
                                 if (parsedMessage != "") {
                                     message = parsedMessage
                                 }
                             }
                         }
-                        if (message == fallback && text != "{}") {
+                        if (message == fallback && text != "{}" && text != "null") {
                             message = text
+                        }
+                    }
+                    if (message == fallback) {
+                        val textMessage = stringValue(error)
+                        if (textMessage != "" && textMessage != "[object Object]") {
+                            message = textMessage
                         }
                     }
                 }
@@ -99,7 +110,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
                     return null
                 }
                 try {
-                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:79")
+                    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:88")
                 }
                  catch (error: Throwable) {
                     return null
@@ -120,7 +131,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
                 }
                 var parsed: UTSArray<UTSJSONObject>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:93")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pages/inventory-checks/from.uvue:102")
                 }
                  catch (error: Throwable) {
                     return _uA<UTSJSONObject>()
@@ -175,7 +186,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
             fun gen_buildOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val pageValue = intValue(params["page"])
                 val pageSizeValue = intValue(params["pageSize"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-checks/from.uvue", 129, 8), "page" to if (pageValue <= 0) {
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/inventory-checks/from.uvue", 138, 8), "page" to if (pageValue <= 0) {
                     1
                 } else {
                     pageValue
@@ -317,7 +328,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
                 }
                 var parsed: UTSArray<Any>? = null
                 try {
-                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<Any>(trimmedText), " at pages/inventory-checks/from.uvue:208")
+                    parsed = UTSAndroid.consoleDebugError(JSON.parseArray<Any>(trimmedText), " at pages/inventory-checks/from.uvue:217")
                 }
                  catch (error: Throwable) {
                     return ""
@@ -388,12 +399,12 @@ open class GenPagesInventoryChecksFrom : BasePage {
             fun gen_buildPayload_fn(data: UTSJSONObject): InventoryMutationData? {
                 val locationId = intValue(data["location"])
                 if (locationId <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择盘点位置", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择盘点位置", icon = "none", duration = 3500))
                     return null
                 }
                 val categoryId = intValue(data["category"])
                 if (categoryId <= 0) {
-                    uni_showToast(ShowToastOptions(title = "请选择盘点分类", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请选择盘点分类", icon = "none", duration = 3500))
                     return null
                 }
                 return InventoryMutationData(payload = _uO("location" to locationId, "check_type" to "CATEGORY", "categories" to _uA(
@@ -412,7 +423,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
                             initialData.value = _uO("location" to stringValue(detail["location"]), "location_text" to stringValue(detail["location_name"]), "category" to categoryValue, "category_text" to stringValue(detail["category_names"], categoryValue), "planned_date" to stringValue(detail["planned_date"]), "purpose" to stringValue(detail["purpose"]), "description" to stringValue(detail["description"]))
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "盘点单详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "盘点单详情加载失败"))
                         }
                 })
             }
@@ -441,7 +452,7 @@ open class GenPagesInventoryChecksFrom : BasePage {
                             goBackToList()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "保存盘点单失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "保存盘点单失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -484,11 +495,11 @@ open class GenPagesInventoryChecksFrom : BasePage {
             }
             val handleFormChange = ::gen_handleFormChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "该字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             onLoad(fun(query: OnLoadOptions){

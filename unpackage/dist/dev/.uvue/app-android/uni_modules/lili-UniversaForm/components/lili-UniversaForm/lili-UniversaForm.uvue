@@ -6,7 +6,7 @@ import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>;
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string;
 type Props = {
-    __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 242, 6>;
+    __$originalPosition?: UTSSourceMapPosition<"Props", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 243, 6>;
     mode?: string;
     formSections?: UTSJSONObject[];
     initialData?: UTSJSONObject;
@@ -67,7 +67,7 @@ const __sfc__ = defineComponent({
             return value as UTSJSONObject;
         }
         function cloneObject(source: UTSJSONObject): UTSJSONObject {
-            const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 313, 8), } as UTSJSONObject;
+            const target = { __$originalPosition: new UTSSourceMapPosition("target", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 314, 8), } as UTSJSONObject;
             for (const key in source) {
                 target[key] = source[key];
             }
@@ -293,6 +293,15 @@ const __sfc__ = defineComponent({
                 return '';
             return '';
         }
+        function shouldUseDefaultValue(field: UTSJSONObject, incoming: any | null): boolean {
+            if (incoming == null)
+                return true;
+            const fieldType = getFieldType(field);
+            if (fieldType == 'datetime' && getBooleanField(field, 'defaultToToday', false)) {
+                return ('' + incoming) == '';
+            }
+            return false;
+        }
         function getFieldValue(field: UTSJSONObject): any {
             const key = getFieldKey(field);
             if (key == '')
@@ -465,6 +474,9 @@ const __sfc__ = defineComponent({
         function showBottomSelectScan(field: UTSJSONObject): boolean {
             return getBooleanField(field, 'showScan', false);
         }
+        function getBottomSelectAutoSelectUnique(field: UTSJSONObject): boolean {
+            return getBooleanField(field, 'autoSelectUnique', false);
+        }
         function getBottomSelectScanOnlyFromCamera(field: UTSJSONObject): boolean {
             return getBooleanField(field, 'scanOnlyFromCamera', true);
         }
@@ -557,7 +569,7 @@ const __sfc__ = defineComponent({
             }
         }
         function emitFieldChange(field: UTSJSONObject, value: any) {
-            const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 848, 8),
+            const payload = { __$originalPosition: new UTSSourceMapPosition("payload", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 862, 8),
                 field: field,
                 key: getFieldKey(field),
                 value: value,
@@ -568,7 +580,7 @@ const __sfc__ = defineComponent({
             emit('form-change', payload);
         }
         function serializeState(): string {
-            const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 860, 8),
+            const state = { __$originalPosition: new UTSSourceMapPosition("state", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 874, 8),
                 mode: props.mode,
                 formData: formData.value,
             } as UTSJSONObject;
@@ -595,7 +607,7 @@ const __sfc__ = defineComponent({
             }
         }
         function applyInitialValues() {
-            const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 891, 8), } as UTSJSONObject;
+            const nextData = { __$originalPosition: new UTSSourceMapPosition("nextData", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 905, 8), } as UTSJSONObject;
             for (let i = 0; i < props.formSections.length; i++) {
                 const fields = getSectionFields(props.formSections[i]);
                 for (let j = 0; j < fields.length; j++) {
@@ -604,11 +616,11 @@ const __sfc__ = defineComponent({
                     if (key == '')
                         continue;
                     const incoming = props.initialData[key];
-                    if (incoming != null) {
-                        nextData[key] = incoming;
+                    if (shouldUseDefaultValue(field, incoming)) {
+                        nextData[key] = getDefaultValue(field);
                     }
                     else {
-                        nextData[key] = getDefaultValue(field);
+                        nextData[key] = incoming;
                     }
                     const textKey = getBottomSelectTextKey(field);
                     if (textKey != '') {
@@ -758,7 +770,7 @@ const __sfc__ = defineComponent({
                 if (value == '') {
                     uni.showToast({
                         title: '请先选择要编辑的项目',
-                        icon: 'none',
+                        icon: 'none', duration: 3500,
                     });
                     return;
                 }
@@ -793,7 +805,7 @@ const __sfc__ = defineComponent({
             const nextItems: UTSJSONObject[] = [];
             for (let index = 0; index < sourceItems.length; index++) {
                 const sourceItem = sourceItems[index];
-                const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1087, 9), } as UTSJSONObject;
+                const clonedItem = { __$originalPosition: new UTSSourceMapPosition("clonedItem", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1101, 9), } as UTSJSONObject;
                 for (const key in sourceItem) {
                     clonedItem[key] = sourceItem[key];
                 }
@@ -862,7 +874,7 @@ const __sfc__ = defineComponent({
             return '';
         }
         function validate(): boolean {
-            const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1159, 8), } as UTSJSONObject;
+            const errors = { __$originalPosition: new UTSSourceMapPosition("errors", "uni_modules/lili-UniversaForm/components/lili-UniversaForm/lili-UniversaForm.uvue", 1173, 8), } as UTSJSONObject;
             let hasError = false;
             for (let i = 0; i < props.formSections.length; i++) {
                 const fields = getSectionFields(props.formSections[i]);
@@ -912,7 +924,7 @@ const __sfc__ = defineComponent({
             if (!validate()) {
                 uni.showToast({
                     title: '请检查必填项',
-                    icon: 'none',
+                    icon: 'none', duration: 3500,
                 });
                 return;
             }
@@ -962,7 +974,7 @@ const __sfc__ = defineComponent({
                     const message = res.errMsg == '' ? '扫码失败' : res.errMsg;
                     uni.showToast({
                         title: message,
-                        icon: 'none',
+                        icon: 'none', duration: 3500,
                     });
                 },
             } as ScanCodeOption);
@@ -1383,6 +1395,7 @@ const __sfc__ = defineComponent({
                                                                                         showEditAction: showBottomSelectEdit(field),
                                                                                         showAddAction: showBottomSelectAdd(field),
                                                                                         showScan: showBottomSelectScan(field),
+                                                                                        autoSelectUnique: getBottomSelectAutoSelectUnique(field),
                                                                                         scanOnlyFromCamera: getBottomSelectScanOnlyFromCamera(field),
                                                                                         addPath: getBottomSelectAddPath(field),
                                                                                         editPath: getBottomSelectEditPath(field),
@@ -1391,7 +1404,7 @@ const __sfc__ = defineComponent({
                                                                                         onChange: ($event: any) => { handleBottomSelectChange(field, $event); },
                                                                                         onEdit: () => { handleBottomSelectEdit(field); },
                                                                                         onAdd: () => { handleBottomSelectAdd(field); }
-                                                                                    }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "imageKey", "subtitleKey", "valueImage", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "showScan", "scanOnlyFromCamera", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
+                                                                                    }), null, 8 /* PROPS */, ["value", "valueText", "title", "placeholder", "searchPlaceholder", "emptyText", "disabled", "labelKey", "valueKey", "imageKey", "subtitleKey", "valueImage", "pageSize", "searchDelay", "tree", "childrenKey", "expandOnClickNode", "selectableLevel", "selectableLevelMessage", "showEditAction", "showAddAction", "showScan", "autoSelectUnique", "scanOnlyFromCamera", "addPath", "editPath", "editQueryKey", "fetchData", "onChange", "onEdit", "onAdd"])
                                                                                 ])
                                                                                 : isTrue(isUploadField(field))
                                                                                     ? _cE("view", _uM({

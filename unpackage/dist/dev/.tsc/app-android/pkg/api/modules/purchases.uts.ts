@@ -26,6 +26,7 @@ export type PurchaseItem = {
 	total_quantity: number
 	received_quantity: number
 	total_amount: string
+	net_total_amount: string
 	receive_progress: string
 	is_fully_received: boolean
 	remark: string
@@ -187,6 +188,8 @@ export type QuickProcurementResultItem = {
 	product_sku: string
 	product_barcode: string
 	purchase_price: string
+	net_purchase_price: string
+	price_type: string
 	quantity: number
 	total: string
 }
@@ -427,6 +430,9 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 	const supplierInfo = parseObject(rawObject['supplier_info'])
 	if (supplierName == '' && supplierInfo != null) supplierName = stringValue(supplierInfo!['name'])
 	const supplierExcelImportStatus = parseObject(rawObject['supplier_excel_import_status'])
+	const totalAmount = stringValue(rawObject['total_amount'])
+	let netTotalAmount = stringValue(rawObject['net_total_amount'])
+	if (netTotalAmount == '') netTotalAmount = totalAmount
 	return {
 		id: intValue(rawObject['id']),
 		purchase_number: stringValue(rawObject['purchase_number']),
@@ -439,7 +445,8 @@ function buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
 		supplier_name: supplierName,
 		total_quantity: intValue(rawObject['total_quantity']),
 		received_quantity: intValue(rawObject['received_quantity']),
-		total_amount: stringValue(rawObject['total_amount']),
+		total_amount: totalAmount,
+		net_total_amount: netTotalAmount,
 		receive_progress: stringValue(rawObject['receive_progress']),
 		is_fully_received: boolValue(rawObject['is_fully_received']),
 		remark: stringValue(rawObject['remark']),
@@ -684,6 +691,8 @@ function buildQuickProcurementResponse(rawObject: UTSJSONObject): QuickProcureme
 			product_sku: stringValue(row['product_sku']),
 			product_barcode: stringValue(row['product_barcode']),
 			purchase_price: stringValue(row['purchase_price']),
+			net_purchase_price: stringValue(row['net_purchase_price']),
+			price_type: stringValue(row['price_type']),
 			quantity: intValue(row['quantity']),
 			total: stringValue(row['total']),
 		} as QuickProcurementResultItem)
@@ -820,7 +829,7 @@ export async function checkPurchaseProduct(id: number | string, barcode: string,
 export async function downloadPurchaseProductTemplate(id: number | string): Promise<PurchaseTemplateDownloadResult> {
 	return new Promise((resolve, reject) => {
 		const url = purchaseProductTemplateDownloadUrl(id)
-		__f__('log','at pkg/api/modules/purchases.uts:823','下载采购商品模板:', url)
+		__f__('log','at pkg/api/modules/purchases.uts:832','下载采购商品模板:', url)
 		uni.downloadFile({
 			url: url,
 			header: buildDownloadHeader(),
@@ -847,7 +856,7 @@ function uploadPurchaseProductImportFile(id: number | string, filePath: string, 
 	return new Promise((resolve, reject) => {
 		const url = baseUrl + detailPath(id) + actionPath + '/'
 		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
-		__f__('log','at pkg/api/modules/purchases.uts:850','采购商品导入上传:', url, filePath)
+		__f__('log','at pkg/api/modules/purchases.uts:859','采购商品导入上传:', url, filePath)
 		uni.uploadFile({
 			url: url,
 			filePath: filePath,
@@ -889,7 +898,7 @@ function uploadSupplierExcelFile(id: number | string, filePath: string, actionPa
 		const formData = {
 			config: JSON.stringify(config),
 		} as UTSJSONObject
-		__f__('log','at pkg/api/modules/purchases.uts:892','供应商Excel上传:', url, filePath)
+		__f__('log','at pkg/api/modules/purchases.uts:901','供应商Excel上传:', url, filePath)
 		uni.uploadFile({
 			url: url,
 			filePath: filePath,
@@ -1017,7 +1026,7 @@ export async function createPurchase(data: PurchaseMutationData): Promise<Purcha
 	return buildPurchaseItem(rawDataObject(raw))
 }
 
-export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[]): Promise<QuickProcurementResponse> {
+export async function quickProcurement(purchaseId: number | string, items: QuickProcurementItem[], priceType: string = 'gross'): Promise<QuickProcurementResponse> {
 	const requestItems: UTSJSONObject[] = []
 	for (let index = 0; index < items.length; index += 1) {
 		const item = items[index]
@@ -1029,6 +1038,7 @@ export async function quickProcurement(purchaseId: number | string, items: Quick
 	}
 	const raw = await request('/api/purchases/purchases/quick_procurement/', 'POST', {
 		procure_id: parseInt(stringValue(purchaseId)),
+		price_type: priceType,
 		items: requestItems,
 	} as UTSJSONObject, true)
 	return buildQuickProcurementResponse(rawDataObject(raw))

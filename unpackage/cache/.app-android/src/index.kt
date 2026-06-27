@@ -28,6 +28,7 @@ import io.dcloud.uts.*
 import io.dcloud.uts.Map
 import io.dcloud.uts.Set
 import io.dcloud.uts.UTSAndroid
+import java.lang.Runnable
 import java.lang.Thread
 import java.nio.charset.Charset
 import java.util.UUID
@@ -35,6 +36,7 @@ import kotlin.properties.Delegates
 import uts.sdk.modules.uniRegisterRequestPermissionTips.RequestPermissionTipsListener
 import io.dcloud.uniapp.extapi.addInterceptor as uni_addInterceptor
 import io.dcloud.uniapp.extapi.createPushMessage as uni_createPushMessage
+import io.dcloud.uniapp.extapi.downloadFile as uni_downloadFile
 import io.dcloud.uniapp.extapi.exit as uni_exit
 import io.dcloud.uniapp.extapi.getAppAuthorizeSetting as uni_getAppAuthorizeSetting
 import io.dcloud.uniapp.extapi.getPrivacySetting as uni_getPrivacySetting
@@ -504,11 +506,8 @@ fun shouldHandleUnauthorized(url: String): Boolean {
     }
     return true
 }
-fun handleUnauthorizedResponse(url: String, showLoading: Boolean) {
+fun handleUnauthorizedResponse(url: String) {
     clearLatestResponseMeta()
-    if (showLoading) {
-        uni_hideLoading(null)
-    }
     if (shouldHandleUnauthorized(url)) {
         redirectToLogin("登录状态已失效，请重新登录")
     }
@@ -539,7 +538,7 @@ fun parseObject(value: Any?): UTSJSONObject? {
         return null
     }
     try {
-        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/index.uts:106")
+        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/index.uts:103")
     }
      catch (error: Throwable) {
         return null
@@ -576,15 +575,31 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
     return wrapUTSPromise(suspend w@{
             return@w UTSPromise(fun(resolve, reject){
                 clearLatestResponseMeta()
+                var loadingVisible = showLoading
+                fun finishLoading() {
+                    if (loadingVisible) {
+                        uni_hideLoading(null)
+                        loadingVisible = false
+                    }
+                }
+                fun resolveDone(value: Any?) {
+                    finishLoading()
+                    resolve(value)
+                }
+                fun rejectDone(error: Any) {
+                    finishLoading()
+                    reject(error)
+                }
                 if (showLoading) {
                     uni_showLoading(ShowLoadingOptions(title = "loading"))
                 }
                 val interceptMap = requestIntercept(reqData)
-                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:162")
+                console.log("请求地址:", baseUrl + url, " at pkg/api/index.uts:174")
                 uni_request<Any>(RequestOptions(url = baseUrl + url, method = method, header = interceptMap.get("header"), data = interceptMap.get("data"), timeout = timeOut, success = fun(res){
                     if (res.statusCode == 401) {
-                        handleUnauthorizedResponse(url, showLoading)
-                        reject(UTSError("登录状态已失效"))
+                        finishLoading()
+                        handleUnauthorizedResponse(url)
+                        rejectDone(UTSError("登录状态已失效"))
                         return
                     }
                     val responseData = res.data
@@ -592,18 +607,19 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         if (responseObject != null && boolValue(responseObject!!["success"])) {
                             saveLatestResponseMetaObject(responseObject!!)
-                            resolve(responseObject!!["data"])
+                            resolveDone(responseObject!!["data"])
                             return
                         }
                         if (responseObject != null && stringValue(responseObject!!["success"]) == "false") {
                             if (intValue(responseObject!!["status_code"]) == 401) {
-                                handleUnauthorizedResponse(url, showLoading)
-                                reject(UTSError("登录状态已失效"))
+                                finishLoading()
+                                handleUnauthorizedResponse(url)
+                                rejectDone(UTSError("登录状态已失效"))
                                 return
                             }
                             clearLatestResponseMeta()
                             val serverMessage = stringValue(responseObject!!["message"])
-                            reject(UTSError(if (serverMessage == "") {
+                            rejectDone(UTSError(if (serverMessage == "") {
                                 "请求失败"
                             } else {
                                 serverMessage
@@ -612,27 +628,25 @@ fun request(url: String, method: RequestMethod, reqData: UTSJSONObject = _uO(), 
                             return
                         }
                         clearLatestResponseMeta()
-                        resolve(responseData)
+                        resolveDone(responseData)
                         return
                     }
                     clearLatestResponseMeta()
                     if (responseObject != null && stringValue(responseObject!!["success"]) == "false") {
                         val serverMessage = stringValue(responseObject!!["message"])
                         if (serverMessage != "") {
-                            reject(UTSError(serverMessage))
+                            rejectDone(UTSError(serverMessage))
                             return
                         }
                     }
-                    reject(UTSError("HTTP状态码错误: " + res.statusCode))
+                    rejectDone(UTSError("HTTP状态码错误: " + res.statusCode))
                 }
                 , fail = fun(err){
                     clearLatestResponseMeta()
-                    reject(UTSError(parseRequestFailMessage(err)))
+                    rejectDone(UTSError(parseRequestFailMessage(err)))
                 }
                 , complete = fun(_){
-                    if (showLoading) {
-                        uni_hideLoading(null)
-                    }
+                    finishLoading()
                 }
                 ))
             }
@@ -698,15 +712,11 @@ open class ProfileResponse (
         return UTSSourceMapPosition("ProfileResponse", "pkg/api/modules/login.uts", 18, 13)
     }
 }
-val useMockLogin = false
 fun accountLogin(data: LoginData): UTSPromise<LoginResponse> {
     return wrapUTSPromise(suspend w@{
-            if (useMockLogin) {
-                return@w LoginResponse(access_token = "debug-access-token", refresh_token = "debug-refresh-token", token_type = "Bearer", expires_in = 86400)
-            }
-            val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/login.uts", 61, 11), "username" to data.username, "password" to data.password)
+            val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/login.uts", 52, 11), "username" to data.username, "password" to data.password)
             val raw = await(request("/api/accounts/auth/login/", "POST", body, true))
-            val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<LoginResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:66")
+            val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<LoginResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:57")
             if (parsed == null) {
                 throw UTSError("登录响应解析失败")
             }
@@ -715,21 +725,8 @@ fun accountLogin(data: LoginData): UTSPromise<LoginResponse> {
 }
 fun getProfile(): UTSPromise<ProfileResponse> {
     return wrapUTSPromise(suspend w@{
-            if (useMockLogin) {
-                return@w ProfileResponse(id = 1, username = "debug", email = "", first_name = "Debug", last_name = "User", is_active = true, date_joined = "2026-05-13T00:00:00+02:00", is_platform_admin = true, company_id = 1, company_name = "DEBUG", name = "调试账号", cashier_account = "", cashier_id = null, shop_ids = _uA(
-                    1
-                ), permissions = _uA(
-                    "approve",
-                    "export",
-                    "manage_inventory",
-                    "manage_purchase",
-                    "manage_users",
-                    "view_cost",
-                    "void"
-                ))
-            }
             val raw = await(request("/api/accounts/auth/me/", "GET", _uO(), false))
-            val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<ProfileResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:134")
+            val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<ProfileResponse>(JSON.stringify(raw)), " at pkg/api/modules/login.uts:66")
             if (parsed == null) {
                 throw UTSError("用户信息响应解析失败")
             }
@@ -1224,6 +1221,10 @@ open class ReportRankItem (
     open var share: String,
     @JsonNotNull
     open var type: String,
+    @JsonNotNull
+    open var product_image: String,
+    @JsonNotNull
+    open var product_media_files: UTSArray<UTSJSONObject>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
         return UTSSourceMapPosition("ReportRankItem", "pkg/api/modules/reports.uts", 37, 13)
@@ -1237,7 +1238,7 @@ class ReportRankItemReactiveObject : ReportRankItem, IUTSReactive<ReportRankItem
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: ReportRankItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, label = __v_raw.label, subtitle = __v_raw.subtitle, code = __v_raw.code, amount = __v_raw.amount, quantity = __v_raw.quantity, order_count = __v_raw.order_count, line_count = __v_raw.line_count, share = __v_raw.share, type = __v_raw.type) {
+    constructor(__v_raw: ReportRankItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, label = __v_raw.label, subtitle = __v_raw.subtitle, code = __v_raw.code, amount = __v_raw.amount, quantity = __v_raw.quantity, order_count = __v_raw.order_count, line_count = __v_raw.line_count, share = __v_raw.share, type = __v_raw.type, product_image = __v_raw.product_image, product_media_files = __v_raw.product_media_files) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -1366,6 +1367,30 @@ class ReportRankItemReactiveObject : ReportRankItem, IUTSReactive<ReportRankItem
             __v_raw.type = value
             _tRS(__v_raw, "type", oldValue, value)
         }
+    override var product_image: String
+        get() {
+            return _tRG(__v_raw, "product_image", __v_raw.product_image, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("product_image")) {
+                return
+            }
+            val oldValue = __v_raw.product_image
+            __v_raw.product_image = value
+            _tRS(__v_raw, "product_image", oldValue, value)
+        }
+    override var product_media_files: UTSArray<UTSJSONObject>
+        get() {
+            return _tRG(__v_raw, "product_media_files", __v_raw.product_media_files, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("product_media_files")) {
+                return
+            }
+            val oldValue = __v_raw.product_media_files
+            __v_raw.product_media_files = value
+            _tRS(__v_raw, "product_media_files", oldValue, value)
+        }
 }
 open class DashboardReport (
     @JsonNotNull
@@ -1388,7 +1413,138 @@ open class DashboardReport (
     open var alerts: UTSArray<ReportAlert>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("DashboardReport", "pkg/api/modules/reports.uts", 49, 13)
+        return UTSSourceMapPosition("DashboardReport", "pkg/api/modules/reports.uts", 51, 13)
+    }
+}
+open class ProductSalesQuery (
+    @JsonNotNull
+    open var period: ReportPeriod,
+    open var search: String? = null,
+    @JsonNotNull
+    open var ordering: String,
+    @JsonNotNull
+    open var page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSalesQuery", "pkg/api/modules/reports.uts", 62, 13)
+    }
+}
+open class ProductSalesSummary (
+    @JsonNotNull
+    open var sales_amount: String,
+    @JsonNotNull
+    open var order_count: Number,
+    @JsonNotNull
+    open var product_count: Number,
+    @JsonNotNull
+    open var quantity: String,
+    @JsonNotNull
+    open var amount: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSalesSummary", "pkg/api/modules/reports.uts", 69, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductSalesSummaryReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductSalesSummaryReactiveObject : ProductSalesSummary, IUTSReactive<ProductSalesSummary> {
+    override var __v_raw: ProductSalesSummary
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductSalesSummary, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(sales_amount = __v_raw.sales_amount, order_count = __v_raw.order_count, product_count = __v_raw.product_count, quantity = __v_raw.quantity, amount = __v_raw.amount) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductSalesSummaryReactiveObject {
+        return ProductSalesSummaryReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var sales_amount: String
+        get() {
+            return _tRG(__v_raw, "sales_amount", __v_raw.sales_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("sales_amount")) {
+                return
+            }
+            val oldValue = __v_raw.sales_amount
+            __v_raw.sales_amount = value
+            _tRS(__v_raw, "sales_amount", oldValue, value)
+        }
+    override var order_count: Number
+        get() {
+            return _tRG(__v_raw, "order_count", __v_raw.order_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("order_count")) {
+                return
+            }
+            val oldValue = __v_raw.order_count
+            __v_raw.order_count = value
+            _tRS(__v_raw, "order_count", oldValue, value)
+        }
+    override var product_count: Number
+        get() {
+            return _tRG(__v_raw, "product_count", __v_raw.product_count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("product_count")) {
+                return
+            }
+            val oldValue = __v_raw.product_count
+            __v_raw.product_count = value
+            _tRS(__v_raw, "product_count", oldValue, value)
+        }
+    override var quantity: String
+        get() {
+            return _tRG(__v_raw, "quantity", __v_raw.quantity, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("quantity")) {
+                return
+            }
+            val oldValue = __v_raw.quantity
+            __v_raw.quantity = value
+            _tRS(__v_raw, "quantity", oldValue, value)
+        }
+    override var amount: String
+        get() {
+            return _tRG(__v_raw, "amount", __v_raw.amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("amount")) {
+                return
+            }
+            val oldValue = __v_raw.amount
+            __v_raw.amount = value
+            _tRS(__v_raw, "amount", oldValue, value)
+        }
+}
+open class ProductSalesResponse (
+    @JsonNotNull
+    open var period: UTSJSONObject,
+    @JsonNotNull
+    open var summary: ProductSalesSummary,
+    @JsonNotNull
+    open var results: UTSArray<ReportRankItem>,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var total_count: Number,
+    @JsonNotNull
+    open var total_pages: Number,
+    @JsonNotNull
+    open var current_page: Number,
+    @JsonNotNull
+    open var page_size: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSalesResponse", "pkg/api/modules/reports.uts", 76, 13)
     }
 }
 fun intValue__1(value: Any?): Number {
@@ -1415,7 +1571,7 @@ fun objectValue(value: Any?): UTSJSONObject {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/reports.uts:77")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/reports.uts:103")
     }
     return if (parsed == null) {
         (_uO())
@@ -1431,7 +1587,7 @@ fun arrayValue(value: Any?): UTSArray<UTSJSONObject> {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/reports.uts:84")
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/reports.uts:110")
     }
     return if (parsed == null) {
         (_uA<UTSJSONObject>())
@@ -1439,12 +1595,47 @@ fun arrayValue(value: Any?): UTSArray<UTSJSONObject> {
         parsed!!
     }
 }
+fun normalizeServerUrl(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun buildRankMediaFiles(value: Any?): UTSArray<UTSJSONObject> {
+    val rows = arrayValue(value)
+    val result: UTSArray<UTSJSONObject> = _uA()
+    run {
+        var index: Number = 0
+        while(index < rows.length){
+            val row = rows[index]
+            row["file_url"] = normalizeServerUrl(stringValue__1(row["file_url"]))
+            row["thumbnail_url"] = normalizeServerUrl(stringValue__1(row["thumbnail_url"]))
+            row["signed_url"] = normalizeServerUrl(stringValue__1(row["signed_url"]))
+            row["signed_thumbnail_url"] = normalizeServerUrl(stringValue__1(row["signed_thumbnail_url"]))
+            result.push(row)
+            index += 1
+        }
+    }
+    return result
+}
 fun rawDataObject(raw: Any): UTSJSONObject {
     val rawText = JSON.stringify(raw)
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/reports.uts:89")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/reports.uts:141")
     }
     if (rawObject == null) {
         throw UTSError("报表接口响应解析失败")
@@ -1452,7 +1643,7 @@ fun rawDataObject(raw: Any): UTSJSONObject {
     val dataValue = rawObject!!["data"]
     if (dataValue != null) {
         val dataObject = objectValue(dataValue)
-        if (dataObject["overview"] != null) {
+        if (dataObject["overview"] != null || dataObject["summary"] != null || dataObject["results"] != null) {
             return dataObject
         }
     }
@@ -1510,20 +1701,40 @@ fun buildRankItems(value: Any?): UTSArray<ReportRankItem> {
         var index: Number = 0
         while(index < rows.length){
             val row = rows[index]
-            result.push(ReportRankItem(key = stringValue__1(row["key"]), label = stringValue__1(row["label"]), subtitle = stringValue__1(row["subtitle"]), code = stringValue__1(row["code"]), amount = stringValue__1(row["amount"]), quantity = stringValue__1(row["quantity"]), order_count = intValue__1(row["order_count"]), line_count = intValue__1(row["line_count"]), share = stringValue__1(row["share"]), type = stringValue__1(row["type"])))
+            result.push(ReportRankItem(key = stringValue__1(row["key"]), label = stringValue__1(row["label"]), subtitle = stringValue__1(row["subtitle"]), code = stringValue__1(row["code"]), amount = stringValue__1(row["amount"]), quantity = stringValue__1(row["quantity"]), order_count = intValue__1(row["order_count"]), line_count = intValue__1(row["line_count"]), share = stringValue__1(row["share"]), type = stringValue__1(row["type"]), product_image = normalizeServerUrl(stringValue__1(row["product_image"])), product_media_files = buildRankMediaFiles(row["product_media_files"])))
             index += 1
         }
     }
     return result
 }
+fun buildProductSalesSummary(raw: UTSJSONObject): ProductSalesSummary {
+    return ProductSalesSummary(sales_amount = stringValue__1(raw["sales_amount"]), order_count = intValue__1(raw["order_count"]), product_count = intValue__1(raw["product_count"]), quantity = stringValue__1(raw["quantity"]), amount = stringValue__1(raw["amount"]))
+}
+fun buildProductSalesQuery(query: ProductSalesQuery): UTSJSONObject {
+    val params: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("params", "pkg/api/modules/reports.uts", 246, 11), "period" to query.period, "ordering" to query.ordering, "page" to query.page, "page_size" to query.page_size)
+    if (query.search != null && query.search != "") {
+        params["search"] = query.search
+    }
+    return params
+}
 fun buildDashboardReport(raw: Any): DashboardReport {
     val rawObject = rawDataObject(raw)
     return DashboardReport(overview = buildOverview(objectValue(rawObject["overview"])), sales_trend = buildTrendItems(rawObject["sales_trend"]), payment_methods = buildPaymentMethods(rawObject["payment_methods"]), order_status = objectValue(rawObject["order_status"]), top_products = buildRankItems(rawObject["top_products"]), top_categories = buildRankItems(rawObject["top_categories"]), top_kasa_categories = buildRankItems(rawObject["top_kasa_categories"]), inventory = buildInventory(objectValue(rawObject["inventory"])), alerts = buildAlerts(rawObject["alerts"]))
+}
+fun buildProductSalesResponse(raw: Any): ProductSalesResponse {
+    val rawObject = rawDataObject(raw)
+    return ProductSalesResponse(period = objectValue(rawObject["period"]), summary = buildProductSalesSummary(objectValue(rawObject["summary"])), results = buildRankItems(rawObject["results"]), count = intValue__1(rawObject["count"]), total_count = intValue__1(rawObject["total_count"]), total_pages = intValue__1(rawObject["total_pages"]), current_page = intValue__1(rawObject["current_page"]), page_size = intValue__1(rawObject["page_size"]))
 }
 fun getDashboardReport(period: ReportPeriod): UTSPromise<DashboardReport> {
     return wrapUTSPromise(suspend w@{
             val raw = await(request("/api/reports/dashboard/", "GET", _uO("period" to period), true))
             return@w buildDashboardReport(raw)
+    })
+}
+fun getProductSalesReport(query: ProductSalesQuery): UTSPromise<ProductSalesResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/reports/product-sales/", "GET", buildProductSalesQuery(query), true))
+            return@w buildProductSalesResponse(raw)
     })
 }
 open class PeriodOption (
@@ -1533,7 +1744,7 @@ open class PeriodOption (
     open var label: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PeriodOption", "pages/tabbar/reports.uvue", 227, 6)
+        return UTSSourceMapPosition("PeriodOption", "pages/tabbar/reports.uvue", 229, 6)
     }
 }
 val GenPagesTabbarReportsClass = CreateVueComponent(GenPagesTabbarReports::class.java, fun(): VueComponentOptions {
@@ -1546,12 +1757,538 @@ val GenPagesTabbarReportsClass = CreateVueComponent(GenPagesTabbarReports::class
     return GenPagesTabbarReports(instance, renderer)
 }
 )
+val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.setup(props as GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter {
+    return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter(instance)
+}
+)
+val GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass = CreateVueComponent(GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inheritAttrs, inject = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inject, props = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.props, propsNeedCastKeys = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.propsNeedCastKeys, emits = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.emits, components = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.components, styles = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.setup(props as GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview {
+    return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview(instance)
+}
+)
+open class MediaShareResponse (
+    @JsonNotNull
+    open var url: String,
+    @JsonNotNull
+    open var signed_url: String,
+    @JsonNotNull
+    open var signed_thumbnail_url: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MediaShareResponse", "pkg/api/modules/media.uts", 37, 13)
+    }
+}
+open class MediaBatchUploadItem (
+    @JsonNotNull
+    open var filePath: String,
+    open var name: String? = null,
+    open var formData: UTSJSONObject? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MediaBatchUploadItem", "pkg/api/modules/media.uts", 45, 13)
+    }
+}
+open class MediaBatchUploadResult (
+    @JsonNotNull
+    open var successItems: UTSArray<UTSJSONObject>,
+    @JsonNotNull
+    open var failItems: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("MediaBatchUploadResult", "pkg/api/modules/media.uts", 50, 13)
+    }
+}
+fun stringValue__2(value: Any?): String {
+    if (value == null) {
+        return ""
+    }
+    return "" + value
+}
+fun safeErrorMessage(error: Any?): String {
+    if (error == null) {
+        return ""
+    }
+    val text = JSON.stringify(error)
+    if (text == null || text == "" || text == "{}") {
+        return ""
+    }
+    try {
+        val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:81")
+        if (parsed != null) {
+            val rawMessage = parsed!!["message"]
+            val message = stringValue__2(rawMessage)
+            if (message != "") {
+                return message
+            }
+            val rawDetail = parsed!!["detail"]
+            val detail = stringValue__2(rawDetail)
+            if (detail != "") {
+                return detail
+            }
+            val rawErrors = parsed!!["errors"]
+            val errors = stringValue__2(rawErrors)
+            if (errors != "") {
+                return errors
+            }
+        }
+    }
+     catch (parseError: Throwable) {
+        return text
+    }
+    return text
+}
+fun normalizeServerUrl__1(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun buildMediaShareResponse(raw: Any): MediaShareResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:254")
+    }
+    if (rawObject == null) {
+        throw UTSError("媒体分享链接解析失败")
+    }
+    var signedUrl = normalizeServerUrl__1(stringValue__2(rawObject!!["signed_url"]))
+    if (signedUrl == "") {
+        signedUrl = normalizeServerUrl__1(stringValue__2(rawObject!!["url"]))
+    }
+    return MediaShareResponse(url = signedUrl, signed_url = signedUrl, signed_thumbnail_url = normalizeServerUrl__1(stringValue__2(rawObject!!["signed_thumbnail_url"])))
+}
+fun mediaFilePath(id: Any): String {
+    return "/api/media/files/" + stringValue__2(id) + "/"
+}
+fun buildUploadHeaders(): UTSJSONObject {
+    val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pkg/api/modules/media.uts", 282, 11))
+    if (authState.token != "") {
+        headers["Authorization"] = authState.token
+    }
+    return headers
+}
+fun parseResponseErrorMessage(text: String): String {
+    if (text == "") {
+        return ""
+    }
+    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:332")
+    if (rootObject == null) {
+        return ""
+    }
+    val detailMessage = stringValue__2(rootObject["detail"])
+    if (detailMessage != "") {
+        return detailMessage
+    }
+    val message = stringValue__2(rootObject["message"])
+    if (message != "") {
+        return message
+    }
+    return ""
+}
+fun cloneObject(source: UTSJSONObject): UTSJSONObject {
+    val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pkg/api/modules/media.uts", 347, 11))
+    for(key in resolveUTSKeyIterator(source)){
+        target[key] = source[key]
+    }
+    return target
+}
+fun buildBatchUploadFormData(items: UTSArray<MediaBatchUploadItem>): UTSJSONObject {
+    val result: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("result", "pkg/api/modules/media.uts", 354, 11))
+    var initialized = false
+    run {
+        var index: Number = 0
+        while(index < items.length){
+            val itemFormData = items[index].formData
+            if (itemFormData == null) {
+                index += 1
+                continue
+            }
+            if (!initialized) {
+                val cloned = cloneObject(itemFormData!!)
+                for(key in resolveUTSKeyIterator(cloned)){
+                    result[key] = cloned[key]
+                }
+                initialized = true
+                index += 1
+                continue
+            }
+            val currentContentTypeModel = stringValue__2(itemFormData!!["content_type_model"]).trim()
+            val currentObjectId = stringValue__2(itemFormData!!["object_id"]).trim()
+            val currentCompanyId = stringValue__2(itemFormData!!["company_id"]).trim()
+            val baseContentTypeModel = stringValue__2(result["content_type_model"]).trim()
+            val baseObjectId = stringValue__2(result["object_id"]).trim()
+            val baseCompanyId = stringValue__2(result["company_id"]).trim()
+            if (currentContentTypeModel != "" && baseContentTypeModel != "" && currentContentTypeModel != baseContentTypeModel) {
+                throw UTSError("批量上传参数冲突: content_type_model 不一致")
+            }
+            if (currentObjectId != "" && baseObjectId != "" && currentObjectId != baseObjectId) {
+                throw UTSError("批量上传参数冲突: object_id 不一致")
+            }
+            if (currentCompanyId != "" && baseCompanyId != "" && currentCompanyId != baseCompanyId) {
+                throw UTSError("批量上传参数冲突: company_id 不一致")
+            }
+            for(key in resolveUTSKeyIterator(itemFormData!!)){
+                if (result[key] == null || stringValue__2(result[key]).trim() == "") {
+                    result[key] = itemFormData!![key]
+                }
+            }
+            index += 1
+        }
+    }
+    val contentTypeModel = stringValue__2(result["content_type_model"]).trim()
+    val objectId = stringValue__2(result["object_id"]).trim()
+    if (contentTypeModel == "" || objectId == "") {
+        throw UTSError("批量上传缺少必填参数: content_type_model 和 object_id")
+    }
+    return result
+}
+fun parseBatchUploadResponseText(text: String): UTSArray<UTSJSONObject> {
+    if (text == "") {
+        return _uA()
+    }
+    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:401")
+    if (rootObject == null) {
+        throw UTSError("批量上传响应解析失败")
+    }
+    val successValue = rootObject["success"]
+    if (successValue != null) {
+        val successText = stringValue__2(successValue)
+        if (successText != "true") {
+            var message = stringValue__2(rootObject["message"])
+            if (message == "") {
+                message = stringValue__2(rootObject["detail"])
+            }
+            throw UTSError(if (message == "") {
+                "批量上传失败"
+            } else {
+                message
+            }
+            )
+        }
+        return extractUploadedItems(rootObject["data"])
+    }
+    return extractUploadedItems(rootObject)
+}
+fun tryParseObject(text: String): UTSJSONObject? {
+    if (text == "") {
+        return null
+    }
+    try {
+        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:424")
+    }
+     catch (error: Throwable) {
+        return null
+    }
+}
+fun tryParseArray(text: String): UTSArray<UTSJSONObject>? {
+    if (text == "") {
+        return null
+    }
+    try {
+        return UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/media.uts:435")
+    }
+     catch (error: Throwable) {
+        return null
+    }
+}
+fun firstJsonToken(text: String): String {
+    run {
+        var index: Number = 0
+        while(index < text.length){
+            val char = text.substring(index, index + 1)
+            if (char == " " || char == "\n" || char == "\r" || char == "\t") {
+                index += 1
+                continue
+            }
+            return char
+            index += 1
+        }
+    }
+    return ""
+}
+fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
+    if (value == null) {
+        return _uA()
+    }
+    val valueText = JSON.stringify(value)
+    if (valueText == null || valueText == "") {
+        return _uA()
+    }
+    val token = firstJsonToken(valueText)
+    if (token == "[") {
+        val uploadedArray = tryParseArray(valueText)
+        if (uploadedArray != null) {
+            return uploadedArray!!
+        }
+    }
+    if (token != "{") {
+        return _uA()
+    }
+    val valueObject = tryParseObject(valueText)
+    if (valueObject == null) {
+        return _uA()
+    }
+    val uploadedValue = valueObject["uploaded"]
+    if (uploadedValue != null) {
+        val uploadedText = JSON.stringify(uploadedValue)
+        if (uploadedText != null && uploadedText != "") {
+            val uploadedToken = firstJsonToken(uploadedText)
+            if (uploadedToken == "[") {
+                val parsedUploadedArray = tryParseArray(uploadedText)
+                if (parsedUploadedArray != null) {
+                    return parsedUploadedArray!!
+                }
+            }
+        }
+    }
+    if (valueObject["id"] != null || valueObject["original_filename"] != null || valueObject["file_url"] != null || valueObject["signed_url"] != null) {
+        return _uA(
+            valueObject
+        )
+    }
+    val detailMessage = stringValue__2(valueObject["detail"])
+    if (detailMessage != "") {
+        throw UTSError(detailMessage)
+    }
+    val message = stringValue__2(valueObject["message"])
+    if (message != "") {
+        throw UTSError(message)
+    }
+    return _uA()
+}
+fun normalizeUploadFilePath(filePath: String): String {
+    return filePath.trim()
+}
+fun buildUploadFailMessage(err: UploadFileFail): String {
+    var message = stringValue__2(err.errMsg)
+    val rawText = JSON.stringify(err)
+    if (rawText != null && rawText != "") {
+        val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:506")
+        if (rawObject != null) {
+            val causeValue = rawObject!!["cause"]
+            if (causeValue != null) {
+                val causeText = JSON.stringify(causeValue)
+                if (causeText != null && causeText != "") {
+                    val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:512")
+                    if (causeObject != null) {
+                        val causeMessage = stringValue__2(causeObject!!["message"])
+                        if (causeMessage != "") {
+                            message = if (message == "") {
+                                causeMessage
+                            } else {
+                                (message + " | " + causeMessage)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (message == "") {
+        return "上传失败"
+    }
+    return message
+}
+fun uploadBatchMediaFilesRequest(items: UTSArray<MediaBatchUploadItem>, formData: UTSJSONObject): UTSPromise<UTSArray<UTSJSONObject>> {
+    return UTSPromise(fun(resolve, reject){
+        val headers = buildUploadHeaders()
+        val uploadTimeout = if (timeOut < 120000) {
+            120000
+        } else {
+            timeOut
+        }
+        val files: UTSArray<UploadFileOptionFiles> = _uA()
+        run {
+            var index: Number = 0
+            while(index < items.length){
+                val resolvedFilePath = normalizeUploadFilePath(items[index].filePath)
+                files.push(UploadFileOptionFiles(name = "files", uri = resolvedFilePath))
+                index += 1
+            }
+        }
+        console.log("media batch upload start:", baseUrl + "/api/media/files/batch-upload/", files.length, " at pkg/api/modules/media.uts:574")
+        try {
+            uni_uploadFile(UploadFileOptions(url = baseUrl + "/api/media/files/batch-upload/", files = files, header = headers, formData = formData, timeout = uploadTimeout, success = fun(res: UploadFileSuccess){
+                console.log("media batch upload success:", res.statusCode, items.length, " at pkg/api/modules/media.uts:584")
+                if (res.statusCode < 200 || res.statusCode >= 300) {
+                    val responseMessage = parseResponseErrorMessage(res.data)
+                    reject(UTSError(if (responseMessage == "") {
+                        ("HTTP状态码错误: " + res.statusCode)
+                    } else {
+                        responseMessage
+                    }
+                    ))
+                    return
+                }
+                try {
+                    resolve(parseBatchUploadResponseText(res.data))
+                }
+                 catch (error: Throwable) {
+                    reject(error)
+                }
+            }
+            , fail = fun(err: UploadFileFail){
+                val failMessage = buildUploadFailMessage(err)
+                console.log("media batch upload fail:", failMessage, err.errCode, " at pkg/api/modules/media.uts:598")
+                reject(UTSError(failMessage))
+            }
+            ))
+        }
+         catch (error: Throwable) {
+            reject(error)
+        }
+    }
+    )
+}
+fun deleteMediaFileRequest(id: Any): UTSPromise<Boolean> {
+    return UTSPromise(fun(resolve, reject){
+        val headers = buildUploadHeaders()
+        headers["content-type"] = "application/json"
+        val requestUrl = baseUrl + mediaFilePath(id)
+        console.log("请求地址:", requestUrl, " at pkg/api/modules/media.uts:655")
+        uni_request<Any>(RequestOptions(url = requestUrl, method = "DELETE", header = headers, timeout = timeOut, success = fun(res){
+            if (res.statusCode == 204 || res.statusCode == 200) {
+                resolve(true)
+                return
+            }
+            reject(UTSError("HTTP状态码错误: " + res.statusCode))
+        }
+        , fail = fun(err){
+            reject(UTSError(stringValue__2(err.errMsg)))
+        }
+        ))
+    }
+    )
+}
+fun deleteMediaFile(id: Any): UTSPromise<Boolean> {
+    return deleteMediaFileRequest(id)
+}
+fun getMediaFileShare(id: Any): UTSPromise<MediaShareResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(mediaFilePath(id) + "share/", "GET", _uO(), true))
+            return@w buildMediaShareResponse(raw)
+    })
+}
+fun batchUploadMediaFiles(items: UTSArray<MediaBatchUploadItem>): UTSPromise<MediaBatchUploadResult> {
+    return wrapUTSPromise(suspend w@{
+            val successItems: UTSArray<UTSJSONObject> = _uA()
+            val failItems: UTSArray<UTSJSONObject> = _uA()
+            console.log("media batch upload count:", items.length, " at pkg/api/modules/media.uts:740")
+            if (items.length == 0) {
+                return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
+            }
+            try {
+                val formData = buildBatchUploadFormData(items)
+                val uploadedItems = await(uploadBatchMediaFilesRequest(items, formData))
+                if (uploadedItems.length == items.length) {
+                    run {
+                        var index: Number = 0
+                        while(index < items.length){
+                            successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
+                            index += 1
+                        }
+                    }
+                } else {
+                    val message = "批量上传返回数量异常: 请求 " + items.length + " 个，返回 " + uploadedItems.length + " 个"
+                    run {
+                        var index: Number = 0
+                        while(index < items.length){
+                            if (index < uploadedItems.length) {
+                                successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
+                            } else {
+                                failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
+                            }
+                            index += 1
+                        }
+                    }
+                }
+            }
+             catch (error: Throwable) {
+                val message = safeErrorMessage(error)
+                run {
+                    var index: Number = 0
+                    while(index < items.length){
+                        failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
+                        index += 1
+                    }
+                }
+            }
+            return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
+    })
+}
+val GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass = CreateVueComponent(GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
+        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, ctx)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList {
+    return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList(instance)
+}
+)
+open class PeriodOption__1 (
+    @JsonNotNull
+    open var key: ReportPeriod,
+    @JsonNotNull
+    open var label: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PeriodOption", "pages/reports/product-sales.uvue", 110, 6)
+    }
+}
+open class SortOption (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var label: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SortOption", "pages/reports/product-sales.uvue", 115, 6)
+    }
+}
+val GenPagesReportsProductSalesClass = CreateVueComponent(GenPagesReportsProductSales::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesReportsProductSales.inheritAttrs, inject = GenPagesReportsProductSales.inject, props = GenPagesReportsProductSales.props, propsNeedCastKeys = GenPagesReportsProductSales.propsNeedCastKeys, emits = GenPagesReportsProductSales.emits, components = GenPagesReportsProductSales.components, styles = GenPagesReportsProductSales.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenPagesReportsProductSales.setup(props as GenPagesReportsProductSales)
+    }
+    )
+}
+, fun(instance, renderer): GenPagesReportsProductSales {
+    return GenPagesReportsProductSales(instance, renderer)
+}
+)
 open class ProductListQuery (
     open var search: String? = null,
     @JsonNotNull
     open var page: Number,
     @JsonNotNull
     open var page_size: Number,
+    @JsonNotNull
+    open var ordering: String,
     @JsonNotNull
     open var filters: UTSArray<ProductSelectedFilter>,
 ) : UTSObject(), IUTSSourceMap {
@@ -1566,7 +2303,7 @@ open class ProductSelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductSelectedFilter", "pkg/api/modules/products.uts", 8, 13)
+        return UTSSourceMapPosition("ProductSelectedFilter", "pkg/api/modules/products.uts", 9, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1646,7 +2383,7 @@ open class ProductMediaFile (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductMediaFile", "pkg/api/modules/products.uts", 12, 13)
+        return UTSSourceMapPosition("ProductMediaFile", "pkg/api/modules/products.uts", 13, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductMediaFileReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1877,6 +2614,8 @@ open class ProductItem (
     @JsonNotNull
     open var media_files: UTSArray<ProductMediaFile>,
     open var category: Any? = null,
+    @JsonNotNull
+    open var category_kasa_kod: String,
     open var supplier: Number? = null,
     @JsonNotNull
     open var supplier_name: String,
@@ -1903,6 +2642,8 @@ open class ProductItem (
     @JsonNotNull
     open var variant_count: Number,
     @JsonNotNull
+    open var total_stock_quantity: Number,
+    @JsonNotNull
     open var total_sales_quantity: Number,
     @JsonNotNull
     open var total_sales_amount: String,
@@ -1914,7 +2655,7 @@ open class ProductItem (
     open var discount_info: ProductDiscountInfo? = null,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductItem", "pkg/api/modules/products.uts", 30, 13)
+        return UTSSourceMapPosition("ProductItem", "pkg/api/modules/products.uts", 31, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -1925,7 +2666,7 @@ class ProductItemReactiveObject : ProductItem, IUTSReactive<ProductItem> {
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: ProductItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, sku = __v_raw.sku, barcode = __v_raw.barcode, name_cn = __v_raw.name_cn, name_en = __v_raw.name_en, name_other = __v_raw.name_other, description = __v_raw.description, media_files = __v_raw.media_files, category = __v_raw.category, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, purchase_price = __v_raw.purchase_price, net_purchase_price = __v_raw.net_purchase_price, cost_price = __v_raw.cost_price, base_sales_price = __v_raw.base_sales_price, status = __v_raw.status, is_featured = __v_raw.is_featured, is_new = __v_raw.is_new, is_bestseller = __v_raw.is_bestseller, sort_order = __v_raw.sort_order, rating = __v_raw.rating, variant_count = __v_raw.variant_count, total_sales_quantity = __v_raw.total_sales_quantity, total_sales_amount = __v_raw.total_sales_amount, last_sale_date = __v_raw.last_sale_date, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, discount_info = __v_raw.discount_info) {
+    constructor(__v_raw: ProductItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, sku = __v_raw.sku, barcode = __v_raw.barcode, name_cn = __v_raw.name_cn, name_en = __v_raw.name_en, name_other = __v_raw.name_other, description = __v_raw.description, media_files = __v_raw.media_files, category = __v_raw.category, category_kasa_kod = __v_raw.category_kasa_kod, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, purchase_price = __v_raw.purchase_price, net_purchase_price = __v_raw.net_purchase_price, cost_price = __v_raw.cost_price, base_sales_price = __v_raw.base_sales_price, status = __v_raw.status, is_featured = __v_raw.is_featured, is_new = __v_raw.is_new, is_bestseller = __v_raw.is_bestseller, sort_order = __v_raw.sort_order, rating = __v_raw.rating, variant_count = __v_raw.variant_count, total_stock_quantity = __v_raw.total_stock_quantity, total_sales_quantity = __v_raw.total_sales_quantity, total_sales_amount = __v_raw.total_sales_amount, last_sale_date = __v_raw.last_sale_date, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, discount_info = __v_raw.discount_info) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -2041,6 +2782,18 @@ class ProductItemReactiveObject : ProductItem, IUTSReactive<ProductItem> {
             val oldValue = __v_raw.category
             __v_raw.category = value
             _tRS(__v_raw, "category", oldValue, value)
+        }
+    override var category_kasa_kod: String
+        get() {
+            return _tRG(__v_raw, "category_kasa_kod", __v_raw.category_kasa_kod, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("category_kasa_kod")) {
+                return
+            }
+            val oldValue = __v_raw.category_kasa_kod
+            __v_raw.category_kasa_kod = value
+            _tRS(__v_raw, "category_kasa_kod", oldValue, value)
         }
     override var supplier: Number?
         get() {
@@ -2198,6 +2951,18 @@ class ProductItemReactiveObject : ProductItem, IUTSReactive<ProductItem> {
             __v_raw.variant_count = value
             _tRS(__v_raw, "variant_count", oldValue, value)
         }
+    override var total_stock_quantity: Number
+        get() {
+            return _tRG(__v_raw, "total_stock_quantity", __v_raw.total_stock_quantity, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("total_stock_quantity")) {
+                return
+            }
+            val oldValue = __v_raw.total_stock_quantity
+            __v_raw.total_stock_quantity = value
+            _tRS(__v_raw, "total_stock_quantity", oldValue, value)
+        }
     override var total_sales_quantity: Number
         get() {
             return _tRG(__v_raw, "total_sales_quantity", __v_raw.total_sales_quantity, __v_isReadonly, __v_isShallow)
@@ -2293,7 +3058,7 @@ open class ProductDiscountInfo (
     open var min_quantity: Number,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductDiscountInfo", "pkg/api/modules/products.uts", 60, 13)
+        return UTSSourceMapPosition("ProductDiscountInfo", "pkg/api/modules/products.uts", 63, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductDiscountInfoReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2464,7 +3229,7 @@ open class ProductMutationData (
     open var sort_order: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductMutationData", "pkg/api/modules/products.uts", 72, 13)
+        return UTSSourceMapPosition("ProductMutationData", "pkg/api/modules/products.uts", 75, 13)
     }
 }
 open class ProductListResponse (
@@ -2482,7 +3247,19 @@ open class ProductListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductListResponse", "pkg/api/modules/products.uts", 91, 13)
+        return UTSSourceMapPosition("ProductListResponse", "pkg/api/modules/products.uts", 94, 13)
+    }
+}
+open class ProductBatchActionResponse (
+    @JsonNotNull
+    open var success: Boolean = false,
+    @JsonNotNull
+    open var message: String,
+    @JsonNotNull
+    open var data: UTSJSONObject,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductBatchActionResponse", "pkg/api/modules/products.uts", 102, 13)
     }
 }
 open class ProductFilterOption (
@@ -2492,7 +3269,7 @@ open class ProductFilterOption (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductFilterOption", "pkg/api/modules/products.uts", 99, 13)
+        return UTSSourceMapPosition("ProductFilterOption", "pkg/api/modules/products.uts", 107, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2554,7 +3331,7 @@ open class ProductFilterDefinition (
     open var options: UTSArray<ProductFilterOption>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductFilterDefinition", "pkg/api/modules/products.uts", 103, 13)
+        return UTSSourceMapPosition("ProductFilterDefinition", "pkg/api/modules/products.uts", 111, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2668,7 +3445,7 @@ open class ProductFilterOptionsResponse (
     open var filters: UTSArray<ProductFilterDefinition>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductFilterOptionsResponse", "pkg/api/modules/products.uts", 112, 13)
+        return UTSSourceMapPosition("ProductFilterOptionsResponse", "pkg/api/modules/products.uts", 120, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2748,7 +3525,7 @@ open class ProductPricingFormulaItem (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaItem", "pkg/api/modules/products.uts", 117, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaItem", "pkg/api/modules/products.uts", 125, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductPricingFormulaItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -2898,7 +3675,7 @@ open class ProductPricingFormulaListQuery (
     open var is_active: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaListQuery", "pkg/api/modules/products.uts", 129, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaListQuery", "pkg/api/modules/products.uts", 137, 13)
     }
 }
 open class ProductPricingFormulaListResponse (
@@ -2916,7 +3693,7 @@ open class ProductPricingFormulaListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaListResponse", "pkg/api/modules/products.uts", 135, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaListResponse", "pkg/api/modules/products.uts", 143, 13)
     }
 }
 open class ProductPricingFormulaMutationData (
@@ -2932,7 +3709,7 @@ open class ProductPricingFormulaMutationData (
     open var is_active: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaMutationData", "pkg/api/modules/products.uts", 143, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaMutationData", "pkg/api/modules/products.uts", 151, 13)
     }
 }
 open class ProductPricingFormulaBatchPreviewResult (
@@ -2958,7 +3735,7 @@ open class ProductPricingFormulaBatchPreviewResult (
     open var error: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewResult", "pkg/api/modules/products.uts", 150, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewResult", "pkg/api/modules/products.uts", 158, 13)
     }
 }
 open class ProductPricingFormulaBatchPreviewResponse (
@@ -2972,7 +3749,7 @@ open class ProductPricingFormulaBatchPreviewResponse (
     open var inputs: UTSJSONObject,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewResponse", "pkg/api/modules/products.uts", 162, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewResponse", "pkg/api/modules/products.uts", 170, 13)
     }
 }
 open class ProductPricingFormulaBatchPreviewRequest (
@@ -2990,7 +3767,7 @@ open class ProductPricingFormulaBatchPreviewRequest (
     open var profitable_only: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewRequest", "pkg/api/modules/products.uts", 168, 13)
+        return UTSSourceMapPosition("ProductPricingFormulaBatchPreviewRequest", "pkg/api/modules/products.uts", 176, 13)
     }
 }
 open class PrintTemplateItem (
@@ -3028,7 +3805,7 @@ open class PrintTemplateItem (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintTemplateItem", "pkg/api/modules/products.uts", 181, 13)
+        return UTSSourceMapPosition("PrintTemplateItem", "pkg/api/modules/products.uts", 189, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PrintTemplateItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -3252,7 +4029,7 @@ open class PrintTemplateListQuery (
     open var is_default: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintTemplateListQuery", "pkg/api/modules/products.uts", 199, 13)
+        return UTSSourceMapPosition("PrintTemplateListQuery", "pkg/api/modules/products.uts", 207, 13)
     }
 }
 open class PrintTemplateListResponse (
@@ -3270,7 +4047,7 @@ open class PrintTemplateListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintTemplateListResponse", "pkg/api/modules/products.uts", 207, 13)
+        return UTSSourceMapPosition("PrintTemplateListResponse", "pkg/api/modules/products.uts", 215, 13)
     }
 }
 open class PrintTemplateMutationData (
@@ -3298,7 +4075,7 @@ open class PrintTemplateMutationData (
     open var description: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintTemplateMutationData", "pkg/api/modules/products.uts", 215, 13)
+        return UTSSourceMapPosition("PrintTemplateMutationData", "pkg/api/modules/products.uts", 223, 13)
     }
 }
 val productsBasePath = "/api/products/products/"
@@ -3308,9 +4085,12 @@ val attributeTypesBasePath = "/api/products/attribute-types/"
 val attributeValuesBasePath = "/api/products/attribute-values/"
 val barcodeSequencesBasePath = "/api/products/barcode-sequences/"
 fun buildListQuery(data: ProductListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 235, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 243, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
+    }
+    if (data.ordering != "") {
+        query["ordering"] = data.ordering
     }
     run {
         var filterIndex: Number = 0
@@ -3325,7 +4105,7 @@ fun buildListQuery(data: ProductListQuery): UTSJSONObject {
     return query
 }
 fun buildPricingFormulaListQuery(data: ProductPricingFormulaListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 251, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 262, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -3335,7 +4115,7 @@ fun buildPricingFormulaListQuery(data: ProductPricingFormulaListQuery): UTSJSONO
     return query
 }
 fun buildPrintTemplateListQuery(data: PrintTemplateListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 264, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 275, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -3350,7 +4130,7 @@ fun buildPrintTemplateListQuery(data: PrintTemplateListQuery): UTSJSONObject {
     }
     return query
 }
-fun normalizeServerUrl(url: String): String {
+fun normalizeServerUrl__2(url: String): String {
     if (url == "") {
         return ""
     }
@@ -3373,10 +4153,10 @@ fun normalizeProductMediaFiles(files: UTSArray<ProductMediaFile>) {
         var mediaIndex: Number = 0
         while(mediaIndex < files.length){
             val mediaFile = files[mediaIndex]
-            mediaFile.file_url = normalizeServerUrl(mediaFile.file_url)
-            mediaFile.thumbnail_url = normalizeServerUrl(mediaFile.thumbnail_url)
-            mediaFile.signed_url = normalizeServerUrl(mediaFile.signed_url)
-            mediaFile.signed_thumbnail_url = normalizeServerUrl(mediaFile.signed_thumbnail_url)
+            mediaFile.file_url = normalizeServerUrl__2(mediaFile.file_url)
+            mediaFile.thumbnail_url = normalizeServerUrl__2(mediaFile.thumbnail_url)
+            mediaFile.signed_url = normalizeServerUrl__2(mediaFile.signed_url)
+            mediaFile.signed_thumbnail_url = normalizeServerUrl__2(mediaFile.signed_thumbnail_url)
             mediaIndex += 1
         }
     }
@@ -3403,7 +4183,7 @@ fun parseObject__1(value: Any?): UTSJSONObject? {
     if (text == null || text == "") {
         return null
     }
-    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/products.uts:323")
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/products.uts:334")
 }
 fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
     if (value == null) {
@@ -3413,7 +4193,7 @@ fun parseObjectArray(value: Any?): UTSArray<UTSJSONObject> {
     if (text == null || text == "") {
         return _uA<UTSJSONObject>()
     }
-    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/products.uts:333")
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/products.uts:344")
     if (parsed == null) {
         return _uA<UTSJSONObject>()
     }
@@ -3433,14 +4213,14 @@ fun intValue__2(value: Any?): Number {
     }
     return parsed
 }
-fun stringValue__2(value: Any?): String {
+fun stringValue__3(value: Any?): String {
     if (value == null) {
         return ""
     }
     return "" + value
 }
 fun booleanValue(value: Any?): Boolean {
-    val text = stringValue__2(value).toLowerCase()
+    val text = stringValue__3(value).toLowerCase()
     return text == "true" || text == "1" || text == "yes"
 }
 fun stringArrayValue(value: Any?): UTSArray<String> {
@@ -3451,7 +4231,7 @@ fun stringArrayValue(value: Any?): UTSArray<String> {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/products.uts:368")
+        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/products.uts:379")
     }
     if (parsed == null) {
         return _uA()
@@ -3460,14 +4240,14 @@ fun stringArrayValue(value: Any?): UTSArray<String> {
     run {
         var index: Number = 0
         while(index < parsed!!.length){
-            result.push(stringValue__2(parsed!![index]))
+            result.push(stringValue__3(parsed!![index]))
             index += 1
         }
     }
     return result
 }
 fun buildProductMediaFileFromObject(rawObject: UTSJSONObject): ProductMediaFile {
-    return ProductMediaFile(id = stringValue__2(rawObject["id"]), company = intValue__2(rawObject["company"]), original_filename = stringValue__2(rawObject["original_filename"]), file_type = stringValue__2(rawObject["file_type"]), file_type_display = stringValue__2(rawObject["file_type_display"]), mime_type = stringValue__2(rawObject["mime_type"]), file_size = intValue__2(rawObject["file_size"]), file_size_display = stringValue__2(rawObject["file_size_display"]), file_url = normalizeServerUrl(stringValue__2(rawObject["file_url"])), thumbnail_url = normalizeServerUrl(stringValue__2(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl(stringValue__2(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl(stringValue__2(rawObject["signed_thumbnail_url"])), object_id = stringValue__2(rawObject["object_id"]), is_deleted = booleanValue(rawObject["is_deleted"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+    return ProductMediaFile(id = stringValue__3(rawObject["id"]), company = intValue__2(rawObject["company"]), original_filename = stringValue__3(rawObject["original_filename"]), file_type = stringValue__3(rawObject["file_type"]), file_type_display = stringValue__3(rawObject["file_type_display"]), mime_type = stringValue__3(rawObject["mime_type"]), file_size = intValue__2(rawObject["file_size"]), file_size_display = stringValue__3(rawObject["file_size_display"]), file_url = normalizeServerUrl__2(stringValue__3(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__2(stringValue__3(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__2(stringValue__3(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__2(stringValue__3(rawObject["signed_thumbnail_url"])), object_id = stringValue__3(rawObject["object_id"]), is_deleted = booleanValue(rawObject["is_deleted"]), created_at = stringValue__3(rawObject["created_at"]), updated_at = stringValue__3(rawObject["updated_at"]))
 }
 fun buildProductMediaFilesFromValue(value: Any?): UTSArray<ProductMediaFile> {
     val rawArray = parseObjectArray(value)
@@ -3482,17 +4262,17 @@ fun buildProductMediaFilesFromValue(value: Any?): UTSArray<ProductMediaFile> {
     return result
 }
 fun buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
-    return ProductItem(id = intValue__2(rawObject["id"]), sku = stringValue__2(rawObject["sku"]), barcode = stringValue__2(rawObject["barcode"]), name_cn = stringValue__2(rawObject["name_cn"]), name_en = stringValue__2(rawObject["name_en"]), name_other = stringValue__2(rawObject["name_other"]), description = stringValue__2(rawObject["description"]), media_files = buildProductMediaFilesFromValue(rawObject["media_files"]), category = rawObject["category"], supplier = if (rawObject["supplier"] == null) {
+    return ProductItem(id = intValue__2(rawObject["id"]), sku = stringValue__3(rawObject["sku"]), barcode = stringValue__3(rawObject["barcode"]), name_cn = stringValue__3(rawObject["name_cn"]), name_en = stringValue__3(rawObject["name_en"]), name_other = stringValue__3(rawObject["name_other"]), description = stringValue__3(rawObject["description"]), media_files = buildProductMediaFilesFromValue(rawObject["media_files"]), category = rawObject["category"], category_kasa_kod = stringValue__3(rawObject["category_kasa_kod"]), supplier = if (rawObject["supplier"] == null) {
         null
     } else {
         intValue__2(rawObject["supplier"])
     }
-    , supplier_name = stringValue__2(rawObject["supplier_name"]), purchase_price = stringValue__2(rawObject["purchase_price"]), net_purchase_price = stringValue__2(rawObject["net_purchase_price"]), cost_price = stringValue__2(rawObject["cost_price"]), base_sales_price = stringValue__2(rawObject["base_sales_price"]), status = stringValue__2(rawObject["status"]), is_featured = booleanValue(rawObject["is_featured"]), is_new = booleanValue(rawObject["is_new"]), is_bestseller = booleanValue(rawObject["is_bestseller"]), sort_order = intValue__2(rawObject["sort_order"]), rating = stringValue__2(rawObject["rating"]), variant_count = intValue__2(rawObject["variant_count"]), total_sales_quantity = intValue__2(rawObject["total_sales_quantity"]), total_sales_amount = stringValue__2(rawObject["total_sales_amount"]), last_sale_date = if (rawObject["last_sale_date"] == null) {
+    , supplier_name = stringValue__3(rawObject["supplier_name"]), purchase_price = stringValue__3(rawObject["purchase_price"]), net_purchase_price = stringValue__3(rawObject["net_purchase_price"]), cost_price = stringValue__3(rawObject["cost_price"]), base_sales_price = stringValue__3(rawObject["base_sales_price"]), status = stringValue__3(rawObject["status"]), is_featured = booleanValue(rawObject["is_featured"]), is_new = booleanValue(rawObject["is_new"]), is_bestseller = booleanValue(rawObject["is_bestseller"]), sort_order = intValue__2(rawObject["sort_order"]), rating = stringValue__3(rawObject["rating"]), variant_count = intValue__2(rawObject["variant_count"]), total_stock_quantity = intValue__2(rawObject["total_stock_quantity"]), total_sales_quantity = intValue__2(rawObject["total_sales_quantity"]), total_sales_amount = stringValue__3(rawObject["total_sales_amount"]), last_sale_date = if (rawObject["last_sale_date"] == null) {
         null
     } else {
-        stringValue__2(rawObject["last_sale_date"])
+        stringValue__3(rawObject["last_sale_date"])
     }
-    , created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]), discount_info = parseProductDiscountInfo(rawObject["discount_info"]))
+    , created_at = stringValue__3(rawObject["created_at"]), updated_at = stringValue__3(rawObject["updated_at"]), discount_info = parseProductDiscountInfo(rawObject["discount_info"]))
 }
 fun buildProductItemResponse(raw: Any): ProductItem {
     val rawObject = parseObject__1(raw)
@@ -3502,7 +4282,7 @@ fun buildProductItemResponse(raw: Any): ProductItem {
     return buildProductItemFromObject(rawObject!!)
 }
 fun buildPricingFormulaItemFromObject(rawObject: UTSJSONObject): ProductPricingFormulaItem {
-    return ProductPricingFormulaItem(id = intValue__2(rawObject["id"]), company = intValue__2(rawObject["company"]), name = stringValue__2(rawObject["name"]), code = stringValue__2(rawObject["code"]), expression = stringValue__2(rawObject["expression"]), description = stringValue__2(rawObject["description"]), is_active = booleanValue(rawObject["is_active"]), supported_functions = stringArrayValue(rawObject["supported_functions"]), created_at = stringValue__2(rawObject["created_at"]), updated_at = stringValue__2(rawObject["updated_at"]))
+    return ProductPricingFormulaItem(id = intValue__2(rawObject["id"]), company = intValue__2(rawObject["company"]), name = stringValue__3(rawObject["name"]), code = stringValue__3(rawObject["code"]), expression = stringValue__3(rawObject["expression"]), description = stringValue__3(rawObject["description"]), is_active = booleanValue(rawObject["is_active"]), supported_functions = stringArrayValue(rawObject["supported_functions"]), created_at = stringValue__3(rawObject["created_at"]), updated_at = stringValue__3(rawObject["updated_at"]))
 }
 fun buildPricingFormulaItemResponse(raw: Any): ProductPricingFormulaItem {
     val rawObject = parseObject__1(raw)
@@ -3516,7 +4296,7 @@ fun buildPricingFormulaListResponse(raw: Any, query: ProductPricingFormulaListQu
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:468")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:481")
     }
     if (rawObject == null) {
         throw UTSError("价格公式列表响应解析失败")
@@ -3526,7 +4306,7 @@ fun buildPricingFormulaListResponse(raw: Any, query: ProductPricingFormulaListQu
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:477")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:490")
         }
     }
     var results: UTSArray<ProductPricingFormulaItem> = _uA()
@@ -3615,7 +4395,7 @@ fun buildBatchPreviewResponse(raw: Any): ProductPricingFormulaBatchPreviewRespon
         var index: Number = 0
         while(index < rawResults.length){
             val item = rawResults[index]
-            results.push(ProductPricingFormulaBatchPreviewResult(formula_id = intValue__2(item["formula_id"]), name = stringValue__2(item["name"]), code = stringValue__2(item["code"]), expression = stringValue__2(item["expression"]), result = stringValue__2(item["result"]), profit = stringValue__2(item["profit"]), margin_rate = stringValue__2(item["margin_rate"]), source_label = stringValue__2(item["source_label"]), profitable = booleanValue(item["profitable"]), error = stringValue__2(item["error"])))
+            results.push(ProductPricingFormulaBatchPreviewResult(formula_id = intValue__2(item["formula_id"]), name = stringValue__3(item["name"]), code = stringValue__3(item["code"]), expression = stringValue__3(item["expression"]), result = stringValue__3(item["result"]), profit = stringValue__3(item["profit"]), margin_rate = stringValue__3(item["margin_rate"]), source_label = stringValue__3(item["source_label"]), profitable = booleanValue(item["profitable"]), error = stringValue__3(item["error"])))
             index += 1
         }
     }
@@ -3631,7 +4411,7 @@ fun buildProductListResponse(raw: Any, query: ProductListQuery): ProductListResp
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:589")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:602")
     }
     if (rawObject == null) {
         throw UTSError("商品列表响应解析失败")
@@ -3641,7 +4421,7 @@ fun buildProductListResponse(raw: Any, query: ProductListQuery): ProductListResp
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:598")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:611")
         }
     }
     var results: UTSArray<ProductItem> = _uA()
@@ -3721,7 +4501,7 @@ fun buildProductFilterOptionsResponse(raw: Any): ProductFilterOptionsResponse {
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:678")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:691")
     }
     if (rawObject == null) {
         throw UTSError("商品过滤选项解析失败")
@@ -3733,7 +4513,7 @@ fun buildProductFilterOptionsResponse(raw: Any): ProductFilterOptionsResponse {
         val filterObjects = if (filtersText == null || filtersText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/products.uts:686")
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/products.uts:699")
         }
         if (filterObjects != null) {
             val nextFilters: UTSArray<ProductFilterDefinition> = _uA()
@@ -3748,7 +4528,7 @@ fun buildProductFilterOptionsResponse(raw: Any): ProductFilterOptionsResponse {
                         val optionObjects = if (optionsText == null || optionsText == "") {
                             null
                         } else {
-                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/products.uts:695")
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/products.uts:708")
                         }
                         if (optionObjects != null) {
                             val nextOptions: UTSArray<ProductFilterOption> = _uA()
@@ -3756,33 +4536,69 @@ fun buildProductFilterOptionsResponse(raw: Any): ProductFilterOptionsResponse {
                                 var optionIndex: Number = 0
                                 while(optionIndex < optionObjects!!.length){
                                     val optionObject = optionObjects!![optionIndex]
-                                    nextOptions.push(ProductFilterOption(value = stringValue__2(optionObject["value"]), label = stringValue__2(optionObject["label"])))
+                                    nextOptions.push(ProductFilterOption(value = stringValue__3(optionObject["value"]), label = stringValue__3(optionObject["label"])))
                                     optionIndex += 1
                                 }
                             }
                             options = nextOptions
                         }
                     }
-                    nextFilters.push(ProductFilterDefinition(key = stringValue__2(filterObject["key"]), param = stringValue__2(filterObject["param"]), label = stringValue__2(filterObject["label"]), control = stringValue__2(filterObject["control"]), aliases = stringArrayValue(filterObject["aliases"]), multiple = booleanValue(filterObject["multiple"]), options = options))
+                    nextFilters.push(ProductFilterDefinition(key = stringValue__3(filterObject["key"]), param = stringValue__3(filterObject["param"]), label = stringValue__3(filterObject["label"]), control = stringValue__3(filterObject["control"]), aliases = stringArrayValue(filterObject["aliases"]), multiple = booleanValue(filterObject["multiple"]), options = options))
                     filterIndex += 1
                 }
             }
             filters = nextFilters
         }
     }
-    return ProductFilterOptionsResponse(resource = stringValue__2(rawObject["resource"]), count = intValue__2(rawObject["count"]), filters = filters)
+    return ProductFilterOptionsResponse(resource = stringValue__3(rawObject["resource"]), count = intValue__2(rawObject["count"]), filters = filters)
 }
 fun productDetailPath(id: Any): String {
-    return productsBasePath + stringValue__2(id) + "/"
+    return productsBasePath + stringValue__3(id) + "/"
+}
+fun productBatchActionPath(action: String): String {
+    return productsBasePath + "batch-actions/" + action + "/"
+}
+fun buildProductBatchActionResponse(raw: Any): ProductBatchActionResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:748")
+    }
+    if (rawObject == null) {
+        return ProductBatchActionResponse(success = true, message = "操作成功", data = _uO())
+    }
+    return ProductBatchActionResponse(success = true, message = stringValue__3(rawObject["message"]), data = rawObject)
+}
+fun buildProductBatchActionBody(ids: UTSArray<String>, remark: String? = null): UTSJSONObject {
+    val nextIds: UTSArray<Any> = _uA()
+    run {
+        var index: Number = 0
+        while(index < ids.length){
+            val text = stringValue__3(ids[index])
+            val parsed = parseInt(text)
+            if (!isNaN(parsed) && "" + parsed == text) {
+                nextIds.push(parsed)
+            } else {
+                nextIds.push(text)
+            }
+            index += 1
+        }
+    }
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/products.uts", 774, 11), "ids" to nextIds)
+    if (remark != null && remark != "") {
+        body["remark"] = remark
+    }
+    return body
 }
 fun pricingFormulaDetailPath(id: Any): String {
-    return productPricingFormulasBasePath + stringValue__2(id) + "/"
+    return productPricingFormulasBasePath + stringValue__3(id) + "/"
 }
 fun resourceDetailPath(basePath: String, id: Any): String {
-    return basePath + stringValue__2(id) + "/"
+    return basePath + stringValue__3(id) + "/"
 }
 fun buildConfigListQuery(search: String?, page: Number, pageSize: Number, extra: UTSJSONObject = _uO()): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 737, 11), "page" to page, "page_size" to pageSize)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 789, 11), "page" to page, "page_size" to pageSize)
     if (search != null && search != "") {
         query["search"] = search
     }
@@ -3813,7 +4629,7 @@ fun buildConfigListResponse(raw: Any, page: Number, pageSize: Number): UTSJSONOb
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:768")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/products.uts:820")
     }
     if (rawObject == null) {
         throw UTSError("配置列表响应解析失败")
@@ -3823,7 +4639,7 @@ fun buildConfigListResponse(raw: Any, page: Number, pageSize: Number): UTSJSONOb
     if (rawPagination != null) {
         val paginationText = JSON.stringify(rawPagination)
         if (paginationText != null && paginationText != "") {
-            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:777")
+            paginationObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/products.uts:829")
         }
     }
     var results: UTSArray<UTSJSONObject> = _uA()
@@ -3892,7 +4708,7 @@ fun buildConfigListResponse(raw: Any, page: Number, pageSize: Number): UTSJSONOb
     return _uO("results" to results, "count" to totalCount, "total_count" to totalCount, "total_pages" to totalPages, "current_page" to currentPage, "page_size" to resolvedPageSize)
 }
 fun buildProductMutationBody(data: ProductMutationData): UTSJSONObject {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/products.uts", 835, 11), "name_cn" to data.name_cn, "purchase_price" to data.purchase_price, "net_purchase_price" to data.net_purchase_price, "cost_price" to data.cost_price, "base_sales_price" to data.base_sales_price, "status" to data.status, "is_featured" to data.is_featured, "is_new" to data.is_new, "is_bestseller" to data.is_bestseller, "sort_order" to data.sort_order)
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/products.uts", 887, 11), "name_cn" to data.name_cn, "purchase_price" to data.purchase_price, "net_purchase_price" to data.net_purchase_price, "cost_price" to data.cost_price, "base_sales_price" to data.base_sales_price, "status" to data.status, "is_featured" to data.is_featured, "is_new" to data.is_new, "is_bestseller" to data.is_bestseller, "sort_order" to data.sort_order)
     if (data.sku != null) {
         body["sku"] = data.sku
     }
@@ -3946,6 +4762,36 @@ fun updateProduct(id: Any, data: ProductMutationData): UTSPromise<ProductItem> {
             return@w normalizeProductItem(buildProductItemResponse(raw))
     })
 }
+fun batchDeleteProducts(ids: UTSArray<String>, remark: String? = null): UTSPromise<ProductBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(productBatchActionPath("delete"), "POST", buildProductBatchActionBody(ids, remark), true))
+            return@w buildProductBatchActionResponse(raw)
+    })
+}
+fun batchUpdateProductCategory(ids: UTSArray<String>, category: String, remark: String? = null): UTSPromise<ProductBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val body = buildProductBatchActionBody(ids, remark)
+            body["category"] = category
+            val raw = await(request(productBatchActionPath("update-category"), "POST", body, true))
+            return@w buildProductBatchActionResponse(raw)
+    })
+}
+fun batchUpdateProductSupplier(ids: UTSArray<String>, supplier: String, remark: String? = null): UTSPromise<ProductBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val body = buildProductBatchActionBody(ids, remark)
+            body["supplier"] = supplier
+            val raw = await(request(productBatchActionPath("update-supplier"), "POST", body, true))
+            return@w buildProductBatchActionResponse(raw)
+    })
+}
+fun batchUpdateProductStatus(ids: UTSArray<String>, status: String, remark: String? = null): UTSPromise<ProductBatchActionResponse> {
+    return wrapUTSPromise(suspend w@{
+            val body = buildProductBatchActionBody(ids, remark)
+            body["status"] = status
+            val raw = await(request(productBatchActionPath("update-status"), "POST", body, true))
+            return@w buildProductBatchActionResponse(raw)
+    })
+}
 fun getProductPricingFormulaDetail(id: Any): UTSPromise<ProductPricingFormulaItem> {
     return wrapUTSPromise(suspend w@{
             val raw = await(request(pricingFormulaDetailPath(id), "GET", _uO(), true))
@@ -3984,19 +4830,19 @@ fun getProductConfigList(basePath: String, search: String?, page: Number, pageSi
 }
 fun getAvailableProductDiscountsForProduct(productId: Any, search: String?, page: Number, pageSize: Number, extra: UTSJSONObject = _uO()): UTSPromise<UTSJSONObject> {
     return wrapUTSPromise(suspend w@{
-            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 928, 11), "product" to productId, "page" to page, "page_size" to pageSize)
+            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/products.uts", 1002, 11), "product" to productId, "page" to page, "page_size" to pageSize)
             if (search != null && search != "") {
                 query["search"] = search
             }
-            val status = stringValue__2(extra["status"])
+            val status = stringValue__3(extra["status"])
             if (status != "") {
                 query["status"] = status
             }
-            val discountType = stringValue__2(extra["discount_type"])
+            val discountType = stringValue__3(extra["discount_type"])
             if (discountType != "") {
                 query["discount_type"] = discountType
             }
-            val shop = stringValue__2(extra["shop"])
+            val shop = stringValue__3(extra["shop"])
             if (shop != "") {
                 query["shop"] = shop
             }
@@ -4006,7 +4852,7 @@ fun getAvailableProductDiscountsForProduct(productId: Any, search: String?, page
 }
 fun addProductDiscountToProduct(productId: Any, discountId: Any): UTSPromise<UTSJSONObject> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request(productDiscountsBasePath + stringValue__2(discountId) + "/add-product/", "POST", _uO("product" to stringValue__2(productId)), true))
+            val raw = await(request(productDiscountsBasePath + stringValue__3(discountId) + "/add-product/", "POST", _uO("product" to stringValue__3(productId)), true))
             val parsed = parseObject__1(raw)
             if (parsed == null) {
                 throw UTSError("绑定折扣响应解析失败")
@@ -4016,7 +4862,7 @@ fun addProductDiscountToProduct(productId: Any, discountId: Any): UTSPromise<UTS
 }
 fun removeProductDiscountFromProduct(productId: Any, discountId: Any): UTSPromise<UTSJSONObject> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request(productDiscountsBasePath + stringValue__2(discountId) + "/remove-product/", "POST", _uO("product" to stringValue__2(productId)), true))
+            val raw = await(request(productDiscountsBasePath + stringValue__3(discountId) + "/remove-product/", "POST", _uO("product" to stringValue__3(productId)), true))
             val parsed = parseObject__1(raw)
             if (parsed == null) {
                 throw UTSError("移除折扣响应解析失败")
@@ -4040,7 +4886,7 @@ fun parseProductDiscountInfo(value: Any?): ProductDiscountInfo? {
             discountId = parsedDiscountId
         }
     }
-    return ProductDiscountInfo(has_discount = booleanValue(source["has_discount"]), discount_id = discountId, discount_name = stringValue__2(source["discount_name"]), discount_type = stringValue__2(source["discount_type"]), original_price = stringValue__2(source["original_price"]), final_price = stringValue__2(source["final_price"]), discount_amount = stringValue__2(source["discount_amount"]), discount_percentage = stringValue__2(source["discount_percentage"]), discount_amount_fixed = stringValue__2(source["discount_amount_fixed"]), min_quantity = intValue__2(source["min_quantity"]))
+    return ProductDiscountInfo(has_discount = booleanValue(source["has_discount"]), discount_id = discountId, discount_name = stringValue__3(source["discount_name"]), discount_type = stringValue__3(source["discount_type"]), original_price = stringValue__3(source["original_price"]), final_price = stringValue__3(source["final_price"]), discount_amount = stringValue__3(source["discount_amount"]), discount_percentage = stringValue__3(source["discount_percentage"]), discount_amount_fixed = stringValue__3(source["discount_amount_fixed"]), min_quantity = intValue__2(source["min_quantity"]))
 }
 fun getProductConfigDetail(basePath: String, id: Any): UTSPromise<UTSJSONObject> {
     return wrapUTSPromise(suspend w@{
@@ -4095,7 +4941,7 @@ fun parsePrintTemplateObject(value: Any?): UTSJSONObject? {
     if (text == null || text == "") {
         return null
     }
-    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/products.uts:1045")
+    return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/products.uts:1119")
 }
 fun parsePrintTemplateArray(value: Any?): UTSArray<PrintTemplateItem> {
     if (value == null) {
@@ -4105,7 +4951,7 @@ fun parsePrintTemplateArray(value: Any?): UTSArray<PrintTemplateItem> {
     if (text == null || text == "") {
         return _uA<PrintTemplateItem>()
     }
-    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<PrintTemplateItem>(text), " at pkg/api/modules/products.uts:1053")
+    val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<PrintTemplateItem>(text), " at pkg/api/modules/products.uts:1127")
     if (parsed == null) {
         return _uA<PrintTemplateItem>()
     }
@@ -4116,7 +4962,7 @@ fun parsePrintTemplateItem(value: Any?): PrintTemplateItem {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<PrintTemplateItem>(text), " at pkg/api/modules/products.uts:1060")
+        UTSAndroid.consoleDebugError(JSON.parseObject<PrintTemplateItem>(text), " at pkg/api/modules/products.uts:1134")
     }
     if (parsed == null) {
         throw UTSError("标签模板响应解析失败")
@@ -4199,7 +5045,7 @@ fun getPrintTemplateDetail(id: String): UTSPromise<PrintTemplateItem> {
     })
 }
 fun buildPrintTemplateMutationBody(data: PrintTemplateMutationData): UTSJSONObject {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/products.uts", 1128, 11))
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/products.uts", 1202, 11))
     body["name"] = data.name
     body["template_type"] = data.template_type
     body["printer_language"] = data.printer_language
@@ -4222,467 +5068,21 @@ fun updatePrintTemplate(id: String, data: PrintTemplateMutationData): UTSPromise
 fun setDefaultPrintTemplate(id: String): UTSPromise<Any> {
     return request("/api/products/print-templates/" + id + "/set-default/", "POST", _uO(), true)
 }
-val GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass = CreateVueComponent(GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inheritAttrs, inject = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.inject, props = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.props, propsNeedCastKeys = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.propsNeedCastKeys, emits = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.emits, components = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.components, styles = GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter.setup(props as GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter)
+val TOAST_ERROR_DURATION: Number = 7000
+val TOAST_AFTER_LOADING_DELAY: Number = 150
+fun normalizeToastTitle(title: String, fallback: String): String {
+    if (title == "") {
+        return fallback
     }
-    )
+    return title
 }
-, fun(instance, renderer): GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter {
-    return GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilter(instance)
+fun showErrorToast(title: String, duration: Number = TOAST_ERROR_DURATION) {
+    val toastTitle = normalizeToastTitle(title, "操作失败")
+    setTimeout(fun(){
+        uni_showToast(ShowToastOptions(title = toastTitle, icon = "none", duration = duration))
+    }
+    , TOAST_AFTER_LOADING_DELAY)
 }
-)
-val GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreviewClass = CreateVueComponent(GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inheritAttrs, inject = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.inject, props = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.props, propsNeedCastKeys = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.propsNeedCastKeys, emits = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.emits, components = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.components, styles = GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview.setup(props as GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview {
-    return GenUniModulesLiliPreviewComponentsLiliPreviewLiliPreview(instance)
-}
-)
-open class MediaShareResponse (
-    @JsonNotNull
-    open var url: String,
-    @JsonNotNull
-    open var signed_url: String,
-    @JsonNotNull
-    open var signed_thumbnail_url: String,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MediaShareResponse", "pkg/api/modules/media.uts", 37, 13)
-    }
-}
-open class MediaBatchUploadItem (
-    @JsonNotNull
-    open var filePath: String,
-    open var name: String? = null,
-    open var formData: UTSJSONObject? = null,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MediaBatchUploadItem", "pkg/api/modules/media.uts", 45, 13)
-    }
-}
-open class MediaBatchUploadResult (
-    @JsonNotNull
-    open var successItems: UTSArray<UTSJSONObject>,
-    @JsonNotNull
-    open var failItems: UTSArray<UTSJSONObject>,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MediaBatchUploadResult", "pkg/api/modules/media.uts", 50, 13)
-    }
-}
-fun stringValue__3(value: Any?): String {
-    if (value == null) {
-        return ""
-    }
-    return "" + value
-}
-fun normalizeServerUrl__1(url: String): String {
-    if (url == "") {
-        return ""
-    }
-    if (url.startsWith("http://localhost:8000")) {
-        return baseUrl + url.substring(21)
-    }
-    if (url.startsWith("https://localhost:8000")) {
-        return baseUrl + url.substring(22)
-    }
-    if (url.startsWith("http://127.0.0.1:8000")) {
-        return baseUrl + url.substring(21)
-    }
-    if (url.startsWith("https://127.0.0.1:8000")) {
-        return baseUrl + url.substring(22)
-    }
-    return url
-}
-fun buildMediaShareResponse(raw: Any): MediaShareResponse {
-    val rawText = JSON.stringify(raw)
-    val rawObject = if (rawText == null || rawText == "") {
-        null
-    } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:226")
-    }
-    if (rawObject == null) {
-        throw UTSError("媒体分享链接解析失败")
-    }
-    var signedUrl = normalizeServerUrl__1(stringValue__3(rawObject!!["signed_url"]))
-    if (signedUrl == "") {
-        signedUrl = normalizeServerUrl__1(stringValue__3(rawObject!!["url"]))
-    }
-    return MediaShareResponse(url = signedUrl, signed_url = signedUrl, signed_thumbnail_url = normalizeServerUrl__1(stringValue__3(rawObject!!["signed_thumbnail_url"])))
-}
-fun mediaFilePath(id: Any): String {
-    return "/api/media/files/" + stringValue__3(id) + "/"
-}
-fun buildUploadHeaders(): UTSJSONObject {
-    val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pkg/api/modules/media.uts", 254, 11))
-    if (authState.token != "") {
-        headers["Authorization"] = authState.token
-    }
-    return headers
-}
-fun parseResponseErrorMessage(text: String): String {
-    if (text == "") {
-        return ""
-    }
-    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:304")
-    if (rootObject == null) {
-        return ""
-    }
-    val detailMessage = stringValue__3(rootObject["detail"])
-    if (detailMessage != "") {
-        return detailMessage
-    }
-    val message = stringValue__3(rootObject["message"])
-    if (message != "") {
-        return message
-    }
-    return ""
-}
-fun cloneObject(source: UTSJSONObject): UTSJSONObject {
-    val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pkg/api/modules/media.uts", 319, 11))
-    for(key in resolveUTSKeyIterator(source)){
-        target[key] = source[key]
-    }
-    return target
-}
-fun buildBatchUploadFormData(items: UTSArray<MediaBatchUploadItem>): UTSJSONObject {
-    val result: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("result", "pkg/api/modules/media.uts", 326, 11))
-    var initialized = false
-    run {
-        var index: Number = 0
-        while(index < items.length){
-            val itemFormData = items[index].formData
-            if (itemFormData == null) {
-                index += 1
-                continue
-            }
-            if (!initialized) {
-                val cloned = cloneObject(itemFormData!!)
-                for(key in resolveUTSKeyIterator(cloned)){
-                    result[key] = cloned[key]
-                }
-                initialized = true
-                index += 1
-                continue
-            }
-            val currentContentTypeModel = stringValue__3(itemFormData!!["content_type_model"]).trim()
-            val currentObjectId = stringValue__3(itemFormData!!["object_id"]).trim()
-            val currentCompanyId = stringValue__3(itemFormData!!["company_id"]).trim()
-            val baseContentTypeModel = stringValue__3(result["content_type_model"]).trim()
-            val baseObjectId = stringValue__3(result["object_id"]).trim()
-            val baseCompanyId = stringValue__3(result["company_id"]).trim()
-            if (currentContentTypeModel != "" && baseContentTypeModel != "" && currentContentTypeModel != baseContentTypeModel) {
-                throw UTSError("批量上传参数冲突: content_type_model 不一致")
-            }
-            if (currentObjectId != "" && baseObjectId != "" && currentObjectId != baseObjectId) {
-                throw UTSError("批量上传参数冲突: object_id 不一致")
-            }
-            if (currentCompanyId != "" && baseCompanyId != "" && currentCompanyId != baseCompanyId) {
-                throw UTSError("批量上传参数冲突: company_id 不一致")
-            }
-            for(key in resolveUTSKeyIterator(itemFormData!!)){
-                if (result[key] == null || stringValue__3(result[key]).trim() == "") {
-                    result[key] = itemFormData!![key]
-                }
-            }
-            index += 1
-        }
-    }
-    val contentTypeModel = stringValue__3(result["content_type_model"]).trim()
-    val objectId = stringValue__3(result["object_id"]).trim()
-    if (contentTypeModel == "" || objectId == "") {
-        throw UTSError("批量上传缺少必填参数: content_type_model 和 object_id")
-    }
-    return result
-}
-fun parseBatchUploadResponseText(text: String): UTSArray<UTSJSONObject> {
-    if (text == "") {
-        return _uA()
-    }
-    val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:373")
-    if (rootObject == null) {
-        throw UTSError("批量上传响应解析失败")
-    }
-    val successValue = rootObject["success"]
-    if (successValue != null) {
-        val successText = stringValue__3(successValue)
-        if (successText != "true") {
-            var message = stringValue__3(rootObject["message"])
-            if (message == "") {
-                message = stringValue__3(rootObject["detail"])
-            }
-            throw UTSError(if (message == "") {
-                "批量上传失败"
-            } else {
-                message
-            }
-            )
-        }
-        return extractUploadedItems(rootObject["data"])
-    }
-    return extractUploadedItems(rootObject)
-}
-fun tryParseObject(text: String): UTSJSONObject? {
-    if (text == "") {
-        return null
-    }
-    try {
-        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/media.uts:396")
-    }
-     catch (error: Throwable) {
-        return null
-    }
-}
-fun tryParseArray(text: String): UTSArray<UTSJSONObject>? {
-    if (text == "") {
-        return null
-    }
-    try {
-        return UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/media.uts:407")
-    }
-     catch (error: Throwable) {
-        return null
-    }
-}
-fun firstJsonToken(text: String): String {
-    run {
-        var index: Number = 0
-        while(index < text.length){
-            val char = text.substring(index, index + 1)
-            if (char == " " || char == "\n" || char == "\r" || char == "\t") {
-                index += 1
-                continue
-            }
-            return char
-            index += 1
-        }
-    }
-    return ""
-}
-fun extractUploadedItems(value: Any?): UTSArray<UTSJSONObject> {
-    if (value == null) {
-        return _uA()
-    }
-    val valueText = JSON.stringify(value)
-    if (valueText == null || valueText == "") {
-        return _uA()
-    }
-    val token = firstJsonToken(valueText)
-    if (token == "[") {
-        val uploadedArray = tryParseArray(valueText)
-        if (uploadedArray != null) {
-            return uploadedArray!!
-        }
-    }
-    if (token != "{") {
-        return _uA()
-    }
-    val valueObject = tryParseObject(valueText)
-    if (valueObject == null) {
-        return _uA()
-    }
-    val uploadedValue = valueObject["uploaded"]
-    if (uploadedValue != null) {
-        val uploadedText = JSON.stringify(uploadedValue)
-        if (uploadedText != null && uploadedText != "") {
-            val uploadedToken = firstJsonToken(uploadedText)
-            if (uploadedToken == "[") {
-                val parsedUploadedArray = tryParseArray(uploadedText)
-                if (parsedUploadedArray != null) {
-                    return parsedUploadedArray!!
-                }
-            }
-        }
-    }
-    if (valueObject["id"] != null || valueObject["original_filename"] != null || valueObject["file_url"] != null || valueObject["signed_url"] != null) {
-        return _uA(
-            valueObject
-        )
-    }
-    val detailMessage = stringValue__3(valueObject["detail"])
-    if (detailMessage != "") {
-        throw UTSError(detailMessage)
-    }
-    val message = stringValue__3(valueObject["message"])
-    if (message != "") {
-        throw UTSError(message)
-    }
-    return _uA()
-}
-fun normalizeUploadFilePath(filePath: String): String {
-    return filePath.trim()
-}
-fun buildUploadFailMessage(err: UploadFileFail): String {
-    var message = stringValue__3(err.errMsg)
-    val rawText = JSON.stringify(err)
-    if (rawText != null && rawText != "") {
-        val rawObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/media.uts:478")
-        if (rawObject != null) {
-            val causeValue = rawObject!!["cause"]
-            if (causeValue != null) {
-                val causeText = JSON.stringify(causeValue)
-                if (causeText != null && causeText != "") {
-                    val causeObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(causeText), " at pkg/api/modules/media.uts:484")
-                    if (causeObject != null) {
-                        val causeMessage = stringValue__3(causeObject!!["message"])
-                        if (causeMessage != "") {
-                            message = if (message == "") {
-                                causeMessage
-                            } else {
-                                (message + " | " + causeMessage)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (message == "") {
-        return "上传失败"
-    }
-    return message
-}
-fun uploadBatchMediaFilesRequest(items: UTSArray<MediaBatchUploadItem>, formData: UTSJSONObject): UTSPromise<UTSArray<UTSJSONObject>> {
-    return UTSPromise(fun(resolve, reject){
-        val headers = buildUploadHeaders()
-        val uploadTimeout = if (timeOut < 120000) {
-            120000
-        } else {
-            timeOut
-        }
-        val files: UTSArray<UploadFileOptionFiles> = _uA()
-        run {
-            var index: Number = 0
-            while(index < items.length){
-                val resolvedFilePath = normalizeUploadFilePath(items[index].filePath)
-                files.push(UploadFileOptionFiles(name = "files", uri = resolvedFilePath))
-                index += 1
-            }
-        }
-        console.log("media batch upload start:", baseUrl + "/api/media/files/batch-upload/", files.length, " at pkg/api/modules/media.uts:551")
-        try {
-            uni_uploadFile(UploadFileOptions(url = baseUrl + "/api/media/files/batch-upload/", files = files, header = headers, formData = formData, timeout = uploadTimeout, success = fun(res: UploadFileSuccess){
-                console.log("media batch upload success:", res.statusCode, items.length, " at pkg/api/modules/media.uts:561")
-                if (res.statusCode < 200 || res.statusCode >= 300) {
-                    val responseMessage = parseResponseErrorMessage(res.data)
-                    reject(UTSError(if (responseMessage == "") {
-                        ("HTTP状态码错误: " + res.statusCode)
-                    } else {
-                        responseMessage
-                    }
-                    ))
-                    return
-                }
-                try {
-                    resolve(parseBatchUploadResponseText(res.data))
-                }
-                 catch (error: Throwable) {
-                    reject(error)
-                }
-            }
-            , fail = fun(err: UploadFileFail){
-                val failMessage = buildUploadFailMessage(err)
-                console.log("media batch upload fail:", failMessage, err.errCode, " at pkg/api/modules/media.uts:575")
-                reject(UTSError(failMessage))
-            }
-            ))
-        }
-         catch (error: Throwable) {
-            reject(error)
-        }
-    }
-    )
-}
-fun deleteMediaFileRequest(id: Any): UTSPromise<Boolean> {
-    return UTSPromise(fun(resolve, reject){
-        val headers = buildUploadHeaders()
-        headers["content-type"] = "application/json"
-        val requestUrl = baseUrl + mediaFilePath(id)
-        console.log("请求地址:", requestUrl, " at pkg/api/modules/media.uts:632")
-        uni_request<Any>(RequestOptions(url = requestUrl, method = "DELETE", header = headers, timeout = timeOut, success = fun(res){
-            if (res.statusCode == 204 || res.statusCode == 200) {
-                resolve(true)
-                return
-            }
-            reject(UTSError("HTTP状态码错误: " + res.statusCode))
-        }
-        , fail = fun(err){
-            reject(UTSError(stringValue__3(err.errMsg)))
-        }
-        ))
-    }
-    )
-}
-fun deleteMediaFile(id: Any): UTSPromise<Boolean> {
-    return deleteMediaFileRequest(id)
-}
-fun getMediaFileShare(id: Any): UTSPromise<MediaShareResponse> {
-    return wrapUTSPromise(suspend w@{
-            val raw = await(request(mediaFilePath(id) + "share/", "GET", _uO(), true))
-            return@w buildMediaShareResponse(raw)
-    })
-}
-fun batchUploadMediaFiles(items: UTSArray<MediaBatchUploadItem>): UTSPromise<MediaBatchUploadResult> {
-    return wrapUTSPromise(suspend w@{
-            val successItems: UTSArray<UTSJSONObject> = _uA()
-            val failItems: UTSArray<UTSJSONObject> = _uA()
-            console.log("media batch upload count:", items.length, " at pkg/api/modules/media.uts:717")
-            if (items.length == 0) {
-                return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
-            }
-            try {
-                val formData = buildBatchUploadFormData(items)
-                val uploadedItems = await(uploadBatchMediaFilesRequest(items, formData))
-                if (uploadedItems.length == items.length) {
-                    run {
-                        var index: Number = 0
-                        while(index < items.length){
-                            successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
-                            index += 1
-                        }
-                    }
-                } else {
-                    val message = "批量上传返回数量异常: 请求 " + items.length + " 个，返回 " + uploadedItems.length + " 个"
-                    run {
-                        var index: Number = 0
-                        while(index < items.length){
-                            if (index < uploadedItems.length) {
-                                successItems.push(_uO("filePath" to items[index].filePath, "result" to uploadedItems[index]))
-                            } else {
-                                failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
-                            }
-                            index += 1
-                        }
-                    }
-                }
-            }
-             catch (error: Throwable) {
-                val message = stringValue__3((error as UTSError).message)
-                run {
-                    var index: Number = 0
-                    while(index < items.length){
-                        failItems.push(_uO("filePath" to items[index].filePath, "message" to message))
-                        index += 1
-                    }
-                }
-            }
-            return@w MediaBatchUploadResult(successItems = successItems, failItems = failItems)
-    })
-}
-val GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalListClass = CreateVueComponent(GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inheritAttrs, inject = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.inject, props = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.props, propsNeedCastKeys = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.propsNeedCastKeys, emits = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.emits, components = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.components, styles = GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.styles, setup = fun(props: ComponentPublicInstance, ctx: SetupContext): Any? {
-        return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList.setup(props as GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList, ctx)
-    }
-    )
-}
-, fun(instance, renderer): GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList {
-    return GenUniModulesLiliUniversalListComponentsLiliUniversalListLiliUniversalList(instance)
-}
-)
 open class SelectChangePayload (
     @JsonNotNull
     open var value: String,
@@ -4694,7 +5094,7 @@ open class SelectChangePayload (
     open var item: UTSJSONObject,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 184, 6)
+        return UTSSourceMapPosition("SelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 185, 6)
     }
 }
 open class MultiSelectChangePayload (
@@ -4706,7 +5106,7 @@ open class MultiSelectChangePayload (
     open var items: UTSArray<UTSJSONObject>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 191, 6)
+        return UTSSourceMapPosition("MultiSelectChangePayload", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 192, 6)
     }
 }
 open class TreeDisplayRow (
@@ -4722,7 +5122,7 @@ open class TreeDisplayRow (
     open var expanded: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 197, 6)
+        return UTSSourceMapPosition("TreeDisplayRow", "uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue", 198, 6)
     }
 }
 val GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelectClass = CreateVueComponent(GenUniModulesLiliBottomSelectComponentsLiliBottomSelectLiliBottomSelect::class.java, fun(): VueComponentOptions {
@@ -4742,8 +5142,112 @@ open class ProductSelectOption (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductSelectOption", "pages/tabbar/products.uvue", 170, 6)
+        return UTSSourceMapPosition("ProductSelectOption", "pages/tabbar/products.uvue", 274, 6)
     }
+}
+open class ProductStatusOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductStatusOption", "pages/tabbar/products.uvue", 279, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductStatusOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductStatusOptionReactiveObject : ProductStatusOption, IUTSReactive<ProductStatusOption> {
+    override var __v_raw: ProductStatusOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductStatusOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductStatusOptionReactiveObject {
+        return ProductStatusOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
+}
+open class ProductSortOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var text: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ProductSortOption", "pages/tabbar/products.uvue", 284, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return ProductSortOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class ProductSortOptionReactiveObject : ProductSortOption, IUTSReactive<ProductSortOption> {
+    override var __v_raw: ProductSortOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: ProductSortOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, text = __v_raw.text) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): ProductSortOptionReactiveObject {
+        return ProductSortOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var text: String
+        get() {
+            return _tRG(__v_raw, "text", __v_raw.text, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("text")) {
+                return
+            }
+            val oldValue = __v_raw.text
+            __v_raw.text = value
+            _tRS(__v_raw, "text", oldValue, value)
+        }
 }
 val GenPagesTabbarProductsClass = CreateVueComponent(GenPagesTabbarProducts::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesTabbarProducts.inheritAttrs, inject = GenPagesTabbarProducts.inject, props = GenPagesTabbarProducts.props, propsNeedCastKeys = GenPagesTabbarProducts.propsNeedCastKeys, emits = GenPagesTabbarProducts.emits, components = GenPagesTabbarProducts.components, styles = GenPagesTabbarProducts.styles, setup = fun(props: ComponentPublicInstance): Any? {
@@ -6077,7 +6581,7 @@ fun buildListQuery__1(data: SupplierListQuery): UTSJSONObject {
     }
     return query
 }
-fun normalizeServerUrl__2(url: String): String {
+fun normalizeServerUrl__3(url: String): String {
     if (url == "") {
         return ""
     }
@@ -6111,10 +6615,10 @@ fun normalizeSupplierMediaFiles(files: UTSArray<SupplierMediaFile>) {
         var mediaIndex: Number = 0
         while(mediaIndex < files.length){
             val mediaFile = files[mediaIndex]
-            mediaFile.file_url = normalizeServerUrl__2(mediaFile.file_url)
-            mediaFile.thumbnail_url = normalizeServerUrl__2(mediaFile.thumbnail_url)
-            mediaFile.signed_url = normalizeServerUrl__2(mediaFile.signed_url)
-            mediaFile.signed_thumbnail_url = normalizeServerUrl__2(mediaFile.signed_thumbnail_url)
+            mediaFile.file_url = normalizeServerUrl__3(mediaFile.file_url)
+            mediaFile.thumbnail_url = normalizeServerUrl__3(mediaFile.thumbnail_url)
+            mediaFile.signed_url = normalizeServerUrl__3(mediaFile.signed_url)
+            mediaFile.signed_thumbnail_url = normalizeServerUrl__3(mediaFile.signed_thumbnail_url)
             mediaIndex += 1
         }
     }
@@ -6307,7 +6811,7 @@ fun buildSupplierFilterOptionsResponse(raw: Any): SupplierFilterOptionsResponse 
     return SupplierFilterOptionsResponse(resource = stringValue__4(rawObject!!["resource"]), count = intValue__3(rawObject!!["count"]), filters = filters)
 }
 fun buildSupplierMediaFileFromObject(rawObject: UTSJSONObject): SupplierMediaFile {
-    return SupplierMediaFile(id = stringValue__4(rawObject["id"]), company = intValue__3(rawObject["company"]), original_filename = stringValue__4(rawObject["original_filename"]), file_type = stringValue__4(rawObject["file_type"]), file_type_display = stringValue__4(rawObject["file_type_display"]), mime_type = stringValue__4(rawObject["mime_type"]), file_size = intValue__3(rawObject["file_size"]), file_size_display = stringValue__4(rawObject["file_size_display"]), file_url = normalizeServerUrl__2(stringValue__4(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__2(stringValue__4(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__2(stringValue__4(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__2(stringValue__4(rawObject["signed_thumbnail_url"])), object_id = stringValue__4(rawObject["object_id"]), is_deleted = stringValue__4(rawObject["is_deleted"]) == "true", created_at = stringValue__4(rawObject["created_at"]), updated_at = stringValue__4(rawObject["updated_at"]))
+    return SupplierMediaFile(id = stringValue__4(rawObject["id"]), company = intValue__3(rawObject["company"]), original_filename = stringValue__4(rawObject["original_filename"]), file_type = stringValue__4(rawObject["file_type"]), file_type_display = stringValue__4(rawObject["file_type_display"]), mime_type = stringValue__4(rawObject["mime_type"]), file_size = intValue__3(rawObject["file_size"]), file_size_display = stringValue__4(rawObject["file_size_display"]), file_url = normalizeServerUrl__3(stringValue__4(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__3(stringValue__4(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__3(stringValue__4(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__3(stringValue__4(rawObject["signed_thumbnail_url"])), object_id = stringValue__4(rawObject["object_id"]), is_deleted = stringValue__4(rawObject["is_deleted"]) == "true", created_at = stringValue__4(rawObject["created_at"]), updated_at = stringValue__4(rawObject["updated_at"]))
 }
 fun buildSupplierMediaFilesFromValue(value: Any?): UTSArray<SupplierMediaFile> {
     if (value == null) {
@@ -6597,7 +7101,7 @@ open class SelectOption (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 50, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/suppliers/from.uvue", 51, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -7574,7 +8078,7 @@ open class TransactionMutationData (
         return UTSSourceMapPosition("TransactionMutationData", "pkg/api/modules/transactions.uts", 105, 13)
     }
 }
-fun normalizeServerUrl__3(url: String): String {
+fun normalizeServerUrl__4(url: String): String {
     if (url == "") {
         return ""
     }
@@ -7679,7 +8183,7 @@ fun buildTransactionListQuery(data: TransactionListQuery): UTSJSONObject {
     return query
 }
 fun buildTransactionMediaFileFromObject(rawObject: UTSJSONObject): TransactionMediaFile {
-    return TransactionMediaFile(id = stringValue__5(rawObject["id"]), company = intValue__4(rawObject["company"]), original_filename = stringValue__5(rawObject["original_filename"]), file_type = stringValue__5(rawObject["file_type"]), file_type_display = stringValue__5(rawObject["file_type_display"]), mime_type = stringValue__5(rawObject["mime_type"]), file_size = intValue__4(rawObject["file_size"]), file_size_display = stringValue__5(rawObject["file_size_display"]), file_url = normalizeServerUrl__3(stringValue__5(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__3(stringValue__5(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__3(stringValue__5(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__3(stringValue__5(rawObject["signed_thumbnail_url"])), object_id = stringValue__5(rawObject["object_id"]), is_deleted = booleanValue__1(rawObject["is_deleted"]), created_at = stringValue__5(rawObject["created_at"]), updated_at = stringValue__5(rawObject["updated_at"]))
+    return TransactionMediaFile(id = stringValue__5(rawObject["id"]), company = intValue__4(rawObject["company"]), original_filename = stringValue__5(rawObject["original_filename"]), file_type = stringValue__5(rawObject["file_type"]), file_type_display = stringValue__5(rawObject["file_type_display"]), mime_type = stringValue__5(rawObject["mime_type"]), file_size = intValue__4(rawObject["file_size"]), file_size_display = stringValue__5(rawObject["file_size_display"]), file_url = normalizeServerUrl__4(stringValue__5(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__4(stringValue__5(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__4(stringValue__5(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__4(stringValue__5(rawObject["signed_thumbnail_url"])), object_id = stringValue__5(rawObject["object_id"]), is_deleted = booleanValue__1(rawObject["is_deleted"]), created_at = stringValue__5(rawObject["created_at"]), updated_at = stringValue__5(rawObject["updated_at"]))
 }
 fun buildTransactionMediaFilesFromValue(value: Any?): UTSArray<TransactionMediaFile> {
     if (value == null) {
@@ -8067,7 +8571,7 @@ open class TransactionSelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("TransactionSelectedFilter", "pages/transactions/index.uvue", 157, 6)
+        return UTSSourceMapPosition("TransactionSelectedFilter", "pages/transactions/index.uvue", 158, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return TransactionSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -8129,7 +8633,7 @@ open class SelectOption__1 (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/transactions/from.uvue", 51, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/transactions/from.uvue", 52, 6)
     }
 }
 val GenPagesTransactionsFromClass = CreateVueComponent(GenPagesTransactionsFrom::class.java, fun(): VueComponentOptions {
@@ -8149,7 +8653,7 @@ open class SummarySelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SummarySelectedFilter", "pages/suppliers_procure/index.uvue", 163, 6)
+        return UTSSourceMapPosition("SummarySelectedFilter", "pages/suppliers_procure/index.uvue", 164, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SummarySelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -8973,7 +9477,7 @@ open class SelectOption__2 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/index.uvue", 135, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/index.uvue", 136, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__2ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -9035,7 +9539,7 @@ open class SelectOption__3 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/form.uvue", 41, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/kasa_category/form.uvue", 42, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__3ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -9666,6 +10170,9 @@ fun buildCategoryRootsQuery(data: CategoryRootsQuery): UTSJSONObject {
     }
     return query
 }
+fun buildIncludeSelfQuery(includeSelf: Boolean): UTSJSONObject {
+    return _uO("include_self" to includeSelf)
+}
 fun categoryDetailPath(id: Any): String {
     return categoryBasePath + stringValue__7(id) + "/"
 }
@@ -9716,6 +10223,12 @@ fun getCategoryChildren(id: Any, search: String? = null): UTSPromise<UTSArray<Ca
             return@w buildCategoryArrayFromValue(raw)
     })
 }
+fun getCategoryDescendants(id: Any, includeSelf: Boolean = false): UTSPromise<UTSArray<CategoryItem>> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request(categoryDetailPath(id) + "descendants/", "GET", buildIncludeSelfQuery(includeSelf), true))
+            return@w buildCategoryArrayFromValue(raw)
+    })
+}
 fun translateCategoryName(text: String): UTSPromise<UTSJSONObject> {
     return wrapUTSPromise(suspend w@{
             val raw = await(request(categoryBasePath + "translate_text/", "POST", buildTranslateTextBody(text), false))
@@ -9729,7 +10242,7 @@ open class FilterOption (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FilterOption", "pages/category/index.uvue", 171, 6)
+        return UTSSourceMapPosition("FilterOption", "pages/category/index.uvue", 172, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -9781,7 +10294,7 @@ open class ChildGroup (
     open var items: UTSArray<CategoryItem>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ChildGroup", "pages/category/index.uvue", 176, 6)
+        return UTSSourceMapPosition("ChildGroup", "pages/category/index.uvue", 177, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ChildGroupReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -9843,7 +10356,7 @@ open class SelectOption__4 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/category/from.uvue", 44, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/category/from.uvue", 45, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__4ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -10629,7 +11142,7 @@ fun parseArray(value: Any?): UTSArray<UTSJSONObject> {
     }
     return parsed
 }
-fun normalizeServerUrl__4(url: String): String {
+fun normalizeServerUrl__5(url: String): String {
     if (url == "") {
         return ""
     }
@@ -10659,7 +11172,7 @@ fun buildShopMediaMutationBody(data: ShopMediaMutationData): UTSJSONObject {
     )
 }
 fun buildShopMediaFile(rawObject: UTSJSONObject): ShopMediaFile {
-    return ShopMediaFile(id = stringValue__8(rawObject["id"]), company = intValue__7(rawObject["company"]), original_filename = stringValue__8(rawObject["original_filename"]), file_type = stringValue__8(rawObject["file_type"]), file_type_display = stringValue__8(rawObject["file_type_display"]), mime_type = stringValue__8(rawObject["mime_type"]), file_size = intValue__7(rawObject["file_size"]), file_size_display = stringValue__8(rawObject["file_size_display"]), file_url = normalizeServerUrl__4(stringValue__8(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__4(stringValue__8(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__4(stringValue__8(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__4(stringValue__8(rawObject["signed_thumbnail_url"])), object_id = stringValue__8(rawObject["object_id"]), is_deleted = boolValue__1(rawObject["is_deleted"]), created_at = stringValue__8(rawObject["created_at"]), updated_at = stringValue__8(rawObject["updated_at"]))
+    return ShopMediaFile(id = stringValue__8(rawObject["id"]), company = intValue__7(rawObject["company"]), original_filename = stringValue__8(rawObject["original_filename"]), file_type = stringValue__8(rawObject["file_type"]), file_type_display = stringValue__8(rawObject["file_type_display"]), mime_type = stringValue__8(rawObject["mime_type"]), file_size = intValue__7(rawObject["file_size"]), file_size_display = stringValue__8(rawObject["file_size_display"]), file_url = normalizeServerUrl__5(stringValue__8(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__5(stringValue__8(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__5(stringValue__8(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__5(stringValue__8(rawObject["signed_thumbnail_url"])), object_id = stringValue__8(rawObject["object_id"]), is_deleted = boolValue__1(rawObject["is_deleted"]), created_at = stringValue__8(rawObject["created_at"]), updated_at = stringValue__8(rawObject["updated_at"]))
 }
 fun buildShopMediaFiles(value: Any?): UTSArray<ShopMediaFile> {
     val rawArray = parseArray(value)
@@ -10877,7 +11390,7 @@ open class SelectOption__5 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/shop/from.uvue", 50, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/shop/from.uvue", 51, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__5ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -10932,6 +11445,1618 @@ val GenPagesShopFromClass = CreateVueComponent(GenPagesShopFrom::class.java, fun
     return GenPagesShopFrom(instance, renderer)
 }
 )
+open class LabelPrinterDevice (
+    @JsonNotNull
+    open var name: String,
+    @JsonNotNull
+    open var address: String,
+    @JsonNotNull
+    open var type: String,
+    @JsonNotNull
+    open var bondState: String,
+    @JsonNotNull
+    open var rssi: Number,
+    @JsonNotNull
+    open var connected: Boolean = false,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("LabelPrinterDevice", "uni_modules/lili-label-printer/index.uts", 22, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return LabelPrinterDeviceReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class LabelPrinterDeviceReactiveObject : LabelPrinterDevice, IUTSReactive<LabelPrinterDevice> {
+    override var __v_raw: LabelPrinterDevice
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: LabelPrinterDevice, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(name = __v_raw.name, address = __v_raw.address, type = __v_raw.type, bondState = __v_raw.bondState, rssi = __v_raw.rssi, connected = __v_raw.connected) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): LabelPrinterDeviceReactiveObject {
+        return LabelPrinterDeviceReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var name: String
+        get() {
+            return _tRG(__v_raw, "name", __v_raw.name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("name")) {
+                return
+            }
+            val oldValue = __v_raw.name
+            __v_raw.name = value
+            _tRS(__v_raw, "name", oldValue, value)
+        }
+    override var address: String
+        get() {
+            return _tRG(__v_raw, "address", __v_raw.address, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("address")) {
+                return
+            }
+            val oldValue = __v_raw.address
+            __v_raw.address = value
+            _tRS(__v_raw, "address", oldValue, value)
+        }
+    override var type: String
+        get() {
+            return _tRG(__v_raw, "type", __v_raw.type, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("type")) {
+                return
+            }
+            val oldValue = __v_raw.type
+            __v_raw.type = value
+            _tRS(__v_raw, "type", oldValue, value)
+        }
+    override var bondState: String
+        get() {
+            return _tRG(__v_raw, "bondState", __v_raw.bondState, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("bondState")) {
+                return
+            }
+            val oldValue = __v_raw.bondState
+            __v_raw.bondState = value
+            _tRS(__v_raw, "bondState", oldValue, value)
+        }
+    override var rssi: Number
+        get() {
+            return _tRG(__v_raw, "rssi", __v_raw.rssi, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("rssi")) {
+                return
+            }
+            val oldValue = __v_raw.rssi
+            __v_raw.rssi = value
+            _tRS(__v_raw, "rssi", oldValue, value)
+        }
+    override var connected: Boolean
+        get() {
+            return _tRG(__v_raw, "connected", __v_raw.connected, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("connected")) {
+                return
+            }
+            val oldValue = __v_raw.connected
+            __v_raw.connected = value
+            _tRS(__v_raw, "connected", oldValue, value)
+        }
+}
+open class LabelPrinterResult (
+    @JsonNotNull
+    open var success: Boolean = false,
+    @JsonNotNull
+    open var code: String,
+    @JsonNotNull
+    open var message: String,
+    open var data: UTSJSONObject? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("LabelPrinterResult", "uni_modules/lili-label-printer/index.uts", 30, 13)
+    }
+}
+open class PrintTsplOptions (
+    @JsonNotNull
+    open var address: String,
+    @JsonNotNull
+    open var tspl: String,
+    open var charset: String? = null,
+    open var chunkSize: Number? = null,
+    open var delayMs: Number? = null,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PrintTsplOptions", "uni_modules/lili-label-printer/index.uts", 36, 13)
+    }
+}
+val sppUuidText = "00001101-0000-1000-8000-00805F9B34FB"
+val labelPrinterDefaultStorageKey = "label-print:default-printer"
+var activeSocket: BluetoothSocket? = null
+var activeDevice: BluetoothDevice? = null
+var discoveryReceiver: BroadcastReceiver? = null
+var discoveryDevices: UTSArray<LabelPrinterDevice> = _uA()
+var discoveryResolve: ((devices: UTSArray<LabelPrinterDevice>) -> Unit)? = null
+var discoveryTimer: Number = -1
+val code128Patterns = _uA(
+    "212222",
+    "222122",
+    "222221",
+    "121223",
+    "121322",
+    "131222",
+    "122213",
+    "122312",
+    "132212",
+    "221213",
+    "221312",
+    "231212",
+    "112232",
+    "122132",
+    "122231",
+    "113222",
+    "123122",
+    "123221",
+    "223211",
+    "221132",
+    "221231",
+    "213212",
+    "223112",
+    "312131",
+    "311222",
+    "321122",
+    "321221",
+    "312212",
+    "322112",
+    "322211",
+    "212123",
+    "212321",
+    "232121",
+    "111323",
+    "131123",
+    "131321",
+    "112313",
+    "132113",
+    "132311",
+    "211313",
+    "231113",
+    "231311",
+    "112133",
+    "112331",
+    "132131",
+    "113123",
+    "113321",
+    "133121",
+    "313121",
+    "211331",
+    "231131",
+    "213113",
+    "213311",
+    "213131",
+    "311123",
+    "311321",
+    "331121",
+    "312113",
+    "312311",
+    "332111",
+    "314111",
+    "221411",
+    "431111",
+    "111224",
+    "111422",
+    "121124",
+    "121421",
+    "141122",
+    "141221",
+    "112214",
+    "112412",
+    "122114",
+    "122411",
+    "142112",
+    "142211",
+    "241211",
+    "221114",
+    "413111",
+    "241112",
+    "134111",
+    "111242",
+    "121142",
+    "121241",
+    "114212",
+    "124112",
+    "124211",
+    "411212",
+    "421112",
+    "421211",
+    "212141",
+    "214121",
+    "412121",
+    "111143",
+    "111341",
+    "131141",
+    "114113",
+    "114311",
+    "411113",
+    "411311",
+    "113141",
+    "114131",
+    "311141",
+    "411131",
+    "211412",
+    "211214",
+    "211232",
+    "2331112"
+) as UTSArray<String>
+fun makeResult(success: Boolean, code: String, message: String, data: UTSJSONObject?): LabelPrinterResult {
+    return LabelPrinterResult(success = success, code = code, message = message, data = data)
+}
+fun getActivity(): Activity {
+    return UTSAndroid.getUniActivity() as Activity
+}
+fun getAdapter(): BluetoothAdapter? {
+    val manager = getActivity().getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    if (manager == null) {
+        return null
+    }
+    return manager.getAdapter()
+}
+fun isAndroid12(): Boolean {
+    return Build.VERSION.SDK_INT >= 31
+}
+fun scanPermissions(): UTSArray<String> {
+    if (isAndroid12()) {
+        return _uA(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT
+        )
+    }
+    return _uA(
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+}
+fun connectPermissions(): UTSArray<String> {
+    if (isAndroid12()) {
+        return _uA(
+            Manifest.permission.BLUETOOTH_CONNECT
+        )
+    }
+    return _uA()
+}
+fun hasPermissions(permissions: UTSArray<String>): Boolean {
+    if (permissions.length == 0) {
+        return true
+    }
+    return UTSAndroid.checkSystemPermissionGranted(getActivity(), permissions)
+}
+fun bluetoothEnabled(adapter: BluetoothAdapter): Boolean {
+    try {
+        return adapter.isEnabled()
+    }
+     catch (error: Throwable) {
+        return false
+    }
+}
+fun isLocationServiceEnabled(): Boolean {
+    val manager = getActivity().getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    if (manager == null) {
+        return false
+    }
+    var gpsEnabled = false
+    var networkEnabled = false
+    try {
+        gpsEnabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    }
+     catch (error: Throwable) {
+        gpsEnabled = false
+    }
+    try {
+        networkEnabled = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+     catch (error: Throwable) {
+        networkEnabled = false
+    }
+    return gpsEnabled || networkEnabled
+}
+fun deviceBondState(device: BluetoothDevice): String {
+    val state = device.getBondState()
+    if (state == BluetoothDevice.BOND_BONDED) {
+        return "BONDED"
+    }
+    if (state == BluetoothDevice.BOND_BONDING) {
+        return "BONDING"
+    }
+    return "NONE"
+}
+fun deviceType(device: BluetoothDevice): String {
+    if (Build.VERSION.SDK_INT < 18) {
+        return "CLASSIC"
+    }
+    val type = device.getType()
+    if (type == BluetoothDevice.DEVICE_TYPE_LE) {
+        return "BLE"
+    }
+    if (type == BluetoothDevice.DEVICE_TYPE_DUAL) {
+        return "DUAL"
+    }
+    if (type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+        return "CLASSIC"
+    }
+    return "UNKNOWN"
+}
+fun safeDeviceName(device: BluetoothDevice): String {
+    var name = ""
+    try {
+        name = device.getName()
+    }
+     catch (error: Throwable) {
+        name = ""
+    }
+    if (name == null || name == "") {
+        return "未知蓝牙设备"
+    }
+    return name
+}
+fun toPrinterDevice(device: BluetoothDevice, rssi: Number): LabelPrinterDevice {
+    val address = device.getAddress()
+    var connected = false
+    if (activeDevice != null && activeSocket != null) {
+        connected = activeDevice!!.getAddress() == address && activeSocket!!.isConnected()
+    }
+    return LabelPrinterDevice(name = safeDeviceName(device), address = address, type = deviceType(device), bondState = deviceBondState(device), rssi = rssi, connected = connected)
+}
+fun addOrUpdateDevice(device: BluetoothDevice, rssi: Number) {
+    val item = toPrinterDevice(device, rssi)
+    console.log("[lili-label-printer] found device name=" + item.name + ", address=" + item.address + ", type=" + item.type + ", bond=" + item.bondState + ", rssi=" + item.rssi.toString(10), " at uni_modules/lili-label-printer/index.uts:207")
+    var found = false
+    run {
+        var i: Number = 0
+        while(i < discoveryDevices.length){
+            if (discoveryDevices[i].address == item.address) {
+                discoveryDevices[i] = item
+                found = true
+                break
+            }
+            i++
+        }
+    }
+    if (!found) {
+        discoveryDevices.push(item)
+    }
+}
+@Suppress("DEPRECATION")
+fun getBluetoothDeviceExtra(intent: Intent): BluetoothDevice? {
+    return intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+}
+fun closeActiveSocket() {
+    if (activeSocket != null) {
+        try {
+            activeSocket!!.close()
+        }
+         catch (error: Throwable) {}
+    }
+    activeSocket = null
+    activeDevice = null
+}
+fun activeConnectionMatches(address: String): Boolean {
+    return activeDevice != null && activeSocket != null && activeSocket!!.isConnected() && activeDevice!!.getAddress() == address
+}
+fun activePrinterData(): UTSJSONObject? {
+    if (activeDevice == null) {
+        return null
+    }
+    return _uO("name" to safeDeviceName(activeDevice!!), "address" to activeDevice!!.getAddress(), "type" to deviceType(activeDevice!!), "bondState" to deviceBondState(activeDevice!!))
+}
+fun sleepQuietly(delayMs: Number) {
+    if (delayMs <= 0) {
+        return
+    }
+    try {
+        Thread.sleep(delayMs.toLong())
+    }
+     catch (error: Throwable) {}
+}
+fun finishDiscovery() {
+    console.log("[lili-label-printer] finish discovery, count=" + discoveryDevices.length.toString(10), " at uni_modules/lili-label-printer/index.uts:258")
+    val adapter = getAdapter()
+    if (adapter != null) {
+        try {
+            if (adapter.isDiscovering()) {
+                adapter.cancelDiscovery()
+            }
+        }
+         catch (error: Throwable) {}
+    }
+    if (discoveryReceiver != null) {
+        try {
+            getActivity().unregisterReceiver(discoveryReceiver)
+        }
+         catch (error: Throwable) {}
+    }
+    discoveryReceiver = null
+    if (discoveryTimer >= 0) {
+        clearTimeout(discoveryTimer)
+        discoveryTimer = -1
+    }
+    if (discoveryResolve != null) {
+        val resolver = discoveryResolve!!
+        discoveryResolve = null
+        resolver(discoveryDevices)
+    }
+}
+open class LabelDiscoveryReceiver : BroadcastReceiver(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("LabelDiscoveryReceiver", "uni_modules/lili-label-printer/index.uts", 268, 7)
+    }
+    override fun onReceive(context: Context, intent: Intent): Unit {
+        val action = intent.getAction()
+        if (action == BluetoothDevice.ACTION_FOUND) {
+            val device = getBluetoothDeviceExtra(intent)
+            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
+            if (device != null) {
+                addOrUpdateDevice(device as BluetoothDevice, rssi)
+            }
+            return
+        }
+        if (action == BluetoothAdapter.ACTION_DISCOVERY_FINISHED) {
+            finishDiscovery()
+        }
+    }
+}
+fun checkBluetoothEnvironment(): LabelPrinterResult {
+    val adapter = getAdapter()
+    if (adapter == null) {
+        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
+    }
+    val scanGranted = hasPermissions(scanPermissions())
+    val connectGranted = hasPermissions(connectPermissions())
+    val enabled = bluetoothEnabled(adapter)
+    val locationEnabled = if (isAndroid12()) {
+        true
+    } else {
+        isLocationServiceEnabled()
+    }
+    val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "uni_modules/lili-label-printer/index.uts", 293, 11), "bluetoothSupported" to true, "bluetoothEnabled" to enabled, "locationPermissionGranted" to scanGranted, "bluetoothPermissionGranted" to connectGranted, "locationServiceEnabled" to locationEnabled)
+    if (!enabled) {
+        return makeResult(false, "BLUETOOTH_DISABLED", "蓝牙未开启", data)
+    }
+    if (!scanGranted || !connectGranted) {
+        return makeResult(false, "LOCATION_PERMISSION_REQUIRED", "缺少蓝牙或位置权限", data)
+    }
+    if (!locationEnabled) {
+        return makeResult(false, "LOCATION_SERVICE_DISABLED", "系统位置服务未开启，可能无法搜索蓝牙设备", data)
+    }
+    return makeResult(true, "OK", "蓝牙环境正常", data)
+}
+fun requestBluetoothEnable(): LabelPrinterResult {
+    val adapter = getAdapter()
+    if (adapter == null) {
+        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
+    }
+    if (bluetoothEnabled(adapter)) {
+        return makeResult(true, "BLUETOOTH_ENABLED", "蓝牙已开启", null)
+    }
+    val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+    getActivity().startActivity(intent)
+    return makeResult(true, "BLUETOOTH_ENABLE_REQUESTED", "已打开蓝牙开启请求，请确认后返回", null)
+}
+fun requestLocationPermission(): UTSPromise<LabelPrinterResult> {
+    return UTSPromise(fun(resolve, _reject){
+        val permissions = scanPermissions()
+        if (hasPermissions(permissions)) {
+            resolve(makeResult(true, "PERMISSION_GRANTED", "蓝牙和位置权限已授权", null))
+            return
+        }
+        try {
+            UTSAndroid.requestSystemPermission(getActivity(), permissions, fun(allRight: Boolean, grantedList: UTSArray<String>){
+                if (allRight) {
+                    resolve(makeResult(true, "PERMISSION_GRANTED", "蓝牙和位置权限已授权", null))
+                    return
+                }
+                resolve(makeResult(false, "PERMISSION_DENIED", "权限未完全授权，无法搜索蓝牙打印机", null))
+            }
+            , fun(doNotAskAgain: Boolean, grantedList: UTSArray<String>){
+                if (doNotAskAgain) {
+                    resolve(makeResult(false, "PERMISSION_NEED_SETTINGS", "权限已被拒绝且不再询问，请到系统设置开启", null))
+                    return
+                }
+                resolve(makeResult(false, "PERMISSION_DENIED", "权限授权失败，无法搜索蓝牙打印机", null))
+            }
+            )
+        }
+         catch (error: Throwable) {
+            resolve(makeResult(false, "PERMISSION_MANIFEST_MISSING", "蓝牙权限未写入自定义基座，请重新打包自定义基座", null))
+        }
+    }
+    )
+}
+fun openLocationSettings(): LabelPrinterResult {
+    val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+    getActivity().startActivity(intent)
+    return makeResult(true, "LOCATION_SETTINGS_OPENED", "已打开系统位置设置", null)
+}
+fun searchBluetoothPrinters(durationMs: Number = 10000): UTSPromise<UTSArray<LabelPrinterDevice>> {
+    return UTSPromise(fun(resolve, _reject){
+        val environment = checkBluetoothEnvironment()
+        if (!environment.success) {
+            console.log("[lili-label-printer] discovery blocked: " + environment.code + ", " + environment.message, " at uni_modules/lili-label-printer/index.uts:397")
+            resolve(_uA())
+            return
+        }
+        val adapter = getAdapter()
+        if (adapter == null) {
+            console.log("[lili-label-printer] discovery blocked: bluetooth adapter is null", " at uni_modules/lili-label-printer/index.uts:403")
+            resolve(_uA())
+            return
+        }
+        stopBluetoothDiscovery()
+        discoveryDevices = _uA()
+        discoveryResolve = resolve
+        discoveryReceiver = LabelDiscoveryReceiver()
+        val filter = IntentFilter()
+        filter.addAction(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        getActivity().registerReceiver(discoveryReceiver, filter)
+        try {
+            if (adapter.isDiscovering()) {
+                adapter.cancelDiscovery()
+            }
+            val started = adapter.startDiscovery()
+            console.log("[lili-label-printer] start discovery result=" + started.toString() + ", durationMs=" + durationMs.toString(10), " at uni_modules/lili-label-printer/index.uts:420")
+            if (!started) {
+                finishDiscovery()
+                return
+            }
+        }
+         catch (error: Throwable) {
+            console.log("[lili-label-printer] start discovery failed", " at uni_modules/lili-label-printer/index.uts:426")
+            finishDiscovery()
+            return
+        }
+        discoveryTimer = setTimeout(fun(){
+            finishDiscovery()
+        }
+        , durationMs)
+    }
+    )
+}
+fun stopBluetoothDiscovery(): LabelPrinterResult {
+    finishDiscovery()
+    return makeResult(true, "DISCOVERY_STOPPED", "已停止搜索蓝牙设备", null)
+}
+fun connectPrinter(address: String): LabelPrinterResult {
+    val environment = checkBluetoothEnvironment()
+    if (!environment.success && environment.code != "LOCATION_SERVICE_DISABLED") {
+        return environment
+    }
+    val adapter = getAdapter()
+    if (adapter == null) {
+        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
+    }
+    if (address == "") {
+        return makeResult(false, "ADDRESS_EMPTY", "打印机地址不能为空", null)
+    }
+    stopBluetoothDiscovery()
+    closeActiveSocket()
+    var socket: BluetoothSocket? = null
+    try {
+        val device = adapter.getRemoteDevice(address)
+        socket = device.createRfcommSocketToServiceRecord(UUID.fromString(sppUuidText))
+        socket!!.connect()
+        activeSocket = socket!!
+        activeDevice = device
+        val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "uni_modules/lili-label-printer/index.uts", 440, 15), "name" to safeDeviceName(device), "address" to device.getAddress(), "type" to deviceType(device), "bondState" to deviceBondState(device))
+        return makeResult(true, "CONNECTED", "已连接蓝牙打印机", data)
+    }
+     catch (error: Throwable) {
+        if (socket != null) {
+            try {
+                socket!!.close()
+            }
+             catch (socketError: Throwable) {}
+        }
+        closeActiveSocket()
+        return makeResult(false, "CONNECT_FAILED", "连接蓝牙打印机失败，请确认设备已开机并处于可连接状态", null)
+    }
+}
+fun connectPrinterWithRetry(address: String, attempts: Number = 2, delayMs: Number = 800): LabelPrinterResult {
+    if (address == "") {
+        return makeResult(false, "ADDRESS_EMPTY", "打印机地址不能为空", null)
+    }
+    if (activeConnectionMatches(address)) {
+        return makeResult(true, "CONNECTED", "已连接蓝牙打印机", activePrinterData())
+    }
+    var total = attempts
+    if (total <= 0) {
+        total = 1
+    }
+    if (total > 3) {
+        total = 3
+    }
+    var lastResult = makeResult(false, "CONNECT_FAILED", "连接蓝牙打印机失败，请确认设备已开机并处于可连接状态", null)
+    run {
+        var attempt: Number = 0
+        while(attempt < total){
+            if (attempt > 0) {
+                sleepQuietly(delayMs)
+            }
+            val result = connectPrinter(address)
+            lastResult = result
+            if (result.success) {
+                if (attempt > 0) {
+                    return makeResult(true, "RECONNECTED", "已重新连接蓝牙打印机", result.data)
+                }
+                return result
+            }
+            attempt += 1
+        }
+    }
+    return lastResult
+}
+open class ResolvePrinterResultRunnable : Runnable, IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ResolvePrinterResultRunnable", "uni_modules/lili-label-printer/index.uts", 486, 7)
+    }
+    open lateinit var resolver: (result: LabelPrinterResult) -> Unit
+    open lateinit var result: LabelPrinterResult
+    constructor(resolver: (result: LabelPrinterResult) -> Unit, result: LabelPrinterResult){
+        this.resolver = resolver
+        this.result = result
+    }
+    override fun run(): Unit {
+        this.resolver(this.result)
+    }
+}
+open class ConnectPrinterRunnable : Runnable, IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ConnectPrinterRunnable", "uni_modules/lili-label-printer/index.uts", 497, 7)
+    }
+    open lateinit var address: String
+    open lateinit var resolver: (result: LabelPrinterResult) -> Unit
+    constructor(address: String, resolver: (result: LabelPrinterResult) -> Unit){
+        this.address = address
+        this.resolver = resolver
+    }
+    override fun run(): Unit {
+        val result = connectPrinter(this.address)
+        getActivity().runOnUiThread(ResolvePrinterResultRunnable(this.resolver, result))
+    }
+}
+fun connectPrinterAsync(address: String): UTSPromise<LabelPrinterResult> {
+    return UTSPromise(fun(resolve, _reject){
+        val thread = Thread(ConnectPrinterRunnable(address, resolve))
+        thread.start()
+    }
+    )
+}
+fun disconnectPrinter(): LabelPrinterResult {
+    closeActiveSocket()
+    return makeResult(true, "DISCONNECTED", "已断开蓝牙打印机", null)
+}
+fun getConnectedPrinter(): LabelPrinterResult {
+    if (activeDevice == null || activeSocket == null || !activeSocket!!.isConnected()) {
+        return makeResult(false, "NOT_CONNECTED", "当前未连接蓝牙打印机", null)
+    }
+    return makeResult(true, "CONNECTED", "已连接蓝牙打印机", activePrinterData())
+}
+fun getDefaultPrinterAddress(): String {
+    val stored = uni_getStorageSync(labelPrinterDefaultStorageKey)
+    if (stored == null || stored == "") {
+        return ""
+    }
+    try {
+        val data = UTSAndroid.consoleDebugError(JSON.parse(stored as String), " at uni_modules/lili-label-printer/index.uts:530") as UTSJSONObject
+        val address = data["address"]
+        if (address == null) {
+            return ""
+        }
+        return address.toString()
+    }
+     catch (error: Throwable) {
+        return ""
+    }
+}
+fun getPreferredPrinterAddress(): String {
+    val connected = getConnectedPrinter()
+    if (connected.success && connected.data != null) {
+        val data = connected.data as UTSJSONObject
+        val address = data["address"]
+        if (address != null && address.toString() != "") {
+            return address.toString()
+        }
+    }
+    return getDefaultPrinterAddress()
+}
+fun labelString(value: Any?, fallback: String = ""): String {
+    if (value == null) {
+        return fallback
+    }
+    val text = "" + value
+    if (text == "") {
+        return fallback
+    }
+    return text
+}
+fun labelNumber(value: Any?, fallback: Number): Number {
+    val parsed = parseFloat(labelString(value))
+    if (isNaN(parsed)) {
+        return fallback
+    }
+    return parsed
+}
+fun labelBool(value: Any?, fallback: Boolean): Boolean {
+    if (value == null) {
+        return fallback
+    }
+    val text = labelString(value).toLowerCase()
+    if (text == "true" || text == "1") {
+        return true
+    }
+    if (text == "false" || text == "0") {
+        return false
+    }
+    return fallback
+}
+fun labelBold(element: UTSJSONObject): Boolean {
+    val fontWeight = labelString(element["fontWeight"], labelString(element["font_weight"], "")).toLowerCase()
+    return labelBool(element["isBold"], labelBool(element["bold"], fontWeight == "bold" || fontWeight == "700"))
+}
+fun labelTextAlign(element: UTSJSONObject): String {
+    val textAlign = labelString(element["textAlign"], labelString(element["text_align"], "left")).toLowerCase()
+    if (textAlign == "center") {
+        return "center"
+    }
+    if (textAlign == "right") {
+        return "right"
+    }
+    return "left"
+}
+open class BitmapTextFit (
+    @JsonNotNull
+    open var lines: UTSArray<String>,
+    @JsonNotNull
+    open var fontSize: Number,
+    @JsonNotNull
+    open var lineHeight: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("BitmapTextFit", "uni_modules/lili-label-printer/index.uts", 592, 6)
+    }
+}
+fun textLineHeight(fontSize: Number): Number {
+    return Math.max(fontSize + 2, fontSize * 1.15)
+}
+fun wrapBitmapTextLines(content: String, paint: Paint, maxWidth: Number): UTSArray<String> {
+    val lines: UTSArray<String> = _uA()
+    var current = ""
+    run {
+        var index: Number = 0
+        while(index < content.length){
+            val char = content.substring(index, index + 1)
+            if (char == "\r") {
+                index += 1
+                continue
+            }
+            if (char == "\n") {
+                lines.push(current)
+                current = ""
+                index += 1
+                continue
+            }
+            val next = current + char
+            if (current != "" && paint.measureText(next) > maxWidth.toFloat()) {
+                lines.push(current)
+                current = char
+            } else {
+                current = next
+            }
+            index += 1
+        }
+    }
+    lines.push(current)
+    return lines
+}
+fun truncateBitmapTextLine(line: String, paint: Paint, maxWidth: Number): String {
+    if (paint.measureText(line) <= maxWidth.toFloat()) {
+        return line
+    }
+    val suffix = "..."
+    var result = line
+    while(result.length > 0 && paint.measureText(result + suffix) > maxWidth.toFloat()){
+        result = result.substring(0, result.length - 1)
+    }
+    if (result == "" && paint.measureText(suffix) > maxWidth.toFloat()) {
+        return ""
+    }
+    return result + suffix
+}
+fun fitBitmapText(content: String, paint: Paint, desiredFontSize: Number, minFontSize: Number, maxWidth: Number, maxHeight: Number): BitmapTextFit {
+    var fontSize = Math.round(desiredFontSize)
+    var minSize = Math.round(minFontSize)
+    if (fontSize < 6) {
+        fontSize = 6
+    }
+    if (minSize < 6) {
+        minSize = 6
+    }
+    if (minSize > fontSize) {
+        minSize = fontSize
+    }
+    while(fontSize >= minSize){
+        paint.setTextSize(fontSize.toFloat())
+        val lines = wrapBitmapTextLines(content, paint, maxWidth)
+        val lineHeight = textLineHeight(fontSize)
+        if (lines.length * lineHeight <= maxHeight + 0.5) {
+            return BitmapTextFit(lines = lines, fontSize = fontSize, lineHeight = lineHeight)
+        }
+        fontSize -= 1
+    }
+    paint.setTextSize(minSize.toFloat())
+    val lineHeight = textLineHeight(minSize)
+    val wrapped = wrapBitmapTextLines(content, paint, maxWidth)
+    var maxLines = Math.floor(maxHeight / lineHeight)
+    if (maxLines < 1) {
+        maxLines = 1
+    }
+    val lines: UTSArray<String> = _uA()
+    run {
+        var index: Number = 0
+        while(index < wrapped.length && index < maxLines){
+            lines.push(wrapped[index])
+            index += 1
+        }
+    }
+    if (wrapped.length > maxLines && lines.length > 0) {
+        val lastIndex = lines.length - 1
+        lines[lastIndex] = truncateBitmapTextLine(lines[lastIndex], paint, maxWidth)
+    }
+    return BitmapTextFit(lines = lines, fontSize = minSize, lineHeight = lineHeight)
+}
+fun onlyDigits(value: String): String {
+    var result = ""
+    run {
+        var index: Number = 0
+        while(index < value.length){
+            val char = value.substring(index, index + 1)
+            if (char >= "0" && char <= "9") {
+                result = result + char
+            }
+            index += 1
+        }
+    }
+    return result
+}
+fun ean13Checksum(first12: String): String {
+    var sum: Number = 0
+    run {
+        var index: Number = 0
+        while(index < 12){
+            val digit = parseInt(first12.substring(index, index + 1))
+            sum += if (index % 2 == 0) {
+                digit
+            } else {
+                digit * 3
+            }
+            index += 1
+        }
+    }
+    val check = (10 - (sum % 10)) % 10
+    return check.toString(10)
+}
+fun normalizeEan13(value: String): String {
+    var digits = onlyDigits(value)
+    if (digits.length >= 13) {
+        return digits.substring(0, 13)
+    }
+    if (digits.length == 12) {
+        return digits + ean13Checksum(digits)
+    }
+    return "5901234123457"
+}
+fun ean13LeftPattern(digit: String, parity: String): String {
+    if (digit == "0") {
+        return if (parity == "G") {
+            "0100111"
+        } else {
+            "0001101"
+        }
+    }
+    if (digit == "1") {
+        return if (parity == "G") {
+            "0110011"
+        } else {
+            "0011001"
+        }
+    }
+    if (digit == "2") {
+        return if (parity == "G") {
+            "0011011"
+        } else {
+            "0010011"
+        }
+    }
+    if (digit == "3") {
+        return if (parity == "G") {
+            "0100001"
+        } else {
+            "0111101"
+        }
+    }
+    if (digit == "4") {
+        return if (parity == "G") {
+            "0011101"
+        } else {
+            "0100011"
+        }
+    }
+    if (digit == "5") {
+        return if (parity == "G") {
+            "0111001"
+        } else {
+            "0110001"
+        }
+    }
+    if (digit == "6") {
+        return if (parity == "G") {
+            "0000101"
+        } else {
+            "0101111"
+        }
+    }
+    if (digit == "7") {
+        return if (parity == "G") {
+            "0010001"
+        } else {
+            "0111011"
+        }
+    }
+    if (digit == "8") {
+        return if (parity == "G") {
+            "0001001"
+        } else {
+            "0110111"
+        }
+    }
+    return if (parity == "G") {
+        "0010111"
+    } else {
+        "0001011"
+    }
+}
+fun ean13RightPattern(digit: String): String {
+    if (digit == "0") {
+        return "1110010"
+    }
+    if (digit == "1") {
+        return "1100110"
+    }
+    if (digit == "2") {
+        return "1101100"
+    }
+    if (digit == "3") {
+        return "1000010"
+    }
+    if (digit == "4") {
+        return "1011100"
+    }
+    if (digit == "5") {
+        return "1001110"
+    }
+    if (digit == "6") {
+        return "1010000"
+    }
+    if (digit == "7") {
+        return "1000100"
+    }
+    if (digit == "8") {
+        return "1001000"
+    }
+    return "1110100"
+}
+fun ean13Parity(first: String): String {
+    if (first == "0") {
+        return "LLLLLL"
+    }
+    if (first == "1") {
+        return "LLGLGG"
+    }
+    if (first == "2") {
+        return "LLGGLG"
+    }
+    if (first == "3") {
+        return "LLGGGL"
+    }
+    if (first == "4") {
+        return "LGLLGG"
+    }
+    if (first == "5") {
+        return "LGGLLG"
+    }
+    if (first == "6") {
+        return "LGGGLL"
+    }
+    if (first == "7") {
+        return "LGLGLG"
+    }
+    if (first == "8") {
+        return "LGLGGL"
+    }
+    return "LGGLGL"
+}
+fun ean13Pattern(value: String): String {
+    val digits = normalizeEan13(value)
+    val parity = ean13Parity(digits.substring(0, 1))
+    var result = "101"
+    run {
+        var index: Number = 1
+        while(index <= 6){
+            result = result + ean13LeftPattern(digits.substring(index, index + 1), parity.substring(index - 1, index))
+            index += 1
+        }
+    }
+    result = result + "01010"
+    run {
+        var index: Number = 7
+        while(index <= 12){
+            result = result + ean13RightPattern(digits.substring(index, index + 1))
+            index += 1
+        }
+    }
+    return result + "101"
+}
+fun code128ValueForChar(value: String, index: Number): Number {
+    val code = value.charCodeAt(index)!!
+    if (code < 32 || code > 126) {
+        return -1
+    }
+    return code - 32
+}
+fun code128PatternForValue(value: Number): String {
+    if (value < 0 || value >= code128Patterns.length) {
+        return ""
+    }
+    return code128Patterns[value]
+}
+fun appendCode128Symbol(pattern: String, value: Number): String {
+    val widths = code128PatternForValue(value)
+    var result = pattern
+    var black = true
+    run {
+        var index: Number = 0
+        while(index < widths.length){
+            val width = parseInt(widths.substring(index, index + 1))
+            val bit = if (black) {
+                "1"
+            } else {
+                "0"
+            }
+            run {
+                var repeat: Number = 0
+                while(repeat < width){
+                    result = result + bit
+                    repeat += 1
+                }
+            }
+            black = !black
+            index += 1
+        }
+    }
+    return result
+}
+fun code128Pattern(value: String): String {
+    val text = if (value.trim() == "") {
+        "CODE128"
+    } else {
+        value.trim()
+    }
+    var checksum: Number = 104
+    var pattern = appendCode128Symbol("", 104)
+    var position: Number = 1
+    run {
+        var index: Number = 0
+        while(index < text.length){
+            val codeValue = code128ValueForChar(text, index)
+            if (codeValue < 0) {
+                index += 1
+                continue
+            }
+            checksum += codeValue * position
+            pattern = appendCode128Symbol(pattern, codeValue)
+            position += 1
+            index += 1
+        }
+    }
+    pattern = appendCode128Symbol(pattern, checksum % 103)
+    return appendCode128Symbol(pattern, 106)
+}
+fun alignedBitmapTextX(line: String, paint: Paint, textAlign: String, x: Number, width: Number): Number {
+    val lineWidth = parseFloat(paint.measureText(line).toString())
+    if (textAlign == "center") {
+        return x + Math.max(0, (width - lineWidth) / 2)
+    }
+    if (textAlign == "right") {
+        return x + Math.max(0, width - lineWidth)
+    }
+    return x
+}
+fun drawBitmapText(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
+    val source = labelString(element["source"])
+    var content = labelString(element["content"])
+    if (content.trim() == "" && source != "" && source != "custom") {
+        return
+    }
+    if (content == "") {
+        content = labelString(element["label"], "TEXT")
+    }
+    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
+    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
+    val width = Math.max(1, Math.round(labelNumber(element["width"], 20) * dotsPerMm))
+    val height = Math.max(1, Math.round(labelNumber(element["height"], 5) * dotsPerMm))
+    val fontSize = Math.max(6, labelNumber(element["fontSize"], 18))
+    val minFontSize = Math.max(6, labelNumber(element["minFontSize"], labelNumber(element["min_font_size"], Math.max(6, fontSize * 0.55))))
+    paint.setColor(Color.BLACK)
+    paint.setAntiAlias(true)
+    paint.setFakeBoldText(labelBold(element))
+    val textAlign = labelTextAlign(element)
+    val fit = fitBitmapText(content, paint, fontSize, minFontSize, width, height)
+    paint.setTextSize(fit.fontSize.toFloat())
+    run {
+        var index: Number = 0
+        while(index < fit.lines.length){
+            val baseline = y + fit.fontSize * 0.82 + index * fit.lineHeight
+            if (baseline <= y + height + 0.5) {
+                val textX = alignedBitmapTextX(fit.lines[index], paint, textAlign, x, width)
+                canvas.drawText(fit.lines[index], textX.toFloat(), baseline.toFloat(), paint)
+            }
+            index += 1
+        }
+    }
+    paint.setFakeBoldText(false)
+}
+fun drawEan13Barcode(canvas: Canvas, paint: Paint, content: String, x: Number, y: Number, width: Number, height: Number) {
+    val pattern = ean13Pattern(content)
+    val moduleWidth = width / pattern.length
+    run {
+        var index: Number = 0
+        while(index < pattern.length){
+            if (pattern.substring(index, index + 1) == "1") {
+                val left = x + index * moduleWidth
+                canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, moduleWidth)).toFloat(), (y + height).toFloat(), paint)
+            }
+            index += 1
+        }
+    }
+}
+fun drawCode128Barcode(canvas: Canvas, paint: Paint, content: String, x: Number, y: Number, width: Number, height: Number) {
+    val pattern = code128Pattern(content)
+    val quietModules: Number = 10
+    val moduleWidth = width / (pattern.length + quietModules * 2)
+    run {
+        var index: Number = 0
+        while(index < pattern.length){
+            if (pattern.substring(index, index + 1) == "1") {
+                val left = x + (index + quietModules) * moduleWidth
+                canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, moduleWidth)).toFloat(), (y + height).toFloat(), paint)
+            }
+            index += 1
+        }
+    }
+}
+fun drawBitmapBarcode(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
+    val content = labelString(element["content"], "5901234123457")
+    val barcodeType = labelString(element["barcodeType"], labelString(element["barcode_type"], "CODE128")).toUpperCase()
+    val showText = labelBool(element["showText"], labelBool(element["show_text"], false))
+    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
+    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
+    val width = Math.round(labelNumber(element["width"], 20) * dotsPerMm)
+    val height = Math.round(labelNumber(element["height"], 5) * dotsPerMm)
+    val textHeight = if (showText) {
+        14
+    } else {
+        0
+    }
+    val barHeight = Math.max(8, height - textHeight)
+    paint.setColor(Color.BLACK)
+    paint.setAntiAlias(false)
+    if (barcodeType == "EAN13") {
+        drawEan13Barcode(canvas, paint, content, x, y, width, barHeight)
+    } else {
+        drawCode128Barcode(canvas, paint, content, x, y, width, barHeight)
+    }
+    if (showText) {
+        paint.setAntiAlias(true)
+        val textSize = (height / 3).toFloat()
+        paint.setTextSize(textSize)
+        canvas.drawText(content, (x + 2).toFloat(), (y + height - 2).toFloat(), paint)
+    }
+}
+fun drawBitmapGraphic(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
+    val type = labelString(element["type"], "text")
+    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
+    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
+    val width = Math.round(labelNumber(element["width"], 10) * dotsPerMm)
+    val height = Math.round(labelNumber(element["height"], 5) * dotsPerMm)
+    val lineWidth = Math.max(1, Math.round(labelNumber(element["lineWidth"], labelNumber(element["line_width"], 0.4)) * dotsPerMm))
+    paint.setColor(Color.BLACK)
+    paint.setAntiAlias(false)
+    if (type == "hline") {
+        canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
+        return
+    }
+    if (type == "vline") {
+        canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
+        return
+    }
+    if (type == "rect") {
+        canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
+        canvas.drawRect(x.toFloat(), (y + height - lineWidth).toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
+        canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
+        canvas.drawRect((x + width - lineWidth).toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
+    }
+}
+fun drawBitmapElement(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
+    val type = labelString(element["type"], "text")
+    if (type == "barcode") {
+        drawBitmapBarcode(canvas, paint, element, dotsPerMm)
+    } else if (type == "hline" || type == "vline" || type == "rect") {
+        drawBitmapGraphic(canvas, paint, element, dotsPerMm)
+    } else {
+        drawBitmapText(canvas, paint, element, dotsPerMm)
+    }
+}
+fun renderLabelBitmap(paperWidthMm: Number, paperHeightMm: Number, dotsPerMm: Number, elements: UTSArray<UTSJSONObject>): Bitmap {
+    val width = Math.max(8, Math.round(paperWidthMm * dotsPerMm))
+    val height = Math.max(8, Math.round(paperHeightMm * dotsPerMm))
+    val bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint()
+    canvas.drawColor(Color.WHITE)
+    run {
+        var index: Number = 0
+        while(index < elements.length){
+            drawBitmapElement(canvas, paint, elements[index], dotsPerMm)
+            index += 1
+        }
+    }
+    return bitmap
+}
+fun bitmapToTsplBytes(bitmap: Bitmap): ByteArray {
+    val width = bitmap.getWidth()
+    val height = bitmap.getHeight()
+    val widthBytes = ((width + 7) / 8).toInt()
+    val result = ByteArray((widthBytes * height).toInt())
+    var y: Int = 0
+    while(y < height){
+        var xByte: Int = 0
+        while(xByte < widthBytes){
+            var value: Int = 0
+            var bit: Int = 0
+            while(bit < 8){
+                val x = (xByte * 8 + bit).toInt()
+                if (x < width) {
+                    val pixel = bitmap.getPixel(x.toInt(), y.toInt())
+                    val gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3
+                    if (gray >= 160) {
+                        value = value or (0x80 shr bit)
+                    }
+                }
+                bit += 1
+            }
+            result[(y * widthBytes + xByte).toInt()] = value.toByte()
+            xByte += 1
+        }
+        y += 1
+    }
+    return result
+}
+fun writePrinterBytes(bytes: ByteArray, chunkSize: Int, delayMs: Long) {
+    val output = activeSocket!!.getOutputStream()
+    var offset: Int = 0
+    while(offset < bytes.size){
+        var count = chunkSize
+        if (offset + count > bytes.size) {
+            count = (bytes.size - offset).toInt()
+        }
+        output.write(bytes, offset.toInt(), count.toInt())
+        output.flush()
+        if (delayMs > 0) {
+            Thread.sleep(delayMs)
+        }
+        offset += count
+    }
+}
+fun printResultData(address: String, reconnected: Boolean, retried: Boolean): UTSJSONObject {
+    return _uO("address" to address, "reconnected" to reconnected, "retried" to retried)
+}
+fun printSuccessResult(address: String, successMessage: String, reconnected: Boolean, retried: Boolean): LabelPrinterResult {
+    if (reconnected || retried) {
+        return makeResult(true, "PRINTED_AFTER_RECONNECT", "已重新连接并发送打印", printResultData(address, reconnected, retried))
+    }
+    return makeResult(true, "PRINTED", successMessage, printResultData(address, false, false))
+}
+fun sendPrinterBlocksWithReconnect(address: String, blocks: UTSArray<ByteArray>, chunkSize: Int, delayMs: Long, successMessage: String, failureCode: String, failureMessage: String): LabelPrinterResult {
+    var attempt: Number = 0
+    var reconnected = false
+    var reconnectAttempts: Number = 0
+    while(attempt < 2){
+        if (!activeConnectionMatches(address)) {
+            if (reconnectAttempts >= 1) {
+                return makeResult(false, "RECONNECT_FAILED", "重新连接打印机失败，请选择新的打印机", printResultData(address, reconnected, attempt > 0))
+            }
+            reconnectAttempts += 1
+            val connectResult = connectPrinterWithRetry(address, 1, 800)
+            if (!connectResult.success) {
+                return connectResult
+            }
+            reconnected = true
+        }
+        try {
+            run {
+                var index: Number = 0
+                while(index < blocks.length){
+                    writePrinterBytes(blocks[index], chunkSize, delayMs)
+                    index += 1
+                }
+            }
+            return printSuccessResult(address, successMessage, reconnected, attempt > 0)
+        }
+         catch (error: Throwable) {
+            closeActiveSocket()
+            reconnected = true
+            attempt += 1
+            if (attempt < 2) {
+                sleepQuietly(800)
+            }
+        }
+    }
+    return makeResult(false, failureCode, failureMessage, printResultData(address, reconnected, true))
+}
+fun extraOptionInt(options: Any, key: String, fallback: Number): Number {
+    try {
+        val text = JSON.stringify(options)
+        val kObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:1037")
+        if (kObject == null) {
+            return fallback
+        }
+        val value = kObject!![key]
+        if (value == null) {
+            return fallback
+        }
+        val parsed = parseInt("" + value)
+        if (isNaN(parsed)) {
+            return fallback
+        }
+        return parsed
+    }
+     catch (error: Throwable) {
+        return fallback
+    }
+}
+fun bitmapOptionObject(options: Any): UTSJSONObject {
+    try {
+        val text = JSON.stringify(options)
+        if (text == null || text == "") {
+            return _uO()
+        }
+        val kObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:1057")
+        if (kObject == null) {
+            return _uO()
+        }
+        return kObject!!
+    }
+     catch (error: Throwable) {
+        return _uO()
+    }
+}
+fun bitmapOptionString(options: UTSJSONObject, key: String, fallback: String): String {
+    val value = options[key]
+    if (value == null) {
+        return fallback
+    }
+    val text = "" + value
+    return if (text == "") {
+        fallback
+    } else {
+        text
+    }
+}
+fun bitmapOptionNumber(options: UTSJSONObject, key: String, fallback: Number): Number {
+    val value = options[key]
+    if (value == null) {
+        return fallback
+    }
+    val parsed = parseFloat("" + value)
+    if (isNaN(parsed)) {
+        return fallback
+    }
+    return parsed
+}
+fun bitmapOptionElements(options: UTSJSONObject): UTSArray<UTSJSONObject> {
+    val value = options["elements"]
+    if (value == null) {
+        return _uA<UTSJSONObject>()
+    }
+    try {
+        val text = JSON.stringify(value)
+        if (text == null || text == "") {
+            return _uA<UTSJSONObject>()
+        }
+        val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:1090")
+        if (parsed == null) {
+            return _uA<UTSJSONObject>()
+        }
+        return parsed!!
+    }
+     catch (error: Throwable) {
+        return _uA<UTSJSONObject>()
+    }
+}
+fun printLabelBitmap(options: Any): LabelPrinterResult {
+    val bitmapOptions = bitmapOptionObject(options)
+    val address = bitmapOptionString(bitmapOptions, "address", "")
+    val paperWidthMm = bitmapOptionNumber(bitmapOptions, "paperWidthMm", 30)
+    val paperHeightMm = bitmapOptionNumber(bitmapOptions, "paperHeightMm", 20)
+    val dotsPerMm = bitmapOptionNumber(bitmapOptions, "dotsPerMm", 8)
+    val elements = bitmapOptionElements(bitmapOptions)
+    if (address == "") {
+        return makeResult(false, "ADDRESS_EMPTY", "请先选择蓝牙打印机", null)
+    }
+    if (elements.length == 0) {
+        return makeResult(false, "ELEMENTS_EMPTY", "标签内容不能为空", null)
+    }
+    var bitmap: Bitmap? = null
+    try {
+        var chunkSizeValue = extraOptionInt(bitmapOptions, "chunkSize", 1024)
+        if (chunkSizeValue <= 0) {
+            chunkSizeValue = 1024
+        }
+        var delayMsValue = extraOptionInt(bitmapOptions, "delayMs", 20)
+        if (delayMsValue < 0) {
+            delayMsValue = 20
+        }
+        val chunkSize = chunkSizeValue.toInt()
+        val delayMs = delayMsValue.toLong()
+        bitmap = renderLabelBitmap(paperWidthMm, paperHeightMm, dotsPerMm, elements)
+        val bitmapBytes = bitmapToTsplBytes(bitmap!!)
+        val widthBytes = ((bitmap!!.getWidth() + 7) / 8).toInt()
+        val bitmapHeight = bitmap!!.getHeight()
+        bitmap!!.recycle()
+        bitmap = null
+        var copies = extraOptionInt(options, "copies", 1)
+        if (copies <= 0) {
+            copies = 1
+        }
+        val prefix = "SIZE " + paperWidthMm.toString(10) + " mm," + paperHeightMm.toString(10) + " mm\r\nGAP 2 mm,0\r\nDENSITY 8\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0," + widthBytes.toString() + "," + bitmapHeight.toString() + ",0,"
+        val suffix = "\r\nPRINT " + copies.toString(10) + "\r\n"
+        val blocks = _uA(
+            prefix.toByteArray(Charset.forName("GBK")),
+            bitmapBytes,
+            suffix.toByteArray(Charset.forName("GBK"))
+        ) as UTSArray<ByteArray>
+        return sendPrinterBlocksWithReconnect(address, blocks, chunkSize, delayMs, "图片标签已发送", "BITMAP_PRINT_FAILED", "图片打印失败，请检查打印机连接")
+    }
+     catch (error: Throwable) {
+        if (bitmap != null) {
+            try {
+                bitmap!!.recycle()
+            }
+             catch (recycleError: Throwable) {}
+        }
+        return makeResult(false, "BITMAP_PRINT_FAILED", "图片打印失败，请检查打印机连接", null)
+    }
+}
+fun printTspl(options: PrintTsplOptions): LabelPrinterResult {
+    if (options.address == "") {
+        return makeResult(false, "ADDRESS_EMPTY", "请先选择蓝牙打印机", null)
+    }
+    if (options.tspl == "") {
+        return makeResult(false, "TSPL_EMPTY", "打印内容不能为空", null)
+    }
+    try {
+        val charsetName = if (options.charset == null || options.charset == "") {
+            "GBK"
+        } else {
+            options.charset!!
+        }
+        val chunkSize = (if (options.chunkSize == null || options.chunkSize!! <= 0) {
+            256
+        } else {
+            options.chunkSize!!
+        }
+        ).toInt()
+        val delayMs = (if (options.delayMs == null || options.delayMs!! < 0) {
+            20
+        } else {
+            options.delayMs!!
+        }
+        ).toLong()
+        val bytes = options.tspl.toByteArray(Charset.forName(charsetName))
+        val blocks = _uA(
+            bytes
+        ) as UTSArray<ByteArray>
+        return sendPrinterBlocksWithReconnect(options.address, blocks, chunkSize, delayMs, "打印指令已发送", "PRINT_FAILED", "发送打印指令失败，请检查打印机连接")
+    }
+     catch (error: Throwable) {
+        closeActiveSocket()
+        return makeResult(false, "PRINT_FAILED", "发送打印指令失败，请检查打印机连接", null)
+    }
+}
+open class PrintLabelBitmapRunnable : Runnable, IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PrintLabelBitmapRunnable", "uni_modules/lili-label-printer/index.uts", 1170, 7)
+    }
+    open lateinit var options: UTSJSONObject
+    open lateinit var resolver: (result: LabelPrinterResult) -> Unit
+    constructor(options: UTSJSONObject, resolver: (result: LabelPrinterResult) -> Unit){
+        this.options = options
+        this.resolver = resolver
+    }
+    override fun run(): Unit {
+        val result = printLabelBitmap(this.options)
+        getActivity().runOnUiThread(ResolvePrinterResultRunnable(this.resolver, result))
+    }
+}
+open class PrintTsplRunnable : Runnable, IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PrintTsplRunnable", "uni_modules/lili-label-printer/index.uts", 1182, 7)
+    }
+    open lateinit var options: PrintTsplOptions
+    open lateinit var resolver: (result: LabelPrinterResult) -> Unit
+    constructor(options: PrintTsplOptions, resolver: (result: LabelPrinterResult) -> Unit){
+        this.options = options
+        this.resolver = resolver
+    }
+    override fun run(): Unit {
+        val result = printTspl(this.options)
+        getActivity().runOnUiThread(ResolvePrinterResultRunnable(this.resolver, result))
+    }
+}
+fun printLabelBitmapAsync(options: UTSJSONObject): UTSPromise<LabelPrinterResult> {
+    return UTSPromise(fun(resolve, _reject){
+        val thread = Thread(PrintLabelBitmapRunnable(options, resolve))
+        thread.start()
+    }
+    )
+}
+fun printTsplAsync(options: PrintTsplOptions): UTSPromise<LabelPrinterResult> {
+    return UTSPromise(fun(resolve, _reject){
+        val thread = Thread(PrintTsplRunnable(options, resolve))
+        thread.start()
+    }
+    )
+}
+open class PrintPreviewField (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var emphasis: Boolean = false,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PrintPreviewField", "uni_modules/lili-print-confirm-popup/components/lili-print-confirm-popup/lili-print-confirm-popup.uvue", 89, 6)
+    }
+}
+val GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopupClass = CreateVueComponent(GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup::class.java, fun(): VueComponentOptions {
+    return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.inheritAttrs, inject = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.inject, props = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.props, propsNeedCastKeys = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.propsNeedCastKeys, emits = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.emits, components = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.components, styles = GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.styles, setup = fun(props: ComponentPublicInstance): Any? {
+        return GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup.setup(props as GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup)
+    }
+    )
+}
+, fun(instance, renderer): GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup {
+    return GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopup(instance)
+}
+)
 open class SelectOption__6 (
     @JsonNotNull
     open var value: String,
@@ -10939,7 +13064,7 @@ open class SelectOption__6 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/products/from.uvue", 125, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/products/from.uvue", 135, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__6ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -11237,7 +13362,7 @@ open class FormulaChoice (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FormulaChoice", "pages/products/pricing-formula.uvue", 167, 6)
+        return UTSSourceMapPosition("FormulaChoice", "pages/products/pricing-formula.uvue", 168, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FormulaChoiceReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -11295,7 +13420,7 @@ open class FormulaStep (
     open var parameter: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FormulaStep", "pages/products/pricing-formula.uvue", 172, 6)
+        return UTSSourceMapPosition("FormulaStep", "pages/products/pricing-formula.uvue", 173, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FormulaStepReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -11385,7 +13510,7 @@ open class ParsedFormula (
     open var steps: UTSArray<FormulaStep>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ParsedFormula", "pages/products/pricing-formula.uvue", 180, 6)
+        return UTSSourceMapPosition("ParsedFormula", "pages/products/pricing-formula.uvue", 181, 6)
     }
 }
 val GenPagesProductsPricingFormulaClass = CreateVueComponent(GenPagesProductsPricingFormula::class.java, fun(): VueComponentOptions {
@@ -11415,7 +13540,7 @@ open class FormulaChoice__1 (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FormulaChoice", "pages/products/pricing-formula/from.uvue", 168, 6)
+        return UTSSourceMapPosition("FormulaChoice", "pages/products/pricing-formula/from.uvue", 169, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FormulaChoice__1ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -11473,7 +13598,7 @@ open class FormulaStep__1 (
     open var parameter: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FormulaStep", "pages/products/pricing-formula/from.uvue", 173, 6)
+        return UTSSourceMapPosition("FormulaStep", "pages/products/pricing-formula/from.uvue", 174, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FormulaStep__1ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -11563,7 +13688,7 @@ open class ParsedFormula__1 (
     open var steps: UTSArray<FormulaStep__1>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ParsedFormula", "pages/products/pricing-formula/from.uvue", 181, 6)
+        return UTSSourceMapPosition("ParsedFormula", "pages/products/pricing-formula/from.uvue", 182, 6)
     }
 }
 val GenPagesProductsPricingFormulaFromClass = CreateVueComponent(GenPagesProductsPricingFormulaFrom::class.java, fun(): VueComponentOptions {
@@ -11576,1252 +13701,6 @@ val GenPagesProductsPricingFormulaFromClass = CreateVueComponent(GenPagesProduct
     return GenPagesProductsPricingFormulaFrom(instance, renderer)
 }
 )
-open class LabelPrinterDevice (
-    @JsonNotNull
-    open var name: String,
-    @JsonNotNull
-    open var address: String,
-    @JsonNotNull
-    open var type: String,
-    @JsonNotNull
-    open var bondState: String,
-    @JsonNotNull
-    open var rssi: Number,
-    @JsonNotNull
-    open var connected: Boolean = false,
-) : UTSReactiveObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("LabelPrinterDevice", "uni_modules/lili-label-printer/index.uts", 21, 13)
-    }
-    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
-        return LabelPrinterDeviceReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
-    }
-}
-class LabelPrinterDeviceReactiveObject : LabelPrinterDevice, IUTSReactive<LabelPrinterDevice> {
-    override var __v_raw: LabelPrinterDevice
-    override var __v_isReadonly: Boolean
-    override var __v_isShallow: Boolean
-    override var __v_skip: Boolean
-    constructor(__v_raw: LabelPrinterDevice, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(name = __v_raw.name, address = __v_raw.address, type = __v_raw.type, bondState = __v_raw.bondState, rssi = __v_raw.rssi, connected = __v_raw.connected) {
-        this.__v_raw = __v_raw
-        this.__v_isReadonly = __v_isReadonly
-        this.__v_isShallow = __v_isShallow
-        this.__v_skip = __v_skip
-    }
-    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): LabelPrinterDeviceReactiveObject {
-        return LabelPrinterDeviceReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
-    }
-    override var name: String
-        get() {
-            return _tRG(__v_raw, "name", __v_raw.name, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("name")) {
-                return
-            }
-            val oldValue = __v_raw.name
-            __v_raw.name = value
-            _tRS(__v_raw, "name", oldValue, value)
-        }
-    override var address: String
-        get() {
-            return _tRG(__v_raw, "address", __v_raw.address, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("address")) {
-                return
-            }
-            val oldValue = __v_raw.address
-            __v_raw.address = value
-            _tRS(__v_raw, "address", oldValue, value)
-        }
-    override var type: String
-        get() {
-            return _tRG(__v_raw, "type", __v_raw.type, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("type")) {
-                return
-            }
-            val oldValue = __v_raw.type
-            __v_raw.type = value
-            _tRS(__v_raw, "type", oldValue, value)
-        }
-    override var bondState: String
-        get() {
-            return _tRG(__v_raw, "bondState", __v_raw.bondState, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("bondState")) {
-                return
-            }
-            val oldValue = __v_raw.bondState
-            __v_raw.bondState = value
-            _tRS(__v_raw, "bondState", oldValue, value)
-        }
-    override var rssi: Number
-        get() {
-            return _tRG(__v_raw, "rssi", __v_raw.rssi, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("rssi")) {
-                return
-            }
-            val oldValue = __v_raw.rssi
-            __v_raw.rssi = value
-            _tRS(__v_raw, "rssi", oldValue, value)
-        }
-    override var connected: Boolean
-        get() {
-            return _tRG(__v_raw, "connected", __v_raw.connected, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("connected")) {
-                return
-            }
-            val oldValue = __v_raw.connected
-            __v_raw.connected = value
-            _tRS(__v_raw, "connected", oldValue, value)
-        }
-}
-open class LabelPrinterResult (
-    @JsonNotNull
-    open var success: Boolean = false,
-    @JsonNotNull
-    open var code: String,
-    @JsonNotNull
-    open var message: String,
-    open var data: UTSJSONObject? = null,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("LabelPrinterResult", "uni_modules/lili-label-printer/index.uts", 29, 13)
-    }
-}
-open class PrintTsplOptions (
-    @JsonNotNull
-    open var address: String,
-    @JsonNotNull
-    open var tspl: String,
-    open var charset: String? = null,
-    open var chunkSize: Number? = null,
-    open var delayMs: Number? = null,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintTsplOptions", "uni_modules/lili-label-printer/index.uts", 35, 13)
-    }
-}
-val sppUuidText = "00001101-0000-1000-8000-00805F9B34FB"
-var activeSocket: BluetoothSocket? = null
-var activeDevice: BluetoothDevice? = null
-var discoveryReceiver: BroadcastReceiver? = null
-var discoveryDevices: UTSArray<LabelPrinterDevice> = _uA()
-var discoveryResolve: ((devices: UTSArray<LabelPrinterDevice>) -> Unit)? = null
-var discoveryTimer: Number = -1
-fun makeResult(success: Boolean, code: String, message: String, data: UTSJSONObject?): LabelPrinterResult {
-    return LabelPrinterResult(success = success, code = code, message = message, data = data)
-}
-fun getActivity(): Activity {
-    return UTSAndroid.getUniActivity() as Activity
-}
-fun getAdapter(): BluetoothAdapter? {
-    val manager = getActivity().getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    if (manager == null) {
-        return null
-    }
-    return manager.getAdapter()
-}
-fun isAndroid12(): Boolean {
-    return Build.VERSION.SDK_INT >= 31
-}
-fun scanPermissions(): UTSArray<String> {
-    if (isAndroid12()) {
-        return _uA(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT
-        )
-    }
-    return _uA(
-        Manifest.permission.ACCESS_FINE_LOCATION
-    )
-}
-fun connectPermissions(): UTSArray<String> {
-    if (isAndroid12()) {
-        return _uA(
-            Manifest.permission.BLUETOOTH_CONNECT
-        )
-    }
-    return _uA()
-}
-fun hasPermissions(permissions: UTSArray<String>): Boolean {
-    if (permissions.length == 0) {
-        return true
-    }
-    return UTSAndroid.checkSystemPermissionGranted(getActivity(), permissions)
-}
-fun bluetoothEnabled(adapter: BluetoothAdapter): Boolean {
-    try {
-        return adapter.isEnabled()
-    }
-     catch (error: Throwable) {
-        return false
-    }
-}
-fun isLocationServiceEnabled(): Boolean {
-    val manager = getActivity().getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    if (manager == null) {
-        return false
-    }
-    var gpsEnabled = false
-    var networkEnabled = false
-    try {
-        gpsEnabled = manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-    }
-     catch (error: Throwable) {
-        gpsEnabled = false
-    }
-    try {
-        networkEnabled = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-    }
-     catch (error: Throwable) {
-        networkEnabled = false
-    }
-    return gpsEnabled || networkEnabled
-}
-fun deviceBondState(device: BluetoothDevice): String {
-    val state = device.getBondState()
-    if (state == BluetoothDevice.BOND_BONDED) {
-        return "BONDED"
-    }
-    if (state == BluetoothDevice.BOND_BONDING) {
-        return "BONDING"
-    }
-    return "NONE"
-}
-fun deviceType(device: BluetoothDevice): String {
-    if (Build.VERSION.SDK_INT < 18) {
-        return "CLASSIC"
-    }
-    val type = device.getType()
-    if (type == BluetoothDevice.DEVICE_TYPE_LE) {
-        return "BLE"
-    }
-    if (type == BluetoothDevice.DEVICE_TYPE_DUAL) {
-        return "DUAL"
-    }
-    if (type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
-        return "CLASSIC"
-    }
-    return "UNKNOWN"
-}
-fun safeDeviceName(device: BluetoothDevice): String {
-    var name = ""
-    try {
-        name = device.getName()
-    }
-     catch (error: Throwable) {
-        name = ""
-    }
-    if (name == null || name == "") {
-        return "未知蓝牙设备"
-    }
-    return name
-}
-fun toPrinterDevice(device: BluetoothDevice, rssi: Number): LabelPrinterDevice {
-    val address = device.getAddress()
-    var connected = false
-    if (activeDevice != null && activeSocket != null) {
-        connected = activeDevice!!.getAddress() == address && activeSocket!!.isConnected()
-    }
-    return LabelPrinterDevice(name = safeDeviceName(device), address = address, type = deviceType(device), bondState = deviceBondState(device), rssi = rssi, connected = connected)
-}
-fun addOrUpdateDevice(device: BluetoothDevice, rssi: Number) {
-    val item = toPrinterDevice(device, rssi)
-    console.log("[lili-label-printer] found device name=" + item.name + ", address=" + item.address + ", type=" + item.type + ", bond=" + item.bondState + ", rssi=" + item.rssi.toString(10), " at uni_modules/lili-label-printer/index.uts:192")
-    var found = false
-    run {
-        var i: Number = 0
-        while(i < discoveryDevices.length){
-            if (discoveryDevices[i].address == item.address) {
-                discoveryDevices[i] = item
-                found = true
-                break
-            }
-            i++
-        }
-    }
-    if (!found) {
-        discoveryDevices.push(item)
-    }
-}
-@Suppress("DEPRECATION")
-fun getBluetoothDeviceExtra(intent: Intent): BluetoothDevice? {
-    return intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-}
-fun closeActiveSocket() {
-    if (activeSocket != null) {
-        try {
-            activeSocket!!.close()
-        }
-         catch (error: Throwable) {}
-    }
-    activeSocket = null
-    activeDevice = null
-}
-fun finishDiscovery() {
-    console.log("[lili-label-printer] finish discovery, count=" + discoveryDevices.length.toString(10), " at uni_modules/lili-label-printer/index.uts:222")
-    val adapter = getAdapter()
-    if (adapter != null) {
-        try {
-            if (adapter.isDiscovering()) {
-                adapter.cancelDiscovery()
-            }
-        }
-         catch (error: Throwable) {}
-    }
-    if (discoveryReceiver != null) {
-        try {
-            getActivity().unregisterReceiver(discoveryReceiver)
-        }
-         catch (error: Throwable) {}
-    }
-    discoveryReceiver = null
-    if (discoveryTimer >= 0) {
-        clearTimeout(discoveryTimer)
-        discoveryTimer = -1
-    }
-    if (discoveryResolve != null) {
-        val resolver = discoveryResolve!!
-        discoveryResolve = null
-        resolver(discoveryDevices)
-    }
-}
-open class LabelDiscoveryReceiver : BroadcastReceiver(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("LabelDiscoveryReceiver", "uni_modules/lili-label-printer/index.uts", 232, 7)
-    }
-    override fun onReceive(context: Context, intent: Intent): Unit {
-        val action = intent.getAction()
-        if (action == BluetoothDevice.ACTION_FOUND) {
-            val device = getBluetoothDeviceExtra(intent)
-            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
-            if (device != null) {
-                addOrUpdateDevice(device as BluetoothDevice, rssi)
-            }
-            return
-        }
-        if (action == BluetoothAdapter.ACTION_DISCOVERY_FINISHED) {
-            finishDiscovery()
-        }
-    }
-}
-fun checkBluetoothEnvironment(): LabelPrinterResult {
-    val adapter = getAdapter()
-    if (adapter == null) {
-        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
-    }
-    val scanGranted = hasPermissions(scanPermissions())
-    val connectGranted = hasPermissions(connectPermissions())
-    val enabled = bluetoothEnabled(adapter)
-    val locationEnabled = if (isAndroid12()) {
-        true
-    } else {
-        isLocationServiceEnabled()
-    }
-    val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "uni_modules/lili-label-printer/index.uts", 257, 11), "bluetoothSupported" to true, "bluetoothEnabled" to enabled, "locationPermissionGranted" to scanGranted, "bluetoothPermissionGranted" to connectGranted, "locationServiceEnabled" to locationEnabled)
-    if (!enabled) {
-        return makeResult(false, "BLUETOOTH_DISABLED", "蓝牙未开启", data)
-    }
-    if (!scanGranted || !connectGranted) {
-        return makeResult(false, "LOCATION_PERMISSION_REQUIRED", "缺少蓝牙或位置权限", data)
-    }
-    if (!locationEnabled) {
-        return makeResult(false, "LOCATION_SERVICE_DISABLED", "系统位置服务未开启，可能无法搜索蓝牙设备", data)
-    }
-    return makeResult(true, "OK", "蓝牙环境正常", data)
-}
-fun requestBluetoothEnable(): LabelPrinterResult {
-    val adapter = getAdapter()
-    if (adapter == null) {
-        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
-    }
-    if (bluetoothEnabled(adapter)) {
-        return makeResult(true, "BLUETOOTH_ENABLED", "蓝牙已开启", null)
-    }
-    val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-    getActivity().startActivity(intent)
-    return makeResult(true, "BLUETOOTH_ENABLE_REQUESTED", "已打开蓝牙开启请求，请确认后返回", null)
-}
-fun requestLocationPermission(): UTSPromise<LabelPrinterResult> {
-    return UTSPromise(fun(resolve, _reject){
-        val permissions = scanPermissions()
-        if (hasPermissions(permissions)) {
-            resolve(makeResult(true, "PERMISSION_GRANTED", "蓝牙和位置权限已授权", null))
-            return
-        }
-        try {
-            UTSAndroid.requestSystemPermission(getActivity(), permissions, fun(allRight: Boolean, grantedList: UTSArray<String>){
-                if (allRight) {
-                    resolve(makeResult(true, "PERMISSION_GRANTED", "蓝牙和位置权限已授权", null))
-                    return
-                }
-                resolve(makeResult(false, "PERMISSION_DENIED", "权限未完全授权，无法搜索蓝牙打印机", null))
-            }
-            , fun(doNotAskAgain: Boolean, grantedList: UTSArray<String>){
-                if (doNotAskAgain) {
-                    resolve(makeResult(false, "PERMISSION_NEED_SETTINGS", "权限已被拒绝且不再询问，请到系统设置开启", null))
-                    return
-                }
-                resolve(makeResult(false, "PERMISSION_DENIED", "权限授权失败，无法搜索蓝牙打印机", null))
-            }
-            )
-        }
-         catch (error: Throwable) {
-            resolve(makeResult(false, "PERMISSION_MANIFEST_MISSING", "蓝牙权限未写入自定义基座，请重新打包自定义基座", null))
-        }
-    }
-    )
-}
-fun openLocationSettings(): LabelPrinterResult {
-    val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-    getActivity().startActivity(intent)
-    return makeResult(true, "LOCATION_SETTINGS_OPENED", "已打开系统位置设置", null)
-}
-fun searchBluetoothPrinters(durationMs: Number = 10000): UTSPromise<UTSArray<LabelPrinterDevice>> {
-    return UTSPromise(fun(resolve, _reject){
-        val environment = checkBluetoothEnvironment()
-        if (!environment.success) {
-            console.log("[lili-label-printer] discovery blocked: " + environment.code + ", " + environment.message, " at uni_modules/lili-label-printer/index.uts:361")
-            resolve(_uA())
-            return
-        }
-        val adapter = getAdapter()
-        if (adapter == null) {
-            console.log("[lili-label-printer] discovery blocked: bluetooth adapter is null", " at uni_modules/lili-label-printer/index.uts:367")
-            resolve(_uA())
-            return
-        }
-        stopBluetoothDiscovery()
-        discoveryDevices = _uA()
-        discoveryResolve = resolve
-        discoveryReceiver = LabelDiscoveryReceiver()
-        val filter = IntentFilter()
-        filter.addAction(BluetoothDevice.ACTION_FOUND)
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        getActivity().registerReceiver(discoveryReceiver, filter)
-        try {
-            if (adapter.isDiscovering()) {
-                adapter.cancelDiscovery()
-            }
-            val started = adapter.startDiscovery()
-            console.log("[lili-label-printer] start discovery result=" + started.toString() + ", durationMs=" + durationMs.toString(10), " at uni_modules/lili-label-printer/index.uts:384")
-            if (!started) {
-                finishDiscovery()
-                return
-            }
-        }
-         catch (error: Throwable) {
-            console.log("[lili-label-printer] start discovery failed", " at uni_modules/lili-label-printer/index.uts:390")
-            finishDiscovery()
-            return
-        }
-        discoveryTimer = setTimeout(fun(){
-            finishDiscovery()
-        }
-        , durationMs)
-    }
-    )
-}
-fun stopBluetoothDiscovery(): LabelPrinterResult {
-    finishDiscovery()
-    return makeResult(true, "DISCOVERY_STOPPED", "已停止搜索蓝牙设备", null)
-}
-fun connectPrinter(address: String): LabelPrinterResult {
-    val environment = checkBluetoothEnvironment()
-    if (!environment.success && environment.code != "LOCATION_SERVICE_DISABLED") {
-        return environment
-    }
-    val adapter = getAdapter()
-    if (adapter == null) {
-        return makeResult(false, "BLUETOOTH_UNSUPPORTED", "当前设备不支持蓝牙", null)
-    }
-    if (address == "") {
-        return makeResult(false, "ADDRESS_EMPTY", "打印机地址不能为空", null)
-    }
-    stopBluetoothDiscovery()
-    closeActiveSocket()
-    try {
-        val device = adapter.getRemoteDevice(address)
-        val socket = device.createRfcommSocketToServiceRecord(UUID.fromString(sppUuidText))
-        socket.connect()
-        activeSocket = socket
-        activeDevice = device
-        val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "uni_modules/lili-label-printer/index.uts", 403, 15), "name" to safeDeviceName(device), "address" to device.getAddress(), "type" to deviceType(device), "bondState" to deviceBondState(device))
-        return makeResult(true, "CONNECTED", "已连接蓝牙打印机", data)
-    }
-     catch (error: Throwable) {
-        closeActiveSocket()
-        return makeResult(false, "CONNECT_FAILED", "连接蓝牙打印机失败，请确认设备已开机并处于可连接状态", null)
-    }
-}
-fun disconnectPrinter(): LabelPrinterResult {
-    closeActiveSocket()
-    return makeResult(true, "DISCONNECTED", "已断开蓝牙打印机", null)
-}
-fun getConnectedPrinter(): LabelPrinterResult {
-    if (activeDevice == null || activeSocket == null || !activeSocket!!.isConnected()) {
-        return makeResult(false, "NOT_CONNECTED", "当前未连接蓝牙打印机", null)
-    }
-    val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "uni_modules/lili-label-printer/index.uts", 424, 11), "name" to safeDeviceName(activeDevice!!), "address" to activeDevice!!.getAddress(), "type" to deviceType(activeDevice!!), "bondState" to deviceBondState(activeDevice!!))
-    return makeResult(true, "CONNECTED", "已连接蓝牙打印机", data)
-}
-fun labelString(value: Any?, fallback: String = ""): String {
-    if (value == null) {
-        return fallback
-    }
-    val text = "" + value
-    if (text == "") {
-        return fallback
-    }
-    return text
-}
-fun labelNumber(value: Any?, fallback: Number): Number {
-    val parsed = parseFloat(labelString(value))
-    if (isNaN(parsed)) {
-        return fallback
-    }
-    return parsed
-}
-fun labelBool(value: Any?, fallback: Boolean): Boolean {
-    if (value == null) {
-        return fallback
-    }
-    val text = labelString(value).toLowerCase()
-    if (text == "true" || text == "1") {
-        return true
-    }
-    if (text == "false" || text == "0") {
-        return false
-    }
-    return fallback
-}
-fun onlyDigits(value: String): String {
-    var result = ""
-    run {
-        var index: Number = 0
-        while(index < value.length){
-            val char = value.substring(index, index + 1)
-            if (char >= "0" && char <= "9") {
-                result = result + char
-            }
-            index += 1
-        }
-    }
-    return result
-}
-fun ean13Checksum(first12: String): String {
-    var sum: Number = 0
-    run {
-        var index: Number = 0
-        while(index < 12){
-            val digit = parseInt(first12.substring(index, index + 1))
-            sum += if (index % 2 == 0) {
-                digit
-            } else {
-                digit * 3
-            }
-            index += 1
-        }
-    }
-    val check = (10 - (sum % 10)) % 10
-    return check.toString(10)
-}
-fun normalizeEan13(value: String): String {
-    var digits = onlyDigits(value)
-    if (digits.length >= 13) {
-        return digits.substring(0, 13)
-    }
-    if (digits.length == 12) {
-        return digits + ean13Checksum(digits)
-    }
-    return "5901234123457"
-}
-fun ean13LeftPattern(digit: String, parity: String): String {
-    if (digit == "0") {
-        return if (parity == "G") {
-            "0100111"
-        } else {
-            "0001101"
-        }
-    }
-    if (digit == "1") {
-        return if (parity == "G") {
-            "0110011"
-        } else {
-            "0011001"
-        }
-    }
-    if (digit == "2") {
-        return if (parity == "G") {
-            "0011011"
-        } else {
-            "0010011"
-        }
-    }
-    if (digit == "3") {
-        return if (parity == "G") {
-            "0100001"
-        } else {
-            "0111101"
-        }
-    }
-    if (digit == "4") {
-        return if (parity == "G") {
-            "0011101"
-        } else {
-            "0100011"
-        }
-    }
-    if (digit == "5") {
-        return if (parity == "G") {
-            "0111001"
-        } else {
-            "0110001"
-        }
-    }
-    if (digit == "6") {
-        return if (parity == "G") {
-            "0000101"
-        } else {
-            "0101111"
-        }
-    }
-    if (digit == "7") {
-        return if (parity == "G") {
-            "0010001"
-        } else {
-            "0111011"
-        }
-    }
-    if (digit == "8") {
-        return if (parity == "G") {
-            "0001001"
-        } else {
-            "0110111"
-        }
-    }
-    return if (parity == "G") {
-        "0010111"
-    } else {
-        "0001011"
-    }
-}
-fun ean13RightPattern(digit: String): String {
-    if (digit == "0") {
-        return "1110010"
-    }
-    if (digit == "1") {
-        return "1100110"
-    }
-    if (digit == "2") {
-        return "1101100"
-    }
-    if (digit == "3") {
-        return "1000010"
-    }
-    if (digit == "4") {
-        return "1011100"
-    }
-    if (digit == "5") {
-        return "1001110"
-    }
-    if (digit == "6") {
-        return "1010000"
-    }
-    if (digit == "7") {
-        return "1000100"
-    }
-    if (digit == "8") {
-        return "1001000"
-    }
-    return "1110100"
-}
-fun ean13Parity(first: String): String {
-    if (first == "0") {
-        return "LLLLLL"
-    }
-    if (first == "1") {
-        return "LLGLGG"
-    }
-    if (first == "2") {
-        return "LLGGLG"
-    }
-    if (first == "3") {
-        return "LLGGGL"
-    }
-    if (first == "4") {
-        return "LGLLGG"
-    }
-    if (first == "5") {
-        return "LGGLLG"
-    }
-    if (first == "6") {
-        return "LGGGLL"
-    }
-    if (first == "7") {
-        return "LGLGLG"
-    }
-    if (first == "8") {
-        return "LGLGGL"
-    }
-    return "LGGLGL"
-}
-fun ean13Pattern(value: String): String {
-    val digits = normalizeEan13(value)
-    val parity = ean13Parity(digits.substring(0, 1))
-    var result = "101"
-    run {
-        var index: Number = 1
-        while(index <= 6){
-            result = result + ean13LeftPattern(digits.substring(index, index + 1), parity.substring(index - 1, index))
-            index += 1
-        }
-    }
-    result = result + "01010"
-    run {
-        var index: Number = 7
-        while(index <= 12){
-            result = result + ean13RightPattern(digits.substring(index, index + 1))
-            index += 1
-        }
-    }
-    return result + "101"
-}
-fun drawBitmapText(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
-    val content = labelString(element["content"], labelString(element["label"], "TEXT"))
-    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
-    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
-    val fontSize = labelNumber(element["fontSize"], 18)
-    paint.setColor(Color.BLACK)
-    paint.setAntiAlias(true)
-    paint.setTextSize(fontSize.toFloat())
-    canvas.drawText(content, x.toFloat(), (y + fontSize * 0.82).toFloat(), paint)
-}
-fun drawPseudoBarcode(canvas: Canvas, paint: Paint, content: String, x: Number, y: Number, width: Number, height: Number) {
-    val count: Number = 38
-    val barWidth = width / count
-    run {
-        var index: Number = 0
-        while(index < count){
-            if (index % 3 != 1) {
-                val left = x + index * barWidth
-                canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, barWidth * 0.65)).toFloat(), (y + height).toFloat(), paint)
-            }
-            index += 1
-        }
-    }
-}
-fun drawEan13Barcode(canvas: Canvas, paint: Paint, content: String, x: Number, y: Number, width: Number, height: Number) {
-    val pattern = ean13Pattern(content)
-    val moduleWidth = width / pattern.length
-    run {
-        var index: Number = 0
-        while(index < pattern.length){
-            if (pattern.substring(index, index + 1) == "1") {
-                val left = x + index * moduleWidth
-                canvas.drawRect(left.toFloat(), y.toFloat(), (left + Math.max(1, moduleWidth)).toFloat(), (y + height).toFloat(), paint)
-            }
-            index += 1
-        }
-    }
-}
-fun drawBitmapBarcode(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
-    val content = labelString(element["content"], "5901234123457")
-    val barcodeType = labelString(element["barcodeType"], labelString(element["barcode_type"], "CODE128")).toUpperCase()
-    val showText = labelBool(element["showText"], labelBool(element["show_text"], false))
-    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
-    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
-    val width = Math.round(labelNumber(element["width"], 20) * dotsPerMm)
-    val height = Math.round(labelNumber(element["height"], 5) * dotsPerMm)
-    val textHeight = if (showText) {
-        14
-    } else {
-        0
-    }
-    val barHeight = Math.max(8, height - textHeight)
-    paint.setColor(Color.BLACK)
-    paint.setAntiAlias(false)
-    if (barcodeType == "EAN13") {
-        drawEan13Barcode(canvas, paint, content, x, y, width, barHeight)
-    } else {
-        drawPseudoBarcode(canvas, paint, content, x, y, width, barHeight)
-    }
-    if (showText) {
-        paint.setAntiAlias(true)
-        val textSize = (height / 3).toFloat()
-        paint.setTextSize(textSize)
-        canvas.drawText(content, (x + 2).toFloat(), (y + height - 2).toFloat(), paint)
-    }
-}
-fun drawBitmapGraphic(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
-    val type = labelString(element["type"], "text")
-    val x = Math.round(labelNumber(element["x"], 0) * dotsPerMm)
-    val y = Math.round(labelNumber(element["y"], 0) * dotsPerMm)
-    val width = Math.round(labelNumber(element["width"], 10) * dotsPerMm)
-    val height = Math.round(labelNumber(element["height"], 5) * dotsPerMm)
-    val lineWidth = Math.max(1, Math.round(labelNumber(element["lineWidth"], labelNumber(element["line_width"], 0.4)) * dotsPerMm))
-    paint.setColor(Color.BLACK)
-    paint.setAntiAlias(false)
-    if (type == "hline") {
-        canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
-        return
-    }
-    if (type == "vline") {
-        canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
-        return
-    }
-    if (type == "rect") {
-        canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
-        canvas.drawRect(x.toFloat(), (y + height - lineWidth).toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
-        canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
-        canvas.drawRect((x + width - lineWidth).toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
-    }
-}
-fun drawBitmapElement(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: Number) {
-    val type = labelString(element["type"], "text")
-    if (type == "barcode") {
-        drawBitmapBarcode(canvas, paint, element, dotsPerMm)
-    } else if (type == "hline" || type == "vline" || type == "rect") {
-        drawBitmapGraphic(canvas, paint, element, dotsPerMm)
-    } else {
-        drawBitmapText(canvas, paint, element, dotsPerMm)
-    }
-}
-fun renderLabelBitmap(paperWidthMm: Number, paperHeightMm: Number, dotsPerMm: Number, elements: UTSArray<UTSJSONObject>): Bitmap {
-    val width = Math.max(8, Math.round(paperWidthMm * dotsPerMm))
-    val height = Math.max(8, Math.round(paperHeightMm * dotsPerMm))
-    val bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val paint = Paint()
-    canvas.drawColor(Color.WHITE)
-    run {
-        var index: Number = 0
-        while(index < elements.length){
-            drawBitmapElement(canvas, paint, elements[index], dotsPerMm)
-            index += 1
-        }
-    }
-    return bitmap
-}
-fun bitmapToTsplBytes(bitmap: Bitmap): ByteArray {
-    val width = bitmap.getWidth()
-    val height = bitmap.getHeight()
-    val widthBytes = ((width + 7) / 8).toInt()
-    val result = ByteArray((widthBytes * height).toInt())
-    var y: Int = 0
-    while(y < height){
-        var xByte: Int = 0
-        while(xByte < widthBytes){
-            var value: Int = 0
-            var bit: Int = 0
-            while(bit < 8){
-                val x = (xByte * 8 + bit).toInt()
-                if (x < width) {
-                    val pixel = bitmap.getPixel(x.toInt(), y.toInt())
-                    val gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3
-                    if (gray >= 160) {
-                        value = value or (0x80 shr bit)
-                    }
-                }
-                bit += 1
-            }
-            result[(y * widthBytes + xByte).toInt()] = value.toByte()
-            xByte += 1
-        }
-        y += 1
-    }
-    return result
-}
-fun writePrinterBytes(bytes: ByteArray, chunkSize: Int, delayMs: Long) {
-    val output = activeSocket!!.getOutputStream()
-    var offset: Int = 0
-    while(offset < bytes.size){
-        var count = chunkSize
-        if (offset + count > bytes.size) {
-            count = (bytes.size - offset).toInt()
-        }
-        output.write(bytes, offset.toInt(), count.toInt())
-        output.flush()
-        if (delayMs > 0) {
-            Thread.sleep(delayMs)
-        }
-        offset += count
-    }
-}
-fun extraOptionInt(options: Any, key: String, fallback: Number): Number {
-    try {
-        val text = JSON.stringify(options)
-        val kObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:715")
-        if (kObject == null) {
-            return fallback
-        }
-        val value = kObject!![key]
-        if (value == null) {
-            return fallback
-        }
-        val parsed = parseInt("" + value)
-        if (isNaN(parsed)) {
-            return fallback
-        }
-        return parsed
-    }
-     catch (error: Throwable) {
-        return fallback
-    }
-}
-fun bitmapOptionObject(options: Any): UTSJSONObject {
-    try {
-        val text = JSON.stringify(options)
-        if (text == null || text == "") {
-            return _uO()
-        }
-        val kObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:735")
-        if (kObject == null) {
-            return _uO()
-        }
-        return kObject!!
-    }
-     catch (error: Throwable) {
-        return _uO()
-    }
-}
-fun bitmapOptionString(options: UTSJSONObject, key: String, fallback: String): String {
-    val value = options[key]
-    if (value == null) {
-        return fallback
-    }
-    val text = "" + value
-    return if (text == "") {
-        fallback
-    } else {
-        text
-    }
-}
-fun bitmapOptionNumber(options: UTSJSONObject, key: String, fallback: Number): Number {
-    val value = options[key]
-    if (value == null) {
-        return fallback
-    }
-    val parsed = parseFloat("" + value)
-    if (isNaN(parsed)) {
-        return fallback
-    }
-    return parsed
-}
-fun bitmapOptionElements(options: UTSJSONObject): UTSArray<UTSJSONObject> {
-    val value = options["elements"]
-    if (value == null) {
-        return _uA<UTSJSONObject>()
-    }
-    try {
-        val text = JSON.stringify(value)
-        if (text == null || text == "") {
-            return _uA<UTSJSONObject>()
-        }
-        val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at uni_modules/lili-label-printer/index.uts:768")
-        if (parsed == null) {
-            return _uA<UTSJSONObject>()
-        }
-        return parsed!!
-    }
-     catch (error: Throwable) {
-        return _uA<UTSJSONObject>()
-    }
-}
-fun printLabelBitmap(options: Any): LabelPrinterResult {
-    val bitmapOptions = bitmapOptionObject(options)
-    val address = bitmapOptionString(bitmapOptions, "address", "")
-    val paperWidthMm = bitmapOptionNumber(bitmapOptions, "paperWidthMm", 30)
-    val paperHeightMm = bitmapOptionNumber(bitmapOptions, "paperHeightMm", 20)
-    val dotsPerMm = bitmapOptionNumber(bitmapOptions, "dotsPerMm", 8)
-    val elements = bitmapOptionElements(bitmapOptions)
-    if (address == "") {
-        return makeResult(false, "ADDRESS_EMPTY", "请先选择蓝牙打印机", null)
-    }
-    if (elements.length == 0) {
-        return makeResult(false, "ELEMENTS_EMPTY", "标签内容不能为空", null)
-    }
-    if (activeDevice == null || activeSocket == null || !activeSocket!!.isConnected() || activeDevice!!.getAddress() != address) {
-        val connectResult = connectPrinter(address)
-        if (!connectResult.success) {
-            return connectResult
-        }
-    }
-    try {
-        var chunkSizeValue = extraOptionInt(bitmapOptions, "chunkSize", 1024)
-        if (chunkSizeValue <= 0) {
-            chunkSizeValue = 1024
-        }
-        var delayMsValue = extraOptionInt(bitmapOptions, "delayMs", 20)
-        if (delayMsValue < 0) {
-            delayMsValue = 20
-        }
-        val chunkSize = chunkSizeValue.toInt()
-        val delayMs = delayMsValue.toLong()
-        val bitmap = renderLabelBitmap(paperWidthMm, paperHeightMm, dotsPerMm, elements)
-        val bitmapBytes = bitmapToTsplBytes(bitmap)
-        val widthBytes = ((bitmap.getWidth() + 7) / 8).toInt()
-        var copies = extraOptionInt(options, "copies", 1)
-        if (copies <= 0) {
-            copies = 1
-        }
-        val prefix = "SIZE " + paperWidthMm.toString(10) + " mm," + paperHeightMm.toString(10) + " mm\r\nGAP 2 mm,0\r\nDENSITY 8\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0," + widthBytes.toString() + "," + bitmap.getHeight().toString() + ",0,"
-        val suffix = "\r\nPRINT " + copies.toString(10) + "\r\n"
-        writePrinterBytes(prefix.toByteArray(Charset.forName("GBK")), chunkSize, delayMs)
-        writePrinterBytes(bitmapBytes, chunkSize, delayMs)
-        writePrinterBytes(suffix.toByteArray(Charset.forName("GBK")), chunkSize, delayMs)
-        bitmap.recycle()
-        return makeResult(true, "PRINTED", "图片标签已发送", null)
-    }
-     catch (error: Throwable) {
-        return makeResult(false, "BITMAP_PRINT_FAILED", "图片打印失败，请检查打印机连接", null)
-    }
-}
-fun printTspl(options: PrintTsplOptions): LabelPrinterResult {
-    if (options.address == "") {
-        return makeResult(false, "ADDRESS_EMPTY", "请先选择蓝牙打印机", null)
-    }
-    if (options.tspl == "") {
-        return makeResult(false, "TSPL_EMPTY", "打印内容不能为空", null)
-    }
-    if (activeDevice == null || activeSocket == null || !activeSocket!!.isConnected() || activeDevice!!.getAddress() != options.address) {
-        val connectResult = connectPrinter(options.address)
-        if (!connectResult.success) {
-            return connectResult
-        }
-    }
-    try {
-        val charsetName = if (options.charset == null || options.charset == "") {
-            "GBK"
-        } else {
-            options.charset!!
-        }
-        val chunkSize = (if (options.chunkSize == null || options.chunkSize!! <= 0) {
-            256
-        } else {
-            options.chunkSize!!
-        }
-        ).toInt()
-        val delayMs = (if (options.delayMs == null || options.delayMs!! < 0) {
-            20
-        } else {
-            options.delayMs!!
-        }
-        ).toLong()
-        val bytes = options.tspl.toByteArray(Charset.forName(charsetName))
-        val output = activeSocket!!.getOutputStream()
-        var offset: Int = 0
-        while(offset < bytes.size){
-            var count = chunkSize
-            if (offset + count > bytes.size) {
-                count = (bytes.size - offset).toInt()
-            }
-            output.write(bytes, offset.toInt(), count.toInt())
-            output.flush()
-            if (delayMs > 0) {
-                Thread.sleep(delayMs)
-            }
-            offset += count
-        }
-        return makeResult(true, "PRINTED", "打印指令已发送", null)
-    }
-     catch (error: Throwable) {
-        return makeResult(false, "PRINT_FAILED", "发送打印指令失败，请检查打印机连接", null)
-    }
-}
-open class LabelElement (
-    @JsonNotNull
-    open var key: String,
-    @JsonNotNull
-    open var label: String,
-    @JsonNotNull
-    open var type: String,
-    @JsonNotNull
-    open var source: String,
-    @JsonNotNull
-    open var content: String,
-    @JsonNotNull
-    open var x: Number,
-    @JsonNotNull
-    open var y: Number,
-    @JsonNotNull
-    open var width: Number,
-    @JsonNotNull
-    open var height: Number,
-    @JsonNotNull
-    open var fontSize: Number,
-) : UTSReactiveObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("LabelElement", "pages/label-print/index.uvue", 240, 6)
-    }
-    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
-        return LabelElementReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
-    }
-}
-class LabelElementReactiveObject : LabelElement, IUTSReactive<LabelElement> {
-    override var __v_raw: LabelElement
-    override var __v_isReadonly: Boolean
-    override var __v_isShallow: Boolean
-    override var __v_skip: Boolean
-    constructor(__v_raw: LabelElement, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, label = __v_raw.label, type = __v_raw.type, source = __v_raw.source, content = __v_raw.content, x = __v_raw.x, y = __v_raw.y, width = __v_raw.width, height = __v_raw.height, fontSize = __v_raw.fontSize) {
-        this.__v_raw = __v_raw
-        this.__v_isReadonly = __v_isReadonly
-        this.__v_isShallow = __v_isShallow
-        this.__v_skip = __v_skip
-    }
-    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): LabelElementReactiveObject {
-        return LabelElementReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
-    }
-    override var key: String
-        get() {
-            return _tRG(__v_raw, "key", __v_raw.key, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("key")) {
-                return
-            }
-            val oldValue = __v_raw.key
-            __v_raw.key = value
-            _tRS(__v_raw, "key", oldValue, value)
-        }
-    override var label: String
-        get() {
-            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("label")) {
-                return
-            }
-            val oldValue = __v_raw.label
-            __v_raw.label = value
-            _tRS(__v_raw, "label", oldValue, value)
-        }
-    override var type: String
-        get() {
-            return _tRG(__v_raw, "type", __v_raw.type, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("type")) {
-                return
-            }
-            val oldValue = __v_raw.type
-            __v_raw.type = value
-            _tRS(__v_raw, "type", oldValue, value)
-        }
-    override var source: String
-        get() {
-            return _tRG(__v_raw, "source", __v_raw.source, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("source")) {
-                return
-            }
-            val oldValue = __v_raw.source
-            __v_raw.source = value
-            _tRS(__v_raw, "source", oldValue, value)
-        }
-    override var content: String
-        get() {
-            return _tRG(__v_raw, "content", __v_raw.content, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("content")) {
-                return
-            }
-            val oldValue = __v_raw.content
-            __v_raw.content = value
-            _tRS(__v_raw, "content", oldValue, value)
-        }
-    override var x: Number
-        get() {
-            return _tRG(__v_raw, "x", __v_raw.x, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("x")) {
-                return
-            }
-            val oldValue = __v_raw.x
-            __v_raw.x = value
-            _tRS(__v_raw, "x", oldValue, value)
-        }
-    override var y: Number
-        get() {
-            return _tRG(__v_raw, "y", __v_raw.y, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("y")) {
-                return
-            }
-            val oldValue = __v_raw.y
-            __v_raw.y = value
-            _tRS(__v_raw, "y", oldValue, value)
-        }
-    override var width: Number
-        get() {
-            return _tRG(__v_raw, "width", __v_raw.width, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("width")) {
-                return
-            }
-            val oldValue = __v_raw.width
-            __v_raw.width = value
-            _tRS(__v_raw, "width", oldValue, value)
-        }
-    override var height: Number
-        get() {
-            return _tRG(__v_raw, "height", __v_raw.height, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("height")) {
-                return
-            }
-            val oldValue = __v_raw.height
-            __v_raw.height = value
-            _tRS(__v_raw, "height", oldValue, value)
-        }
-    override var fontSize: Number
-        get() {
-            return _tRG(__v_raw, "fontSize", __v_raw.fontSize, __v_isReadonly, __v_isShallow)
-        }
-        set(value) {
-            if (!__v_canSet("fontSize")) {
-                return
-            }
-            val oldValue = __v_raw.fontSize
-            __v_raw.fontSize = value
-            _tRS(__v_raw, "fontSize", oldValue, value)
-        }
-}
-open class BarcodeBar (
-    @JsonNotNull
-    open var key: String,
-    @JsonNotNull
-    open var style: String,
-) : UTSObject(), IUTSSourceMap {
-    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("BarcodeBar", "pages/label-print/index.uvue", 253, 6)
-    }
-}
-val GenPagesLabelPrintIndexClass = CreateVueComponent(GenPagesLabelPrintIndex::class.java, fun(): VueComponentOptions {
-    return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesLabelPrintIndex.inheritAttrs, inject = GenPagesLabelPrintIndex.inject, props = GenPagesLabelPrintIndex.props, propsNeedCastKeys = GenPagesLabelPrintIndex.propsNeedCastKeys, emits = GenPagesLabelPrintIndex.emits, components = GenPagesLabelPrintIndex.components, styles = GenPagesLabelPrintIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
-        return GenPagesLabelPrintIndex.setup(props as GenPagesLabelPrintIndex)
-    }
-    )
-}
-, fun(instance, renderer): GenPagesLabelPrintIndex {
-    return GenPagesLabelPrintIndex(instance, renderer)
-}
-)
 val GenPagesPrinterSettingsIndexClass = CreateVueComponent(GenPagesPrinterSettingsIndex::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesPrinterSettingsIndex.inheritAttrs, inject = GenPagesPrinterSettingsIndex.inject, props = GenPagesPrinterSettingsIndex.props, propsNeedCastKeys = GenPagesPrinterSettingsIndex.propsNeedCastKeys, emits = GenPagesPrinterSettingsIndex.emits, components = GenPagesPrinterSettingsIndex.components, styles = GenPagesPrinterSettingsIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
         return GenPagesPrinterSettingsIndex.setup(props as GenPagesPrinterSettingsIndex)
@@ -12832,7 +13711,7 @@ val GenPagesPrinterSettingsIndexClass = CreateVueComponent(GenPagesPrinterSettin
     return GenPagesPrinterSettingsIndex(instance, renderer)
 }
 )
-open class PrintPreviewField (
+open class PrintPreviewField__1 (
     @JsonNotNull
     open var key: String,
     @JsonNotNull
@@ -12843,7 +13722,7 @@ open class PrintPreviewField (
     open var emphasis: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintPreviewField", "pages/label-templates/index.uvue", 117, 6)
+        return UTSSourceMapPosition("PrintPreviewField", "pages/label-templates/index.uvue", 118, 6)
     }
 }
 val GenPagesLabelTemplatesIndexClass = CreateVueComponent(GenPagesLabelTemplatesIndex::class.java, fun(): VueComponentOptions {
@@ -12863,7 +13742,7 @@ open class TemplateChoice (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("TemplateChoice", "pages/label-templates/from.uvue", 135, 6)
+        return UTSSourceMapPosition("TemplateChoice", "pages/label-templates/from.uvue", 136, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return TemplateChoiceReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -12918,7 +13797,7 @@ val GenPagesLabelTemplatesFromClass = CreateVueComponent(GenPagesLabelTemplatesF
     return GenPagesLabelTemplatesFrom(instance, renderer)
 }
 )
-open class LabelElement__1 (
+open class LabelElement (
     @JsonNotNull
     open var key: String,
     @JsonNotNull
@@ -12945,27 +13824,31 @@ open class LabelElement__1 (
     open var height: Number,
     @JsonNotNull
     open var fontSize: Number,
+    @JsonNotNull
+    open var isBold: Boolean = false,
+    @JsonNotNull
+    open var textAlign: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("LabelElement", "uni_modules/lili-label-template-editor/components/lili-label-template-editor/lili-label-template-editor.uvue", 99, 6)
+        return UTSSourceMapPosition("LabelElement", "uni_modules/lili-label-template-editor/components/lili-label-template-editor/lili-label-template-editor.uvue", 125, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
-        return LabelElement__1ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+        return LabelElementReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
     }
 }
-class LabelElement__1ReactiveObject : LabelElement__1, IUTSReactive<LabelElement__1> {
-    override var __v_raw: LabelElement__1
+class LabelElementReactiveObject : LabelElement, IUTSReactive<LabelElement> {
+    override var __v_raw: LabelElement
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: LabelElement__1, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, label = __v_raw.label, type = __v_raw.type, source = __v_raw.source, content = __v_raw.content, barcodeType = __v_raw.barcodeType, showText = __v_raw.showText, lineWidth = __v_raw.lineWidth, x = __v_raw.x, y = __v_raw.y, width = __v_raw.width, height = __v_raw.height, fontSize = __v_raw.fontSize) {
+    constructor(__v_raw: LabelElement, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, label = __v_raw.label, type = __v_raw.type, source = __v_raw.source, content = __v_raw.content, barcodeType = __v_raw.barcodeType, showText = __v_raw.showText, lineWidth = __v_raw.lineWidth, x = __v_raw.x, y = __v_raw.y, width = __v_raw.width, height = __v_raw.height, fontSize = __v_raw.fontSize, isBold = __v_raw.isBold, textAlign = __v_raw.textAlign) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
         this.__v_skip = __v_skip
     }
-    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): LabelElement__1ReactiveObject {
-        return LabelElement__1ReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): LabelElementReactiveObject {
+        return LabelElementReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
     }
     override var key: String
         get() {
@@ -13123,6 +14006,56 @@ class LabelElement__1ReactiveObject : LabelElement__1, IUTSReactive<LabelElement
             __v_raw.fontSize = value
             _tRS(__v_raw, "fontSize", oldValue, value)
         }
+    override var isBold: Boolean
+        get() {
+            return _tRG(__v_raw, "isBold", __v_raw.isBold, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("isBold")) {
+                return
+            }
+            val oldValue = __v_raw.isBold
+            __v_raw.isBold = value
+            _tRS(__v_raw, "isBold", oldValue, value)
+        }
+    override var textAlign: String
+        get() {
+            return _tRG(__v_raw, "textAlign", __v_raw.textAlign, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("textAlign")) {
+                return
+            }
+            val oldValue = __v_raw.textAlign
+            __v_raw.textAlign = value
+            _tRS(__v_raw, "textAlign", oldValue, value)
+        }
+}
+open class ElementBounds (
+    @JsonNotNull
+    open var x: Number,
+    @JsonNotNull
+    open var y: Number,
+    @JsonNotNull
+    open var width: Number,
+    @JsonNotNull
+    open var height: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("ElementBounds", "uni_modules/lili-label-template-editor/components/lili-label-template-editor/lili-label-template-editor.uvue", 143, 6)
+    }
+}
+open class PreviewTextFit (
+    @JsonNotNull
+    open var lines: UTSArray<String>,
+    @JsonNotNull
+    open var fontSize: Number,
+    @JsonNotNull
+    open var lineHeight: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("PreviewTextFit", "uni_modules/lili-label-template-editor/components/lili-label-template-editor/lili-label-template-editor.uvue", 150, 6)
+    }
 }
 val GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditorClass = CreateVueComponent(GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "component", name = "", inheritAttrs = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.inheritAttrs, inject = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.inject, props = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.props, propsNeedCastKeys = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.propsNeedCastKeys, emits = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.emits, components = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.components, styles = GenUniModulesLiliLabelTemplateEditorComponentsLiliLabelTemplateEditorLiliLabelTemplateEditor.styles, setup = fun(props: ComponentPublicInstance): Any? {
@@ -13170,8 +14103,13 @@ open class KsefInvoiceListQuery (
     open var page: Number,
     @JsonNotNull
     open var page_size: Number,
+    open var supplier: String? = null,
+    open var supplier_id: String? = null,
     open var sync_status: String? = null,
     open var is_paid: String? = null,
+    open var has_xml: String? = null,
+    open var payment_review_status: String? = null,
+    open var ordering: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
         return UTSSourceMapPosition("KsefInvoiceListQuery", "pkg/api/modules/ksef.uts", 2, 13)
@@ -13221,6 +14159,8 @@ open class KsefInvoiceItem (
     @JsonNotNull
     open var payment_method: String,
     @JsonNotNull
+    open var payment_method_display: String,
+    @JsonNotNull
     open var bank_account_number: String,
     @JsonNotNull
     open var bank_name: String,
@@ -13232,6 +14172,18 @@ open class KsefInvoiceItem (
     open var paid_at: String,
     @JsonNotNull
     open var remark: String,
+    @JsonNotNull
+    open var payment_review_status: String,
+    @JsonNotNull
+    open var payment_review_status_display: String,
+    @JsonNotNull
+    open var payment_review_note: String,
+    @JsonNotNull
+    open var payment_reviewed_by: Number,
+    @JsonNotNull
+    open var payment_reviewed_by_name: String,
+    @JsonNotNull
+    open var payment_reviewed_at: String,
     @JsonNotNull
     open var sync_status: String,
     @JsonNotNull
@@ -13246,7 +14198,7 @@ open class KsefInvoiceItem (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("KsefInvoiceItem", "pkg/api/modules/ksef.uts", 9, 13)
+        return UTSSourceMapPosition("KsefInvoiceItem", "pkg/api/modules/ksef.uts", 14, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return KsefInvoiceItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -13257,7 +14209,7 @@ class KsefInvoiceItemReactiveObject : KsefInvoiceItem, IUTSReactive<KsefInvoiceI
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: KsefInvoiceItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, subject_type = __v_raw.subject_type, ksef_number = __v_raw.ksef_number, invoice_number = __v_raw.invoice_number, invoice_type = __v_raw.invoice_type, seller_name = __v_raw.seller_name, seller_nip = __v_raw.seller_nip, buyer_name = __v_raw.buyer_name, buyer_nip = __v_raw.buyer_nip, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, issue_date = __v_raw.issue_date, sale_date = __v_raw.sale_date, currency = __v_raw.currency, net_amount = __v_raw.net_amount, tax_amount = __v_raw.tax_amount, gross_amount = __v_raw.gross_amount, amount_due = __v_raw.amount_due, payment_due_date = __v_raw.payment_due_date, payment_method = __v_raw.payment_method, bank_account_number = __v_raw.bank_account_number, bank_name = __v_raw.bank_name, is_paid = __v_raw.is_paid, paid_amount = __v_raw.paid_amount, paid_at = __v_raw.paid_at, remark = __v_raw.remark, sync_status = __v_raw.sync_status, raw_xml_downloaded_at = __v_raw.raw_xml_downloaded_at, files_count = __v_raw.files_count, pdf_download_url = __v_raw.pdf_download_url, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
+    constructor(__v_raw: KsefInvoiceItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, subject_type = __v_raw.subject_type, ksef_number = __v_raw.ksef_number, invoice_number = __v_raw.invoice_number, invoice_type = __v_raw.invoice_type, seller_name = __v_raw.seller_name, seller_nip = __v_raw.seller_nip, buyer_name = __v_raw.buyer_name, buyer_nip = __v_raw.buyer_nip, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, issue_date = __v_raw.issue_date, sale_date = __v_raw.sale_date, currency = __v_raw.currency, net_amount = __v_raw.net_amount, tax_amount = __v_raw.tax_amount, gross_amount = __v_raw.gross_amount, amount_due = __v_raw.amount_due, payment_due_date = __v_raw.payment_due_date, payment_method = __v_raw.payment_method, payment_method_display = __v_raw.payment_method_display, bank_account_number = __v_raw.bank_account_number, bank_name = __v_raw.bank_name, is_paid = __v_raw.is_paid, paid_amount = __v_raw.paid_amount, paid_at = __v_raw.paid_at, remark = __v_raw.remark, payment_review_status = __v_raw.payment_review_status, payment_review_status_display = __v_raw.payment_review_status_display, payment_review_note = __v_raw.payment_review_note, payment_reviewed_by = __v_raw.payment_reviewed_by, payment_reviewed_by_name = __v_raw.payment_reviewed_by_name, payment_reviewed_at = __v_raw.payment_reviewed_at, sync_status = __v_raw.sync_status, raw_xml_downloaded_at = __v_raw.raw_xml_downloaded_at, files_count = __v_raw.files_count, pdf_download_url = __v_raw.pdf_download_url, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -13518,6 +14470,18 @@ class KsefInvoiceItemReactiveObject : KsefInvoiceItem, IUTSReactive<KsefInvoiceI
             __v_raw.payment_method = value
             _tRS(__v_raw, "payment_method", oldValue, value)
         }
+    override var payment_method_display: String
+        get() {
+            return _tRG(__v_raw, "payment_method_display", __v_raw.payment_method_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_method_display")) {
+                return
+            }
+            val oldValue = __v_raw.payment_method_display
+            __v_raw.payment_method_display = value
+            _tRS(__v_raw, "payment_method_display", oldValue, value)
+        }
     override var bank_account_number: String
         get() {
             return _tRG(__v_raw, "bank_account_number", __v_raw.bank_account_number, __v_isReadonly, __v_isShallow)
@@ -13589,6 +14553,78 @@ class KsefInvoiceItemReactiveObject : KsefInvoiceItem, IUTSReactive<KsefInvoiceI
             val oldValue = __v_raw.remark
             __v_raw.remark = value
             _tRS(__v_raw, "remark", oldValue, value)
+        }
+    override var payment_review_status: String
+        get() {
+            return _tRG(__v_raw, "payment_review_status", __v_raw.payment_review_status, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_status")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_status
+            __v_raw.payment_review_status = value
+            _tRS(__v_raw, "payment_review_status", oldValue, value)
+        }
+    override var payment_review_status_display: String
+        get() {
+            return _tRG(__v_raw, "payment_review_status_display", __v_raw.payment_review_status_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_status_display")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_status_display
+            __v_raw.payment_review_status_display = value
+            _tRS(__v_raw, "payment_review_status_display", oldValue, value)
+        }
+    override var payment_review_note: String
+        get() {
+            return _tRG(__v_raw, "payment_review_note", __v_raw.payment_review_note, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_note")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_note
+            __v_raw.payment_review_note = value
+            _tRS(__v_raw, "payment_review_note", oldValue, value)
+        }
+    override var payment_reviewed_by: Number
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_by", __v_raw.payment_reviewed_by, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_by")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_by
+            __v_raw.payment_reviewed_by = value
+            _tRS(__v_raw, "payment_reviewed_by", oldValue, value)
+        }
+    override var payment_reviewed_by_name: String
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_by_name", __v_raw.payment_reviewed_by_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_by_name")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_by_name
+            __v_raw.payment_reviewed_by_name = value
+            _tRS(__v_raw, "payment_reviewed_by_name", oldValue, value)
+        }
+    override var payment_reviewed_at: String
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_at", __v_raw.payment_reviewed_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_at")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_at
+            __v_raw.payment_reviewed_at = value
+            _tRS(__v_raw, "payment_reviewed_at", oldValue, value)
         }
     override var sync_status: String
         get() {
@@ -13707,6 +14743,8 @@ open class KsefInvoiceDetail (
     @JsonNotNull
     open var payment_method: String,
     @JsonNotNull
+    open var payment_method_display: String,
+    @JsonNotNull
     open var bank_account_number: String,
     @JsonNotNull
     open var bank_name: String,
@@ -13718,6 +14756,18 @@ open class KsefInvoiceDetail (
     open var paid_at: String,
     @JsonNotNull
     open var remark: String,
+    @JsonNotNull
+    open var payment_review_status: String,
+    @JsonNotNull
+    open var payment_review_status_display: String,
+    @JsonNotNull
+    open var payment_review_note: String,
+    @JsonNotNull
+    open var payment_reviewed_by: Number,
+    @JsonNotNull
+    open var payment_reviewed_by_name: String,
+    @JsonNotNull
+    open var payment_reviewed_at: String,
     @JsonNotNull
     open var sync_status: String,
     @JsonNotNull
@@ -13744,7 +14794,7 @@ open class KsefInvoiceDetail (
     open var media_files: UTSArray<UTSJSONObject>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("KsefInvoiceDetail", "pkg/api/modules/ksef.uts", 44, 13)
+        return UTSSourceMapPosition("KsefInvoiceDetail", "pkg/api/modules/ksef.uts", 56, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return KsefInvoiceDetailReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -13755,7 +14805,7 @@ class KsefInvoiceDetailReactiveObject : KsefInvoiceDetail, IUTSReactive<KsefInvo
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: KsefInvoiceDetail, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, subject_type = __v_raw.subject_type, ksef_number = __v_raw.ksef_number, invoice_number = __v_raw.invoice_number, invoice_type = __v_raw.invoice_type, seller_name = __v_raw.seller_name, seller_nip = __v_raw.seller_nip, buyer_name = __v_raw.buyer_name, buyer_nip = __v_raw.buyer_nip, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, issue_date = __v_raw.issue_date, sale_date = __v_raw.sale_date, currency = __v_raw.currency, net_amount = __v_raw.net_amount, tax_amount = __v_raw.tax_amount, gross_amount = __v_raw.gross_amount, amount_due = __v_raw.amount_due, payment_due_date = __v_raw.payment_due_date, payment_method = __v_raw.payment_method, bank_account_number = __v_raw.bank_account_number, bank_name = __v_raw.bank_name, is_paid = __v_raw.is_paid, paid_amount = __v_raw.paid_amount, paid_at = __v_raw.paid_at, remark = __v_raw.remark, sync_status = __v_raw.sync_status, raw_xml_downloaded_at = __v_raw.raw_xml_downloaded_at, files_count = __v_raw.files_count, pdf_download_url = __v_raw.pdf_download_url, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, metadata = __v_raw.metadata, raw_xml = __v_raw.raw_xml, last_error = __v_raw.last_error, payment_note = __v_raw.payment_note, xml_summary = __v_raw.xml_summary, media_files = __v_raw.media_files) {
+    constructor(__v_raw: KsefInvoiceDetail, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, company = __v_raw.company, subject_type = __v_raw.subject_type, ksef_number = __v_raw.ksef_number, invoice_number = __v_raw.invoice_number, invoice_type = __v_raw.invoice_type, seller_name = __v_raw.seller_name, seller_nip = __v_raw.seller_nip, buyer_name = __v_raw.buyer_name, buyer_nip = __v_raw.buyer_nip, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, issue_date = __v_raw.issue_date, sale_date = __v_raw.sale_date, currency = __v_raw.currency, net_amount = __v_raw.net_amount, tax_amount = __v_raw.tax_amount, gross_amount = __v_raw.gross_amount, amount_due = __v_raw.amount_due, payment_due_date = __v_raw.payment_due_date, payment_method = __v_raw.payment_method, payment_method_display = __v_raw.payment_method_display, bank_account_number = __v_raw.bank_account_number, bank_name = __v_raw.bank_name, is_paid = __v_raw.is_paid, paid_amount = __v_raw.paid_amount, paid_at = __v_raw.paid_at, remark = __v_raw.remark, payment_review_status = __v_raw.payment_review_status, payment_review_status_display = __v_raw.payment_review_status_display, payment_review_note = __v_raw.payment_review_note, payment_reviewed_by = __v_raw.payment_reviewed_by, payment_reviewed_by_name = __v_raw.payment_reviewed_by_name, payment_reviewed_at = __v_raw.payment_reviewed_at, sync_status = __v_raw.sync_status, raw_xml_downloaded_at = __v_raw.raw_xml_downloaded_at, files_count = __v_raw.files_count, pdf_download_url = __v_raw.pdf_download_url, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, metadata = __v_raw.metadata, raw_xml = __v_raw.raw_xml, last_error = __v_raw.last_error, payment_note = __v_raw.payment_note, xml_summary = __v_raw.xml_summary, media_files = __v_raw.media_files) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -14016,6 +15066,18 @@ class KsefInvoiceDetailReactiveObject : KsefInvoiceDetail, IUTSReactive<KsefInvo
             __v_raw.payment_method = value
             _tRS(__v_raw, "payment_method", oldValue, value)
         }
+    override var payment_method_display: String
+        get() {
+            return _tRG(__v_raw, "payment_method_display", __v_raw.payment_method_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_method_display")) {
+                return
+            }
+            val oldValue = __v_raw.payment_method_display
+            __v_raw.payment_method_display = value
+            _tRS(__v_raw, "payment_method_display", oldValue, value)
+        }
     override var bank_account_number: String
         get() {
             return _tRG(__v_raw, "bank_account_number", __v_raw.bank_account_number, __v_isReadonly, __v_isShallow)
@@ -14087,6 +15149,78 @@ class KsefInvoiceDetailReactiveObject : KsefInvoiceDetail, IUTSReactive<KsefInvo
             val oldValue = __v_raw.remark
             __v_raw.remark = value
             _tRS(__v_raw, "remark", oldValue, value)
+        }
+    override var payment_review_status: String
+        get() {
+            return _tRG(__v_raw, "payment_review_status", __v_raw.payment_review_status, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_status")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_status
+            __v_raw.payment_review_status = value
+            _tRS(__v_raw, "payment_review_status", oldValue, value)
+        }
+    override var payment_review_status_display: String
+        get() {
+            return _tRG(__v_raw, "payment_review_status_display", __v_raw.payment_review_status_display, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_status_display")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_status_display
+            __v_raw.payment_review_status_display = value
+            _tRS(__v_raw, "payment_review_status_display", oldValue, value)
+        }
+    override var payment_review_note: String
+        get() {
+            return _tRG(__v_raw, "payment_review_note", __v_raw.payment_review_note, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_review_note")) {
+                return
+            }
+            val oldValue = __v_raw.payment_review_note
+            __v_raw.payment_review_note = value
+            _tRS(__v_raw, "payment_review_note", oldValue, value)
+        }
+    override var payment_reviewed_by: Number
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_by", __v_raw.payment_reviewed_by, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_by")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_by
+            __v_raw.payment_reviewed_by = value
+            _tRS(__v_raw, "payment_reviewed_by", oldValue, value)
+        }
+    override var payment_reviewed_by_name: String
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_by_name", __v_raw.payment_reviewed_by_name, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_by_name")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_by_name
+            __v_raw.payment_reviewed_by_name = value
+            _tRS(__v_raw, "payment_reviewed_by_name", oldValue, value)
+        }
+    override var payment_reviewed_at: String
+        get() {
+            return _tRG(__v_raw, "payment_reviewed_at", __v_raw.payment_reviewed_at, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("payment_reviewed_at")) {
+                return
+            }
+            val oldValue = __v_raw.payment_reviewed_at
+            __v_raw.payment_reviewed_at = value
+            _tRS(__v_raw, "payment_reviewed_at", oldValue, value)
         }
     override var sync_status: String
         get() {
@@ -14245,7 +15379,39 @@ open class KsefPaymentUpdateData (
     open var remark: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("KsefPaymentUpdateData", "pkg/api/modules/ksef.uts", 85, 13)
+        return UTSSourceMapPosition("KsefPaymentUpdateData", "pkg/api/modules/ksef.uts", 104, 13)
+    }
+}
+open class KsefPaymentReviewData (
+    @JsonNotNull
+    open var payment_review_status: String,
+    @JsonNotNull
+    open var payment_review_note: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefPaymentReviewData", "pkg/api/modules/ksef.uts", 111, 13)
+    }
+}
+open class KsefVoucherUploadResponse (
+    @JsonNotNull
+    open var uploaded: UTSArray<UTSJSONObject>,
+    @JsonNotNull
+    open var files_count: Number,
+    @JsonNotNull
+    open var media_files: UTSArray<UTSJSONObject>,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefVoucherUploadResponse", "pkg/api/modules/ksef.uts", 115, 13)
+    }
+}
+open class KsefPdfDownloadResult (
+    @JsonNotNull
+    open var tempFilePath: String,
+    @JsonNotNull
+    open var statusCode: Number,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefPdfDownloadResult", "pkg/api/modules/ksef.uts", 120, 13)
     }
 }
 open class KsefInvoiceListResponse (
@@ -14265,7 +15431,7 @@ open class KsefInvoiceListResponse (
     open var summary: UTSJSONObject,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("KsefInvoiceListResponse", "pkg/api/modules/ksef.uts", 92, 13)
+        return UTSSourceMapPosition("KsefInvoiceListResponse", "pkg/api/modules/ksef.uts", 124, 13)
     }
 }
 open class KsefAutoSyncStatus (
@@ -14291,7 +15457,7 @@ open class KsefAutoSyncStatus (
     open var last_failed_message: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("KsefAutoSyncStatus", "pkg/api/modules/ksef.uts", 101, 13)
+        return UTSSourceMapPosition("KsefAutoSyncStatus", "pkg/api/modules/ksef.uts", 133, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return KsefAutoSyncStatusReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -14432,6 +15598,246 @@ class KsefAutoSyncStatusReactiveObject : KsefAutoSyncStatus, IUTSReactive<KsefAu
             _tRS(__v_raw, "last_failed_message", oldValue, value)
         }
 }
+open class KsefFilterOption (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var label: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefFilterOption", "pkg/api/modules/ksef.uts", 145, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KsefFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KsefFilterOptionReactiveObject : KsefFilterOption, IUTSReactive<KsefFilterOption> {
+    override var __v_raw: KsefFilterOption
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KsefFilterOption, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(value = __v_raw.value, label = __v_raw.label) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KsefFilterOptionReactiveObject {
+        return KsefFilterOptionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+}
+open class KsefFilterDefinition (
+    @JsonNotNull
+    open var key: String,
+    @JsonNotNull
+    open var param: String,
+    @JsonNotNull
+    open var label: String,
+    @JsonNotNull
+    open var control: String,
+    @JsonNotNull
+    open var aliases: UTSArray<String>,
+    @JsonNotNull
+    open var multiple: Boolean = false,
+    @JsonNotNull
+    open var options: UTSArray<KsefFilterOption>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefFilterDefinition", "pkg/api/modules/ksef.uts", 149, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KsefFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KsefFilterDefinitionReactiveObject : KsefFilterDefinition, IUTSReactive<KsefFilterDefinition> {
+    override var __v_raw: KsefFilterDefinition
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KsefFilterDefinition, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(key = __v_raw.key, param = __v_raw.param, label = __v_raw.label, control = __v_raw.control, aliases = __v_raw.aliases, multiple = __v_raw.multiple, options = __v_raw.options) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KsefFilterDefinitionReactiveObject {
+        return KsefFilterDefinitionReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var key: String
+        get() {
+            return _tRG(__v_raw, "key", __v_raw.key, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("key")) {
+                return
+            }
+            val oldValue = __v_raw.key
+            __v_raw.key = value
+            _tRS(__v_raw, "key", oldValue, value)
+        }
+    override var param: String
+        get() {
+            return _tRG(__v_raw, "param", __v_raw.param, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("param")) {
+                return
+            }
+            val oldValue = __v_raw.param
+            __v_raw.param = value
+            _tRS(__v_raw, "param", oldValue, value)
+        }
+    override var label: String
+        get() {
+            return _tRG(__v_raw, "label", __v_raw.label, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("label")) {
+                return
+            }
+            val oldValue = __v_raw.label
+            __v_raw.label = value
+            _tRS(__v_raw, "label", oldValue, value)
+        }
+    override var control: String
+        get() {
+            return _tRG(__v_raw, "control", __v_raw.control, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("control")) {
+                return
+            }
+            val oldValue = __v_raw.control
+            __v_raw.control = value
+            _tRS(__v_raw, "control", oldValue, value)
+        }
+    override var aliases: UTSArray<String>
+        get() {
+            return _tRG(__v_raw, "aliases", __v_raw.aliases, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("aliases")) {
+                return
+            }
+            val oldValue = __v_raw.aliases
+            __v_raw.aliases = value
+            _tRS(__v_raw, "aliases", oldValue, value)
+        }
+    override var multiple: Boolean
+        get() {
+            return _tRG(__v_raw, "multiple", __v_raw.multiple, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("multiple")) {
+                return
+            }
+            val oldValue = __v_raw.multiple
+            __v_raw.multiple = value
+            _tRS(__v_raw, "multiple", oldValue, value)
+        }
+    override var options: UTSArray<KsefFilterOption>
+        get() {
+            return _tRG(__v_raw, "options", __v_raw.options, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("options")) {
+                return
+            }
+            val oldValue = __v_raw.options
+            __v_raw.options = value
+            _tRS(__v_raw, "options", oldValue, value)
+        }
+}
+open class KsefFilterOptionsResponse (
+    @JsonNotNull
+    open var resource: String,
+    @JsonNotNull
+    open var count: Number,
+    @JsonNotNull
+    open var filters: UTSArray<KsefFilterDefinition>,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefFilterOptionsResponse", "pkg/api/modules/ksef.uts", 158, 13)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KsefFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KsefFilterOptionsResponseReactiveObject : KsefFilterOptionsResponse, IUTSReactive<KsefFilterOptionsResponse> {
+    override var __v_raw: KsefFilterOptionsResponse
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KsefFilterOptionsResponse, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(resource = __v_raw.resource, count = __v_raw.count, filters = __v_raw.filters) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KsefFilterOptionsResponseReactiveObject {
+        return KsefFilterOptionsResponseReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var resource: String
+        get() {
+            return _tRG(__v_raw, "resource", __v_raw.resource, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("resource")) {
+                return
+            }
+            val oldValue = __v_raw.resource
+            __v_raw.resource = value
+            _tRS(__v_raw, "resource", oldValue, value)
+        }
+    override var count: Number
+        get() {
+            return _tRG(__v_raw, "count", __v_raw.count, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("count")) {
+                return
+            }
+            val oldValue = __v_raw.count
+            __v_raw.count = value
+            _tRS(__v_raw, "count", oldValue, value)
+        }
+    override var filters: UTSArray<KsefFilterDefinition>
+        get() {
+            return _tRG(__v_raw, "filters", __v_raw.filters, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("filters")) {
+                return
+            }
+            val oldValue = __v_raw.filters
+            __v_raw.filters = value
+            _tRS(__v_raw, "filters", oldValue, value)
+        }
+}
 fun stringValue__9(value: Any?): String {
     if (value == null) {
         return ""
@@ -14465,6 +15871,44 @@ fun boolValue__2(value: Any?): Boolean {
     val text = ("" + value).toLowerCase()
     return text == "true" || text == "1"
 }
+fun normalizeServerUrl__6(url: String): String {
+    if (url == "") {
+        return ""
+    }
+    if (url.startsWith("http://localhost:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://localhost:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    if (url.startsWith("http://127.0.0.1:8000")) {
+        return baseUrl + url.substring(21)
+    }
+    if (url.startsWith("https://127.0.0.1:8000")) {
+        return baseUrl + url.substring(22)
+    }
+    return url
+}
+fun normalizeMediaFiles(files: UTSArray<UTSJSONObject>): UTSArray<UTSJSONObject> {
+    val result: UTSArray<UTSJSONObject> = _uA()
+    run {
+        var index: Number = 0
+        while(index < files.length){
+            val source = files[index]
+            val target: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("target", "pkg/api/modules/ksef.uts", 213, 15))
+            for(key in resolveUTSKeyIterator(source)){
+                target[key] = source[key]
+            }
+            target["file_url"] = normalizeServerUrl__6(stringValue__9(source["file_url"]))
+            target["thumbnail_url"] = normalizeServerUrl__6(stringValue__9(source["thumbnail_url"]))
+            target["signed_url"] = normalizeServerUrl__6(stringValue__9(source["signed_url"]))
+            target["signed_thumbnail_url"] = normalizeServerUrl__6(stringValue__9(source["signed_thumbnail_url"]))
+            result.push(target)
+            index += 1
+        }
+    }
+    return result
+}
 fun objectValue__1(value: Any?): UTSJSONObject {
     if (value == null) {
         return _uO()
@@ -14473,7 +15917,7 @@ fun objectValue__1(value: Any?): UTSJSONObject {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:151")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:230")
     }
     if (parsed == null) {
         return _uO()
@@ -14488,17 +15932,46 @@ fun objectArrayValue(value: Any?): UTSArray<UTSJSONObject> {
     val parsed = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:162")
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:241")
     }
     if (parsed == null) {
         return _uA<UTSJSONObject>()
     }
     return parsed!!
 }
+fun stringArrayValue__3(value: Any?): UTSArray<String> {
+    if (value == null) {
+        return _uA<String>()
+    }
+    val text = JSON.stringify(value)
+    val parsed = if (text == null || text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/ksef.uts:252")
+    }
+    if (parsed == null) {
+        return _uA<String>()
+    }
+    val result: UTSArray<String> = _uA()
+    run {
+        var index: Number = 0
+        while(index < parsed!!.length){
+            result.push(stringValue__9(parsed!![index]))
+            index += 1
+        }
+    }
+    return result
+}
 fun buildListQuery__3(data: KsefInvoiceListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/ksef.uts", 169, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/ksef.uts", 263, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
+    }
+    if (data.supplier != null && data.supplier != "") {
+        query["supplier"] = data.supplier
+    }
+    if (data.supplier_id != null && data.supplier_id != "") {
+        query["supplier_id"] = data.supplier_id
     }
     if (data.sync_status != null && data.sync_status != "") {
         query["sync_status"] = data.sync_status
@@ -14506,23 +15979,32 @@ fun buildListQuery__3(data: KsefInvoiceListQuery): UTSJSONObject {
     if (data.is_paid != null && data.is_paid != "") {
         query["is_paid"] = data.is_paid
     }
+    if (data.has_xml != null && data.has_xml != "") {
+        query["has_xml"] = data.has_xml
+    }
+    if (data.payment_review_status != null && data.payment_review_status != "") {
+        query["payment_review_status"] = data.payment_review_status
+    }
+    if (data.ordering != null && data.ordering != "") {
+        query["ordering"] = data.ordering
+    }
     return query
 }
 fun buildInvoiceItem(rawObject: UTSJSONObject): KsefInvoiceItem {
-    return KsefInvoiceItem(id = intValue__8(rawObject["id"]), company = intValue__8(rawObject["company"]), subject_type = stringValue__9(rawObject["subject_type"]), ksef_number = stringValue__9(rawObject["ksef_number"]), invoice_number = stringValue__9(rawObject["invoice_number"]), invoice_type = stringValue__9(rawObject["invoice_type"]), seller_name = stringValue__9(rawObject["seller_name"]), seller_nip = stringValue__9(rawObject["seller_nip"]), buyer_name = stringValue__9(rawObject["buyer_name"]), buyer_nip = stringValue__9(rawObject["buyer_nip"]), supplier = intValue__8(rawObject["supplier"]), supplier_name = stringValue__9(rawObject["supplier_name"]), issue_date = stringValue__9(rawObject["issue_date"]), sale_date = stringValue__9(rawObject["sale_date"]), currency = stringValue__9(rawObject["currency"]), net_amount = stringValue__9(rawObject["net_amount"]), tax_amount = stringValue__9(rawObject["tax_amount"]), gross_amount = stringValue__9(rawObject["gross_amount"]), amount_due = stringValue__9(rawObject["amount_due"]), payment_due_date = stringValue__9(rawObject["payment_due_date"]), payment_method = stringValue__9(rawObject["payment_method"]), bank_account_number = stringValue__9(rawObject["bank_account_number"]), bank_name = stringValue__9(rawObject["bank_name"]), is_paid = boolValue__2(rawObject["is_paid"]), paid_amount = stringValue__9(rawObject["paid_amount"]), paid_at = stringValue__9(rawObject["paid_at"]), remark = stringValue__9(rawObject["remark"]), sync_status = stringValue__9(rawObject["sync_status"]), raw_xml_downloaded_at = stringValue__9(rawObject["raw_xml_downloaded_at"]), files_count = intValue__8(rawObject["files_count"]), pdf_download_url = stringValue__9(rawObject["pdf_download_url"]), created_at = stringValue__9(rawObject["created_at"]), updated_at = stringValue__9(rawObject["updated_at"]))
+    return KsefInvoiceItem(id = intValue__8(rawObject["id"]), company = intValue__8(rawObject["company"]), subject_type = stringValue__9(rawObject["subject_type"]), ksef_number = stringValue__9(rawObject["ksef_number"]), invoice_number = stringValue__9(rawObject["invoice_number"]), invoice_type = stringValue__9(rawObject["invoice_type"]), seller_name = stringValue__9(rawObject["seller_name"]), seller_nip = stringValue__9(rawObject["seller_nip"]), buyer_name = stringValue__9(rawObject["buyer_name"]), buyer_nip = stringValue__9(rawObject["buyer_nip"]), supplier = intValue__8(rawObject["supplier"]), supplier_name = stringValue__9(rawObject["supplier_name"]), issue_date = stringValue__9(rawObject["issue_date"]), sale_date = stringValue__9(rawObject["sale_date"]), currency = stringValue__9(rawObject["currency"]), net_amount = stringValue__9(rawObject["net_amount"]), tax_amount = stringValue__9(rawObject["tax_amount"]), gross_amount = stringValue__9(rawObject["gross_amount"]), amount_due = stringValue__9(rawObject["amount_due"]), payment_due_date = stringValue__9(rawObject["payment_due_date"]), payment_method = stringValue__9(rawObject["payment_method"]), payment_method_display = stringValue__9(rawObject["payment_method_display"]), bank_account_number = stringValue__9(rawObject["bank_account_number"]), bank_name = stringValue__9(rawObject["bank_name"]), is_paid = boolValue__2(rawObject["is_paid"]), paid_amount = stringValue__9(rawObject["paid_amount"]), paid_at = stringValue__9(rawObject["paid_at"]), remark = stringValue__9(rawObject["remark"]), payment_review_status = stringValue__9(rawObject["payment_review_status"]), payment_review_status_display = stringValue__9(rawObject["payment_review_status_display"]), payment_review_note = stringValue__9(rawObject["payment_review_note"]), payment_reviewed_by = intValue__8(rawObject["payment_reviewed_by"]), payment_reviewed_by_name = stringValue__9(rawObject["payment_reviewed_by_name"]), payment_reviewed_at = stringValue__9(rawObject["payment_reviewed_at"]), sync_status = stringValue__9(rawObject["sync_status"]), raw_xml_downloaded_at = stringValue__9(rawObject["raw_xml_downloaded_at"]), files_count = intValue__8(rawObject["files_count"]), pdf_download_url = normalizeServerUrl__6(stringValue__9(rawObject["pdf_download_url"])), created_at = stringValue__9(rawObject["created_at"]), updated_at = stringValue__9(rawObject["updated_at"]))
 }
 fun buildInvoiceDetail(raw: Any): KsefInvoiceDetail {
     val rawText = JSON.stringify(raw)
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:223")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:339")
     }
     if (rawObject == null) {
         throw UTSError("KSeF 发票详情解析失败")
     }
     val item = buildInvoiceItem(rawObject!!)
-    return KsefInvoiceDetail(id = item.id, company = item.company, subject_type = item.subject_type, ksef_number = item.ksef_number, invoice_number = item.invoice_number, invoice_type = item.invoice_type, seller_name = item.seller_name, seller_nip = item.seller_nip, buyer_name = item.buyer_name, buyer_nip = item.buyer_nip, supplier = item.supplier, supplier_name = item.supplier_name, issue_date = item.issue_date, sale_date = item.sale_date, currency = item.currency, net_amount = item.net_amount, tax_amount = item.tax_amount, gross_amount = item.gross_amount, amount_due = item.amount_due, payment_due_date = item.payment_due_date, payment_method = item.payment_method, bank_account_number = item.bank_account_number, bank_name = item.bank_name, is_paid = item.is_paid, paid_amount = item.paid_amount, paid_at = item.paid_at, remark = item.remark, sync_status = item.sync_status, raw_xml_downloaded_at = item.raw_xml_downloaded_at, files_count = item.files_count, pdf_download_url = item.pdf_download_url, created_at = item.created_at, updated_at = item.updated_at, metadata = objectValue__1(rawObject!!["metadata"]), raw_xml = stringValue__9(rawObject!!["raw_xml"]), last_error = stringValue__9(rawObject!!["last_error"]), payment_note = stringValue__9(rawObject!!["payment_note"]), xml_summary = objectValue__1(rawObject!!["xml_summary"]), media_files = objectArrayValue(rawObject!!["media_files"]))
+    return KsefInvoiceDetail(id = item.id, company = item.company, subject_type = item.subject_type, ksef_number = item.ksef_number, invoice_number = item.invoice_number, invoice_type = item.invoice_type, seller_name = item.seller_name, seller_nip = item.seller_nip, buyer_name = item.buyer_name, buyer_nip = item.buyer_nip, supplier = item.supplier, supplier_name = item.supplier_name, issue_date = item.issue_date, sale_date = item.sale_date, currency = item.currency, net_amount = item.net_amount, tax_amount = item.tax_amount, gross_amount = item.gross_amount, amount_due = item.amount_due, payment_due_date = item.payment_due_date, payment_method = item.payment_method, payment_method_display = item.payment_method_display, bank_account_number = item.bank_account_number, bank_name = item.bank_name, is_paid = item.is_paid, paid_amount = item.paid_amount, paid_at = item.paid_at, remark = item.remark, payment_review_status = item.payment_review_status, payment_review_status_display = item.payment_review_status_display, payment_review_note = item.payment_review_note, payment_reviewed_by = item.payment_reviewed_by, payment_reviewed_by_name = item.payment_reviewed_by_name, payment_reviewed_at = item.payment_reviewed_at, sync_status = item.sync_status, raw_xml_downloaded_at = item.raw_xml_downloaded_at, files_count = item.files_count, pdf_download_url = item.pdf_download_url, created_at = item.created_at, updated_at = item.updated_at, metadata = objectValue__1(rawObject!!["metadata"]), raw_xml = stringValue__9(rawObject!!["raw_xml"]), last_error = stringValue__9(rawObject!!["last_error"]), payment_note = stringValue__9(rawObject!!["payment_note"]), xml_summary = objectValue__1(rawObject!!["xml_summary"]), media_files = normalizeMediaFiles(objectArrayValue(rawObject!!["media_files"])))
 }
 fun buildInvoiceItems(value: Any?): UTSArray<KsefInvoiceItem> {
     if (value == null) {
@@ -14532,7 +16014,7 @@ fun buildInvoiceItems(value: Any?): UTSArray<KsefInvoiceItem> {
     val rawArray = if (text == null || text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:275")
+        UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:398")
     }
     if (rawArray == null) {
         return _uA()
@@ -14552,7 +16034,7 @@ fun buildListResponse(raw: Any, query: KsefInvoiceListQuery): KsefInvoiceListRes
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:287")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:410")
     }
     if (rawObject == null) {
         throw UTSError("KSeF 发票列表解析失败")
@@ -14564,7 +16046,7 @@ fun buildListResponse(raw: Any, query: KsefInvoiceListQuery): KsefInvoiceListRes
         paginationObject = if (paginationText == null || paginationText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/ksef.uts:295")
+            UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(paginationText), " at pkg/api/modules/ksef.uts:418")
         }
     }
     val results = buildInvoiceItems(rawObject!!["results"])
@@ -14608,14 +16090,14 @@ fun buildListResponse(raw: Any, query: KsefInvoiceListQuery): KsefInvoiceListRes
     if (totalPages <= 0) {
         totalPages = 1
     }
-    var summary: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("summary", "pkg/api/modules/ksef.uts", 326, 9))
+    var summary: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("summary", "pkg/api/modules/ksef.uts", 449, 9))
     val rawSummary = rawObject!!["summary"]
     if (rawSummary != null) {
         val summaryText = JSON.stringify(rawSummary)
         val parsedSummary = if (summaryText == null || summaryText == "") {
             null
         } else {
-            UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(summaryText), " at pkg/api/modules/ksef.uts:330")
+            UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(summaryText), " at pkg/api/modules/ksef.uts:453")
         }
         if (parsedSummary != null) {
             summary = parsedSummary!!
@@ -14628,12 +16110,139 @@ fun buildAutoSyncStatus(raw: Any): KsefAutoSyncStatus {
     val rawObject = if (rawText == null || rawText == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:347")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:470")
     }
     if (rawObject == null) {
         throw UTSError("KSeF 自动同步状态解析失败")
     }
     return KsefAutoSyncStatus(enabled = boolValue__2(rawObject!!["enabled"]), metadata_interval_seconds = floatValue(rawObject!!["metadata_interval_seconds"]), xml_interval_seconds = floatValue(rawObject!!["xml_interval_seconds"]), xml_batch_size = intValue__8(rawObject!!["xml_batch_size"]), xml_delay_seconds = floatValue(rawObject!!["xml_delay_seconds"]), pending_xml_count = intValue__8(rawObject!!["pending_xml_count"]), last_success_at = stringValue__9(rawObject!!["last_success_at"]), last_success_requested_to = stringValue__9(rawObject!!["last_success_requested_to"]), last_failed_at = stringValue__9(rawObject!!["last_failed_at"]), last_failed_message = stringValue__9(rawObject!!["last_failed_message"]))
+}
+fun buildKsefFilterOptionsResponse(raw: Any): KsefFilterOptionsResponse {
+    val rawText = JSON.stringify(raw)
+    val rawObject = if (rawText == null || rawText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pkg/api/modules/ksef.uts:489")
+    }
+    if (rawObject == null) {
+        throw UTSError("KSeF 发票筛选选项解析失败")
+    }
+    var filters: UTSArray<KsefFilterDefinition> = _uA()
+    val rawFilters = rawObject!!["filters"]
+    if (rawFilters != null) {
+        val filtersText = JSON.stringify(rawFilters)
+        val filterObjects = if (filtersText == null || filtersText == "") {
+            null
+        } else {
+            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(filtersText), " at pkg/api/modules/ksef.uts:497")
+        }
+        if (filterObjects != null) {
+            val nextFilters: UTSArray<KsefFilterDefinition> = _uA()
+            run {
+                var filterIndex: Number = 0
+                while(filterIndex < filterObjects!!.length){
+                    val filterObject = filterObjects!![filterIndex]
+                    var options: UTSArray<KsefFilterOption> = _uA()
+                    val rawOptions = filterObject["options"]
+                    if (rawOptions != null) {
+                        val optionsText = JSON.stringify(rawOptions)
+                        val optionObjects = if (optionsText == null || optionsText == "") {
+                            null
+                        } else {
+                            UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(optionsText), " at pkg/api/modules/ksef.uts:506")
+                        }
+                        if (optionObjects != null) {
+                            val nextOptions: UTSArray<KsefFilterOption> = _uA()
+                            run {
+                                var optionIndex: Number = 0
+                                while(optionIndex < optionObjects!!.length){
+                                    val optionObject = optionObjects!![optionIndex]
+                                    nextOptions.push(KsefFilterOption(value = stringValue__9(optionObject["value"]), label = stringValue__9(optionObject["label"])))
+                                    optionIndex += 1
+                                }
+                            }
+                            options = nextOptions
+                        }
+                    }
+                    nextFilters.push(KsefFilterDefinition(key = stringValue__9(filterObject["key"]), param = stringValue__9(filterObject["param"]), label = stringValue__9(filterObject["label"]), control = stringValue__9(filterObject["control"]), aliases = stringArrayValue__3(filterObject["aliases"]), multiple = boolValue__2(filterObject["multiple"]), options = options))
+                    filterIndex += 1
+                }
+            }
+            filters = nextFilters
+        }
+    }
+    return KsefFilterOptionsResponse(resource = stringValue__9(rawObject!!["resource"]), count = intValue__8(rawObject!!["count"]), filters = filters)
+}
+fun ksefInvoicePath(id: Any): String {
+    return "/api/procurement/ksef-invoices/" + stringValue__9(id) + "/"
+}
+fun responseMessageFromText(text: String): String {
+    if (text == "") {
+        return ""
+    }
+    try {
+        val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:545")
+        if (rootObject == null) {
+            return ""
+        }
+        val detailMessage = stringValue__9(rootObject!!["detail"])
+        if (detailMessage != "") {
+            return detailMessage
+        }
+        val message = stringValue__9(rootObject!!["message"])
+        if (message != "") {
+            return message
+        }
+        return ""
+    }
+     catch (error: Throwable) {
+        return ""
+    }
+}
+fun normalizeUploadFilePath__1(filePath: String): String {
+    return filePath.trim()
+}
+fun parseVoucherUploadResponseText(text: String): KsefVoucherUploadResponse {
+    val rootObject = if (text == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/ksef.uts:564")
+    }
+    if (rootObject == null) {
+        throw UTSError("凭证上传响应解析失败")
+    }
+    var dataValue: Any? = rootObject
+    val successValue = rootObject!!["success"]
+    if (successValue != null) {
+        if (!boolValue__2(successValue)) {
+            var message = stringValue__9(rootObject!!["message"])
+            if (message == "") {
+                message = stringValue__9(rootObject!!["detail"])
+            }
+            throw UTSError(if (message == "") {
+                "凭证上传失败"
+            } else {
+                message
+            }
+            )
+        }
+        dataValue = rootObject!!["data"]
+    }
+    val dataText = if (dataValue == null) {
+        ""
+    } else {
+        JSON.stringify(dataValue)
+    }
+    val dataObject = if (dataText == null || dataText == "") {
+        null
+    } else {
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(dataText), " at pkg/api/modules/ksef.uts:580")
+    }
+    if (dataObject == null) {
+        return KsefVoucherUploadResponse(uploaded = _uA<UTSJSONObject>(), files_count = 0, media_files = _uA<UTSJSONObject>())
+    }
+    val mediaFiles = normalizeMediaFiles(objectArrayValue(dataObject!!["media_files"]))
+    return KsefVoucherUploadResponse(uploaded = normalizeMediaFiles(objectArrayValue(dataObject!!["uploaded"])), files_count = intValue__8(dataObject!!["files_count"]), media_files = mediaFiles)
 }
 fun getKsefInvoiceList(data: KsefInvoiceListQuery): UTSPromise<KsefInvoiceListResponse> {
     return wrapUTSPromise(suspend w@{
@@ -14641,28 +16250,41 @@ fun getKsefInvoiceList(data: KsefInvoiceListQuery): UTSPromise<KsefInvoiceListRe
             return@w buildListResponse(raw, data)
     })
 }
+fun getKsefInvoiceFilterOptions(): UTSPromise<KsefFilterOptionsResponse> {
+    return wrapUTSPromise(suspend w@{
+            val raw = await(request("/api/procurement/ksef-invoices/filter-options/", "GET", _uO(), true))
+            return@w buildKsefFilterOptionsResponse(raw)
+    })
+}
 fun getKsefInvoiceDetail(id: Any): UTSPromise<KsefInvoiceDetail> {
     return wrapUTSPromise(suspend w@{
-            val raw = await(request("/api/procurement/ksef-invoices/" + stringValue__9(id) + "/", "GET", _uO(), true))
+            val raw = await(request(ksefInvoicePath(id), "GET", _uO(), true))
             return@w buildInvoiceDetail(raw)
     })
 }
 fun updateKsefInvoicePayment(id: Any, data: KsefPaymentUpdateData): UTSPromise<KsefInvoiceDetail> {
     return wrapUTSPromise(suspend w@{
-            val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pkg/api/modules/ksef.uts", 373, 11), "is_paid" to data.is_paid, "paid_amount" to data.paid_amount, "paid_at" to data.paid_at, "payment_note" to data.payment_note, "remark" to data.remark)
-            val raw = await(request("/api/procurement/ksef-invoices/" + stringValue__9(id) + "/update_payment/", "PATCH", payload, true))
+            val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pkg/api/modules/ksef.uts", 608, 11), "is_paid" to data.is_paid, "paid_amount" to data.paid_amount, "paid_at" to data.paid_at, "payment_note" to data.payment_note, "remark" to data.remark)
+            val raw = await(request(ksefInvoicePath(id) + "update_payment/", "PATCH", payload, true))
+            return@w buildInvoiceDetail(raw)
+    })
+}
+fun reviewKsefInvoicePayment(id: Any, data: KsefPaymentReviewData): UTSPromise<KsefInvoiceDetail> {
+    return wrapUTSPromise(suspend w@{
+            val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pkg/api/modules/ksef.uts", 619, 11), "payment_review_status" to data.payment_review_status, "payment_review_note" to data.payment_review_note)
+            val raw = await(request(ksefInvoicePath(id) + "review-payment/", "PATCH", payload, true))
             return@w buildInvoiceDetail(raw)
     })
 }
 fun linkKsefInvoiceSupplier(id: Any, supplierId: String?): UTSPromise<KsefInvoiceDetail> {
     return wrapUTSPromise(suspend w@{
-            val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pkg/api/modules/ksef.uts", 384, 11))
+            val payload: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("payload", "pkg/api/modules/ksef.uts", 627, 11))
             if (supplierId == null || supplierId == "") {
                 payload["supplier_id"] = null
             } else {
                 payload["supplier_id"] = supplierId
             }
-            val raw = await(request("/api/procurement/ksef-invoices/" + stringValue__9(id) + "/link-supplier/", "POST", payload, true))
+            val raw = await(request(ksefInvoicePath(id) + "link-supplier/", "POST", payload, true))
             return@w buildInvoiceDetail(raw)
     })
 }
@@ -14672,11 +16294,140 @@ fun getKsefAutoSyncStatus(): UTSPromise<KsefAutoSyncStatus> {
             return@w buildAutoSyncStatus(raw)
     })
 }
-fun enqueueKsefAutoSync(): UTSPromise<Any> {
-    return request("/api/procurement/ksef-invoices/enqueue-auto-sync/", "POST", _uO(), true)
-}
 fun downloadKsefInvoiceXml(id: Any): UTSPromise<Any> {
-    return request("/api/procurement/ksef-invoices/" + stringValue__9(id) + "/download_xml/", "POST", _uO(), true)
+    return request(ksefInvoicePath(id) + "download_xml/", "POST", _uO(), true)
+}
+fun downloadKsefInvoicePdfFile(id: Any): UTSPromise<KsefPdfDownloadResult> {
+    return UTSPromise(fun(resolve, reject){
+        val url = baseUrl + ksefInvoicePath(id) + "download_pdf/"
+        uni_downloadFile(DownloadFileOptions(url = url, header = buildDownloadHeader(), success = fun(res){
+            val statusCode = res.statusCode
+            val tempFilePath = res.tempFilePath
+            if (statusCode >= 200 && statusCode < 300 && tempFilePath != "") {
+                resolve(KsefPdfDownloadResult(tempFilePath = tempFilePath, statusCode = statusCode))
+                return
+            }
+            reject(UTSError("PDF加载失败: HTTP " + statusCode))
+        }
+        , fail = fun(err){
+            reject(UTSError(if (stringValue__9(err.errMsg) == "") {
+                "PDF加载失败"
+            } else {
+                stringValue__9(err.errMsg)
+            }
+            ))
+        }
+        ))
+    }
+    )
+}
+fun uploadKsefInvoiceVouchers(id: Any, filePaths: UTSArray<String>): UTSPromise<KsefVoucherUploadResponse> {
+    return UTSPromise(fun(resolve, reject){
+        if (filePaths.length == 0) {
+            reject(UTSError("请选择付款凭证"))
+            return
+        }
+        val files: UTSArray<UploadFileOptionFiles> = _uA()
+        run {
+            var index: Number = 0
+            while(index < filePaths.length){
+                files.push(UploadFileOptionFiles(name = "files", uri = normalizeUploadFilePath__1(filePaths[index])))
+                index += 1
+            }
+        }
+        val url = baseUrl + ksefInvoicePath(id) + "upload-vouchers/"
+        val uploadTimeout = if (timeOut < 120000) {
+            120000
+        } else {
+            timeOut
+        }
+        try {
+            uni_uploadFile(UploadFileOptions(url = url, files = files, header = buildDownloadHeader(), timeout = uploadTimeout, success = fun(res: UploadFileSuccess){
+                if (res.statusCode < 200 || res.statusCode >= 300) {
+                    val responseMessage = responseMessageFromText(res.data)
+                    reject(UTSError(if (responseMessage == "") {
+                        ("HTTP状态码错误: " + res.statusCode)
+                    } else {
+                        responseMessage
+                    }
+                    ))
+                    return
+                }
+                try {
+                    resolve(parseVoucherUploadResponseText(res.data))
+                }
+                 catch (error: Throwable) {
+                    reject(error)
+                }
+            }
+            , fail = fun(err: UploadFileFail){
+                val message = stringValue__9(err.errMsg)
+                reject(UTSError(if (message == "") {
+                    "凭证上传失败"
+                } else {
+                    message
+                }
+                ))
+            }
+            ))
+        }
+         catch (error: Throwable) {
+            reject(error)
+        }
+    }
+    )
+}
+open class KsefSelectedFilter (
+    @JsonNotNull
+    open var param: String,
+    @JsonNotNull
+    open var value: String,
+) : UTSReactiveObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("KsefSelectedFilter", "pages/ksef/index.uvue", 120, 6)
+    }
+    override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
+        return KsefSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+}
+class KsefSelectedFilterReactiveObject : KsefSelectedFilter, IUTSReactive<KsefSelectedFilter> {
+    override var __v_raw: KsefSelectedFilter
+    override var __v_isReadonly: Boolean
+    override var __v_isShallow: Boolean
+    override var __v_skip: Boolean
+    constructor(__v_raw: KsefSelectedFilter, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(param = __v_raw.param, value = __v_raw.value) {
+        this.__v_raw = __v_raw
+        this.__v_isReadonly = __v_isReadonly
+        this.__v_isShallow = __v_isShallow
+        this.__v_skip = __v_skip
+    }
+    override fun __v_clone(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): KsefSelectedFilterReactiveObject {
+        return KsefSelectedFilterReactiveObject(this.__v_raw, __v_isReadonly, __v_isShallow, __v_skip)
+    }
+    override var param: String
+        get() {
+            return _tRG(__v_raw, "param", __v_raw.param, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("param")) {
+                return
+            }
+            val oldValue = __v_raw.param
+            __v_raw.param = value
+            _tRS(__v_raw, "param", oldValue, value)
+        }
+    override var value: String
+        get() {
+            return _tRG(__v_raw, "value", __v_raw.value, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("value")) {
+                return
+            }
+            val oldValue = __v_raw.value
+            __v_raw.value = value
+            _tRS(__v_raw, "value", oldValue, value)
+        }
 }
 val GenPagesKsefIndexClass = CreateVueComponent(GenPagesKsefIndex::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesKsefIndex.inheritAttrs, inject = GenPagesKsefIndex.inject, props = GenPagesKsefIndex.props, propsNeedCastKeys = GenPagesKsefIndex.propsNeedCastKeys, emits = GenPagesKsefIndex.emits, components = GenPagesKsefIndex.components, styles = GenPagesKsefIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
@@ -15510,7 +17261,7 @@ open class ExpenseMutationData (
         return UTSSourceMapPosition("ExpenseMutationData", "pkg/api/modules/expenses.uts", 94, 13)
     }
 }
-fun normalizeServerUrl__5(url: String): String {
+fun normalizeServerUrl__7(url: String): String {
     if (url == "") {
         return ""
     }
@@ -15582,7 +17333,7 @@ fun parseObjectArray__3(value: Any?): UTSArray<UTSJSONObject> {
     }
     return parsed!!
 }
-fun stringArrayValue__3(value: Any?): UTSArray<String> {
+fun stringArrayValue__4(value: Any?): UTSArray<String> {
     if (value == null) {
         return _uA<String>()
     }
@@ -15648,7 +17399,7 @@ fun buildExpenseListQuery(data: ExpenseListQuery): UTSJSONObject {
     return query
 }
 fun buildMediaFileFromObject(rawObject: UTSJSONObject): ExpenseMediaFile {
-    return ExpenseMediaFile(id = stringValue__10(rawObject["id"]), company = intValue__9(rawObject["company"]), original_filename = stringValue__10(rawObject["original_filename"]), file_type = stringValue__10(rawObject["file_type"]), file_type_display = stringValue__10(rawObject["file_type_display"]), mime_type = stringValue__10(rawObject["mime_type"]), file_size = intValue__9(rawObject["file_size"]), file_size_display = stringValue__10(rawObject["file_size_display"]), file_url = normalizeServerUrl__5(stringValue__10(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__5(stringValue__10(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__5(stringValue__10(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__5(stringValue__10(rawObject["signed_thumbnail_url"])), object_id = stringValue__10(rawObject["object_id"]), is_deleted = boolValue__3(rawObject["is_deleted"]), created_at = stringValue__10(rawObject["created_at"]), updated_at = stringValue__10(rawObject["updated_at"]))
+    return ExpenseMediaFile(id = stringValue__10(rawObject["id"]), company = intValue__9(rawObject["company"]), original_filename = stringValue__10(rawObject["original_filename"]), file_type = stringValue__10(rawObject["file_type"]), file_type_display = stringValue__10(rawObject["file_type_display"]), mime_type = stringValue__10(rawObject["mime_type"]), file_size = intValue__9(rawObject["file_size"]), file_size_display = stringValue__10(rawObject["file_size_display"]), file_url = normalizeServerUrl__7(stringValue__10(rawObject["file_url"])), thumbnail_url = normalizeServerUrl__7(stringValue__10(rawObject["thumbnail_url"])), signed_url = normalizeServerUrl__7(stringValue__10(rawObject["signed_url"])), signed_thumbnail_url = normalizeServerUrl__7(stringValue__10(rawObject["signed_thumbnail_url"])), object_id = stringValue__10(rawObject["object_id"]), is_deleted = boolValue__3(rawObject["is_deleted"]), created_at = stringValue__10(rawObject["created_at"]), updated_at = stringValue__10(rawObject["updated_at"]))
 }
 fun buildMediaFilesFromValue(value: Any?): UTSArray<ExpenseMediaFile> {
     if (value == null) {
@@ -15838,7 +17589,7 @@ fun buildExpenseFilterOptionsResponse(raw: Any): ExpenseFilterOptionsResponse {
                         optionIndex += 1
                     }
                 }
-                nextFilters.push(ExpenseFilterDefinition(key = stringValue__10(filterObject["key"]), param = stringValue__10(filterObject["param"]), label = stringValue__10(filterObject["label"]), control = stringValue__10(filterObject["control"]), aliases = stringArrayValue__3(filterObject["aliases"]), multiple = stringValue__10(filterObject["multiple"]) == "true", options = options))
+                nextFilters.push(ExpenseFilterDefinition(key = stringValue__10(filterObject["key"]), param = stringValue__10(filterObject["param"]), label = stringValue__10(filterObject["label"]), control = stringValue__10(filterObject["control"]), aliases = stringArrayValue__4(filterObject["aliases"]), multiple = stringValue__10(filterObject["multiple"]) == "true", options = options))
                 filterIndex += 1
             }
         }
@@ -15934,7 +17685,7 @@ open class ExpenseSelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ExpenseSelectedFilter", "pages/expenses/index.uvue", 128, 6)
+        return UTSSourceMapPosition("ExpenseSelectedFilter", "pages/expenses/index.uvue", 129, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ExpenseSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -15996,7 +17747,7 @@ open class SelectOption__7 (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/expenses/from.uvue", 41, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/expenses/from.uvue", 42, 6)
     }
 }
 val GenPagesExpensesFromClass = CreateVueComponent(GenPagesExpensesFrom::class.java, fun(): VueComponentOptions {
@@ -16053,6 +17804,8 @@ open class PurchaseItem (
     @JsonNotNull
     open var total_amount: String,
     @JsonNotNull
+    open var net_total_amount: String,
+    @JsonNotNull
     open var receive_progress: String,
     @JsonNotNull
     open var is_fully_received: Boolean = false,
@@ -16079,7 +17832,7 @@ class PurchaseItemReactiveObject : PurchaseItem, IUTSReactive<PurchaseItem> {
     override var __v_isReadonly: Boolean
     override var __v_isShallow: Boolean
     override var __v_skip: Boolean
-    constructor(__v_raw: PurchaseItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, purchase_number = __v_raw.purchase_number, purchase_date = __v_raw.purchase_date, status = __v_raw.status, status_display = __v_raw.status_display, shop = __v_raw.shop, shop_name = __v_raw.shop_name, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, total_quantity = __v_raw.total_quantity, received_quantity = __v_raw.received_quantity, total_amount = __v_raw.total_amount, receive_progress = __v_raw.receive_progress, is_fully_received = __v_raw.is_fully_received, remark = __v_raw.remark, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, items = __v_raw.items, supplier_excel_import_status = __v_raw.supplier_excel_import_status) {
+    constructor(__v_raw: PurchaseItem, __v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean) : super(id = __v_raw.id, purchase_number = __v_raw.purchase_number, purchase_date = __v_raw.purchase_date, status = __v_raw.status, status_display = __v_raw.status_display, shop = __v_raw.shop, shop_name = __v_raw.shop_name, supplier = __v_raw.supplier, supplier_name = __v_raw.supplier_name, total_quantity = __v_raw.total_quantity, received_quantity = __v_raw.received_quantity, total_amount = __v_raw.total_amount, net_total_amount = __v_raw.net_total_amount, receive_progress = __v_raw.receive_progress, is_fully_received = __v_raw.is_fully_received, remark = __v_raw.remark, created_at = __v_raw.created_at, updated_at = __v_raw.updated_at, items = __v_raw.items, supplier_excel_import_status = __v_raw.supplier_excel_import_status) {
         this.__v_raw = __v_raw
         this.__v_isReadonly = __v_isReadonly
         this.__v_isShallow = __v_isShallow
@@ -16232,6 +17985,18 @@ class PurchaseItemReactiveObject : PurchaseItem, IUTSReactive<PurchaseItem> {
             __v_raw.total_amount = value
             _tRS(__v_raw, "total_amount", oldValue, value)
         }
+    override var net_total_amount: String
+        get() {
+            return _tRG(__v_raw, "net_total_amount", __v_raw.net_total_amount, __v_isReadonly, __v_isShallow)
+        }
+        set(value) {
+            if (!__v_canSet("net_total_amount")) {
+                return
+            }
+            val oldValue = __v_raw.net_total_amount
+            __v_raw.net_total_amount = value
+            _tRS(__v_raw, "net_total_amount", oldValue, value)
+        }
     override var receive_progress: String
         get() {
             return _tRG(__v_raw, "receive_progress", __v_raw.receive_progress, __v_isReadonly, __v_isShallow)
@@ -16330,7 +18095,7 @@ open class PurchaseListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseListResponse", "pkg/api/modules/purchases.uts", 35, 13)
+        return UTSSourceMapPosition("PurchaseListResponse", "pkg/api/modules/purchases.uts", 36, 13)
     }
 }
 open class PurchaseMutationData (
@@ -16345,7 +18110,7 @@ open class PurchaseMutationData (
     open var items: UTSArray<UTSJSONObject>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseMutationData", "pkg/api/modules/purchases.uts", 42, 13)
+        return UTSSourceMapPosition("PurchaseMutationData", "pkg/api/modules/purchases.uts", 43, 13)
     }
 }
 open class PurchaseOptionItem (
@@ -16355,7 +18120,7 @@ open class PurchaseOptionItem (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseOptionItem", "pkg/api/modules/purchases.uts", 49, 13)
+        return UTSSourceMapPosition("PurchaseOptionItem", "pkg/api/modules/purchases.uts", 50, 13)
     }
 }
 open class PurchaseSelectedFilter (
@@ -16365,7 +18130,7 @@ open class PurchaseSelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseSelectedFilter", "pkg/api/modules/purchases.uts", 53, 13)
+        return UTSSourceMapPosition("PurchaseSelectedFilter", "pkg/api/modules/purchases.uts", 54, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -16417,7 +18182,7 @@ open class PurchaseFilterOption (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseFilterOption", "pkg/api/modules/purchases.uts", 57, 13)
+        return UTSSourceMapPosition("PurchaseFilterOption", "pkg/api/modules/purchases.uts", 58, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -16479,7 +18244,7 @@ open class PurchaseFilterDefinition (
     open var options: UTSArray<PurchaseFilterOption>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseFilterDefinition", "pkg/api/modules/purchases.uts", 61, 13)
+        return UTSSourceMapPosition("PurchaseFilterDefinition", "pkg/api/modules/purchases.uts", 62, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -16593,7 +18358,7 @@ open class PurchaseFilterOptionsResponse (
     open var filters: UTSArray<PurchaseFilterDefinition>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseFilterOptionsResponse", "pkg/api/modules/purchases.uts", 70, 13)
+        return UTSSourceMapPosition("PurchaseFilterOptionsResponse", "pkg/api/modules/purchases.uts", 71, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -16695,7 +18460,7 @@ open class PurchaseDetailItem (
     open var updated_at: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailItem", "pkg/api/modules/purchases.uts", 75, 13)
+        return UTSSourceMapPosition("PurchaseDetailItem", "pkg/api/modules/purchases.uts", 76, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseDetailItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -16979,7 +18744,7 @@ open class PurchaseDetailListQuery (
     open var is_fully_received: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailListQuery", "pkg/api/modules/purchases.uts", 98, 13)
+        return UTSSourceMapPosition("PurchaseDetailListQuery", "pkg/api/modules/purchases.uts", 99, 13)
     }
 }
 open class PurchaseDetailListResponse (
@@ -16995,7 +18760,7 @@ open class PurchaseDetailListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailListResponse", "pkg/api/modules/purchases.uts", 106, 13)
+        return UTSSourceMapPosition("PurchaseDetailListResponse", "pkg/api/modules/purchases.uts", 107, 13)
     }
 }
 open class PurchaseDetailFilterOption (
@@ -17005,7 +18770,7 @@ open class PurchaseDetailFilterOption (
     open var label: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailFilterOption", "pkg/api/modules/purchases.uts", 113, 13)
+        return UTSSourceMapPosition("PurchaseDetailFilterOption", "pkg/api/modules/purchases.uts", 114, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseDetailFilterOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -17067,7 +18832,7 @@ open class PurchaseDetailFilterDefinition (
     open var options: UTSArray<PurchaseDetailFilterOption>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailFilterDefinition", "pkg/api/modules/purchases.uts", 117, 13)
+        return UTSSourceMapPosition("PurchaseDetailFilterDefinition", "pkg/api/modules/purchases.uts", 118, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseDetailFilterDefinitionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -17181,7 +18946,7 @@ open class PurchaseDetailFilterOptionsResponse (
     open var filters: UTSArray<PurchaseDetailFilterDefinition>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailFilterOptionsResponse", "pkg/api/modules/purchases.uts", 126, 13)
+        return UTSSourceMapPosition("PurchaseDetailFilterOptionsResponse", "pkg/api/modules/purchases.uts", 127, 13)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseDetailFilterOptionsResponseReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -17249,7 +19014,7 @@ open class PurchaseDetailMutationData (
     open var notes: String? = null,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailMutationData", "pkg/api/modules/purchases.uts", 131, 13)
+        return UTSSourceMapPosition("PurchaseDetailMutationData", "pkg/api/modules/purchases.uts", 132, 13)
     }
 }
 open class PurchaseImportResponse (
@@ -17269,7 +19034,7 @@ open class PurchaseImportResponse (
     open var warnings: UTSArray<UTSJSONObject>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseImportResponse", "pkg/api/modules/purchases.uts", 142, 13)
+        return UTSSourceMapPosition("PurchaseImportResponse", "pkg/api/modules/purchases.uts", 143, 13)
     }
 }
 open class SupplierExcelImportTask (
@@ -17285,7 +19050,7 @@ open class SupplierExcelImportTask (
     open var data: UTSJSONObject,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SupplierExcelImportTask", "pkg/api/modules/purchases.uts", 151, 13)
+        return UTSSourceMapPosition("SupplierExcelImportTask", "pkg/api/modules/purchases.uts", 152, 13)
     }
 }
 open class QuickProcurementItem (
@@ -17297,7 +19062,7 @@ open class QuickProcurementItem (
     open var quantity: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("QuickProcurementItem", "pkg/api/modules/purchases.uts", 158, 13)
+        return UTSSourceMapPosition("QuickProcurementItem", "pkg/api/modules/purchases.uts", 159, 13)
     }
 }
 open class QuickProcurementResultItem (
@@ -17312,12 +19077,16 @@ open class QuickProcurementResultItem (
     @JsonNotNull
     open var purchase_price: String,
     @JsonNotNull
+    open var net_purchase_price: String,
+    @JsonNotNull
+    open var price_type: String,
+    @JsonNotNull
     open var quantity: Number,
     @JsonNotNull
     open var total: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("QuickProcurementResultItem", "pkg/api/modules/purchases.uts", 163, 13)
+        return UTSSourceMapPosition("QuickProcurementResultItem", "pkg/api/modules/purchases.uts", 164, 13)
     }
 }
 open class QuickProcurementResponse (
@@ -17333,7 +19102,7 @@ open class QuickProcurementResponse (
     open var message: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("QuickProcurementResponse", "pkg/api/modules/purchases.uts", 172, 13)
+        return UTSSourceMapPosition("QuickProcurementResponse", "pkg/api/modules/purchases.uts", 175, 13)
     }
 }
 open class PurchaseProductCheckResult (
@@ -17359,7 +19128,7 @@ open class PurchaseProductCheckResult (
     open var unit_price: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseProductCheckResult", "pkg/api/modules/purchases.uts", 179, 13)
+        return UTSSourceMapPosition("PurchaseProductCheckResult", "pkg/api/modules/purchases.uts", 182, 13)
     }
 }
 open class PurchaseAutoPriceResponse (
@@ -17377,7 +19146,7 @@ open class PurchaseAutoPriceResponse (
     open var updated_products: UTSArray<UTSJSONObject>,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseAutoPriceResponse", "pkg/api/modules/purchases.uts", 191, 13)
+        return UTSSourceMapPosition("PurchaseAutoPriceResponse", "pkg/api/modules/purchases.uts", 194, 13)
     }
 }
 fun stringValue__11(value: Any?): String {
@@ -17386,7 +19155,7 @@ fun stringValue__11(value: Any?): String {
     }
     return "" + value
 }
-fun normalizeServerUrl__6(url: String): String {
+fun normalizeServerUrl__8(url: String): String {
     if (url == "") {
         return ""
     }
@@ -17424,7 +19193,7 @@ fun parseObject__6(value: Any?): UTSJSONObject? {
         return null
     }
     try {
-        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:234")
+        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:237")
     }
      catch (error: Throwable) {
         return null
@@ -17464,7 +19233,7 @@ fun parseObjectArray__4(value: Any?): UTSArray<UTSJSONObject> {
     }
     var parsed: UTSArray<UTSJSONObject>? = null
     try {
-        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:268")
+        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:271")
     }
      catch (error: Throwable) {
         return _uA<UTSJSONObject>()
@@ -17474,7 +19243,7 @@ fun parseObjectArray__4(value: Any?): UTSArray<UTSJSONObject> {
     }
     return parsed!!
 }
-fun stringArrayValue__4(value: Any?): UTSArray<String> {
+fun stringArrayValue__5(value: Any?): UTSArray<String> {
     if (value == null) {
         return _uA<String>()
     }
@@ -17484,7 +19253,7 @@ fun stringArrayValue__4(value: Any?): UTSArray<String> {
     }
     var parsed: UTSArray<Any>? = null
     try {
-        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/purchases.uts:285")
+        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<Any>(text), " at pkg/api/modules/purchases.uts:288")
     }
      catch (error: Throwable) {
         val singleValue = stringValue__11(value)
@@ -17509,7 +19278,7 @@ fun stringArrayValue__4(value: Any?): UTSArray<String> {
     return result
 }
 fun pushImageUrl(images: UTSArray<String>, url: String) {
-    val normalizedUrl = normalizeServerUrl__6(url)
+    val normalizedUrl = normalizeServerUrl__8(url)
     if (normalizedUrl != "" && images.indexOf(normalizedUrl) < 0) {
         images.push(normalizedUrl)
     }
@@ -17571,7 +19340,7 @@ fun appendMediaIds(ids: UTSArray<String>, value: Any?) {
     }
 }
 fun appendStringImages(images: UTSArray<String>, value: Any?) {
-    val rawImages = stringArrayValue__4(value)
+    val rawImages = stringArrayValue__5(value)
     run {
         var index: Number = 0
         while(index < rawImages.length){
@@ -17615,7 +19384,7 @@ fun buildProductMediaIds(rawObject: UTSJSONObject, productObject: UTSJSONObject?
     return ids
 }
 fun buildQuery(data: PurchaseListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 387, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 390, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -17643,7 +19412,7 @@ fun buildQuery(data: PurchaseListQuery): UTSJSONObject {
     return query
 }
 fun buildDetailQuery(data: PurchaseDetailListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 407, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 410, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -17670,7 +19439,12 @@ fun buildPurchaseItem(rawObject: UTSJSONObject): PurchaseItem {
         supplierName = stringValue__11(supplierInfo!!["name"])
     }
     val supplierExcelImportStatus = parseObject__6(rawObject["supplier_excel_import_status"])
-    return PurchaseItem(id = intValue__10(rawObject["id"]), purchase_number = stringValue__11(rawObject["purchase_number"]), purchase_date = stringValue__11(rawObject["purchase_date"]), status = stringValue__11(rawObject["status"]), status_display = stringValue__11(rawObject["status_display"]), shop = intValue__10(rawObject["shop"]), shop_name = shopName, supplier = intValue__10(rawObject["supplier"]), supplier_name = supplierName, total_quantity = intValue__10(rawObject["total_quantity"]), received_quantity = intValue__10(rawObject["received_quantity"]), total_amount = stringValue__11(rawObject["total_amount"]), receive_progress = stringValue__11(rawObject["receive_progress"]), is_fully_received = boolValue__4(rawObject["is_fully_received"]), remark = stringValue__11(rawObject["remark"]), created_at = stringValue__11(rawObject["created_at"]), updated_at = stringValue__11(rawObject["updated_at"]), items = parseObjectArray__4(rawObject["items"]), supplier_excel_import_status = if (supplierExcelImportStatus == null) {
+    val totalAmount = stringValue__11(rawObject["total_amount"])
+    var netTotalAmount = stringValue__11(rawObject["net_total_amount"])
+    if (netTotalAmount == "") {
+        netTotalAmount = totalAmount
+    }
+    return PurchaseItem(id = intValue__10(rawObject["id"]), purchase_number = stringValue__11(rawObject["purchase_number"]), purchase_date = stringValue__11(rawObject["purchase_date"]), status = stringValue__11(rawObject["status"]), status_display = stringValue__11(rawObject["status_display"]), shop = intValue__10(rawObject["shop"]), shop_name = shopName, supplier = intValue__10(rawObject["supplier"]), supplier_name = supplierName, total_quantity = intValue__10(rawObject["total_quantity"]), received_quantity = intValue__10(rawObject["received_quantity"]), total_amount = totalAmount, net_total_amount = netTotalAmount, receive_progress = stringValue__11(rawObject["receive_progress"]), is_fully_received = boolValue__4(rawObject["is_fully_received"]), remark = stringValue__11(rawObject["remark"]), created_at = stringValue__11(rawObject["created_at"]), updated_at = stringValue__11(rawObject["updated_at"]), items = parseObjectArray__4(rawObject["items"]), supplier_excel_import_status = if (supplierExcelImportStatus == null) {
         (_uO())
     } else {
         supplierExcelImportStatus!!
@@ -17861,7 +19635,7 @@ fun buildPurchaseFilterOptionsResponse(raw: Any): PurchaseFilterOptionsResponse 
     var filters: UTSArray<PurchaseFilterDefinition> = _uA()
     val rawFilters = rawObject["filters"]
     if (rawFilters != null) {
-        val filterObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters)), " at pkg/api/modules/purchases.uts:604")
+        val filterObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters)), " at pkg/api/modules/purchases.uts:612")
         if (filterObjects != null) {
             val nextFilters: UTSArray<PurchaseFilterDefinition> = _uA()
             run {
@@ -17871,7 +19645,7 @@ fun buildPurchaseFilterOptionsResponse(raw: Any): PurchaseFilterOptionsResponse 
                     var options: UTSArray<PurchaseFilterOption> = _uA()
                     val rawOptions = filterObject["options"]
                     if (rawOptions != null) {
-                        val optionObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions)), " at pkg/api/modules/purchases.uts:612")
+                        val optionObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions)), " at pkg/api/modules/purchases.uts:620")
                         if (optionObjects != null) {
                             val nextOptions: UTSArray<PurchaseFilterOption> = _uA()
                             run {
@@ -17885,7 +19659,7 @@ fun buildPurchaseFilterOptionsResponse(raw: Any): PurchaseFilterOptionsResponse 
                             options = nextOptions
                         }
                     }
-                    nextFilters.push(PurchaseFilterDefinition(key = stringValue__11(filterObject["key"]), param = stringValue__11(filterObject["param"]), label = stringValue__11(filterObject["label"]), control = stringValue__11(filterObject["control"]), aliases = stringArrayValue__4(filterObject["aliases"]), multiple = stringValue__11(filterObject["multiple"]) == "true", options = options))
+                    nextFilters.push(PurchaseFilterDefinition(key = stringValue__11(filterObject["key"]), param = stringValue__11(filterObject["param"]), label = stringValue__11(filterObject["label"]), control = stringValue__11(filterObject["control"]), aliases = stringArrayValue__5(filterObject["aliases"]), multiple = stringValue__11(filterObject["multiple"]) == "true", options = options))
                     filterIndex += 1
                 }
             }
@@ -17899,7 +19673,7 @@ fun buildPurchaseDetailFilterOptionsResponse(raw: Any): PurchaseDetailFilterOpti
     var filters: UTSArray<PurchaseDetailFilterDefinition> = _uA()
     val rawFilters = rawObject["filters"]
     if (rawFilters != null) {
-        val filterObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters)), " at pkg/api/modules/purchases.uts:649")
+        val filterObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters)), " at pkg/api/modules/purchases.uts:657")
         if (filterObjects != null) {
             val nextFilters: UTSArray<PurchaseDetailFilterDefinition> = _uA()
             run {
@@ -17909,7 +19683,7 @@ fun buildPurchaseDetailFilterOptionsResponse(raw: Any): PurchaseDetailFilterOpti
                     var options: UTSArray<PurchaseDetailFilterOption> = _uA()
                     val rawOptions = filterObject["options"]
                     if (rawOptions != null) {
-                        val optionObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions)), " at pkg/api/modules/purchases.uts:657")
+                        val optionObjects = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions)), " at pkg/api/modules/purchases.uts:665")
                         if (optionObjects != null) {
                             val nextOptions: UTSArray<PurchaseDetailFilterOption> = _uA()
                             run {
@@ -17923,7 +19697,7 @@ fun buildPurchaseDetailFilterOptionsResponse(raw: Any): PurchaseDetailFilterOpti
                             options = nextOptions
                         }
                     }
-                    nextFilters.push(PurchaseDetailFilterDefinition(key = stringValue__11(filterObject["key"]), param = stringValue__11(filterObject["param"]), label = stringValue__11(filterObject["label"]), control = stringValue__11(filterObject["control"]), aliases = stringArrayValue__4(filterObject["aliases"]), multiple = stringValue__11(filterObject["multiple"]) == "true", options = options))
+                    nextFilters.push(PurchaseDetailFilterDefinition(key = stringValue__11(filterObject["key"]), param = stringValue__11(filterObject["param"]), label = stringValue__11(filterObject["label"]), control = stringValue__11(filterObject["control"]), aliases = stringArrayValue__5(filterObject["aliases"]), multiple = stringValue__11(filterObject["multiple"]) == "true", options = options))
                     filterIndex += 1
                 }
             }
@@ -17954,7 +19728,7 @@ fun buildQuickProcurementResponse(rawObject: UTSJSONObject): QuickProcurementRes
         var index: Number = 0
         while(index < rows.length){
             val row = rows[index]
-            items.push(QuickProcurementResultItem(product_id = intValue__10(row["product_id"]), product_name = stringValue__11(row["product_name"]), product_sku = stringValue__11(row["product_sku"]), product_barcode = stringValue__11(row["product_barcode"]), purchase_price = stringValue__11(row["purchase_price"]), quantity = intValue__10(row["quantity"]), total = stringValue__11(row["total"])))
+            items.push(QuickProcurementResultItem(product_id = intValue__10(row["product_id"]), product_name = stringValue__11(row["product_name"]), product_sku = stringValue__11(row["product_sku"]), product_barcode = stringValue__11(row["product_barcode"]), purchase_price = stringValue__11(row["purchase_price"]), net_purchase_price = stringValue__11(row["net_purchase_price"]), price_type = stringValue__11(row["price_type"]), quantity = intValue__10(row["quantity"]), total = stringValue__11(row["total"])))
             index += 1
         }
     }
@@ -17965,7 +19739,7 @@ fun parseImportUploadError(text: String, fallback: String): String {
         return fallback
     }
     try {
-        val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:744")
+        val rootObject = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:754")
         if (rootObject == null) {
             return fallback
         }
@@ -17983,7 +19757,7 @@ fun parseUploadDataObject(text: String): UTSJSONObject {
     val rootObject = if (text == "") {
         null
     } else {
-        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:757")
+        UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pkg/api/modules/purchases.uts:767")
     }
     if (rootObject == null) {
         throw UTSError("接口响应解析失败")
@@ -18002,7 +19776,7 @@ fun parseUploadDataObject(text: String): UTSJSONObject {
     return rootObject!!
 }
 fun mutationBody(data: PurchaseMutationData): UTSJSONObject {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 772, 11), "purchase_date" to data.purchase_date, "shop" to parseInt(data.shop), "supplier" to parseInt(data.supplier), "remark" to if (data.remark == null) {
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 782, 11), "purchase_date" to data.purchase_date, "shop" to parseInt(data.shop), "supplier" to parseInt(data.supplier), "remark" to if (data.remark == null) {
         ""
     } else {
         data.remark
@@ -18022,7 +19796,7 @@ fun updateMutationBody(data: PurchaseMutationData): UTSJSONObject {
     )
 }
 fun detailMutationBody(data: PurchaseDetailMutationData): UTSJSONObject {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 790, 11), "purchase" to parseInt(data.purchase), "product" to parseInt(data.product), "quantity" to parseInt(data.quantity), "notes" to if (data.notes == null) {
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 800, 11), "purchase" to parseInt(data.purchase), "product" to parseInt(data.product), "quantity" to parseInt(data.quantity), "notes" to if (data.notes == null) {
         ""
     } else {
         data.notes
@@ -18062,7 +19836,7 @@ fun getPurchaseDetail(id: Any): UTSPromise<PurchaseItem> {
 }
 fun checkPurchaseProduct(id: Any, barcode: String, sku: String = ""): UTSPromise<PurchaseProductCheckResult> {
     return wrapUTSPromise(suspend w@{
-            val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 836, 11), "barcode" to barcode, "sku" to sku)
+            val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 846, 11), "barcode" to barcode, "sku" to sku)
             val raw = await(request(detailPath__1(id) + "check-product/", "POST", body, true))
             return@w buildPurchaseProductCheckResult(rawDataObject__2(raw))
     })
@@ -18075,8 +19849,8 @@ fun uploadSupplierExcelFile(id: Any, filePath: String, actionPath: String, confi
         } else {
             timeOut
         }
-        val formData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("formData", "pkg/api/modules/purchases.uts", 910, 15), "config" to JSON.stringify(config))
-        console.log("供应商Excel上传:", url, filePath, " at pkg/api/modules/purchases.uts:892")
+        val formData: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("formData", "pkg/api/modules/purchases.uts", 920, 15), "config" to JSON.stringify(config))
+        console.log("供应商Excel上传:", url, filePath, " at pkg/api/modules/purchases.uts:901")
         uni_uploadFile(UploadFileOptions(url = url, filePath = filePath, name = "file", header = buildDownloadHeader(), formData = formData, timeout = uploadTimeout, success = fun(res){
             if (res.statusCode < 200 || res.statusCode >= 300) {
                 reject(UTSError(parseImportUploadError(res.data, "HTTP状态码错误: " + res.statusCode)))
@@ -18147,7 +19921,7 @@ fun getPurchaseDetailList(data: PurchaseDetailListQuery): UTSPromise<PurchaseDet
 }
 fun getPurchaseDetailFilterOptions(purchase: String?): UTSPromise<PurchaseDetailFilterOptionsResponse> {
     return wrapUTSPromise(suspend w@{
-            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 1016, 11))
+            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 1026, 11))
             if (purchase != null && purchase != "") {
                 query["purchase"] = purchase
             }
@@ -18167,7 +19941,7 @@ fun createPurchase(data: PurchaseMutationData): UTSPromise<PurchaseItem> {
             return@w buildPurchaseItem(rawDataObject__2(raw))
     })
 }
-fun quickProcurement(purchaseId: Any, items: UTSArray<QuickProcurementItem>): UTSPromise<QuickProcurementResponse> {
+fun quickProcurement(purchaseId: Any, items: UTSArray<QuickProcurementItem>, priceType: String = "gross"): UTSPromise<QuickProcurementResponse> {
     return wrapUTSPromise(suspend w@{
             val requestItems: UTSArray<UTSJSONObject> = _uA()
             run {
@@ -18178,7 +19952,7 @@ fun quickProcurement(purchaseId: Any, items: UTSArray<QuickProcurementItem>): UT
                     index += 1
                 }
             }
-            val raw = await(request("/api/purchases/purchases/quick_procurement/", "POST", _uO("procure_id" to parseInt(stringValue__11(purchaseId)), "items" to requestItems), true))
+            val raw = await(request("/api/purchases/purchases/quick_procurement/", "POST", _uO("procure_id" to parseInt(stringValue__11(purchaseId)), "price_type" to priceType, "items" to requestItems), true))
             return@w buildQuickProcurementResponse(rawDataObject__2(raw))
     })
 }
@@ -18207,7 +19981,7 @@ fun deletePurchaseDetail(id: Any): UTSPromise<Any> {
     return request(purchaseDetailPath(id), "DELETE", _uO(), true)
 }
 fun runPurchaseAction(id: Any, actionName: String): UTSPromise<Any> {
-    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 1065, 11), "action" to actionName)
+    val body: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("body", "pkg/api/modules/purchases.uts", 1076, 11), "action" to actionName)
     if (actionName == "cancel") {
         body["reason"] = "前端取消采购单"
     }
@@ -18231,7 +20005,7 @@ fun receivePurchaseDetail(id: Any, quantity: Number, notes: String = ""): UTSPro
 }
 fun getPurchaseOptionList(path: String, search: String?, labelField: String, extraLabelField: String = ""): UTSPromise<UTSArray<PurchaseOptionItem>> {
     return wrapUTSPromise(suspend w@{
-            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 1087, 11), "page" to 1, "page_size" to 30)
+            val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/purchases.uts", 1098, 11), "page" to 1, "page_size" to 30)
             if (search != null && search != "") {
                 query["search"] = search
             }
@@ -18278,7 +20052,7 @@ open class PurchaseSelectOption (
     open var text: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseSelectOption", "pages/purchases/index.uvue", 200, 6)
+        return UTSSourceMapPosition("PurchaseSelectOption", "pages/purchases/index.uvue", 201, 6)
     }
 }
 val GenPagesPurchasesIndexClass = CreateVueComponent(GenPagesPurchasesIndex::class.java, fun(): VueComponentOptions {
@@ -18308,7 +20082,7 @@ open class PurchaseDetailSelectedFilter (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PurchaseDetailSelectedFilter", "pages/purchases/details/index.uvue", 123, 6)
+        return UTSSourceMapPosition("PurchaseDetailSelectedFilter", "pages/purchases/details/index.uvue", 188, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PurchaseDetailSelectedFilterReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18374,10 +20148,10 @@ open class ProductOption (
     open var subtitle: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductOption", "pages/purchases/details/from.uvue", 114, 6)
+        return UTSSourceMapPosition("ProductOption", "pages/purchases/details/from.uvue", 76, 6)
     }
 }
-open class PrintPreviewField__1 (
+open class PrintPreviewField__2 (
     @JsonNotNull
     open var key: String,
     @JsonNotNull
@@ -18388,7 +20162,7 @@ open class PrintPreviewField__1 (
     open var emphasis: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PrintPreviewField", "pages/purchases/details/from.uvue", 121, 6)
+        return UTSSourceMapPosition("PrintPreviewField", "pages/purchases/details/from.uvue", 83, 6)
     }
 }
 open class ProductCategoryQuickInfo (
@@ -18402,7 +20176,7 @@ open class ProductCategoryQuickInfo (
     open var kasaText: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ProductCategoryQuickInfo", "pages/purchases/details/from.uvue", 128, 6)
+        return UTSSourceMapPosition("ProductCategoryQuickInfo", "pages/purchases/details/from.uvue", 90, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ProductCategoryQuickInfoReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18492,7 +20266,7 @@ open class QuickDraftRow (
     open var quantity: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("QuickDraftRow", "pages/purchases/details/quick-input.uvue", 157, 6)
+        return UTSSourceMapPosition("QuickDraftRow", "pages/purchases/details/quick-input.uvue", 170, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return QuickDraftRowReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18570,7 +20344,7 @@ open class AIParsedRow (
     open var quantity: Number,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("AIParsedRow", "pages/purchases/details/quick-input.uvue", 164, 6)
+        return UTSSourceMapPosition("AIParsedRow", "pages/purchases/details/quick-input.uvue", 177, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return AIParsedRowReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18646,7 +20420,7 @@ open class PreviewCell (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PreviewCell", "pages/purchases/details/excel-upload.uvue", 191, 6)
+        return UTSSourceMapPosition("PreviewCell", "pages/purchases/details/excel-upload.uvue", 192, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PreviewCellReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18712,7 +20486,7 @@ open class PreviewRow (
     open var cells: UTSArray<PreviewCell>,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("PreviewRow", "pages/purchases/details/excel-upload.uvue", 197, 6)
+        return UTSSourceMapPosition("PreviewRow", "pages/purchases/details/excel-upload.uvue", 198, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return PreviewRowReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18778,7 +20552,7 @@ open class SummaryItem (
     open var value: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SummaryItem", "pages/purchases/details/excel-upload.uvue", 203, 6)
+        return UTSSourceMapPosition("SummaryItem", "pages/purchases/details/excel-upload.uvue", 204, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SummaryItemReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18846,7 +20620,7 @@ open class ColumnOption (
     open var previewTitle: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("ColumnOption", "pages/purchases/details/excel-upload.uvue", 209, 6)
+        return UTSSourceMapPosition("ColumnOption", "pages/purchases/details/excel-upload.uvue", 210, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return ColumnOptionReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -18924,7 +20698,7 @@ open class FieldDefinition (
     open var required: Boolean = false,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FieldDefinition", "pages/purchases/details/excel-upload.uvue", 216, 6)
+        return UTSSourceMapPosition("FieldDefinition", "pages/purchases/details/excel-upload.uvue", 217, 6)
     }
 }
 open class FieldMappingRow (
@@ -18940,7 +20714,7 @@ open class FieldMappingRow (
     open var columnText: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("FieldMappingRow", "pages/purchases/details/excel-upload.uvue", 222, 6)
+        return UTSSourceMapPosition("FieldMappingRow", "pages/purchases/details/excel-upload.uvue", 223, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return FieldMappingRowReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -19032,7 +20806,7 @@ open class AIParsedMapping (
     open var columnText: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("AIParsedMapping", "pages/purchases/details/excel-upload.uvue", 230, 6)
+        return UTSSourceMapPosition("AIParsedMapping", "pages/purchases/details/excel-upload.uvue", 231, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return AIParsedMappingReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -19921,7 +21695,7 @@ fun boolValue__5(value: Any?): Boolean {
     val text = stringValue__12(value).toLowerCase()
     return text == "true" || text == "1" || text == "yes"
 }
-fun stringArrayValue__5(value: Any?): UTSArray<String> {
+fun stringArrayValue__6(value: Any?): UTSArray<String> {
     if (value == null) {
         return _uA<String>()
     }
@@ -20146,7 +21920,7 @@ fun buildOrderFilterOptionsResponse(raw: Any): OrderFilterOptionsResponse {
                             options = nextOptions
                         }
                     }
-                    nextFilters.push(OrderFilterDefinition(key = stringValue__12(filterObject["key"]), param = stringValue__12(filterObject["param"]), label = stringValue__12(filterObject["label"]), control = stringValue__12(filterObject["control"]), aliases = stringArrayValue__5(filterObject["aliases"]), multiple = stringValue__12(filterObject["multiple"]) == "true", options = options))
+                    nextFilters.push(OrderFilterDefinition(key = stringValue__12(filterObject["key"]), param = stringValue__12(filterObject["param"]), label = stringValue__12(filterObject["label"]), control = stringValue__12(filterObject["control"]), aliases = stringArrayValue__6(filterObject["aliases"]), multiple = stringValue__12(filterObject["multiple"]) == "true", options = options))
                     filterIndex += 1
                 }
             }
@@ -20292,6 +22066,9 @@ open class InventoryListQuery (
     open var stock: String? = null,
     open var check_type: String? = null,
     open var is_checked: String? = null,
+    open var discrepancy: String? = null,
+    open var sort_by: String? = null,
+    open var movement_period: String? = null,
     open var transaction_type: String? = null,
     open var location_type: String? = null,
     open var is_active: String? = null,
@@ -20313,7 +22090,7 @@ open class InventoryListResponse (
     open var page_size: Number,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("InventoryListResponse", "pkg/api/modules/inventory.uts", 24, 13)
+        return UTSSourceMapPosition("InventoryListResponse", "pkg/api/modules/inventory.uts", 27, 13)
     }
 }
 open class StockAdjustmentData (
@@ -20329,7 +22106,7 @@ open class StockAdjustmentData (
     open var notes: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("StockAdjustmentData", "pkg/api/modules/inventory.uts", 31, 13)
+        return UTSSourceMapPosition("StockAdjustmentData", "pkg/api/modules/inventory.uts", 34, 13)
     }
 }
 open class InventoryStockCreateForProductData (
@@ -20347,7 +22124,7 @@ open class InventoryStockCreateForProductData (
     open var notes: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("InventoryStockCreateForProductData", "pkg/api/modules/inventory.uts", 38, 13)
+        return UTSSourceMapPosition("InventoryStockCreateForProductData", "pkg/api/modules/inventory.uts", 41, 13)
     }
 }
 open class InventoryMutationData (
@@ -20355,7 +22132,7 @@ open class InventoryMutationData (
     open var payload: UTSJSONObject,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("InventoryMutationData", "pkg/api/modules/inventory.uts", 46, 13)
+        return UTSSourceMapPosition("InventoryMutationData", "pkg/api/modules/inventory.uts", 49, 13)
     }
 }
 fun stringValue__13(value: Any?): String {
@@ -20375,7 +22152,7 @@ fun intValue__12(value: Any?): Number {
     return parsed
 }
 fun buildQuery__2(data: InventoryListQuery): UTSJSONObject {
-    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/inventory.uts", 63, 11), "page" to data.page, "page_size" to data.page_size)
+    val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pkg/api/modules/inventory.uts", 66, 11), "page" to data.page, "page_size" to data.page_size)
     if (data.search != null && data.search != "") {
         query["search"] = data.search
     }
@@ -20421,6 +22198,15 @@ fun buildQuery__2(data: InventoryListQuery): UTSJSONObject {
     if (data.is_checked != null && data.is_checked != "") {
         query["is_checked"] = data.is_checked
     }
+    if (data.discrepancy != null && data.discrepancy != "") {
+        query["discrepancy"] = data.discrepancy
+    }
+    if (data.sort_by != null && data.sort_by != "") {
+        query["sort_by"] = data.sort_by
+    }
+    if (data.movement_period != null && data.movement_period != "") {
+        query["movement_period"] = data.movement_period
+    }
     if (data.transaction_type != null && data.transaction_type != "") {
         query["transaction_type"] = data.transaction_type
     }
@@ -20446,7 +22232,7 @@ fun parseObjectArray__6(value: Any?): UTSArray<UTSJSONObject> {
     }
     var parsed: UTSArray<UTSJSONObject>? = null
     try {
-        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pkg/api/modules/inventory.uts:116")
+        parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(trimmedText), " at pkg/api/modules/inventory.uts:125")
     }
      catch (error: Throwable) {
         return _uA<UTSJSONObject>()
@@ -20469,7 +22255,7 @@ fun parseObject__8(value: Any?): UTSJSONObject? {
         return null
     }
     try {
-        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pkg/api/modules/inventory.uts:135")
+        return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(trimmedText), " at pkg/api/modules/inventory.uts:144")
     }
      catch (error: Throwable) {
         return null
@@ -20652,8 +22438,14 @@ fun createInventoryCheck(data: InventoryMutationData): UTSPromise<Any> {
 fun updateInventoryCheck(id: String, data: InventoryMutationData): UTSPromise<Any> {
     return request("/api/inventory/checks/" + stringValue__13(id) + "/", "PUT", data.payload, true)
 }
+fun deleteInventoryCheck(id: String): UTSPromise<Any> {
+    return request("/api/inventory/checks/" + stringValue__13(id) + "/", "DELETE", _uO(), true)
+}
 fun createInventoryCheckItem(data: InventoryMutationData): UTSPromise<Any> {
     return request("/api/inventory/check-items/", "POST", data.payload, true)
+}
+fun checkInventoryCheckItem(id: String, data: InventoryMutationData): UTSPromise<Any> {
+    return request("/api/inventory/check-items/" + stringValue__13(id) + "/check/", "POST", data.payload, true)
 }
 fun adjustInventoryStock(data: StockAdjustmentData): UTSPromise<Any> {
     return request("/api/inventory/stocks/adjust/", "POST", stockAdjustmentBody(data), true)
@@ -20673,14 +22465,14 @@ fun cancelInventoryTransfer(id: String): UTSPromise<Any> {
 fun startInventoryCheck(id: String): UTSPromise<Any> {
     return request("/api/inventory/checks/" + stringValue__13(id) + "/start/", "POST", _uO(), true)
 }
-fun submitInventoryCheck(id: String): UTSPromise<Any> {
-    return request("/api/inventory/checks/" + stringValue__13(id) + "/submit/", "POST", _uO(), true)
-}
 fun approveInventoryCheck(id: String): UTSPromise<Any> {
     return request("/api/inventory/checks/" + stringValue__13(id) + "/approve/", "POST", _uO(), true)
 }
 fun adjustInventoryCheck(id: String): UTSPromise<Any> {
     return request("/api/inventory/checks/" + stringValue__13(id) + "/adjust/", "POST", _uO(), true)
+}
+fun completeInventoryCheck(id: String): UTSPromise<Any> {
+    return request("/api/inventory/checks/" + stringValue__13(id) + "/complete/", "POST", _uO(), true)
 }
 open class SelectOption__8 (
     @JsonNotNull
@@ -20689,7 +22481,7 @@ open class SelectOption__8 (
     open var label: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/inventory-management/index.uvue", 196, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-management/index.uvue", 238, 6)
     }
 }
 val GenPagesInventoryManagementIndexClass = CreateVueComponent(GenPagesInventoryManagementIndex::class.java, fun(): VueComponentOptions {
@@ -20709,7 +22501,7 @@ open class SelectOption__9 (
     open var label: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/inventory-management/from.uvue", 324, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-management/from.uvue", 325, 6)
     }
 }
 val GenPagesInventoryManagementFromClass = CreateVueComponent(GenPagesInventoryManagementFrom::class.java, fun(): VueComponentOptions {
@@ -20739,7 +22531,7 @@ open class SelectOption__10 (
     open var text: String,
 ) : UTSReactiveObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/inventory-locations/from.uvue", 15, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-locations/from.uvue", 16, 6)
     }
     override fun __v_create(__v_isReadonly: Boolean, __v_isShallow: Boolean, __v_skip: Boolean): UTSReactiveObject {
         return SelectOption__10ReactiveObject(this, __v_isReadonly, __v_isShallow, __v_skip)
@@ -20801,7 +22593,7 @@ open class SelectOption__11 (
     open var label: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/inventory-transfers/index.uvue", 146, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-transfers/index.uvue", 147, 6)
     }
 }
 val GenPagesInventoryTransfersIndexClass = CreateVueComponent(GenPagesInventoryTransfersIndex::class.java, fun(): VueComponentOptions {
@@ -20851,7 +22643,7 @@ open class SelectOption__12 (
     open var label: String,
 ) : UTSObject(), IUTSSourceMap {
     override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
-        return UTSSourceMapPosition("SelectOption", "pages/inventory-checks/index.uvue", 141, 6)
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-checks/index.uvue", 142, 6)
     }
 }
 val GenPagesInventoryChecksIndexClass = CreateVueComponent(GenPagesInventoryChecksIndex::class.java, fun(): VueComponentOptions {
@@ -20884,6 +22676,16 @@ val GenPagesInventoryChecksCreateClass = CreateVueComponent(GenPagesInventoryChe
     return GenPagesInventoryChecksCreate(instance, renderer)
 }
 )
+open class SelectOption__13 (
+    @JsonNotNull
+    open var value: String,
+    @JsonNotNull
+    open var label: String,
+) : UTSObject(), IUTSSourceMap {
+    override fun `__$getOriginalPosition`(): UTSSourceMapPosition? {
+        return UTSSourceMapPosition("SelectOption", "pages/inventory-checks/details/index.uvue", 252, 6)
+    }
+}
 val GenPagesInventoryChecksDetailsIndexClass = CreateVueComponent(GenPagesInventoryChecksDetailsIndex::class.java, fun(): VueComponentOptions {
     return VueComponentOptions(type = "page", name = "", inheritAttrs = GenPagesInventoryChecksDetailsIndex.inheritAttrs, inject = GenPagesInventoryChecksDetailsIndex.inject, props = GenPagesInventoryChecksDetailsIndex.props, propsNeedCastKeys = GenPagesInventoryChecksDetailsIndex.propsNeedCastKeys, emits = GenPagesInventoryChecksDetailsIndex.emits, components = GenPagesInventoryChecksDetailsIndex.components, styles = GenPagesInventoryChecksDetailsIndex.styles, setup = fun(props: ComponentPublicInstance): Any? {
         return GenPagesInventoryChecksDetailsIndex.setup(props as GenPagesInventoryChecksDetailsIndex)
@@ -20914,6 +22716,7 @@ open class UniAppConfig : io.dcloud.uniapp.appframe.AppConfig {
 fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/login/login", component = GenPagesLoginLoginClass, meta = UniPageMeta(isQuit = true), style = _uM("navigationStyle" to "custom")))
     __uniRoutes.push(UniPageRoute(path = "pages/tabbar/reports", component = GenPagesTabbarReportsClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "报表")))
+    __uniRoutes.push(UniPageRoute(path = "pages/reports/product-sales", component = GenPagesReportsProductSalesClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "商品销售")))
     __uniRoutes.push(UniPageRoute(path = "pages/tabbar/products", component = GenPagesTabbarProductsClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "商品")))
     __uniRoutes.push(UniPageRoute(path = "pages/tabbar/settings", component = GenPagesTabbarSettingsClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "设置")))
     __uniRoutes.push(UniPageRoute(path = "pages/tabbar/mine", component = GenPagesTabbarMineClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "我的")))
@@ -20939,7 +22742,6 @@ fun definePageRoutes() {
     __uniRoutes.push(UniPageRoute(path = "pages/products/pricing-formula", component = GenPagesProductsPricingFormulaClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/products/pricing-formula/index", component = GenPagesProductsPricingFormulaIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/products/pricing-formula/from", component = GenPagesProductsPricingFormulaFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
-    __uniRoutes.push(UniPageRoute(path = "pages/label-print/index", component = GenPagesLabelPrintIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/printer-settings/index", component = GenPagesPrinterSettingsIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/label-templates/index", component = GenPagesLabelTemplatesIndexClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))
     __uniRoutes.push(UniPageRoute(path = "pages/label-templates/from", component = GenPagesLabelTemplatesFromClass, meta = UniPageMeta(isQuit = false), style = _uM("navigationStyle" to "custom", "navigationBarTitleText" to "")))

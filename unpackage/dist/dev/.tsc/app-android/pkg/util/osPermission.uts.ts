@@ -126,7 +126,8 @@ export function getLocationAsync():Promise<GetLocationSuccess> {
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)
@@ -184,7 +185,7 @@ export function getCameraAsync(sizeType:string[] = ['original','compressed']):Pr
 				resolve(res)
 			},
 			fail: (err: IMediaError) => {
-				__f__('log','at pkg/util/osPermission.uts:187',"相机拍照错误：",err.errCode,err.errMsg)
+				__f__('log','at pkg/util/osPermission.uts:188',"相机拍照错误：",err.errCode,err.errMsg)
 				if(err.errCode == 1101005){
 					uni.showModal({
 						content: "相机权限已经被拒绝，请前往设置中开启",
@@ -198,7 +199,8 @@ export function getCameraAsync(sizeType:string[] = ['original','compressed']):Pr
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)
@@ -257,7 +259,7 @@ export function getAlbumAsync(count:number = 1,sizeType:string[] = ['original','
 				resolve(res)
 			},
 			fail: (err: IMediaError) => {
-				__f__('log','at pkg/util/osPermission.uts:260',"获取相册错误：",err.errCode,err.errMsg)
+				__f__('log','at pkg/util/osPermission.uts:262',"获取相册错误：",err.errCode,err.errMsg)
 				if(err.errCode == 1101005){
 					uni.showModal({
 						content: "相册权限已经被拒绝，请前往设置中开启",
@@ -271,7 +273,8 @@ export function getAlbumAsync(count:number = 1,sizeType:string[] = ['original','
 				}else{
 					uni.showToast({
 						title: err.errCode + err.errMsg,
-						icon: "none"
+						icon: "none",
+						duration: 3500
 					})
 				}
 				reject(err)

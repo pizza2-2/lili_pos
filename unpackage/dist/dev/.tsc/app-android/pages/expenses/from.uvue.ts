@@ -6,8 +6,9 @@ import { authState } from '@/store/auth'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { createExpense, ExpenseItem, ExpenseMutationData, ExpenseOptionGroup, getExpenseDetail, getExpenseOptions, updateExpense } from '@/pkg/api/modules/expenses.uts'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/expenses/from.uvue", 41, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/expenses/from.uvue", 42, 6>;
 	value: string
 	text: string
 }
@@ -55,7 +56,7 @@ function getArrayField(obj: UTSJSONObject, key: string): string[] {
 }
 
 function buildUploadHeaders(): UTSJSONObject {
-	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 81, 8), } as UTSJSONObject
+	const headers = { __$originalPosition: new UTSSourceMapPosition("headers", "pages/expenses/from.uvue", 82, 8), } as UTSJSONObject
 	if (authState.token != '') headers['Authorization'] = authState.token
 	return headers
 }
@@ -76,11 +77,9 @@ function todayText(): string {
 function parseErrorMessage(error: any, fallback: string): string {
 	let message = fallback
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') message = directMessage
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:106")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/expenses/from.uvue:105")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -215,7 +214,7 @@ async function loadExpenseDetailData(idText: string) {
 		const detail = await getExpenseDetail(idText)
 		initialData.value = buildInitialDataFromExpense(detail)
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '支出详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '支出详情加载失败'))
 	}
 }
 
@@ -272,11 +271,11 @@ async function persistForm(payload: UTSJSONObject) {
 	const data = formDataValue == null ? ({} as UTSJSONObject) : (formDataValue as UTSJSONObject)
 	const body = buildMutationPayload(data)
 	if (body.amount == '' || parseFloat(body.amount) <= 0 || isNaN(parseFloat(body.amount))) {
-		uni.showToast({ title: '请输入有效的支出金额', icon: 'none' })
+		uni.showToast({ title: '请输入有效的支出金额', icon: 'none', duration: 3500 })
 		return
 	}
 	if (body.expenditure_date == '') {
-		uni.showToast({ title: '请选择支出日期', icon: 'none' })
+		uni.showToast({ title: '请选择支出日期', icon: 'none', duration: 3500 })
 		return
 	}
 	const uploadContentTypeModel = getStringField(payload, 'uploadContentTypeModel').trim()
@@ -310,7 +309,7 @@ async function persistForm(payload: UTSJSONObject) {
 		goBackToList(false)
 	} catch (error) {
 		if (!pageTaskGuard.canApply(taskToken)) return
-		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		if (pageTaskGuard.canApply(taskToken)) {
 			savingVisible.value = false
@@ -325,11 +324,11 @@ async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(pay
 function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
 function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
 function handleDirtyChange(value: boolean) {}
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请先在后台维护支出类型或供应商', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none' }) }
-function handleUpload(payload: UTSJSONObject) { uni.showToast({ title: '凭证已加入待保存列表', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '请先在后台维护支出类型或供应商', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持直接编辑', icon: 'none', duration: 3500 }) }
+function handleUpload(payload: UTSJSONObject) { uni.showToast({ title: '凭证已加入待保存列表', icon: 'none', duration: 3500 }) }
 function handleUploadDelete(payload: UTSJSONObject) { uni.showToast({ title: '凭证已删除', icon: 'success' }) }
-function handleUploadError(payload: UTSJSONObject) { uni.showToast({ title: '凭证上传失败', icon: 'none' }) }
+function handleUploadError(payload: UTSJSONObject) { showErrorToast('凭证上传失败') }
 
 onLoad((event: OnLoadOptions) => {
 	pageTaskGuard.reset()

@@ -20,6 +20,7 @@ export type InventoryListQuery = {
 	is_checked?: string | null
 	discrepancy?: string | null
 	sort_by?: string | null
+	movement_period?: string | null
 	transaction_type: string | null
 	location_type: string | null
 	is_active: string | null
@@ -88,6 +89,7 @@ function buildQuery(data: InventoryListQuery): UTSJSONObject {
 	if (data.is_checked != null && data.is_checked != '') query['is_checked'] = data.is_checked
 	if (data.discrepancy != null && data.discrepancy != '') query['discrepancy'] = data.discrepancy
 	if (data.sort_by != null && data.sort_by != '') query['sort_by'] = data.sort_by
+	if (data.movement_period != null && data.movement_period != '') query['movement_period'] = data.movement_period
 	if (data.transaction_type != null && data.transaction_type != '') query['transaction_type'] = data.transaction_type
 	if (data.location_type != null && data.location_type != '') query['location_type'] = data.location_type
 	if (data.is_active != null && data.is_active != '') query['is_active'] = data.is_active

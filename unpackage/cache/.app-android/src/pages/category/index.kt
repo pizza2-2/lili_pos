@@ -48,13 +48,9 @@ open class GenPagesCategoryIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any): String {
                 var message = "分类列表加载失败"
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/index.uvue:226")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/index.uvue:223")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -116,7 +112,7 @@ open class GenPagesCategoryIndex : BasePage {
                 if (text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/index.uvue:287")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/index.uvue:284")
             }
             val parseStoredObject = ::gen_parseStoredObject_fn
             fun gen_containsNodeId_fn(list: UTSArray<String>, id: Number): Boolean {
@@ -266,7 +262,7 @@ open class GenPagesCategoryIndex : BasePage {
                             return@w1 true
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                             return@w1 false
                         }
                          finally {
@@ -557,7 +553,7 @@ open class GenPagesCategoryIndex : BasePage {
             }
             val goToEdit = ::gen_goToEdit_fn
             fun gen_goToAddChild_fn(item: CategoryItem): Unit {
-                uni_navigateTo(NavigateToOptions(url = "/pages/category/from?parent_id=" + item.id + "&parent_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(item.name), " at pages/category/index.uvue:659") + "&mode=add"))
+                uni_navigateTo(NavigateToOptions(url = "/pages/category/from?parent_id=" + item.id + "&parent_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(item.name), " at pages/category/index.uvue:653") + "&mode=add"))
             }
             val goToAddChild = ::gen_goToAddChild_fn
             fun gen_handleCreateRoot_fn(): Unit {
@@ -586,7 +582,7 @@ open class GenPagesCategoryIndex : BasePage {
                             loadRootCategories()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                         }
                          finally {
                             isOperating.value = false

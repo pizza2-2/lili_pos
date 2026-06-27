@@ -3,8 +3,9 @@ import _easycom_lili_UniversaForm from '@/uni_modules/lili-UniversaForm/componen
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createInventoryLocation, getInventoryLocationDetail, InventoryMutationData, updateInventoryLocation } from '@/pkg/api/modules/inventory'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-locations/from.uvue", 15, 6>;
+type SelectOption = { __$originalPosition?: UTSSourceMapPosition<"SelectOption", "pages/inventory-locations/from.uvue", 16, 6>;
 	value: string
 	text: string
 }
@@ -124,7 +125,7 @@ async function loadDetail(idText: string) {
 			is_active_text: optionText(activeOptions.value, activeValue, '启用'),
 		} as UTSJSONObject
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '库存位置详情加载失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '库存位置详情加载失败'))
 	}
 }
 
@@ -133,7 +134,7 @@ async function persistForm(payload: UTSJSONObject) {
 	const rawData = payload['formData']
 	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
 	if (getStringField(data, 'name') == '' || getStringField(data, 'code') == '') {
-		uni.showToast({ title: '请填写位置名称和位置编码', icon: 'none' })
+		uni.showToast({ title: '请填写位置名称和位置编码', icon: 'none', duration: 3500 })
 		return
 	}
 	const actionText = formMode.value == 'edit' ? '保存库存位置' : '创建库存位置'
@@ -146,7 +147,7 @@ async function persistForm(payload: UTSJSONObject) {
 		uni.showToast({ title: takeLatestResponseMessage(actionText + '成功'), icon: 'success' })
 		goBackToList()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, actionText + '失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
 	} finally {
 		uni.hideLoading()
 		submitting.value = false
@@ -158,8 +159,8 @@ async function handleSaveRequest(payload: UTSJSONObject) { await persistForm(pay
 function handleCancel(payload: UTSJSONObject) { const changed = payload['hasChanges']; if (changed != null && (changed as boolean)) return; goBackToList() }
 function handleDiscardLeave(payload: UTSJSONObject) { goBackToList() }
 function handleDirtyChange(value: boolean) {}
-function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none' }) }
-function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none' }) }
+function handleBottomSelectAdd(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持新增', icon: 'none', duration: 3500 }) }
+function handleBottomSelectEdit(payload: UTSJSONObject) { uni.showToast({ title: '该字段不支持编辑', icon: 'none', duration: 3500 }) }
 
 onLoad((query: OnLoadOptions) => {
 	const idValue = query['id']

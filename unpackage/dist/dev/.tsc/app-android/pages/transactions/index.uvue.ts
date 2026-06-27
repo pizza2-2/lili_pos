@@ -3,8 +3,9 @@ import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/compon
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteTransaction, getTransactionFilterOptions, getTransactionList, getTransactionStatistics, TransactionFilterDefinition, TransactionFilterOption, TransactionFilterOptionsResponse, TransactionItem, TransactionListResponse, TransactionMediaFile, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type TransactionSelectedFilter = { __$originalPosition?: UTSSourceMapPosition<"TransactionSelectedFilter", "pages/transactions/index.uvue", 157, 6>;
+type TransactionSelectedFilter = { __$originalPosition?: UTSSourceMapPosition<"TransactionSelectedFilter", "pages/transactions/index.uvue", 158, 6>;
 	param: string
 	value: string
 }
@@ -51,6 +52,7 @@ const fieldConfig = ref<UTSJSONObject[]>([
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'ksef', text: '查看KSeF' } as UTSJSONObject,
 	{ key: 'edit', text: '编辑' } as UTSJSONObject,
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 ])
@@ -105,13 +107,9 @@ function applyTransactionResponse(response: TransactionListResponse) {
 function parseErrorMessage(error: any): string {
 	let message = '采购记录加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:256")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:254")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -517,7 +515,7 @@ function handleItemClick(payload: UTSJSONObject) {
 	const titleText = stringValue(payload['title'], '采购记录')
 	const itemValue = payload['item']
 	if (itemValue == null) {
-		uni.showToast({ title: titleText, icon: 'none' })
+		uni.showToast({ title: titleText, icon: 'none', duration: 3500 })
 		return
 	}
 	const item = itemValue as UTSJSONObject
@@ -605,7 +603,7 @@ function handleCreateTransaction() {
 	if (supplierId.value == '') {
 		uni.showToast({
 			title: '供应商ID缺失',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -613,6 +611,21 @@ function handleCreateTransaction() {
 	uni.navigateTo({
 		url: '/pages/transactions/from?supplier_id=' + supplierId.value,
 	})
+}
+
+function openKsefForCurrentSupplier() {
+	if (supplierId.value == '') {
+		uni.showToast({
+			title: '供应商ID缺失',
+			icon: 'none', duration: 3500,
+		})
+		return
+	}
+	let url = '/pages/ksef/index?supplier_id=' + supplierId.value
+	if (supplierName.value != '') {
+		url += '&supplier_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(supplierName.value), " at pages/transactions/index.uvue:768")
+	}
+	uni.navigateTo({ url: url })
 }
 
 async function confirmDeleteTransaction(transactionId: string) {
@@ -625,10 +638,7 @@ async function confirmDeleteTransaction(transactionId: string) {
 		markTransactionListRefreshNeeded()
 		refreshTransactionData()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	}
 }
 
@@ -652,8 +662,13 @@ function handleMenu(payload: UTSJSONObject) {
 	if (transactionId == '') {
 		uni.showToast({
 			title: '采购记录ID缺失',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
+		return
+	}
+
+	if (key == 'ksef') {
+		openKsefForCurrentSupplier()
 		return
 	}
 
@@ -667,7 +682,7 @@ function handleMenu(payload: UTSJSONObject) {
 	if (key == 'Detail') {
 		uni.showToast({
 			title: '当前已在详情页',
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -776,7 +791,7 @@ onLoad((event : OnLoadOptions) => {
 	if (supplierNameValue == null) {
 		supplierName.value = ''
 	} else {
-		const decodedSupplierName = UTSAndroid.consoleDebugError(decodeURIComponent(supplierNameValue as string), " at pages/transactions/index.uvue:921")
+		const decodedSupplierName = UTSAndroid.consoleDebugError(decodeURIComponent(supplierNameValue as string), " at pages/transactions/index.uvue:936")
 		supplierName.value = decodedSupplierName == null ? '' : decodedSupplierName
 	}
 	refreshTransactionData()

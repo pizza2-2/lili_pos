@@ -46,12 +46,10 @@ function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): st
 
 function parseErrorMessage(error: any, fallback: string): string {
 	if (error == null) return fallback
-	const directMessage = (error as Error).message
-	if (directMessage != null && directMessage != '') return directMessage
 	const text = JSON.stringify(error)
 	if (text == null || text == '' || text == '{}') return fallback
 	try {
-		const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:156")
+		const parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/inventory-locations/index.uvue:154")
 		if (parsed != null) {
 			const message = stringField(parsed!, 'message')
 			if (message != '') return message
@@ -68,7 +66,7 @@ function parseErrorMessage(error: any, fallback: string): string {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -111,7 +109,7 @@ async function loadItems() {
 		totalCount.value = 0
 		const message = parseErrorMessage(error, '库存位置加载失败')
 		errorMessage.value = message
-		uni.showToast({ title: message, icon: 'none' })
+		uni.showToast({ title: message, icon: 'none', duration: 3500 })
 	} finally {
 		isLoading.value = false
 	}

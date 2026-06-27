@@ -81,6 +81,29 @@ function stringValue(value: any | null): string {
 	return '' + value
 }
 
+function safeErrorMessage(error: any | null): string {
+	if (error == null) return ''
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return ''
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const rawMessage = parsed!['message']
+			const message = stringValue(rawMessage)
+			if (message != '') return message
+			const rawDetail = parsed!['detail']
+			const detail = stringValue(rawDetail)
+			if (detail != '') return detail
+			const rawErrors = parsed!['errors']
+			const errors = stringValue(rawErrors)
+			if (errors != '') return errors
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
 function boolValue(value: any | null): boolean {
 	if (value == null) {
 		return false
@@ -548,7 +571,7 @@ function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: U
 				uri: resolvedFilePath,
 			} as UploadFileOptionFiles)
 		}
-		__f__('log','at pkg/api/modules/media.uts:551','media batch upload start:', baseUrl + '/api/media/files/batch-upload/', files.length)
+		__f__('log','at pkg/api/modules/media.uts:574','media batch upload start:', baseUrl + '/api/media/files/batch-upload/', files.length)
 		try {
 
 			uni.uploadFile({
@@ -558,7 +581,7 @@ function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: U
 				formData: formData,
 				timeout: uploadTimeout,
 				success: (res : UploadFileSuccess) => {
-					__f__('log','at pkg/api/modules/media.uts:561','media batch upload success:', res.statusCode, items.length)
+					__f__('log','at pkg/api/modules/media.uts:584','media batch upload success:', res.statusCode, items.length)
 					if (res.statusCode < 200 || res.statusCode >= 300) {
 						const responseMessage = parseResponseErrorMessage(res.data)
 						reject(new Error(responseMessage == '' ? ('HTTP状态码错误: ' + res.statusCode) : responseMessage))
@@ -572,7 +595,7 @@ function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: U
 				},
 				fail: (err : UploadFileFail) => {
 					const failMessage = buildUploadFailMessage(err)
-					__f__('log','at pkg/api/modules/media.uts:575','media batch upload fail:', failMessage, err.errCode)
+					__f__('log','at pkg/api/modules/media.uts:598','media batch upload fail:', failMessage, err.errCode)
 					reject(new Error(failMessage))
 				},
 			})
@@ -593,7 +616,7 @@ function uploadSingleMediaFile(item: MediaBatchUploadItem): Promise<UTSJSONObjec
 		const fieldName = item.name == null || item.name == '' ? 'file' : item.name!
 		const headers = buildUploadHeaders()
 		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
-		__f__('log','at pkg/api/modules/media.uts:596','media upload start:', baseUrl + '/api/media/files/', resolvedFilePath)
+		__f__('log','at pkg/api/modules/media.uts:619','media upload start:', baseUrl + '/api/media/files/', resolvedFilePath)
 		try {
 			uni.uploadFile({
 				url: baseUrl + '/api/media/files/',
@@ -603,22 +626,22 @@ function uploadSingleMediaFile(item: MediaBatchUploadItem): Promise<UTSJSONObjec
 				formData: formData,
 				timeout: uploadTimeout,
 				success: (res : UploadFileSuccess) => {
-					__f__('log','at pkg/api/modules/media.uts:606','media upload success:', resolvedFilePath, res.statusCode)
+					__f__('log','at pkg/api/modules/media.uts:629','media upload success:', resolvedFilePath, res.statusCode)
 					try {
 						resolve(parseUploadResponseText(res.data))
 					} catch (error) {
-						__f__('log','at pkg/api/modules/media.uts:610','media upload parse fail:', resolvedFilePath)
+						__f__('log','at pkg/api/modules/media.uts:633','media upload parse fail:', resolvedFilePath)
 						reject(error)
 					}
 				},
 				fail: (err : UploadFileFail) => {
 					const failMessage = buildUploadFailMessage(err)
-					__f__('log','at pkg/api/modules/media.uts:616','media upload fail:', resolvedFilePath, failMessage, err.errCode)
+					__f__('log','at pkg/api/modules/media.uts:639','media upload fail:', resolvedFilePath, failMessage, err.errCode)
 					reject(new Error(failMessage))
 				},
 			})
 		} catch (error) {
-			__f__('log','at pkg/api/modules/media.uts:621','media upload throw:', resolvedFilePath, stringValue((error as Error).message))
+			__f__('log','at pkg/api/modules/media.uts:644','media upload throw:', resolvedFilePath, safeErrorMessage(error))
 			reject(error)
 		}
 	})
@@ -629,7 +652,7 @@ function deleteMediaFileRequest(id: number | string): Promise<boolean> {
 		const headers = buildUploadHeaders()
 		headers['content-type'] = 'application/json'
 		const requestUrl = baseUrl + mediaFilePath(id)
-		__f__('log','at pkg/api/modules/media.uts:632','请求地址:', requestUrl)
+		__f__('log','at pkg/api/modules/media.uts:655','请求地址:', requestUrl)
 		uni.request({
 			url: requestUrl,
 			method: 'DELETE',
@@ -714,7 +737,7 @@ export function regenerateMediaThumbnail(id: number | string): Promise<any> {
 export async function batchUploadMediaFiles(items: MediaBatchUploadItem[]): Promise<MediaBatchUploadResult> {
 	const successItems: UTSJSONObject[] = []
 	const failItems: UTSJSONObject[] = []
-	__f__('log','at pkg/api/modules/media.uts:717','media batch upload count:', items.length)
+	__f__('log','at pkg/api/modules/media.uts:740','media batch upload count:', items.length)
 	if (items.length == 0) {
 		return {
 			successItems: successItems,
@@ -748,7 +771,7 @@ export async function batchUploadMediaFiles(items: MediaBatchUploadItem[]): Prom
 			}
 		}
 	} catch (error) {
-		const message = stringValue((error as Error).message)
+		const message = safeErrorMessage(error)
 		for (let index = 0; index < items.length; index += 1) {
 			failItems.push({
 				filePath: items[index].filePath,

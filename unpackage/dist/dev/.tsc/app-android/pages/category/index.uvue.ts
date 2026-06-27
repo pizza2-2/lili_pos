@@ -2,13 +2,14 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import { computed, onUnmounted } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteCategory, getCategoryChildren, getCategoryRoots, CategoryItem, CategoryRootsQuery } from '@/pkg/api/modules/category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type FilterOption = { __$originalPosition?: UTSSourceMapPosition<"FilterOption", "pages/category/index.uvue", 171, 6>;
+type FilterOption = { __$originalPosition?: UTSSourceMapPosition<"FilterOption", "pages/category/index.uvue", 172, 6>;
 	value: string
 	text: string
 }
 
-type ChildGroup = { __$originalPosition?: UTSSourceMapPosition<"ChildGroup", "pages/category/index.uvue", 176, 6>;
+type ChildGroup = { __$originalPosition?: UTSSourceMapPosition<"ChildGroup", "pages/category/index.uvue", 177, 6>;
 	parentId: number
 	items: CategoryItem[]
 }
@@ -60,13 +61,9 @@ const orderingFilterOptions = ref<FilterOption[]>([
 function parseErrorMessage(error: any): string {
 	let message = '分类列表加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/index.uvue:226")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/category/index.uvue:223")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -127,7 +124,7 @@ function parseStoredObject(value: any | null): UTSJSONObject | null {
 	if (text == '') {
 		return null
 	}
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/index.uvue:287")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/category/index.uvue:284")
 }
 
 function containsNodeId(list: string[], id: number): boolean {
@@ -249,10 +246,7 @@ async function ensureChildrenLoaded(item: CategoryItem): Promise<boolean> {
 		}
 		return true
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 		return false
 	} finally {
 		loadingNodeIds.value = removeNodeId(loadingNodeIds.value, item.id)
@@ -499,7 +493,7 @@ function goToEdit(item: CategoryItem): void {
 
 function goToAddChild(item: CategoryItem): void {
 	uni.navigateTo({
-		url: '/pages/category/from?parent_id=' + item.id + '&parent_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(item.name), " at pages/category/index.uvue:659") + '&mode=add',
+		url: '/pages/category/from?parent_id=' + item.id + '&parent_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(item.name), " at pages/category/index.uvue:653") + '&mode=add',
 	})
 }
 
@@ -528,10 +522,7 @@ async function executeDelete(item: CategoryItem): Promise<void> {
 		})
 		loadRootCategories()
 	} catch (error) {
-		uni.showToast({
-			title: parseErrorMessage(error),
-			icon: 'none',
-		})
+		showErrorToast(parseErrorMessage(error))
 	} finally {
 		isOperating.value = false
 	}

@@ -54,7 +54,7 @@ open class GenPagesTransactionsIndex : BasePage {
             val filterPanelHeight = ref(440)
             val filterContentHeight = ref(376)
             val fieldConfig = ref(_uA<UTSJSONObject>(_uO("key" to "transactionTypeText", "label" to "类型:"), _uO("key" to "filesText", "label" to "附件:"), _uO("key" to "noteText", "label" to "备注:")))
-            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "edit", "text" to "编辑"), _uO("key" to "delete", "text" to "删除")))
+            val menuActions = ref(_uA<UTSJSONObject>(_uO("key" to "ksef", "text" to "查看KSeF"), _uO("key" to "edit", "text" to "编辑"), _uO("key" to "delete", "text" to "删除")))
             val defaultFilterDefinitions = ref(_uA<TransactionFilterDefinition>(TransactionFilterDefinition(key = "transaction_type", param = "transaction_type", label = "记录类型", control = "choice", aliases = _uA<String>(), multiple = false, options = _uA(
                 TransactionFilterOption(value = "1", label = "采购"),
                 TransactionFilterOption(value = "2", label = "欠单"),
@@ -84,13 +84,9 @@ open class GenPagesTransactionsIndex : BasePage {
             fun gen_parseErrorMessage_fn(error: Any): String {
                 var message = "采购记录加载失败"
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:256")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/transactions/index.uvue:254")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -577,7 +573,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 val titleText = stringValue(payload["title"], "采购记录")
                 val itemValue = payload["item"]
                 if (itemValue == null) {
-                    uni_showToast(ShowToastOptions(title = titleText, icon = "none"))
+                    uni_showToast(ShowToastOptions(title = titleText, icon = "none", duration = 3500))
                     return
                 }
                 val item = itemValue as UTSJSONObject
@@ -647,12 +643,24 @@ open class GenPagesTransactionsIndex : BasePage {
             val handleFieldClick = ::gen_handleFieldClick_fn
             fun gen_handleCreateTransaction_fn() {
                 if (supplierId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "供应商ID缺失", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "供应商ID缺失", icon = "none", duration = 3500))
                     return
                 }
                 uni_navigateTo(NavigateToOptions(url = "/pages/transactions/from?supplier_id=" + supplierId.value))
             }
             val handleCreateTransaction = ::gen_handleCreateTransaction_fn
+            fun gen_openKsefForCurrentSupplier_fn() {
+                if (supplierId.value == "") {
+                    uni_showToast(ShowToastOptions(title = "供应商ID缺失", icon = "none", duration = 3500))
+                    return
+                }
+                var url = "/pages/ksef/index?supplier_id=" + supplierId.value
+                if (supplierName.value != "") {
+                    url += "&supplier_name=" + UTSAndroid.consoleDebugError(encodeURIComponent(supplierName.value), " at pages/transactions/index.uvue:768")
+                }
+                uni_navigateTo(NavigateToOptions(url = url))
+            }
+            val openKsefForCurrentSupplier = ::gen_openKsefForCurrentSupplier_fn
             fun gen_confirmDeleteTransaction_fn(transactionId: String): UTSPromise<Unit> {
                 return wrapUTSPromise(suspend {
                         try {
@@ -662,7 +670,7 @@ open class GenPagesTransactionsIndex : BasePage {
                             refreshTransactionData()
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error), icon = "none"))
+                            showErrorToast(parseErrorMessage(error))
                         }
                 })
             }
@@ -687,7 +695,11 @@ open class GenPagesTransactionsIndex : BasePage {
                     (transactionIdValue as String)
                 }
                 if (transactionId == "") {
-                    uni_showToast(ShowToastOptions(title = "采购记录ID缺失", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "采购记录ID缺失", icon = "none", duration = 3500))
+                    return
+                }
+                if (key == "ksef") {
+                    openKsefForCurrentSupplier()
                     return
                 }
                 if (key == "edit") {
@@ -695,7 +707,7 @@ open class GenPagesTransactionsIndex : BasePage {
                     return
                 }
                 if (key == "Detail") {
-                    uni_showToast(ShowToastOptions(title = "当前已在详情页", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "当前已在详情页", icon = "none", duration = 3500))
                     return
                 }
                 if (key == "add") {
@@ -816,7 +828,7 @@ open class GenPagesTransactionsIndex : BasePage {
                 if (supplierNameValue == null) {
                     supplierName.value = ""
                 } else {
-                    val decodedSupplierName = UTSAndroid.consoleDebugError(decodeURIComponent(supplierNameValue as String), " at pages/transactions/index.uvue:921")
+                    val decodedSupplierName = UTSAndroid.consoleDebugError(decodeURIComponent(supplierNameValue as String), " at pages/transactions/index.uvue:936")
                     supplierName.value = if (decodedSupplierName == null) {
                         ""
                     } else {

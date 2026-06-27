@@ -45,13 +45,9 @@ function stringValue(value: any | null, fallback: string = ''): string {
 function parseErrorMessage(error: any): string {
 	let message = '商店资料加载失败'
 	if (error != null) {
-		const directMessage = (error as Error).message
-		if (directMessage != null && directMessage != '') {
-			message = directMessage
-		}
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/media.uvue:114")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/shop/media.uvue:110")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -209,7 +205,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string): void 
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -270,7 +266,7 @@ function handleItemClick(payload: UTSJSONObject): void {
 	const title = stringValue(payload['title'], '商店资料')
 	uni.showToast({
 		title: title,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -294,7 +290,7 @@ function handleMenu(payload: UTSJSONObject): void {
 function handleCreateMedia(): void {
 	const url = shopId.value == ''
 		? '/pages/shop/from'
-		: ('/pages/shop/from?shop_id=' + shopId.value + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:357"))
+		: ('/pages/shop/from?shop_id=' + shopId.value + '&shop_name=' + UTSAndroid.consoleDebugError(encodeURIComponent(shopName.value), " at pages/shop/media.uvue:353"))
 	uni.navigateTo({
 		url: url,
 	})
@@ -390,7 +386,7 @@ const emptyText = computed((): string => {
 onLoad((event: OnLoadOptions) => {
 	shopId.value = stringValue(event['shop_id'])
 	const rawShopName = stringValue(event['shop_name'])
-	shopName.value = rawShopName == '' ? '' : stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:453"))
+	shopName.value = rawShopName == '' ? '' : stringValue(UTSAndroid.consoleDebugError(decodeURIComponent(rawShopName), " at pages/shop/media.uvue:449"))
 	loadShopMedia()
 })
 

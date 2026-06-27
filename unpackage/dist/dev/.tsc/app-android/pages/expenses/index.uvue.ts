@@ -3,8 +3,9 @@ import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/compon
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteExpense, ExpenseFilterDefinition, ExpenseFilterOptionsResponse, ExpenseItem, ExpenseListResponse, ExpenseMediaFile, getExpenseFilterOptions, getExpenseList } from '@/pkg/api/modules/expenses.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type ExpenseSelectedFilter = { __$originalPosition?: UTSSourceMapPosition<"ExpenseSelectedFilter", "pages/expenses/index.uvue", 128, 6>;
+type ExpenseSelectedFilter = { __$originalPosition?: UTSSourceMapPosition<"ExpenseSelectedFilter", "pages/expenses/index.uvue", 129, 6>;
 	param: string
 	value: string
 }
@@ -120,7 +121,7 @@ function toggleFilterOption(param: string, value: string) {
 
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
-		uni.showToast({ title: emptyTitle, icon: 'none' })
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
 		return
 	}
 	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
@@ -323,7 +324,7 @@ async function runDelete(id: string) {
 		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
 		loadExpenses()
 	} catch (error) {
-		uni.showToast({ title: parseErrorMessage(error, '删除失败'), icon: 'none' })
+		showErrorToast(parseErrorMessage(error, '删除失败'))
 	}
 }
 

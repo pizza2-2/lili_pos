@@ -22,8 +22,8 @@ open class GenPagesLoginLogin : BasePage {
             val __ins = getCurrentInstance()!!
             val _ctx = __ins.proxy as GenPagesLoginLogin
             val _cache = __ins.renderCache
-            val username = ref("733063605")
-            val password = ref("Luochaowei88")
+            val username = ref("")
+            val password = ref("")
             val showPassword = ref(false)
             val isSubmitting = ref(false)
             fun gen_togglePassword_fn() {
@@ -46,11 +46,11 @@ open class GenPagesLoginLogin : BasePage {
                             return@w1
                         }
                         if (username.value == "") {
-                            uni_showToast(ShowToastOptions(title = "请输入账号", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请输入账号", icon = "none", duration = 3500))
                             return@w1
                         }
                         if (password.value == "") {
-                            uni_showToast(ShowToastOptions(title = "请输入密码", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "请输入密码", icon = "none", duration = 3500))
                             return@w1
                         }
                         isSubmitting.value = true
@@ -82,7 +82,7 @@ open class GenPagesLoginLogin : BasePage {
                                     }
                                 }
                             }
-                            uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                            uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                         }
                          finally {
                             isSubmitting.value = false

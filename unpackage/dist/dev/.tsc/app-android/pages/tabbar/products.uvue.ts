@@ -2,12 +2,23 @@ import _easycom_lili_universal_filter from '@/uni_modules/lili-universal-filter/
 import _easycom_lili_UniversalList from '@/uni_modules/lili-UniversalList/components/lili-UniversalList/lili-UniversalList.uvue'
 import { computed } from 'vue'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
-import { request } from '@/pkg/api/index.uts'
-import { getProductFilterOptions, getProductList, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { batchDeleteProducts, batchUpdateProductCategory, batchUpdateProductStatus, batchUpdateProductSupplier, getProductFilterOptions, getProductList, ProductBatchActionResponse, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+import { showErrorToast } from '@/pkg/util/toast.uts'
 
-type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 170, 6>;
+type ProductSelectOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSelectOption", "pages/tabbar/products.uvue", 274, 6>;
+	value: string
+	text: string
+}
+
+type ProductStatusOption = { __$originalPosition?: UTSSourceMapPosition<"ProductStatusOption", "pages/tabbar/products.uvue", 279, 6>;
+	value: string
+	text: string
+}
+
+type ProductSortOption = { __$originalPosition?: UTSSourceMapPosition<"ProductSortOption", "pages/tabbar/products.uvue", 284, 6>;
 	value: string
 	text: string
 }
@@ -36,21 +47,60 @@ const selectedFilters = ref<ProductSelectedFilter[]>([])
 const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
+const sortOrdering = ref('-updated_at')
 const filterPanelHeight = ref(456)
 const filterContentHeight = ref(392)
 const volumeScanLocked = ref(false)
+const selectionMode = ref(false)
+const selectedProductIds = ref<string[]>([])
+const batchSubmitting = ref(false)
+const batchEditorVisible = ref(false)
+const batchEditorType = ref('')
+const batchCategoryValue = ref('')
+const batchCategoryText = ref('')
+const batchSupplierValue = ref('')
+const batchSupplierText = ref('')
+const batchStatusValue = ref('')
+const batchStatusText = ref('')
 
 const fieldConfig = ref<UTSJSONObject[]>([
-	{ key: 'supplierText', label: '供应商：' } as UTSJSONObject,
-	{ key: 'purchasePriceText', label: '含税进价：' } as UTSJSONObject,
+	{ key: 'supplierText', label: '供应商：', hideWhenEmpty: true } as UTSJSONObject,
+	{ key: 'stockQuantityText', label: '库存数量：' } as UTSJSONObject,
+	{ key: 'purchasePriceText', label: '含税进价：', hideWhenEmpty: true } as UTSJSONObject,
 	{ key: 'salesPriceText', label: '售价：' } as UTSJSONObject,
 	{ key: 'salesCountText', label: '销量：' } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'copy-product', text: '复制商品' } as UTSJSONObject,
 	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const batchToolbarActions = ref<UTSJSONObject[]>([
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+	{ key: 'update-category', text: '改分类' } as UTSJSONObject,
+	{ key: 'update-supplier', text: '改供应商' } as UTSJSONObject,
+	{ key: 'update-status', text: '改状态' } as UTSJSONObject,
+])
+
+const productStatusOptions = ref<ProductStatusOption[]>([
+	{ value: 'DRAFT', text: '草稿' } as ProductStatusOption,
+	{ value: 'ACTIVE', text: '启用' } as ProductStatusOption,
+	{ value: 'INACTIVE', text: '停用' } as ProductStatusOption,
+	{ value: 'DISCONTINUED', text: '停产' } as ProductStatusOption,
+])
+
+const productSortOptions = ref<ProductSortOption[]>([
+	{ value: '-updated_at', text: '最近更新' } as ProductSortOption,
+	{ value: '-created_at', text: '最新创建' } as ProductSortOption,
+	{ value: 'sort_order', text: '手动排序' } as ProductSortOption,
+	{ value: 'name_cn', text: '名称正序' } as ProductSortOption,
+	{ value: '-total_stock_quantity', text: '库存最多' } as ProductSortOption,
+	{ value: '-total_sales_quantity', text: '销量最高' } as ProductSortOption,
+	{ value: 'base_sales_price', text: '售价最低' } as ProductSortOption,
+	{ value: '-base_sales_price', text: '售价最高' } as ProductSortOption,
 ])
 
 const tagColorMap = ref<UTSJSONObject>({
@@ -82,7 +132,7 @@ function parseErrorMessage(error: any): string {
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:237")
+			const parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/tabbar/products.uvue:390")
 			if (parsedError != null) {
 				const rawMessage = parsedError['message']
 				if (rawMessage != null) {
@@ -98,6 +148,73 @@ function parseErrorMessage(error: any): string {
 		}
 	}
 	return message
+}
+
+function numberValue(value: any | null): number {
+	if (value == null) {
+		return 0
+	}
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+function selectedCountText(): string {
+	return selectedProductIds.value.length.toString()
+}
+
+function clearSelectionState() {
+	selectionMode.value = false
+	selectedProductIds.value = [] as string[]
+}
+
+function handleSelectionModeChange(value: boolean) {
+	selectionMode.value = value
+	if (!value) {
+		selectedProductIds.value = [] as string[]
+	}
+}
+
+function handleSelectedProductIdsChange(value: string[]) {
+	const nextIds: string[] = []
+	for (let index = 0; index < value.length; index += 1) {
+		nextIds.push(value[index])
+	}
+	selectedProductIds.value = nextIds
+}
+
+function handleSelectionExit(payload: UTSJSONObject) {
+	clearSelectionState()
+}
+
+function selectedProductIdsSnapshot(): string[] {
+	const result: string[] = []
+	for (let index = 0; index < selectedProductIds.value.length; index += 1) {
+		result.push(selectedProductIds.value[index])
+	}
+	return result
+}
+
+function ensureBatchSelection(): boolean {
+	if (selectedProductIds.value.length > 0) {
+		return true
+	}
+	uni.showToast({
+		title: '请先选择商品',
+		icon: 'none', duration: 3500,
+	})
+	return false
+}
+
+function resetBatchDraft() {
+	batchCategoryValue.value = ''
+	batchCategoryText.value = ''
+	batchSupplierValue.value = ''
+	batchSupplierText.value = ''
+	batchStatusValue.value = ''
+	batchStatusText.value = ''
 }
 
 function updateFilterPanelLayout() {
@@ -132,10 +249,10 @@ async function loadProducts() {
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
+			ordering: sortOrdering.value,
 			filters: selectedFilters.value,
 		})
 		applyProductResponse(response)
-		console.log("输出打印",response, " at pages/tabbar/products.uvue:290")
 	} catch (error) {
 		products.value = []
 		currentPage.value = 1
@@ -176,7 +293,7 @@ function parseObject(value: any | null): UTSJSONObject | null {
 		return null
 	}
 
-	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:331")
+	return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/tabbar/products.uvue:551")
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
@@ -189,7 +306,7 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 		return []
 	}
 
-	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:344")
+	const parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/tabbar/products.uvue:564")
 	if (parsed == null) {
 		return []
 	}
@@ -519,7 +636,7 @@ function buildCategoryTreeResponse(raw: any): UTSJSONObject {
 
 async function fetchSupplierFilterOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const keywordValue = stringValue(params['keyword'])
-	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 674, 8), 
+	const query: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("query", "pages/tabbar/products.uvue", 894, 8), 
 		key: 'supplier',
 		limit: 50,
 	} as UTSJSONObject
@@ -542,7 +659,7 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 	const parentValue = stringValue(params['parent'])
 	const pageSizeValue = stringValue(params['pageSize'], '20')
 
-	const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 697, 8), 
+	const queryParams: UTSJSONObject = { __$originalPosition: new UTSSourceMapPosition("queryParams", "pages/tabbar/products.uvue", 917, 8), 
 		key: 'parent',
 		page: parseInt(pageValue == '' ? '1' : pageValue),
 		page_size: parseInt(pageSizeValue),
@@ -562,6 +679,193 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 		true
 	)
 	return buildCategoryTreeResponse(raw)
+}
+
+function batchActionTitle(actionKey: string): string {
+	if (actionKey == 'delete') return '批量删除'
+	if (actionKey == 'update-category') return '批量修改分类'
+	if (actionKey == 'update-supplier') return '批量修改供应商'
+	if (actionKey == 'update-status') return '批量修改状态'
+	return '批量操作'
+}
+
+function batchActionConfirmText(actionKey: string, count: number): string {
+	if (actionKey == 'delete') return '确定删除选中的 ' + count.toString() + ' 个商品吗？'
+	if (actionKey == 'update-category') return '确定将选中的 ' + count.toString() + ' 个商品修改到该分类吗？'
+	if (actionKey == 'update-supplier') return '确定将选中的 ' + count.toString() + ' 个商品修改到该供应商吗？'
+	if (actionKey == 'update-status') return '确定将选中的 ' + count.toString() + ' 个商品修改为该状态吗？'
+	return '确定执行批量操作吗？'
+}
+
+function batchResultMessage(response: ProductBatchActionResponse, fallback: string): string {
+	let message = takeLatestResponseMessage(fallback)
+	if (message == '') {
+		message = fallback
+	}
+	const summaryObject = parseObject(response.data['summary'])
+	if (summaryObject == null) {
+		return message
+	}
+
+	const successCount = numberValue(summaryObject['success_count'])
+	const failureCount = numberValue(summaryObject['failure_count'])
+	const skippedCount = numberValue(summaryObject['skipped_count'])
+	if (failureCount > 0) {
+		return '成功' + successCount.toString() + '，失败' + failureCount.toString()
+	}
+	if (skippedCount > 0) {
+		return '成功' + successCount.toString() + '，跳过' + skippedCount.toString()
+	}
+	return message
+}
+
+function batchResultHasIssue(response: ProductBatchActionResponse): boolean {
+	const summaryObject = parseObject(response.data['summary'])
+	if (summaryObject == null) {
+		return false
+	}
+	return numberValue(summaryObject['failure_count']) > 0 || numberValue(summaryObject['skipped_count']) > 0
+}
+
+async function executeProductBatchAction(actionKey: string) {
+	if (batchSubmitting.value || !ensureBatchSelection()) {
+		return
+	}
+
+	const ids = selectedProductIdsSnapshot()
+	batchSubmitting.value = true
+	try {
+		let response: ProductBatchActionResponse | null = null
+		if (actionKey == 'delete') {
+			response = await batchDeleteProducts(ids)
+		} else if (actionKey == 'update-category') {
+			response = await batchUpdateProductCategory(ids, batchCategoryValue.value)
+		} else if (actionKey == 'update-supplier') {
+			response = await batchUpdateProductSupplier(ids, batchSupplierValue.value)
+		} else if (actionKey == 'update-status') {
+			response = await batchUpdateProductStatus(ids, batchStatusValue.value)
+		} else {
+			uni.showToast({ title: '暂不支持该操作', icon: 'none', duration: 3500 })
+			return
+		}
+
+		const fallbackMessage = batchActionTitle(actionKey) + '成功'
+		let resultMessage = fallbackMessage
+		let resultIcon = 'success'
+		if (response != null) {
+			const batchResponse = response as ProductBatchActionResponse
+			resultMessage = batchResultMessage(batchResponse, fallbackMessage)
+			if (batchResultHasIssue(batchResponse)) {
+				resultIcon = 'none'
+			}
+		}
+		uni.showToast({
+			title: resultMessage,
+			icon: resultIcon,
+		})
+		batchEditorVisible.value = false
+		batchEditorType.value = ''
+		resetBatchDraft()
+		clearSelectionState()
+		loadProducts()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		batchSubmitting.value = false
+	}
+}
+
+function confirmProductBatchAction(actionKey: string) {
+	if (!ensureBatchSelection()) {
+		return
+	}
+	const count = selectedProductIds.value.length
+	uni.showModal({
+		title: batchActionTitle(actionKey),
+		content: batchActionConfirmText(actionKey, count),
+		success: (res) => {
+			if (!res.confirm) {
+				return
+			}
+			executeProductBatchAction(actionKey)
+		},
+	})
+}
+
+function openBatchEditor(actionKey: string) {
+	if (!ensureBatchSelection()) {
+		return
+	}
+	resetBatchDraft()
+	batchEditorType.value = actionKey
+	batchEditorVisible.value = true
+}
+
+function closeBatchEditor() {
+	if (batchSubmitting.value) {
+		return
+	}
+	batchEditorVisible.value = false
+	batchEditorType.value = ''
+	resetBatchDraft()
+}
+
+function handleBatchCategoryChange(payload: UTSJSONObject) {
+	batchCategoryValue.value = stringValue(payload['value'])
+	batchCategoryText.value = stringValue(payload['text'])
+}
+
+function handleBatchSupplierChange(payload: UTSJSONObject) {
+	batchSupplierValue.value = stringValue(payload['value'])
+	batchSupplierText.value = stringValue(payload['text'])
+}
+
+function selectBatchStatus(option: ProductStatusOption) {
+	batchStatusValue.value = option.value
+	batchStatusText.value = option.text
+}
+
+function isBatchStatusSelected(option: ProductStatusOption): boolean {
+	return batchStatusValue.value == option.value
+}
+
+function validateBatchEditor(): boolean {
+	if (batchEditorType.value == 'update-category' && batchCategoryValue.value == '') {
+		uni.showToast({ title: '请选择分类', icon: 'none', duration: 3500 })
+		return false
+	}
+	if (batchEditorType.value == 'update-supplier' && batchSupplierValue.value == '') {
+		uni.showToast({ title: '请选择供应商', icon: 'none', duration: 3500 })
+		return false
+	}
+	if (batchEditorType.value == 'update-status' && batchStatusValue.value == '') {
+		uni.showToast({ title: '请选择状态', icon: 'none', duration: 3500 })
+		return false
+	}
+	return true
+}
+
+function confirmBatchEditor() {
+	if (batchEditorType.value == '' || !validateBatchEditor()) {
+		return
+	}
+	confirmProductBatchAction(batchEditorType.value)
+}
+
+function handleBatchToolbarAction(payload: UTSJSONObject) {
+	const actionValue = payload['action']
+	if (actionValue == null) {
+		return
+	}
+	const action = actionValue as UTSJSONObject
+	const actionKey = stringValue(action['key'])
+	if (actionKey == 'delete') {
+		confirmProductBatchAction(actionKey)
+		return
+	}
+	if (actionKey == 'update-category' || actionKey == 'update-supplier' || actionKey == 'update-status') {
+		openBatchEditor(actionKey)
+	}
 }
 
 function buildProductTags(item: ProductItem): string[] {
@@ -608,10 +912,11 @@ function productToListItem(item: ProductItem): UTSJSONObject {
 		barcodeText: '条码：' + getDisplayText(item.barcode),
 		foreignNameText: getDisplayText(item.name_en),
 		otherNameText: getDisplayText(item.name_other),
-		supplierText: getDisplayText(item.supplier_name),
-		purchasePriceText: getDisplayText(item.purchase_price),
-		netPurchasePriceText: getDisplayText(item.net_purchase_price),
-		costPriceText: getDisplayText(item.cost_price),
+		supplierText: item.supplier_name,
+		stockQuantityText: item.total_stock_quantity.toString(),
+		purchasePriceText: item.purchase_price,
+		netPurchasePriceText: item.net_purchase_price,
+		costPriceText: item.cost_price,
 		salesPriceText: getDisplayText(item.base_sales_price),
 		salesCountText: item.total_sales_quantity.toString(),
 		variantCountText: item.variant_count.toString(),
@@ -630,7 +935,7 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({
 			title: emptyTitle,
-			icon: 'none',
+			icon: 'none', duration: 3500,
 		})
 		return
 	}
@@ -675,7 +980,7 @@ function handleScanSearch() {
 		},
 		fail: (res: GeneralCallbackResult) => {
 			const message = res.errMsg == '' ? '扫码失败' : res.errMsg
-			uni.showToast({ title: message, icon: 'none' })
+			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
 }
@@ -785,6 +1090,10 @@ function toggleFilterOption(param: string, value: string, multiple: boolean) {
 	setSelectedFilterValue(param, nextValues.join(','))
 }
 
+function selectSortOption(option: ProductSortOption) {
+	sortOrdering.value = option.value
+}
+
 function handlePageChange(payload: UTSJSONObject) {
 	const pageValue = payload['page']
 	if (pageValue == null) {
@@ -805,6 +1114,7 @@ function handleFilterReset() {
 	supplierFilterValue.value = ''
 	supplierFilterText.value = ''
 	categoryFilterValues.value = []
+	sortOrdering.value = '-updated_at'
 	keyword.value = ''
 	currentPage.value = 1
 	closeFilterDrawer()
@@ -821,7 +1131,7 @@ function handleItemClick(payload: UTSJSONObject) {
 	const itemName = stringValue(payload['name'], '商品')
 	uni.showToast({
 		title: itemName,
-		icon: 'none',
+		icon: 'none', duration: 3500,
 	})
 }
 
@@ -888,12 +1198,12 @@ function handleFieldClick(payload: UTSJSONObject) {
 function navigateToProductInventory(item: UTSJSONObject) {
 	const rawId = stringValue(item['rawId'], stringValue(item['id']))
 	if (rawId == '') {
-		uni.showToast({ title: '缺少商品ID', icon: 'none' })
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
 		return
 	}
 	const productName = stringValue(item['name'])
 	let url = '/pages/inventory-management/from?product=' + rawId
-	if (productName != '') url = url + '&productName=' + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1048")
+	if (productName != '') url = url + '&productName=' + UTSAndroid.consoleDebugError(encodeURIComponent(productName), " at pages/tabbar/products.uvue:1461")
 	uni.navigateTo({
 		url: url,
 	})
@@ -924,6 +1234,17 @@ function handleMenu(payload: UTSJSONObject) {
 		}
 		uni.navigateTo({
 			url: '/pages/products/from?id=' + rawId,
+		})
+		return
+	}
+	if (key == 'copy-product') {
+		const rawId = stringValue(item['rawId'])
+		if (rawId == '') {
+			uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
+			return
+		}
+		uni.navigateTo({
+			url: '/pages/products/from?copy_id=' + rawId,
 		})
 		return
 	}
@@ -959,6 +1280,18 @@ const listItems = computed((): UTSJSONObject[] => {
 	return result
 })
 
+const batchInfoText = computed((): string => {
+	return '已选 ' + selectedCountText() + ' 个商品'
+})
+
+const batchEditorTitle = computed((): string => {
+	return batchActionTitle(batchEditorType.value)
+})
+
+const batchEditorSubtitle = computed((): string => {
+	return '当前已选 ' + selectedCountText() + ' 个商品'
+})
+
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{
@@ -980,7 +1313,7 @@ const summaryItems = computed((): UTSJSONObject[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedFilters.value.length > 0
+	return keyword.value != '' || selectedFilters.value.length > 0 || sortOrdering.value != '-updated_at'
 })
 
 const emptyText = computed((): string => {
@@ -1062,6 +1395,7 @@ return (): any | null => {
 
 const _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter",_easycom_lili_universal_filter)
 const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",_easycom_lili_UniversalList)
+const _component_page_container = resolveComponent("page-container")
 
   return _cE("view", _uM({ class: "page" }), [
     _cV(_component_lili_universal_filter, _uM({
@@ -1128,6 +1462,22 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
                     fetchData: fetchCategoryFilterOptions,
                     onMultiChange: handleCategoryMultiChange
                   }), null, 8 /* PROPS */, ["values"])
+                ])
+              ]),
+              _cE("view", _uM({ class: "product-filter-select-group" }), [
+                _cE("text", _uM({ class: "product-filter-select-title" }), "排序"),
+                _cE("view", _uM({ class: "product-filter-options" }), [
+                  _cE(Fragment, null, RenderHelpers.renderList(unref(productSortOptions), (option, __key, __index, _cached): any => {
+                    return _cE("view", _uM({
+                      key: option.value,
+                      class: _nC(unref(sortOrdering) == option.value ? 'product-filter-option product-filter-option-active' : 'product-filter-option'),
+                      onClick: () => {selectSortOption(option)}
+                    }), [
+                      _cE("text", _uM({
+                        class: _nC(unref(sortOrdering) == option.value ? 'product-filter-option-text product-filter-option-text-active' : 'product-filter-option-text')
+                      }), _tD(option.text), 3 /* TEXT, CLASS */)
+                    ], 10 /* CLASS, PROPS */, ["onClick"])
+                  }), 128 /* KEYED_FRAGMENT */)
                 ])
               ]),
               isTrue(unref(filterOptionsLoading))
@@ -1236,11 +1586,19 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           currentPage: unref(currentPage),
           totalPages: unref(totalPages),
           totalCount: unref(totalCount),
+          selectionMode: unref(selectionMode),
+          selectedItems: unref(selectedProductIds),
+          batchActions: unref(batchToolbarActions),
+          batchInfoText: batchInfoText.value,
           summaryTitle: "商品概览",
           summaryItems: summaryItems.value,
           summaryCollapsedByDefault: true,
           showFloatingAdd: true,
           floatingAddText: "新增商品",
+          "onUpdate:selectionMode": handleSelectionModeChange,
+          "onUpdate:selectedItems": handleSelectedProductIdsChange,
+          onSelectionExit: handleSelectionExit,
+          onBatchAction: handleBatchToolbarAction,
           onItemClick: handleItemClick,
           onSubtitleClick: handleSubtitleClick,
           onMetaClick: handleMetaClick,
@@ -1248,13 +1606,117 @@ const _component_lili_UniversalList = resolveEasyComponent("lili-UniversalList",
           onMenu: handleMenu,
           onPageChange: handlePageChange,
           onFloatingAdd: handleFloatingAdd
-        }), null, 8 /* PROPS */, ["items", "tagColorMap", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "summaryItems"])
+        }), null, 8 /* PROPS */, ["items", "tagColorMap", "fields", "loading", "emptyText", "menuActions", "currentPage", "totalPages", "totalCount", "selectionMode", "selectedItems", "batchActions", "batchInfoText", "summaryItems"])
       ])
-    ], 4 /* STYLE */)
+    ], 4 /* STYLE */),
+    _cV(_component_page_container, _uM({
+      show: unref(batchEditorVisible),
+      position: "bottom",
+      round: true,
+      overlay: true,
+      duration: 240,
+      "overlay-style": "background-color: rgba(15, 23, 42, 0.42);",
+      "custom-style": "background-color: #FFFFFF;",
+      onClickoverlay: closeBatchEditor
+    }), _uM({
+      default: withSlotCtx((): any[] => [
+        _cE("view", _uM({ class: "batch-panel" }), [
+          _cE("view", _uM({ class: "batch-handle" })),
+          _cE("view", _uM({ class: "batch-head" }), [
+            _cE("view", null, [
+              _cE("text", _uM({ class: "batch-title" }), _tD(batchEditorTitle.value), 1 /* TEXT */),
+              _cE("text", _uM({ class: "batch-subtitle" }), _tD(batchEditorSubtitle.value), 1 /* TEXT */)
+            ]),
+            _cE("view", _uM({
+              class: "batch-close",
+              onClick: closeBatchEditor
+            }), [
+              _cE("text", _uM({ class: "batch-close-text" }), "关闭")
+            ])
+          ]),
+          unref(batchEditorType) == 'update-category'
+            ? _cE("view", _uM({
+                key: 0,
+                class: "batch-field"
+              }), [
+                _cE("text", _uM({ class: "batch-label" }), "目标分类"),
+                _cV(unref(liliBottomSelect), _uM({
+                  value: unref(batchCategoryValue),
+                  valueText: unref(batchCategoryText),
+                  title: "批量修改分类",
+                  placeholder: "请选择分类",
+                  searchPlaceholder: "请输入分类名称",
+                  emptyText: "暂无分类",
+                  tree: true,
+                  checkStrictly: false,
+                  showAddAction: false,
+                  showEditAction: false,
+                  fetchData: fetchCategoryFilterOptions,
+                  onChange: handleBatchCategoryChange
+                }), null, 8 /* PROPS */, ["value", "valueText"])
+              ])
+            : unref(batchEditorType) == 'update-supplier'
+              ? _cE("view", _uM({
+                  key: 1,
+                  class: "batch-field"
+                }), [
+                  _cE("text", _uM({ class: "batch-label" }), "目标供应商"),
+                  _cV(unref(liliBottomSelect), _uM({
+                    value: unref(batchSupplierValue),
+                    valueText: unref(batchSupplierText),
+                    title: "批量修改供应商",
+                    placeholder: "请选择供应商",
+                    searchPlaceholder: "请输入供应商名称",
+                    emptyText: "暂无供应商",
+                    showAddAction: false,
+                    showEditAction: false,
+                    fetchData: fetchSupplierFilterOptions,
+                    onChange: handleBatchSupplierChange
+                  }), null, 8 /* PROPS */, ["value", "valueText"])
+                ])
+              : unref(batchEditorType) == 'update-status'
+                ? _cE("view", _uM({
+                    key: 2,
+                    class: "batch-field"
+                  }), [
+                    _cE("text", _uM({ class: "batch-label" }), "目标状态"),
+                    _cE("view", _uM({ class: "batch-status-options" }), [
+                      _cE(Fragment, null, RenderHelpers.renderList(unref(productStatusOptions), (option, __key, __index, _cached): any => {
+                        return _cE("view", _uM({
+                          key: option.value,
+                          class: _nC(isBatchStatusSelected(option) ? 'batch-status-option batch-status-option-active' : 'batch-status-option'),
+                          onClick: () => {selectBatchStatus(option)}
+                        }), [
+                          _cE("text", _uM({
+                            class: _nC(isBatchStatusSelected(option) ? 'batch-status-option-text batch-status-option-text-active' : 'batch-status-option-text')
+                          }), _tD(option.text), 3 /* TEXT, CLASS */)
+                        ], 10 /* CLASS, PROPS */, ["onClick"])
+                      }), 128 /* KEYED_FRAGMENT */)
+                    ])
+                  ])
+                : _cC("v-if", true),
+          _cE("view", _uM({ class: "batch-actions" }), [
+            _cE("view", _uM({
+              class: "batch-secondary-btn",
+              onClick: closeBatchEditor
+            }), [
+              _cE("text", _uM({ class: "batch-secondary-text" }), "取消")
+            ]),
+            _cE("view", _uM({
+              class: "batch-primary-btn",
+              onClick: confirmBatchEditor
+            }), [
+              _cE("text", _uM({ class: "batch-primary-text" }), _tD(unref(batchSubmitting) ? '处理中...' : '确认修改'), 1 /* TEXT */)
+            ])
+          ])
+        ])
+      ]),
+      _: 1 /* STABLE */
+    }), 8 /* PROPS */, ["show"])
   ])
 }
 }
 
 })
 export default __sfc__
-const GenPagesTabbarProductsStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["paddingLeft", 18], ["paddingRight", 18], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#B42318"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["product-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["product-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["product-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["product-filter-select-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-select-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-select-wrap", _pS(_uM([["marginTop", 8]]))], ["product-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["product-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["product-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["product-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))], ["product-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["product-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["product-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["product-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["product-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["product-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["product-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["product-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["marginTop", 0], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))]])]
+const GenPagesTabbarProductsStyles = [_uM([["page", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-scroll", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["backgroundColor", "#F6F7FB"]]))], ["page-content", _pS(_uM([["paddingLeft", 6], ["paddingRight", 6], ["paddingTop", 6], ["paddingBottom", 96]]))], ["error-card", _pS(_uM([["backgroundColor", "#FFFFFF"], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["paddingTop", 18], ["paddingRight", 18], ["paddingBottom", 18], ["paddingLeft", 18], ["marginBottom", 14], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#FECACA"], ["borderRightColor", "#FECACA"], ["borderBottomColor", "#FECACA"], ["borderLeftColor", "#FECACA"], ["alignItems", "center"]]))], ["error-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#B42318"], ["fontWeight", "bold"]]))], ["error-desc", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#7F1D1D"], ["marginTop", 8], ["textAlign", "center"]]))], ["retry-btn", _pS(_uM([["marginTop", 14], ["height", 40], ["paddingLeft", 18], ["paddingRight", 18], ["borderTopLeftRadius", 20], ["borderTopRightRadius", 20], ["borderBottomRightRadius", 20], ["borderBottomLeftRadius", 20], ["backgroundColor", "#B42318"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["retry-btn-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))], ["product-filter-panel", _pS(_uM([["position", "relative"], ["paddingTop", 2]]))], ["product-filter-content-scroll", _pS(_uM([["paddingRight", 2]]))], ["product-filter-scroll-inner", _pS(_uM([["paddingBottom", 58]]))], ["product-filter-select-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-select-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-select-wrap", _pS(_uM([["marginTop", 8]]))], ["product-filter-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 38], ["borderTopLeftRadius", 11], ["borderTopRightRadius", 11], ["borderBottomRightRadius", 11], ["borderBottomLeftRadius", 11], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-btn-light", _pS(_uM([["backgroundColor", "#F3F6FA"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 8]]))], ["product-filter-btn-primary", _pS(_uM([["backgroundColor", "#0F172A"]]))], ["product-filter-btn-light-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#475569"]]))], ["product-filter-btn-primary-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#FFFFFF"]]))], ["product-filter-state", _pS(_uM([["height", 112], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#F8FAFC"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["product-filter-state-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#64748B"]]))], ["product-filter-groups", _pS(_uM([["marginBottom", 6]]))], ["product-filter-group", _pS(_uM([["paddingLeft", 10], ["paddingRight", 10], ["paddingTop", 10], ["paddingBottom", 10], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["backgroundColor", "#FFFFFF"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E5EAF1"], ["borderRightColor", "#E5EAF1"], ["borderBottomColor", "#E5EAF1"], ["borderLeftColor", "#E5EAF1"], ["marginBottom", 6]]))], ["product-filter-group-title", _pS(_uM([["fontSize", 13], ["lineHeight", "17px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["product-filter-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"], ["marginTop", 8]]))], ["product-filter-option", _pS(_uM([["minWidth", 48], ["height", 30], ["paddingLeft", 10], ["paddingRight", 10], ["borderTopLeftRadius", 15], ["borderTopRightRadius", 15], ["borderBottomRightRadius", 15], ["borderBottomLeftRadius", 15], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 6], ["marginBottom", 6]]))], ["product-filter-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["product-filter-option-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#334155"]]))], ["product-filter-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["product-filter-actions", _pS(_uM([["position", "absolute"], ["left", 0], ["right", 0], ["bottom", 0], ["flexDirection", "row"], ["marginTop", 0], ["paddingTop", 6], ["paddingLeft", 2], ["paddingRight", 2], ["paddingBottom", 4], ["borderTopWidth", 1], ["borderTopStyle", "solid"], ["borderTopColor", "rgba(226,232,240,0.78)"], ["backgroundColor", "#FFFFFF"]]))], ["batch-panel", _pS(_uM([["paddingLeft", 18], ["paddingRight", 18], ["paddingTop", 10], ["paddingBottom", 22], ["backgroundColor", "#FFFFFF"]]))], ["batch-handle", _pS(_uM([["width", 42], ["height", 4], ["borderTopLeftRadius", 2], ["borderTopRightRadius", 2], ["borderBottomRightRadius", 2], ["borderBottomLeftRadius", 2], ["backgroundColor", "#CBD5E1"], ["alignSelf", "center"], ["marginBottom", 14]]))], ["batch-head", _pS(_uM([["flexDirection", "row"], ["alignItems", "flex-start"], ["justifyContent", "space-between"], ["marginBottom", 18]]))], ["batch-title", _pS(_uM([["fontSize", 18], ["lineHeight", "24px"], ["color", "#0F172A"], ["fontWeight", "bold"]]))], ["batch-subtitle", _pS(_uM([["fontSize", 12], ["lineHeight", "18px"], ["color", "#64748B"], ["marginTop", 3]]))], ["batch-close", _pS(_uM([["height", 32], ["paddingLeft", 12], ["paddingRight", 12], ["borderTopLeftRadius", 16], ["borderTopRightRadius", 16], ["borderBottomRightRadius", 16], ["borderBottomLeftRadius", 16], ["backgroundColor", "#F1F5F9"], ["alignItems", "center"], ["justifyContent", "center"]]))], ["batch-close-text", _pS(_uM([["fontSize", 12], ["lineHeight", "17px"], ["color", "#475569"]]))], ["batch-field", _pS(_uM([["marginBottom", 16]]))], ["batch-label", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#0F172A"], ["fontWeight", "bold"], ["marginBottom", 8]]))], ["batch-status-options", _pS(_uM([["flexDirection", "row"], ["flexWrap", "wrap"]]))], ["batch-status-option", _pS(_uM([["height", 36], ["minWidth", 72], ["paddingLeft", 14], ["paddingRight", 14], ["borderTopLeftRadius", 18], ["borderTopRightRadius", 18], ["borderBottomRightRadius", 18], ["borderBottomLeftRadius", 18], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["alignItems", "center"], ["justifyContent", "center"], ["marginRight", 8], ["marginBottom", 8]]))], ["batch-status-option-active", _pS(_uM([["backgroundColor", "#0F172A"], ["borderTopColor", "#0F172A"], ["borderRightColor", "#0F172A"], ["borderBottomColor", "#0F172A"], ["borderLeftColor", "#0F172A"]]))], ["batch-status-option-text", _pS(_uM([["fontSize", 13], ["lineHeight", "18px"], ["color", "#334155"]]))], ["batch-status-option-text-active", _pS(_uM([["color", "#FFFFFF"]]))], ["batch-actions", _pS(_uM([["flexDirection", "row"], ["marginTop", 4]]))], ["batch-secondary-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 42], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#F8FAFC"], ["borderTopWidth", 1], ["borderRightWidth", 1], ["borderBottomWidth", 1], ["borderLeftWidth", 1], ["borderTopStyle", "solid"], ["borderRightStyle", "solid"], ["borderBottomStyle", "solid"], ["borderLeftStyle", "solid"], ["borderTopColor", "#E2E8F0"], ["borderRightColor", "#E2E8F0"], ["borderBottomColor", "#E2E8F0"], ["borderLeftColor", "#E2E8F0"], ["marginRight", 10]]))], ["batch-primary-btn", _pS(_uM([["flexGrow", 1], ["flexShrink", 1], ["flexBasis", "0%"], ["height", 42], ["borderTopLeftRadius", 12], ["borderTopRightRadius", 12], ["borderBottomRightRadius", 12], ["borderBottomLeftRadius", 12], ["alignItems", "center"], ["justifyContent", "center"], ["backgroundColor", "#0F172A"]]))], ["batch-secondary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#475569"], ["fontWeight", "bold"]]))], ["batch-primary-text", _pS(_uM([["fontSize", 14], ["lineHeight", "20px"], ["color", "#FFFFFF"], ["fontWeight", "bold"]]))]])]

@@ -1,7 +1,7 @@
 import { authState, redirectToLogin } from '@/store/auth'
 
 export const baseUrl: string = 'http://43.157.91.24:1996'		//服务器请求接口地址http://43.157.91.24:1996/
-// export const baseUrl: string = 'http://192.168.43.173:8000'		//服务器请求接口地址http://43.157.91.24:1996/
+// export const baseUrl: string = 'http://192.168.1.108:8000'		//服务器请求接口地址http://43.157.91.24:1996/
 export const timeOut: number = 10000							//网络请求超时时间
 const loginApiUrl = '/api/accounts/auth/login/'
 
@@ -86,11 +86,8 @@ function shouldHandleUnauthorized(url: string) : boolean {
 	return true
 }
 
-function handleUnauthorizedResponse(url: string, showLoading: boolean) {
+function handleUnauthorizedResponse(url: string) {
 	clearLatestResponseMeta()
-	if (showLoading) {
-		uni.hideLoading()
-	}
 	if (shouldHandleUnauthorized(url)) {
 		redirectToLogin('登录状态已失效，请重新登录')
 	}
@@ -155,11 +152,26 @@ function parseRequestFailMessage(err: any | null): string {
 export async function request(url:string, method:RequestMethod, reqData:UTSJSONObject = {},showLoading:boolean = false): Promise<any> {
 	return new Promise((resolve,reject) => {
 		clearLatestResponseMeta()
+		let loadingVisible = showLoading
+		function finishLoading() {
+			if (loadingVisible) {
+				uni.hideLoading()
+				loadingVisible = false
+			}
+		}
+		function resolveDone(value: any | null) {
+			finishLoading()
+			resolve(value)
+		}
+		function rejectDone(error: any) {
+			finishLoading()
+			reject(error)
+		}
 		if(showLoading){
 			uni.showLoading({ title: 'loading' })
 		}
 		const interceptMap = requestIntercept(reqData)	//请求拦截，返回的是header和data
-		__f__('log','at pkg/api/index.uts:162','请求地址:', baseUrl + url)
+		__f__('log','at pkg/api/index.uts:174','请求地址:', baseUrl + url)
 		uni.request<any>({
 			url: baseUrl + url,
 			method: method,
@@ -169,8 +181,9 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 			success:(res) => {
 				//这里首先是判断网络请求的状态码
 				if (res.statusCode == 401) {
-					handleUnauthorizedResponse(url, showLoading)
-					reject(new Error('登录状态已失效'))
+					finishLoading()
+					handleUnauthorizedResponse(url)
+					rejectDone(new Error('登录状态已失效'))
 					return
 				}
 				const responseData = res.data
@@ -187,23 +200,24 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 						// 	setAuthToken(headers.get('token') as string)
 						// }
 						
-						resolve(responseObject!['data']);	//直接resolve服务器返回的data内容
+						resolveDone(responseObject!['data']);	//直接resolve服务器返回的data内容
 						return
 					}
 					if (responseObject != null && stringValue(responseObject!['success']) == 'false') {
 						if (intValue(responseObject!['status_code']) == 401) {
-							handleUnauthorizedResponse(url, showLoading)
-							reject(new Error('登录状态已失效'))
+							finishLoading()
+							handleUnauthorizedResponse(url)
+							rejectDone(new Error('登录状态已失效'))
 							return
 						}
 						clearLatestResponseMeta()
 						const serverMessage = stringValue(responseObject!['message'])
-						reject(new Error(serverMessage == '' ? '请求失败' : serverMessage))
+						rejectDone(new Error(serverMessage == '' ? '请求失败' : serverMessage))
 						return
 					}
 					// 兼容后端直接返回对象/数组（无 success 包裹）
 					clearLatestResponseMeta()
-					resolve(responseData)
+					resolveDone(responseData)
 					return
 				}
 				//可以做其它判断....
@@ -211,20 +225,18 @@ export async function request(url:string, method:RequestMethod, reqData:UTSJSONO
 				if (responseObject != null && stringValue(responseObject!['success']) == 'false') {
 					const serverMessage = stringValue(responseObject!['message'])
 					if (serverMessage != '') {
-						reject(new Error(serverMessage))
+						rejectDone(new Error(serverMessage))
 						return
 					}
 				}
-				reject(new Error("HTTP状态码错误: " + res.statusCode))
+				rejectDone(new Error("HTTP状态码错误: " + res.statusCode))
 			},
 			fail:(err) => {
 				clearLatestResponseMeta()
-				reject(new Error(parseRequestFailMessage(err)))
+				rejectDone(new Error(parseRequestFailMessage(err)))
 			},
 			complete:() =>{
-				if(showLoading){
-					uni.hideLoading()
-				}
+				finishLoading()
 			}
 		})
 	})

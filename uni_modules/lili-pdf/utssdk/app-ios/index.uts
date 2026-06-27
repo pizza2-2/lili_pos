@@ -1,0 +1,8 @@
+import { PdfRenderPagesOptions, RenderPdfPages } from '../interface.uts'
+import { makePdfRenderFail } from '../unierror.uts'
+
+export const renderPdfPages: RenderPdfPages = function (options: PdfRenderPagesOptions) {
+	const err = makePdfRenderFail('UNSUPPORTED_PLATFORM', '当前平台暂不支持内嵌PDF预览')
+	options.fail?.(err)
+	options.complete?.(err)
+}

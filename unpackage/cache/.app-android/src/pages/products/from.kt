@@ -34,15 +34,19 @@ open class GenPagesProductsFrom : BasePage {
             val productDiscountSelectionStorageKey = "selected_discount_for_product:"
             val formMode = ref("create")
             val productId = ref("")
+            val copySourceId = ref("")
+            val productFormRef = ref<ComponentPublicInstance?>(null)
             val leaveSignal = ref(0)
             val dirtySignal = ref(0)
             val submitting = ref(false)
             val savingVisible = ref(false)
             val savingText = ref("处理中...")
+            val printPopupVisible = ref(false)
             val pageTaskGuard = createAsyncGuard()
             val discountCards = ref(_uA<UTSJSONObject>())
             val discountCardsLoading = ref(false)
-            val initialData = ref<UTSJSONObject>(_uO("sku" to "", "barcode" to "", "name_cn" to "", "name_en" to "", "name_other" to "", "description" to "", "category_id" to "", "category_text" to "", "supplier_id" to "", "supplier_name" to "", "purchase_price" to "0.00", "net_purchase_price" to "0.00", "cost_price" to "0.00", "base_sales_price" to "0.00", "discount_rule" to "", "discount_rule_id" to "", "discounted_base_sales_price" to "0.00", "status" to "ACTIVE", "is_featured" to false, "is_new" to false, "is_bestseller" to false, "sort_order" to "0", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
+            val categoryTaxRateCache = ref<UTSJSONObject>(_uO())
+            val initialData = ref<UTSJSONObject>(_uO("sku" to "", "barcode" to "", "name_cn" to "", "name_en" to "", "name_other" to "", "description" to "", "category_id" to "", "category_text" to "", "category_kasa_kod" to "", "supplier_id" to "", "supplier_name" to "", "purchase_price" to "0.00", "net_purchase_price" to "0.00", "cost_price" to "0.00", "base_sales_price" to "0.00", "discount_rule" to "", "discount_rule_id" to "", "discounted_base_sales_price" to "0.00", "status" to "ACTIVE", "is_featured" to false, "is_new" to false, "is_bestseller" to false, "sort_order" to "0", "images" to _uA<String>(), "imageItems" to _uA<UTSJSONObject>()))
             val statusOptions = ref(_uA<SelectOption__6>(SelectOption__6(value = "ACTIVE", text = "启用"), SelectOption__6(value = "INACTIVE", text = "停用"), SelectOption__6(value = "DRAFT", text = "草稿")))
             fun stringValue(value: Any?, fallback: String = ""): String {
                 if (value == null) {
@@ -70,9 +74,98 @@ open class GenPagesProductsFrom : BasePage {
                 if (productId.value == "") {
                     return
                 }
-                uni_navigateTo(NavigateToOptions(url = "/pages/label-templates/index?mode=print&product=" + productId.value))
+                printPopupVisible.value = true
             }
             val openProductPrintPage = ::gen_openProductPrintPage_fn
+            fun gen_handlePrintPopupVisibleChange_fn(value: Boolean) {
+                printPopupVisible.value = value
+            }
+            val handlePrintPopupVisibleChange = ::gen_handlePrintPopupVisibleChange_fn
+            fun productPrintField(key: String, fallback: String = ""): String {
+                return stringValue(initialData.value[key], fallback)
+            }
+            fun gen_productPrintNameText_fn(): String {
+                val nameCn = productPrintField("name_cn")
+                if (nameCn != "") {
+                    return nameCn
+                }
+                val nameEn = productPrintField("name_en")
+                if (nameEn != "") {
+                    return nameEn
+                }
+                val nameOther = productPrintField("name_other")
+                if (nameOther != "") {
+                    return nameOther
+                }
+                return "未命名商品"
+            }
+            val productPrintNameText = ::gen_productPrintNameText_fn
+            fun gen_productPrintPriceText_fn(): String {
+                val discountPrice = productPrintField("discounted_base_sales_price")
+                if (discountPrice != "" && discountPrice != "0.00") {
+                    return discountPrice
+                }
+                return productPrintField("base_sales_price", "0.00")
+            }
+            val productPrintPriceText = ::gen_productPrintPriceText_fn
+            fun gen_productPrintKodText_fn(fallback: String): String {
+                return productPrintField("category_kasa_kod", fallback)
+            }
+            val productPrintKodText = ::gen_productPrintKodText_fn
+            val productPrintData = computed(fun(): UTSJSONObject {
+                val data: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("data", "pages/products/from.uvue", 245, 8))
+                data["name"] = productPrintNameText()
+                data["name_cn"] = productPrintField("name_cn")
+                data["name_en"] = productPrintField("name_en")
+                data["name_other"] = productPrintField("name_other")
+                data["price"] = productPrintPriceText()
+                data["base_sales_price"] = productPrintField("base_sales_price", "0.00")
+                data["discount_price"] = productPrintPriceText()
+                data["barcode"] = productPrintField("barcode")
+                data["sku"] = productPrintField("sku")
+                data["kod"] = productPrintKodText("")
+                data["category_kasa_kod"] = productPrintKodText("")
+                return data
+            }
+            )
+            fun gen_resolveProductPrintValue_fn(source: String, fallback: String): String {
+                if (source == "name") {
+                    return productPrintNameText()
+                }
+                if (source == "name_cn") {
+                    return productPrintField("name_cn")
+                }
+                if (source == "name_en") {
+                    return productPrintField("name_en")
+                }
+                if (source == "name_other") {
+                    return productPrintField("name_other")
+                }
+                if (source == "price") {
+                    return productPrintPriceText()
+                }
+                if (source == "base_sales_price") {
+                    return productPrintField("base_sales_price", "0.00")
+                }
+                if (source == "discount_price") {
+                    return productPrintPriceText()
+                }
+                if (source == "barcode") {
+                    val barcode = productPrintField("barcode")
+                    if (barcode != "") {
+                        return barcode
+                    }
+                    return productPrintField("sku", fallback)
+                }
+                if (source == "sku") {
+                    return productPrintField("sku", fallback)
+                }
+                if (source == "kod") {
+                    return productPrintKodText(fallback)
+                }
+                return fallback
+            }
+            val resolveProductPrintValue = ::gen_resolveProductPrintValue_fn
             fun floatValue(value: Any?, fallback: Number = 0): Number {
                 val text = stringValue(value)
                 if (text == "") {
@@ -102,6 +195,67 @@ open class GenPagesProductsFrom : BasePage {
                 }
                 return numberValue.toFixed(2)
             }
+            fun gen_normalizeTaxRate_fn(value: Any?): Number {
+                var taxRate = floatValue(value, -1)
+                if (taxRate < 0) {
+                    return -1
+                }
+                if (taxRate > 1) {
+                    taxRate = taxRate / 100
+                }
+                return taxRate
+            }
+            val normalizeTaxRate = ::gen_normalizeTaxRate_fn
+            fun gen_resolveCategoryTaxRate_fn(categoryId: String): UTSPromise<Number> {
+                return wrapUTSPromise(suspend w1@{
+                        if (categoryId == "") {
+                            return@w1 -1
+                        }
+                        val cachedValue = categoryTaxRateCache.value[categoryId]
+                        if (cachedValue != null) {
+                            return@w1 normalizeTaxRate(cachedValue)
+                        }
+                        try {
+                            val raw = await(request("/api/categories/categories/" + categoryId + "/", "GET", _uO(), true))
+                            val rawObject = parseObject(raw)
+                            if (rawObject == null) {
+                                return@w1 -1
+                            }
+                            val taxRate = normalizeTaxRate(rawObject["tax_rate"])
+                            if (taxRate >= 0) {
+                                categoryTaxRateCache.value[categoryId] = taxRate
+                            }
+                            return@w1 taxRate
+                        }
+                         catch (error: Throwable) {
+                            return@w1 -1
+                        }
+                })
+            }
+            val resolveCategoryTaxRate = ::gen_resolveCategoryTaxRate_fn
+            fun gen_applyPurchasePriceSync_fn(formDataObject: UTSJSONObject, taxRate: Number, sourceKey: String): Boolean {
+                if (taxRate < 0) {
+                    return false
+                }
+                val multiplier = 1 + taxRate
+                if (multiplier <= 0) {
+                    return false
+                }
+                val grossPrice = floatValue(formDataObject["purchase_price"], 0)
+                val netPrice = floatValue(formDataObject["net_purchase_price"], 0)
+                val canFillNet = sourceKey == "category_id" || sourceKey == "purchase_price"
+                val canFillGross = sourceKey == "category_id" || sourceKey == "net_purchase_price"
+                if (canFillNet && grossPrice > 0 && netPrice <= 0) {
+                    formDataObject["net_purchase_price"] = formatMoneyText((grossPrice / multiplier).toString(10))
+                    return true
+                }
+                if (canFillGross && netPrice > 0 && grossPrice <= 0) {
+                    formDataObject["purchase_price"] = formatMoneyText((netPrice * multiplier).toString(10))
+                    return true
+                }
+                return false
+            }
+            val applyPurchasePriceSync = ::gen_applyPurchasePriceSync_fn
             fun gen_calculateDiscountedPriceText_fn(productSalesPriceText: String, discountRule: UTSJSONObject): String {
                 val basePrice = floatValue(productSalesPriceText, 0)
                 if (basePrice <= 0) {
@@ -142,7 +296,7 @@ open class GenPagesProductsFrom : BasePage {
                 if (text == null || text == "") {
                     return null
                 }
-                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:274")
+                return UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(text), " at pages/products/from.uvue:398")
             }
             val parseObject = ::gen_parseObject_fn
             fun gen_parseObjectArray_fn(value: Any?): UTSArray<UTSJSONObject> {
@@ -153,7 +307,7 @@ open class GenPagesProductsFrom : BasePage {
                 if (text == null || text == "") {
                     return _uA<UTSJSONObject>()
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:285")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseArray<UTSJSONObject>(text), " at pages/products/from.uvue:409")
                 if (parsed == null) {
                     return _uA<UTSJSONObject>()
                 }
@@ -163,13 +317,9 @@ open class GenPagesProductsFrom : BasePage {
             fun gen_parseErrorMessage_fn(error: Any, fallback: String): String {
                 var message = fallback
                 if (error != null) {
-                    val directMessage = (error as UTSError).message
-                    if (directMessage != null && directMessage != "") {
-                        message = directMessage
-                    }
                     val errorText = JSON.stringify(error)
                     if (errorText != null && errorText != "") {
-                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:301")
+                        val parsedError = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(errorText), " at pages/products/from.uvue:421")
                         if (parsedError != null) {
                             val rawMessage = parsedError["message"]
                             if (rawMessage != null) {
@@ -185,7 +335,7 @@ open class GenPagesProductsFrom : BasePage {
             }
             val parseErrorMessage = ::gen_parseErrorMessage_fn
             fun gen_buildUploadHeaders_fn(): UTSJSONObject {
-                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/products/from.uvue", 317, 8))
+                val headers: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("headers", "pages/products/from.uvue", 437, 8))
                 if (authState.token != "") {
                     headers["Authorization"] = authState.token
                 }
@@ -345,7 +495,7 @@ open class GenPagesProductsFrom : BasePage {
             val fetchStatusOptions = ::gen_fetchStatusOptions_fn
             fun gen_buildSupplierOptionQuery_fn(params: UTSJSONObject): UTSJSONObject {
                 val keywordValue = stringValue(params["keyword"])
-                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/products/from.uvue", 439, 8), "key" to "supplier", "limit" to 50)
+                val query: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("query", "pages/products/from.uvue", 559, 8), "key" to "supplier", "limit" to 50)
                 if (keywordValue != "") {
                     query["search"] = keywordValue
                     query["keyword"] = keywordValue
@@ -369,7 +519,7 @@ open class GenPagesProductsFrom : BasePage {
                         val children = parseObjectArray(item["children"])
                         val treeChildren = gen_convertCategoryTreeItems_fn(children)
                         val label = buildOptionText(item)
-                        val option: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("option", "pages/products/from.uvue", 467, 9), "value" to buildOptionValue(item), "text" to label, "label" to label, "full_name" to stringValue(item["full_name"], label), "code" to stringValue(item["code"]), "level" to intValue(item["level"], -1), "parent_value" to stringValue(item["parent_value"]), "disabled" to booleanValue(item["disabled"]), "has_children" to (booleanValue(item["has_children"]) || treeChildren.length > 0), "children" to treeChildren)
+                        val option: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("option", "pages/products/from.uvue", 587, 9), "value" to buildOptionValue(item), "text" to label, "label" to label, "full_name" to stringValue(item["full_name"], label), "code" to stringValue(item["code"]), "level" to intValue(item["level"], -1), "parent_value" to stringValue(item["parent_value"]), "disabled" to booleanValue(item["disabled"]), "has_children" to (booleanValue(item["has_children"]) || treeChildren.length > 0), "children" to treeChildren)
                         result.push(option)
                         i++
                     }
@@ -414,7 +564,7 @@ open class GenPagesProductsFrom : BasePage {
                         val parentValue = getStringField(params, "parent")
                         val pageValue = getStringField(params, "page", "1")
                         val pageSizeValue = getStringField(params, "pageSize", "20")
-                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 519, 8), "key" to "parent", "page" to intValue(pageValue, 1), "page_size" to intValue(pageSizeValue, 20))
+                        val queryParams: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("queryParams", "pages/products/from.uvue", 639, 8), "key" to "parent", "page" to intValue(pageValue, 1), "page_size" to intValue(pageSizeValue, 20))
                         if (keywordValue != "") {
                             queryParams["search"] = keywordValue
                         }
@@ -542,7 +692,7 @@ open class GenPagesProductsFrom : BasePage {
                 } else {
                     item.discount_info!!.final_price
                 }
-                return _uO("sku" to item.sku, "barcode" to item.barcode, "name_cn" to item.name_cn, "name_en" to item.name_en, "name_other" to item.name_other, "description" to item.description, "category_id" to categoryId, "category_text" to categoryText, "supplier_id" to supplierId, "supplier_name" to item.supplier_name, "purchase_price" to if (item.purchase_price == "") {
+                return _uO("sku" to item.sku, "barcode" to item.barcode, "name_cn" to item.name_cn, "name_en" to item.name_en, "name_other" to item.name_other, "description" to item.description, "category_id" to categoryId, "category_text" to categoryText, "category_kasa_kod" to item.category_kasa_kod, "supplier_id" to supplierId, "supplier_name" to item.supplier_name, "purchase_price" to if (item.purchase_price == "") {
                     "0.00"
                 } else {
                     item.purchase_price
@@ -574,8 +724,22 @@ open class GenPagesProductsFrom : BasePage {
                 }
                 , "is_featured" to item.is_featured, "is_new" to item.is_new, "is_bestseller" to item.is_bestseller, "sort_order" to item.sort_order.toString(10), "images" to images, "imageItems" to imageItems)
             }
+            fun buildCopiedInitialDataFromProduct(item: ProductItem, categoryTextOverride: String = ""): UTSJSONObject {
+                val data = buildInitialDataFromProduct(item, categoryTextOverride)
+                data["sku"] = ""
+                data["barcode"] = ""
+                data["discount_rule"] = ""
+                data["discount_rule_id"] = ""
+                data["discounted_base_sales_price"] = "0.00"
+                data["images"] = _uA<String>()
+                data["imageItems"] = _uA<UTSJSONObject>()
+                return data
+            }
             val formSections = ref(_uA<UTSJSONObject>(_uO("key" to "base", "title" to "基础信息", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "name_cn", "label" to "中文名称", "type" to "input", "required" to true, "placeholder" to "请输入中文名称"), _uO("key" to "name_en", "label" to "波兰名称", "type" to "input", "placeholder" to "请输入波兰名称"), _uO("key" to "name_other", "label" to "其他名称", "type" to "input", "placeholder" to "请输入其他名称"), _uO("key" to "sku", "label" to "SKU", "type" to "input", "placeholder" to "请输入SKU"), _uO("key" to "barcode", "label" to "条码", "type" to "input", "showScan" to true, "placeholder" to "请输入或扫描条码"), _uO("key" to "supplier_id", "label" to "供应商", "type" to "bottomSelect", "textKey" to "supplier_name", "title" to "选择供应商", "placeholder" to "请选择供应商", "searchPlaceholder" to "请输入供应商名称", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/suppliers/from", "editPath" to "/pages/suppliers/from", "fetchData" to fetchSupplierOptions), _uO("key" to "category_id", "label" to "商品分类", "type" to "bottomSelect", "textKey" to "category_text", "title" to "选择商品分类", "placeholder" to "请选择商品分类", "searchPlaceholder" to "请输入分类名称", "showAddAction" to true, "showEditAction" to true, "addPath" to "/pages/category/from", "editPath" to "/pages/category/from", "tree" to true, "expandOnClickNode" to true, "selectableLevel" to 2, "selectableLevelMessage" to "只能选择 level 2 分类", "fetchData" to fetchCategoryOptions), _uO("key" to "description", "label" to "描述", "type" to "textarea", "placeholder" to "请输入商品描述"))), _uO("key" to "price", "title" to "价格信息", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "purchase_price", "label" to "含税采购价", "type" to "number", "required" to true, "decimal" to true, "placeholder" to "请输入含税采购价"), _uO("key" to "net_purchase_price", "label" to "不含税采购价", "type" to "number", "required" to true, "decimal" to true, "placeholder" to "请输入不含税采购价"), _uO("key" to "cost_price", "label" to "成本价", "type" to "number", "required" to true, "decimal" to true, "placeholder" to "请输入成本价"), _uO("key" to "base_sales_price", "label" to "基础售价", "type" to "number", "required" to true, "decimal" to true, "placeholder" to "请输入基础售价"), _uO("key" to "discount_rule", "label" to "折扣规则", "type" to "custom", "readonly" to true))), _uO("key" to "status", "title" to "状态设置", "description" to "", "defaultOpen" to false, "fields" to _uA<UTSJSONObject>(_uO("key" to "status", "label" to "商品状态", "type" to "bottomSelect", "title" to "选择商品状态", "placeholder" to "请选择商品状态", "showAddAction" to false, "showEditAction" to false, "fetchData" to fetchStatusOptions), _uO("key" to "is_featured", "label" to "精选商品", "type" to "switch"), _uO("key" to "is_new", "label" to "新品", "type" to "switch"), _uO("key" to "is_bestseller", "label" to "热销商品", "type" to "switch"), _uO("key" to "sort_order", "label" to "排序", "type" to "number", "placeholder" to "数字越小越靠前"))), _uO("key" to "media", "title" to "商品图片", "description" to "可同时上传多张图片", "defaultOpen" to true, "fields" to _uA<UTSJSONObject>(_uO("key" to "images", "label" to "商品图片", "type" to "upload", "action" to "", "name" to "files", "max" to 9, "uploadText" to "上传图片", "fileItemsKey" to "imageItems", "headers" to buildUploadHeaders(), "formData" to _uO())))))
             val pageTitle = computed(fun(): String {
+                if (formMode.value == "create" && copySourceId.value != "") {
+                    return "复制商品"
+                }
                 return if (formMode.value == "edit") {
                     "编辑商品"
                 } else {
@@ -608,7 +772,7 @@ open class GenPagesProductsFrom : BasePage {
                         }
                          catch (error: Throwable) {
                             discountCards.value = _uA<UTSJSONObject>()
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "折扣规则加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "折扣规则加载失败"))
                         }
                          finally {
                             discountCardsLoading.value = false
@@ -632,11 +796,41 @@ open class GenPagesProductsFrom : BasePage {
                             await(loadProductDiscountCards())
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "商品详情加载失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "商品详情加载失败"))
                         }
                 })
             }
             val loadProductDetailData = ::gen_loadProductDetailData_fn
+            fun gen_loadCopiedProductData_fn(idText: String): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        if (idText == "") {
+                            return@w1
+                        }
+                        var loaded = false
+                        try {
+                            uni_showLoading(ShowLoadingOptions(title = "复制中", mask = true))
+                            val detail = await(getProductDetail(idText))
+                            var categoryText = ""
+                            val categoryId = extractCategoryIdFromProduct(detail)
+                            if (categoryId != "") {
+                                categoryText = await(resolveCategoryOptionText(categoryId))
+                            }
+                            initialData.value = buildCopiedInitialDataFromProduct(detail, categoryText)
+                            discountCards.value = _uA<UTSJSONObject>()
+                            loaded = true
+                        }
+                         catch (error: Throwable) {
+                            showErrorToast(parseErrorMessage(error, "复制商品加载失败"))
+                        }
+                         finally {
+                            uni_hideLoading(null)
+                        }
+                        if (loaded) {
+                            uni_showToast(ShowToastOptions(title = "已填入商品信息", icon = "success"))
+                        }
+                })
+            }
+            val loadCopiedProductData = ::gen_loadCopiedProductData_fn
             fun gen_discountCardKey_fn(discount: UTSJSONObject, index: Number): String {
                 val id = getStringField(discount, "id")
                 if (id != "") {
@@ -694,7 +888,7 @@ open class GenPagesProductsFrom : BasePage {
                 if (discountId == "") {
                     return
                 }
-                val nextCard: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextCard", "pages/products/from.uvue", 973, 8), "id" to discountId, "name" to getStringField(selected, "discount_name", getStringField(selected, "name", "未命名折扣")), "discount_type" to getStringField(selected, "discount_type"), "discount_percentage" to getStringField(selected, "discount_percentage"), "discount_amount" to getStringField(selected, "discount_amount", getStringField(selected, "discount_amount_fixed")), "discount_amount_fixed" to getStringField(selected, "discount_amount_fixed"), "min_quantity" to getStringField(selected, "min_quantity", "1"), "priority" to "-", "final_price" to getStringField(selected, "final_price"))
+                val nextCard: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("nextCard", "pages/products/from.uvue", 1133, 8), "id" to discountId, "name" to getStringField(selected, "discount_name", getStringField(selected, "name", "未命名折扣")), "discount_type" to getStringField(selected, "discount_type"), "discount_percentage" to getStringField(selected, "discount_percentage"), "discount_amount" to getStringField(selected, "discount_amount", getStringField(selected, "discount_amount_fixed")), "discount_amount_fixed" to getStringField(selected, "discount_amount_fixed"), "min_quantity" to getStringField(selected, "min_quantity", "1"), "priority" to "-", "final_price" to getStringField(selected, "final_price"))
                 val nextCards: UTSArray<UTSJSONObject> = _uA()
                 var replaced = false
                 run {
@@ -728,7 +922,7 @@ open class GenPagesProductsFrom : BasePage {
                             uni_showToast(ShowToastOptions(title = "折扣已删除", icon = "success"))
                         }
                          catch (error: Throwable) {
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, "折扣删除失败"), icon = "none"))
+                            showErrorToast(parseErrorMessage(error, "折扣删除失败"))
                         }
                          finally {
                             uni_hideLoading(null)
@@ -771,7 +965,7 @@ open class GenPagesProductsFrom : BasePage {
                 if (rawText == "") {
                     return null
                 }
-                val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pages/products/from.uvue:1060")
+                val parsed = UTSAndroid.consoleDebugError(JSON.parseObject<UTSJSONObject>(rawText), " at pages/products/from.uvue:1217")
                 if (parsed != null) {
                     return parsed
                 }
@@ -780,7 +974,7 @@ open class GenPagesProductsFrom : BasePage {
             val parseStoredJson = ::gen_parseStoredJson_fn
             fun gen_cloneInitialData_fn(): UTSJSONObject {
                 val source = initialData.value
-                val result: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("result", "pages/products/from.uvue", 1069, 8))
+                val result: UTSJSONObject = _uO("__\$originalPosition" to UTSSourceMapPosition("result", "pages/products/from.uvue", 1226, 8))
                 for(key in resolveUTSKeyIterator(source)){
                     result[key] = source[key]
                 }
@@ -827,14 +1021,14 @@ open class GenPagesProductsFrom : BasePage {
             fun gen_openDiscountSelector_fn() {
                 val safeProductId = "" + productId.value
                 if (safeProductId == "") {
-                    uni_showToast(ShowToastOptions(title = "请先保存商品后再选择折扣", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请先保存商品后再选择折扣", icon = "none", duration = 3500))
                     return
                 }
                 var baseSalesPrice = getStringField(initialData.value, "base_sales_price", "0.00")
                 if (baseSalesPrice == "") {
                     baseSalesPrice = "0.00"
                 }
-                uni_navigateTo(NavigateToOptions(url = "/pages/products/config-model/index?resource=discount&mode=select&product_id=" + safeProductId + "&base_sales_price=" + UTSAndroid.consoleDebugError(encodeURIComponent(baseSalesPrice), " at pages/products/from.uvue:1130")))
+                uni_navigateTo(NavigateToOptions(url = "/pages/products/config-model/index?resource=discount&mode=select&product_id=" + safeProductId + "&base_sales_price=" + UTSAndroid.consoleDebugError(encodeURIComponent(baseSalesPrice), " at pages/products/from.uvue:1287")))
             }
             val openDiscountSelector = ::gen_openDiscountSelector_fn
             fun gen_handleInputAdd_fn(payload: UTSJSONObject) {
@@ -1008,7 +1202,7 @@ open class GenPagesProductsFrom : BasePage {
                         }
                         val nameCn = getStringField(data, "name_cn").trim()
                         if (nameCn == "") {
-                            uni_showToast(ShowToastOptions(title = "中文名称不能为空", icon = "none"))
+                            uni_showToast(ShowToastOptions(title = "中文名称不能为空", icon = "none", duration = 3500))
                             return@w1
                         }
                         val taskToken = pageTaskGuard.begin()
@@ -1059,12 +1253,12 @@ open class GenPagesProductsFrom : BasePage {
                             if (!pageTaskGuard.canApply(taskToken)) {
                                 return@w1
                             }
-                            uni_showToast(ShowToastOptions(title = parseErrorMessage(error, if (isEditing) {
+                            showErrorToast(parseErrorMessage(error, if (isEditing) {
                                 "商品保存失败"
                             } else {
                                 "商品创建失败"
                             }
-                            ), icon = "none"))
+                            ))
                         }
                          finally {
                             if (pageTaskGuard.canApply(taskToken)) {
@@ -1103,16 +1297,39 @@ open class GenPagesProductsFrom : BasePage {
             val handleDiscardLeave = ::gen_handleDiscardLeave_fn
             fun gen_handleDirtyChange_fn(value: Boolean) {}
             val handleDirtyChange = ::gen_handleDirtyChange_fn
+            fun gen_handleFieldChange_fn(payload: UTSJSONObject): UTSPromise<Unit> {
+                return wrapUTSPromise(suspend w1@{
+                        val keyValue = getStringField(payload, "key")
+                        if (keyValue != "category_id" && keyValue != "purchase_price" && keyValue != "net_purchase_price") {
+                            return@w1
+                        }
+                        val formDataValue = payload["formData"]
+                        if (formDataValue == null) {
+                            return@w1
+                        }
+                        val formDataObject = formDataValue as UTSJSONObject
+                        val categoryId = getStringField(formDataObject, "category_id").trim()
+                        if (categoryId == "") {
+                            return@w1
+                        }
+                        val taxRate = await(resolveCategoryTaxRate(categoryId))
+                        if (getStringField(formDataObject, "category_id").trim() != categoryId) {
+                            return@w1
+                        }
+                        applyPurchasePriceSync(formDataObject, taxRate, keyValue)
+                })
+            }
+            val handleFieldChange = ::gen_handleFieldChange_fn
             fun gen_handleBottomSelectAdd_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持新增", icon = "none", duration = 3500))
             }
             val handleBottomSelectAdd = ::gen_handleBottomSelectAdd_fn
             fun gen_handleBottomSelectEdit_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "当前字段不支持编辑", icon = "none", duration = 3500))
             }
             val handleBottomSelectEdit = ::gen_handleBottomSelectEdit_fn
             fun gen_handleUpload_fn(payload: UTSJSONObject) {
-                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片已加入待保存列表", icon = "none", duration = 3500))
             }
             val handleUpload = ::gen_handleUpload_fn
             fun gen_handleUploadDelete_fn(payload: UTSJSONObject) {
@@ -1125,16 +1342,16 @@ open class GenPagesProductsFrom : BasePage {
                     val payloadObject = rawPayload as UTSJSONObject
                     val message = getStringField(payloadObject, "message")
                     if (message != "") {
-                        uni_showToast(ShowToastOptions(title = message, icon = "none"))
+                        uni_showToast(ShowToastOptions(title = message, icon = "none", duration = 3500))
                         return
                     }
                 }
-                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none"))
+                uni_showToast(ShowToastOptions(title = "图片上传失败", icon = "none", duration = 3500))
             }
             val handleUploadError = ::gen_handleUploadError_fn
             fun gen_openPriceCalculator_fn() {
                 if (productId.value == "") {
-                    uni_showToast(ShowToastOptions(title = "请先保存商品后再计算", icon = "none"))
+                    uni_showToast(ShowToastOptions(title = "请先保存商品后再计算", icon = "none", duration = 3500))
                     return
                 }
                 uni_navigateTo(NavigateToOptions(url = "/pages/products/price-calculator?id=" + productId.value))
@@ -1150,15 +1367,13 @@ open class GenPagesProductsFrom : BasePage {
                     return
                 }
                 uni_removeStorageSync(storageKey)
-                val currentData = cloneInitialData()
                 val nextBaseSalesPrice = calculatedPrice.trim()
-                currentData["base_sales_price"] = if (nextBaseSalesPrice == "") {
+                productFormRef.value?.`$callMethod`("setFieldValue", "base_sales_price", if (nextBaseSalesPrice == "") {
                     "0.00"
                 } else {
                     nextBaseSalesPrice
                 }
-                initialData.value = currentData
-                dirtySignal.value = dirtySignal.value + 1
+                )
                 uni_showToast(ShowToastOptions(title = "基础售价已填入计算结果", icon = "success"))
             }
             val applyCalculatedPrice = ::gen_applyCalculatedPrice_fn
@@ -1166,10 +1381,16 @@ open class GenPagesProductsFrom : BasePage {
                 pageTaskGuard.reset()
                 leaveSignal.value = 0
                 val idValue = event["id"]
+                val copyValue = event["copy_id"]
                 productId.value = if (idValue == null) {
                     ""
                 } else {
                     (idValue as String)
+                }
+                copySourceId.value = if (copyValue == null) {
+                    ""
+                } else {
+                    (copyValue as String)
                 }
                 formMode.value = if (productId.value == "") {
                     "create"
@@ -1178,6 +1399,8 @@ open class GenPagesProductsFrom : BasePage {
                 }
                 if (formMode.value == "edit") {
                     loadProductDetailData(productId.value)
+                } else if (copySourceId.value != "") {
+                    loadCopiedProductData(copySourceId.value)
                 }
             }
             )
@@ -1194,13 +1417,14 @@ open class GenPagesProductsFrom : BasePage {
             return fun(): Any? {
                 val _component_lili_universal_filter = resolveEasyComponent("lili-universal-filter", GenUniModulesLiliUniversalFilterComponentsLiliUniversalFilterLiliUniversalFilterClass)
                 val _component_lili_UniversaForm = resolveEasyComponent("lili-UniversaForm", GenUniModulesLiliUniversaFormComponentsLiliUniversaFormLiliUniversaFormClass)
+                val _component_lili_print_confirm_popup = resolveEasyComponent("lili-print-confirm-popup", GenUniModulesLiliPrintConfirmPopupComponentsLiliPrintConfirmPopupLiliPrintConfirmPopupClass)
                 return _cE("view", _uM("class" to "page"), _uA(
                     _cV(_component_lili_universal_filter, _uM("title" to pageTitle.value, "showBack" to true, "showSearch" to false, "showHome" to true, "showRightText" to (unref(formMode) == "edit" && unref(productId) != ""), "rightText" to "打印", "homePath" to "/pages/tabbar/products", "backgroundColor" to "#EEF2F7", "onRight" to openProductPrintPage), null, 8, _uA(
                         "title",
                         "showRightText"
                     )),
                     _cE("view", _uM("class" to "page-content"), _uA(
-                        _cV(_component_lili_UniversaForm, _uM("mode" to unref(formMode), "formSections" to unref(formSections), "initialData" to unref(initialData), "leaveSignal" to unref(leaveSignal), "dirtySignal" to unref(dirtySignal), "uploadContentTypeModel" to "product", "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onDirtyChange" to handleDirtyChange, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit, "onInputAdd" to handleInputAdd, "onUpload" to handleUpload, "onUploadDelete" to handleUploadDelete, "onUploadError" to handleUploadError), _uM("field-discount_rule" to withScopedSlotCtx(fun(slotProps: Record<String, Any?>): UTSArray<Any> {
+                        _cV(_component_lili_UniversaForm, _uM("ref_key" to "productFormRef", "ref" to productFormRef, "mode" to unref(formMode), "formSections" to unref(formSections), "initialData" to unref(initialData), "leaveSignal" to unref(leaveSignal), "dirtySignal" to unref(dirtySignal), "uploadContentTypeModel" to "product", "onSubmit" to handleSubmit, "onCancel" to handleCancel, "onDiscardLeave" to handleDiscardLeave, "onSaveRequest" to handleSaveRequest, "onFieldChange" to handleFieldChange, "onDirtyChange" to handleDirtyChange, "onBottomSelectAdd" to handleBottomSelectAdd, "onBottomSelectEdit" to handleBottomSelectEdit, "onInputAdd" to handleInputAdd, "onUpload" to handleUpload, "onUploadDelete" to handleUploadDelete, "onUploadError" to handleUploadError), _uM("field-discount_rule" to withScopedSlotCtx(fun(slotProps: Record<String, Any?>): UTSArray<Any> {
                             val value = slotProps["value"]
                             return _uA(
                                 _cE("view", _uM("class" to "discount-card-section"), _uA(
@@ -1297,6 +1521,11 @@ open class GenPagesProductsFrom : BasePage {
                     } else {
                         _cC("v-if", true)
                     }
+                    ,
+                    _cV(_component_lili_print_confirm_popup, _uM("visible" to unref(printPopupVisible), "templateType" to "product_label", "printData" to productPrintData.value, "onUpdate:visible" to handlePrintPopupVisibleChange), null, 8, _uA(
+                        "visible",
+                        "printData"
+                    ))
                 ))
             }
         }
