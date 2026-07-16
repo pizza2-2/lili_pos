@@ -49,6 +49,14 @@ export type ProductItem = {
 	net_purchase_price: string
 	cost_price: string
 	base_sales_price: string
+	tax_rate: string
+	pricing_formula: number | null
+	pricing_formula_name: string
+	print_template: number | null
+	print_template_name: string
+	pos_sale_enabled: boolean
+	default_min_stock_level: number
+	default_reorder_point: number
 	status: string
 	is_featured: boolean
 	is_new: boolean
@@ -91,6 +99,15 @@ export type ProductMutationData = {
 	net_purchase_price: string
 	cost_price: string
 	base_sales_price: string
+	// 规则字段均为可选：省略时后端保持原值（更新）或继承分类默认（创建）
+	tax_rate?: string
+	pricing_formula?: number | null
+	pricing_formula_name?: string
+	print_template?: number | null
+	print_template_name?: string
+	pos_sale_enabled?: boolean
+	default_min_stock_level?: number
+	default_reorder_point?: number
 	status: string
 	is_featured: boolean
 	is_new: boolean
@@ -263,6 +280,7 @@ const productDiscountsBasePath = '/api/products/discounts/'
 const attributeTypesBasePath = '/api/products/attribute-types/'
 const attributeValuesBasePath = '/api/products/attribute-values/'
 const barcodeSequencesBasePath = '/api/products/barcode-sequences/'
+const productVariantsBasePath = '/api/products/variants/'
 
 function buildListQuery(data: ProductListQuery): UTSJSONObject {
 	const query = {
@@ -486,6 +504,14 @@ function buildProductItemFromObject(rawObject: UTSJSONObject): ProductItem {
 		net_purchase_price: stringValue(rawObject['net_purchase_price']),
 		cost_price: stringValue(rawObject['cost_price']),
 		base_sales_price: stringValue(rawObject['base_sales_price']),
+		tax_rate: stringValue(rawObject['tax_rate']),
+		pricing_formula: rawObject['pricing_formula'] == null ? null : intValue(rawObject['pricing_formula']),
+		pricing_formula_name: stringValue(rawObject['pricing_formula_name']),
+		print_template: rawObject['print_template'] == null ? null : intValue(rawObject['print_template']),
+		print_template_name: stringValue(rawObject['print_template_name']),
+		pos_sale_enabled: rawObject['pos_sale_enabled'] == null ? true : booleanValue(rawObject['pos_sale_enabled']),
+		default_min_stock_level: intValue(rawObject['default_min_stock_level']),
+		default_reorder_point: intValue(rawObject['default_reorder_point']),
 		status: stringValue(rawObject['status']),
 		is_featured: booleanValue(rawObject['is_featured']),
 		is_new: booleanValue(rawObject['is_new']),
@@ -1014,6 +1040,25 @@ export async function getProductDetail(id: number | string): Promise<ProductItem
 	return normalizeProductItem(buildProductItemResponse(raw))
 }
 
+export async function getProductCategoryHistory(id: number | string): Promise<UTSJSONObject> {
+	const raw = await request(
+		productDetailPath(id) + 'category-history/',
+		'GET',
+		{} as UTSJSONObject,
+		false
+	)
+	const text = JSON.stringify(raw)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		return parsed == null ? {} as UTSJSONObject : parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
 export async function createProduct(data: ProductMutationData): Promise<ProductItem> {
 	const raw = await request(
 		productsBasePath,
@@ -1080,6 +1125,55 @@ export async function batchUpdateProductStatus(ids: string[], status: string, re
 	return buildProductBatchActionResponse(raw)
 }
 
+export async function batchUpdateProductTaxRate(ids: string[], taxRate: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['tax_rate'] = taxRate
+	const raw = await request(
+		productBatchActionPath('update-tax-rate'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+export async function batchApplyProductPricingFormula(ids: string[], pricingFormula: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['pricing_formula'] = pricingFormula
+	const raw = await request(
+		productBatchActionPath('apply-pricing-formula'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+export async function batchApplyProductPrintTemplate(ids: string[], printTemplate: string, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['print_template'] = printTemplate
+	const raw = await request(
+		productBatchActionPath('apply-print-template'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
+
+
+export async function batchAutoClassifyProductCategory(ids: string[], mode: string, minScore: number = 10, remark: string | null = null): Promise<ProductBatchActionResponse> {
+	const body = buildProductBatchActionBody(ids, remark)
+	body['mode'] = mode
+	body['min_score'] = minScore
+	const raw = await request(
+		productBatchActionPath('auto-classify'),
+		'POST',
+		body,
+		true
+	)
+	return buildProductBatchActionResponse(raw)
+}
 export async function getProductPricingFormulaDetail(id: number | string): Promise<ProductPricingFormulaItem> {
 	const raw = await request(
 		pricingFormulaDetailPath(id),
@@ -1302,6 +1396,38 @@ export function deleteProductConfig(basePath: string, id: number | string): Prom
 	)
 }
 
+export async function patchProductConfig(basePath: string, id: number | string, data: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(
+		resourceDetailPath(basePath, id),
+		'PATCH',
+		data,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('配置保存响应解析失败')
+	}
+	return parsed!
+}
+
+// 按属性值组合批量生成变体：后端做笛卡尔积并自动跳过已存在组合
+export async function generateProductVariants(productId: string, attributeValueIds: number[]): Promise<UTSJSONObject> {
+	const raw = await request(
+		productVariantsBasePath + 'generate/',
+		'POST',
+		{
+			product: productId,
+			attribute_values: attributeValueIds,
+		} as UTSJSONObject,
+		true
+	)
+	const parsed = parseObject(raw)
+	if (parsed == null) {
+		throw new Error('变体生成响应解析失败')
+	}
+	return parsed!
+}
+
 export function productDiscountsPath(): string {
 	return productDiscountsBasePath
 }
@@ -1316,6 +1442,10 @@ export function attributeValuesPath(): string {
 
 export function barcodeSequencesPath(): string {
 	return barcodeSequencesBasePath
+}
+
+export function productVariantsPath(): string {
+	return productVariantsBasePath
 }
 
 function parsePrintTemplateObject(value: any | null): UTSJSONObject | null {

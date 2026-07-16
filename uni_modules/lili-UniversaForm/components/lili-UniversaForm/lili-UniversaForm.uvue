@@ -151,6 +151,8 @@
 									:expandOnClickNode="getFieldExpandOnClickNode(field)"
 									:selectableLevel="getFieldSelectableLevel(field)"
 									:selectableLevelMessage="getFieldSelectableLevelMessage(field)"
+									:selectableLeafOnly="getFieldSelectableLeafOnly(field)"
+									:selectableLeafOnlyMessage="getFieldSelectableLeafOnlyMessage(field)"
 									:showEditAction="showBottomSelectEdit(field)"
 									:showAddAction="showBottomSelectAdd(field)"
 									:showScan="showBottomSelectScan(field)"
@@ -227,12 +229,14 @@
 </template>
 
 <script setup lang="uts">
+// #ifdef APP-ANDROID
 import {
 	scanCode,
 	type GeneralCallbackResult,
 	type ScanCodeOption,
 	type ScanCodeSuccessCallbackResult,
 } from '@/uni_modules/lime-scan'
+// #endif
 import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
@@ -779,6 +783,14 @@ function getFieldSelectableLevelMessage(field: UTSJSONObject) : string {
 	return getStringField(field, 'selectableLevelMessage')
 }
 
+function getFieldSelectableLeafOnly(field: UTSJSONObject) : boolean {
+	return getBooleanField(field, 'selectableLeafOnly', false)
+}
+
+function getFieldSelectableLeafOnlyMessage(field: UTSJSONObject) : string {
+	return getStringField(field, 'selectableLeafOnlyMessage')
+}
+
 function getFieldFetchData(field: UTSJSONObject) : FetchDataFn {
 	return field['fetchData'] as FetchDataFn
 }
@@ -1252,6 +1264,10 @@ function handleScanClick(field: UTSJSONObject) {
 	if (isReadonly(field)) return
 	const key = getFieldKey(field)
 	if (key == '') return
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: getFieldScanOnlyFromCamera(field),
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -1278,6 +1294,7 @@ function handleScanClick(field: UTSJSONObject) {
 			})
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function handleAddClick(field: UTSJSONObject) {

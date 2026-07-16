@@ -1,0 +1,121 @@
+/**
+ * 应用本地设置：统一键名、默认值与读写（uni storage）。
+ * 布尔值按 '1'/'0' 字符串存取，避免部分平台 storage 布尔类型不稳定的问题。
+ */
+
+// ── 图片上传质量 ──────────────────────────────────────────────────────────────
+// standard 长边1600/质量80（默认）；high 长边2560/质量90；original 不压缩
+export const UPLOAD_QUALITY_STANDARD = 'standard'
+export const UPLOAD_QUALITY_HIGH = 'high'
+export const UPLOAD_QUALITY_ORIGINAL = 'original'
+
+// ── 报表默认周期 ──────────────────────────────────────────────────────────────
+// today/week/month 固定周期；last 表示记住上次选择
+export const REPORT_PERIOD_TODAY = 'today'
+export const REPORT_PERIOD_WEEK = 'week'
+export const REPORT_PERIOD_MONTH = 'month'
+export const REPORT_PERIOD_LAST = 'last'
+
+const KEY_UPLOAD_IMAGE_QUALITY = 'app_setting:upload_image_quality'
+const KEY_LIST_PAGE_SIZE = 'app_setting:list_page_size'
+const KEY_REPORT_DEFAULT_PERIOD = 'app_setting:report_default_period'
+const KEY_REPORT_LAST_PERIOD = 'app_setting:report_last_period'
+const KEY_AUTO_CHECK_UPDATE = 'app_setting:auto_check_update'
+
+function readString(key: string): string {
+	const v = uni.getStorageSync(key)
+	if (v == null) return ''
+	if (typeof v == 'string') return v as string
+	return ''
+}
+
+function writeString(key: string, value: string): void {
+	uni.setStorageSync(key, value)
+}
+
+function readBool(key: string, fallback: boolean): boolean {
+	const v = readString(key)
+	if (v == '1') return true
+	if (v == '0') return false
+	return fallback
+}
+
+function writeBool(key: string, value: boolean): void {
+	writeString(key, value ? '1' : '0')
+}
+
+// ── 图片上传质量 ──────────────────────────────────────────────────────────────
+
+export function getUploadImageQuality(): string {
+	const v = readString(KEY_UPLOAD_IMAGE_QUALITY)
+	if (v == UPLOAD_QUALITY_HIGH || v == UPLOAD_QUALITY_ORIGINAL) return v
+	return UPLOAD_QUALITY_STANDARD
+}
+
+export function setUploadImageQuality(value: string): void {
+	writeString(KEY_UPLOAD_IMAGE_QUALITY, value)
+}
+
+// ── 列表每页数量 ──────────────────────────────────────────────────────────────
+
+export function getListPageSize(): number {
+	const v = readString(KEY_LIST_PAGE_SIZE)
+	if (v == '10' || v == '20' || v == '50' || v == '100') {
+		return parseInt(v)
+	}
+	return 20
+}
+
+export function setListPageSize(value: number): void {
+	writeString(KEY_LIST_PAGE_SIZE, value.toString())
+}
+
+// ── 报表默认周期 ──────────────────────────────────────────────────────────────
+
+export function getReportDefaultPeriod(): string {
+	const v = readString(KEY_REPORT_DEFAULT_PERIOD)
+	if (v == REPORT_PERIOD_WEEK || v == REPORT_PERIOD_MONTH || v == REPORT_PERIOD_LAST) return v
+	return REPORT_PERIOD_TODAY
+}
+
+export function setReportDefaultPeriod(value: string): void {
+	writeString(KEY_REPORT_DEFAULT_PERIOD, value)
+}
+
+/** 报表页记录上次选择的周期，供「记住上次」模式使用 */
+export function setReportLastPeriod(value: string): void {
+	writeString(KEY_REPORT_LAST_PERIOD, value)
+}
+
+/** 报表页启动时实际使用的周期（把「记住上次」解析为具体周期） */
+export function resolveReportStartPeriod(): string {
+	const setting = getReportDefaultPeriod()
+	if (setting != REPORT_PERIOD_LAST) return setting
+	const last = readString(KEY_REPORT_LAST_PERIOD)
+	if (last == REPORT_PERIOD_WEEK || last == REPORT_PERIOD_MONTH || last == REPORT_PERIOD_TODAY) return last
+	return REPORT_PERIOD_TODAY
+}
+
+// ── 启动自动检查更新 ──────────────────────────────────────────────────────────
+
+export function isAutoCheckUpdateEnabled(): boolean {
+	return readBool(KEY_AUTO_CHECK_UPDATE, true)
+}
+
+export function setAutoCheckUpdateEnabled(value: boolean): void {
+	writeBool(KEY_AUTO_CHECK_UPDATE, value)
+}
+
+// ── 日志上报开关 ──────────────────────────────────────────────────────────────
+// 会话级开关：只存内存不落 storage，默认关闭；关闭 App（进程结束）后自动恢复关闭。
+// 开启后 logger 才开始收集并上报错误日志，用于临时排查问题。
+
+let logUploadEnabledSession = false
+
+export function isLogUploadEnabled(): boolean {
+	return logUploadEnabledSession
+}
+
+export function setLogUploadEnabled(value: boolean): void {
+	logUploadEnabledSession = value
+}

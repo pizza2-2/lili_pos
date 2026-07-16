@@ -11,7 +11,7 @@
 			:showHome="true"
 			:filterActive="hasActiveFilter"
 			filterText="重置"
-			homePath="/pages/tabbar/products"
+			homePath="/pages/tabbar/settings"
 			@searchInput="handleSearchInput"
 			@searchConfirm="handleSearchConfirm"
 			@searchClear="handleSearchClear"
@@ -129,6 +129,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchActivateSuppliers, batchDeactivateSuppliers, batchDeleteSuppliers, deleteSupplier, getSupplierList, getSupplierFilterOptions, getSupplierGlobalStatistics, SupplierItem, SupplierListResponse, SupplierMediaFile, SupplierFilterDefinition, SupplierFilterOptionsResponse, SupplierGlobalStatisticsResponse } from '@/pkg/api/modules/suppliers'
 import { showErrorToast } from '@/pkg/util/toast.uts'
@@ -143,7 +144,7 @@ const suppliers = ref<SupplierItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<SupplierFilterOptionsResponse | null>(null)

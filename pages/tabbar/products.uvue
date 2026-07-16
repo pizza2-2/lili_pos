@@ -5,11 +5,12 @@
 			searchPlaceholder="输入商品名称、SKU、条码"
 			:searchValue="keyword"
 			:filterVisible="filterVisible"
-			:showBack="false"
+			:showBack="true"
 			:showSearch="true"
 			:showFilter="true"
 			:showScan="true"
 			:showHome="false"
+			homePath="/pages/tabbar/settings"
 			:filterActive="hasActiveFilter"
 			filterText="重置"
 			@searchInput="handleSearchInput"
@@ -138,6 +139,7 @@
 					imageField="cover"
 					imageListField="images"
 					tagField="tags"
+					tagPosition="cover"
 					:tagColorMap="tagColorMap"
 					:fields="fieldConfig"
 					:loading="isLoading"
@@ -214,6 +216,8 @@
 						:checkStrictly="false"
 						:showAddAction="false"
 						:showEditAction="false"
+						:selectableLeafOnly="true"
+						selectableLeafOnlyMessage="只能选择叶子分类"
 						:fetchData="fetchCategoryFilterOptions"
 						@change="handleBatchCategoryChange"
 					/>
@@ -264,11 +268,16 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { batchDeleteProducts, batchUpdateProductCategory, batchUpdateProductStatus, batchUpdateProductSupplier, getProductFilterOptions, getProductList, ProductBatchActionResponse, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+import { batchAutoClassifyProductCategory, batchDeleteProducts, batchUpdateProductCategory, batchUpdateProductStatus, batchUpdateProductSupplier, getProductFilterOptions, getProductList, ProductBatchActionResponse, ProductFilterDefinition, ProductFilterOptionsResponse, ProductItem, ProductListResponse, ProductMediaFile, ProductSelectedFilter } from '@/pkg/api/modules/products.uts'
+// #ifdef APP-ANDROID
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+// #endif
+// #ifdef APP-ANDROID
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type ProductSelectOption = {
@@ -294,11 +303,13 @@ const products = ref<ProductItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<ProductFilterOptionsResponse | null>(null)
 const selectedFilters = ref<ProductSelectedFilter[]>([])
+// 商品状态默认筛选：只看草稿+启用，停用/停产在筛选面板中按需勾选
+const defaultStatusFilterValue = 'DRAFT,ACTIVE'
 const supplierFilterValue = ref('')
 const supplierFilterText = ref('')
 const categoryFilterValues = ref<string[]>([])
@@ -324,10 +335,12 @@ const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'purchasePriceText', label: '含税进价：', hideWhenEmpty: true } as UTSJSONObject,
 	{ key: 'salesPriceText', label: '售价：' } as UTSJSONObject,
 	{ key: 'salesCountText', label: '销量：' } as UTSJSONObject,
+	{ key: 'variantCountText', label: '规格：', hideWhenEmpty: true } as UTSJSONObject,
 ])
 
 const menuActions = ref<UTSJSONObject[]>([
 	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'variants', text: '规格变体' } as UTSJSONObject,
 	{ key: 'copy-product', text: '复制商品' } as UTSJSONObject,
 	{ key: 'inventory', text: '查看库存' } as UTSJSONObject,
 	{ key: 'reload', text: '刷新' } as UTSJSONObject,
@@ -336,6 +349,7 @@ const menuActions = ref<UTSJSONObject[]>([
 const batchToolbarActions = ref<UTSJSONObject[]>([
 	{ key: 'delete', text: '删除' } as UTSJSONObject,
 	{ key: 'update-category', text: '改分类' } as UTSJSONObject,
+	{ key: 'auto-classify', text: '智能归类' } as UTSJSONObject,
 	{ key: 'update-supplier', text: '改供应商' } as UTSJSONObject,
 	{ key: 'update-status', text: '改状态' } as UTSJSONObject,
 ])
@@ -362,6 +376,10 @@ const tagColorMap = ref<UTSJSONObject>({
 	新品: 'violet',
 	精选: 'info',
 	热销: 'warning',
+	草稿: 'info',
+	启用: 'success',
+	停用: 'danger',
+	停产: 'warning',
 })
 
 const productListRefreshStorageKey = 'refresh:pages:products:index'
@@ -491,11 +509,12 @@ function updateFilterPanelLayout() {
 	filterContentHeight.value = nextContentHeight
 }
 
-async function loadProducts() {
-	if (isLoading.value) {
-		return
-	}
+// 加载请求序号：并发时只应用最新一次请求的结果，新请求不再被在途请求拦截（避免扫码/搜索被静默丢弃）
+let productsRequestSeq = 0
 
+async function loadProducts() {
+	productsRequestSeq += 1
+	const requestSeq = productsRequestSeq
 	isLoading.value = true
 	errorMessage.value = ''
 
@@ -507,15 +526,23 @@ async function loadProducts() {
 			ordering: sortOrdering.value,
 			filters: selectedFilters.value,
 		})
+		if (requestSeq != productsRequestSeq) {
+			return
+		}
 		applyProductResponse(response)
 	} catch (error) {
+		if (requestSeq != productsRequestSeq) {
+			return
+		}
 		products.value = []
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
 		errorMessage.value = parseErrorMessage(error)
 	} finally {
-		isLoading.value = false
+		if (requestSeq == productsRequestSeq) {
+			isLoading.value = false
+		}
 	}
 }
 
@@ -845,6 +872,15 @@ function buildTreeSelectItem(item: UTSJSONObject): UTSJSONObject {
 
 	const label = stringValue(item['label'], buildOptionText(item))
 	const fullName = stringValue(item['full_name'])
+	const hasChildren = booleanValue(item['has_children']) || children.length > 0
+	let isLeaf = !hasChildren
+	if (item['is_leaf'] != null) {
+		isLeaf = booleanValue(item['is_leaf'])
+	}
+	let canSelectProduct = isLeaf
+	if (item['can_select_product'] != null) {
+		canSelectProduct = booleanValue(item['can_select_product'])
+	}
 
 	return {
 		value: buildOptionValue(item),
@@ -855,7 +891,10 @@ function buildTreeSelectItem(item: UTSJSONObject): UTSJSONObject {
 		level: stringValue(item['level']),
 		parent_value: stringValue(item['parent_value']),
 		disabled: booleanValue(item['disabled']),
-		has_children: booleanValue(item['has_children']) || children.length > 0,
+		has_children: hasChildren,
+		is_leaf: isLeaf,
+		can_add_child: booleanValue(item['can_add_child']),
+		can_select_product: canSelectProduct,
 		children: children,
 	} as UTSJSONObject
 }
@@ -939,6 +978,7 @@ async function fetchCategoryFilterOptions(params: UTSJSONObject): Promise<UTSJSO
 function batchActionTitle(actionKey: string): string {
 	if (actionKey == 'delete') return '批量删除'
 	if (actionKey == 'update-category') return '批量修改分类'
+	if (actionKey == 'auto-classify') return '智能归类'
 	if (actionKey == 'update-supplier') return '批量修改供应商'
 	if (actionKey == 'update-status') return '批量修改状态'
 	return '批量操作'
@@ -947,6 +987,7 @@ function batchActionTitle(actionKey: string): string {
 function batchActionConfirmText(actionKey: string, count: number): string {
 	if (actionKey == 'delete') return '确定删除选中的 ' + count.toString() + ' 个商品吗？'
 	if (actionKey == 'update-category') return '确定将选中的 ' + count.toString() + ' 个商品修改到该分类吗？'
+	if (actionKey == 'auto-classify') return '将按名称/供应商/条码为选中的 ' + count.toString() + ' 个商品推荐并移动分类，无可靠推荐的商品会跳过。确定执行吗？'
 	if (actionKey == 'update-supplier') return '确定将选中的 ' + count.toString() + ' 个商品修改到该供应商吗？'
 	if (actionKey == 'update-status') return '确定将选中的 ' + count.toString() + ' 个商品修改为该状态吗？'
 	return '确定执行批量操作吗？'
@@ -982,6 +1023,39 @@ function batchResultHasIssue(response: ProductBatchActionResponse): boolean {
 	return numberValue(summaryObject['failure_count']) > 0 || numberValue(summaryObject['skipped_count']) > 0
 }
 
+// 智能归类分片提交：避免单次处理过多商品触发请求超时
+async function runAutoClassifyChunks(ids: string[]): Promise<void> {
+	let successCount = 0
+	let failureCount = 0
+	let skippedCount = 0
+	const chunkSize = 10
+	for (let start = 0; start < ids.length; start += chunkSize) {
+		const chunk: string[] = []
+		for (let index = start; index < ids.length && index < start + chunkSize; index += 1) {
+			chunk.push(ids[index])
+		}
+		try {
+			const response = await batchAutoClassifyProductCategory(chunk, 'auto', 10)
+			const summaryObject = parseObject(response.data['summary'])
+			if (summaryObject != null) {
+				successCount += numberValue(summaryObject['success_count'])
+				failureCount += numberValue(summaryObject['failure_count'])
+				skippedCount += numberValue(summaryObject['skipped_count'])
+			}
+		} catch (error) {
+			failureCount += chunk.length
+		}
+	}
+	let message = '归类成功 ' + successCount.toString()
+	if (failureCount > 0) {
+		message = message + '，失败 ' + failureCount.toString()
+	}
+	if (skippedCount > 0) {
+		message = message + '，无推荐 ' + skippedCount.toString()
+	}
+	uni.showToast({ title: message, icon: 'none', duration: 3500 })
+}
+
 async function executeProductBatchAction(actionKey: string) {
 	if (batchSubmitting.value || !ensureBatchSelection()) {
 		return
@@ -990,6 +1064,15 @@ async function executeProductBatchAction(actionKey: string) {
 	const ids = selectedProductIdsSnapshot()
 	batchSubmitting.value = true
 	try {
+		if (actionKey == 'auto-classify') {
+			await runAutoClassifyChunks(ids)
+			batchEditorVisible.value = false
+			batchEditorType.value = ''
+			resetBatchDraft()
+			clearSelectionState()
+			loadProducts()
+			return
+		}
 		let response: ProductBatchActionResponse | null = null
 		if (actionKey == 'delete') {
 			response = await batchDeleteProducts(ids)
@@ -1114,7 +1197,8 @@ function handleBatchToolbarAction(payload: UTSJSONObject) {
 	}
 	const action = actionValue as UTSJSONObject
 	const actionKey = stringValue(action['key'])
-	if (actionKey == 'delete') {
+	if (actionKey == 'delete' || actionKey == 'auto-classify') {
+		// 无需取值编辑器的动作：确认后直接执行
 		confirmProductBatchAction(actionKey)
 		return
 	}
@@ -1123,8 +1207,17 @@ function handleBatchToolbarAction(payload: UTSJSONObject) {
 	}
 }
 
+function productStatusTagText(status: string): string {
+	if (status == 'ACTIVE') return '启用'
+	if (status == 'INACTIVE') return '停用'
+	if (status == 'DISCONTINUED') return '停产'
+	return '草稿'
+}
+
 function buildProductTags(item: ProductItem): string[] {
 	const result: string[] = []
+	// 状态徽标放首位：草稿(蓝)/启用(绿)/停用(红)/停产(橙)
+	result.push(productStatusTagText(item.status))
 	if (item.is_new) {
 		result.push('新品')
 	}
@@ -1174,7 +1267,9 @@ function productToListItem(item: ProductItem): UTSJSONObject {
 		costPriceText: item.cost_price,
 		salesPriceText: getDisplayText(item.base_sales_price),
 		salesCountText: item.total_sales_quantity.toString(),
-		variantCountText: item.variant_count.toString(),
+		// 无变体时为空串，配合 hideWhenEmpty 隐藏该行
+		variantCountText: item.variant_count > 0 ? item.variant_count.toString() + ' 个' : '',
+		baseSalesPrice: getDisplayText(item.base_sales_price, ''),
 		updatedText: getDisplayText(item.updated_at),
 		cover: images.length > 0 ? images[0] : '',
 		images: images,
@@ -1223,6 +1318,10 @@ function handleSearchClear() {
 }
 
 function handleScanSearch() {
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: true,
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -1238,6 +1337,7 @@ function handleScanSearch() {
 			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function unlockVolumeScanSoon() {
@@ -1246,6 +1346,7 @@ function unlockVolumeScanSoon() {
 	}, 1200)
 }
 
+// #ifdef APP-ANDROID
 function handleVolumeKeyEvent(event: VolumeKeyEvent) {
 	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
 		return
@@ -1259,15 +1360,21 @@ function handleVolumeKeyEvent(event: VolumeKeyEvent) {
 	unlockVolumeScanSoon()
 }
 
+// #endif
+
 function startProductVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	startVolumeKeyListener((event: VolumeKeyEvent) => {
 		handleVolumeKeyEvent(event)
 	})
+	// #endif
 }
 
 function stopProductVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	stopVolumeKeyListener()
 	volumeScanLocked.value = false
+	// #endif
 }
 
 async function handleFilterOpen() {
@@ -1366,6 +1473,8 @@ function handlePageChange(payload: UTSJSONObject) {
 
 function handleFilterReset() {
 	selectedFilters.value = [] as ProductSelectedFilter[]
+	// 重置回默认商品状态（草稿+启用），而非完全清空
+	setSelectedFilterValue('status', defaultStatusFilterValue)
 	supplierFilterValue.value = ''
 	supplierFilterText.value = ''
 	categoryFilterValues.value = []
@@ -1408,6 +1517,22 @@ function handleMetaClick(payload: UTSJSONObject) {
 	copyText(stringValue(item['barcode']), '条码已复制', '暂无条码')
 }
 
+function navigateToProductVariants(item: UTSJSONObject) {
+	const rawId = stringValue(item['rawId'], stringValue(item['id']))
+	if (rawId == '') {
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
+		return
+	}
+	const productName = stringValue(item['name'])
+	const basePrice = stringValue(item['baseSalesPrice'])
+	let url = '/pages/products/variants?product=' + rawId
+	if (productName != '') url = url + '&name=' + encodeURIComponent(productName)
+	if (basePrice != '' && basePrice != '-') url = url + '&base_price=' + basePrice
+	uni.navigateTo({
+		url: url,
+	})
+}
+
 function handleFieldClick(payload: UTSJSONObject) {
 	const keyValue = payload['key']
 	const itemValue = payload['item']
@@ -1447,6 +1572,10 @@ function handleFieldClick(payload: UTSJSONObject) {
 	}
 	if (key == 'salesCountText') {
 		copyText(stringValue(item['salesCountText']), '销量已复制', '暂无销量')
+		return
+	}
+	if (key == 'variantCountText') {
+		navigateToProductVariants(item)
 	}
 }
 
@@ -1503,6 +1632,10 @@ function handleMenu(payload: UTSJSONObject) {
 		})
 		return
 	}
+	if (key == 'variants') {
+		navigateToProductVariants(item)
+		return
+	}
 	if (key == 'inventory') {
 		navigateToProductInventory(item)
 		return
@@ -1525,6 +1658,102 @@ function consumeProductListRefreshFlag(): boolean {
 		uni.removeStorageSync(productListRefreshStorageKey)
 	}
 	return shouldRefresh
+}
+
+// 分类页跳转时通过 storage 传入预置分类筛选（switchTab 无法带参数）
+function consumePendingCategoryFilter(): boolean {
+	let payloadText = ''
+	try {
+		payloadText = stringValue(uni.getStorageSync('pending:pages:products:category-filter'))
+		if (payloadText != '') {
+			uni.removeStorageSync('pending:pages:products:category-filter')
+		}
+	} catch (error) {
+		payloadText = ''
+	}
+	if (payloadText == '') {
+		return false
+	}
+	const payload = JSON.parseObject<UTSJSONObject>(payloadText)
+	if (payload == null) {
+		return false
+	}
+	let applied = false
+	let toastText = ''
+
+	// category_ids 支持逗号分隔多个 id（父级分类会传全部后代分类）
+	let idsText = stringValue(payload['category_ids'])
+	if (idsText == '') {
+		idsText = stringValue(payload['category_id'])
+	}
+	if (idsText != '' && idsText != '0') {
+		const rawIds = idsText.split(',')
+		const idList: string[] = []
+		for (let index = 0; index < rawIds.length; index += 1) {
+			const idText = rawIds[index].trim()
+			if (idText != '' && idText != '0') {
+				idList.push(idText)
+			}
+		}
+		if (idList.length > 0) {
+			categoryFilterValues.value = idList
+			setSelectedFilterValue('category', idList.join(','))
+			applied = true
+			const categoryName = stringValue(payload['category_name'])
+			if (categoryName != '') {
+				const suffix = idList.length > 1 ? '（含全部子分类）' : ''
+				toastText = '已筛选分类：' + categoryName + suffix
+			}
+		}
+	}
+
+	// 治理跳转的语义筛选：未分类 / 挂在父级分类
+	if (stringValue(payload['uncategorized']) == 'true') {
+		setSelectedFilterValue('uncategorized', 'true')
+		applied = true
+	}
+	if (stringValue(payload['non_leaf_category']) == 'true') {
+		setSelectedFilterValue('non_leaf_category', 'true')
+		applied = true
+	}
+
+	// 洞察跳转的语义筛选：库存预警 / 无销售 / 缺成本 / 成本倒挂
+	if (stringValue(payload['stock_warning']) == 'true') {
+		setSelectedFilterValue('stock_warning', 'true')
+		applied = true
+	}
+	if (stringValue(payload['no_sales']) == 'true') {
+		setSelectedFilterValue('no_sales', 'true')
+		applied = true
+	}
+	if (stringValue(payload['cost_missing']) == 'true') {
+		setSelectedFilterValue('cost_missing', 'true')
+		applied = true
+	}
+	if (stringValue(payload['cost_inversion']) == 'true') {
+		setSelectedFilterValue('cost_inversion', 'true')
+		applied = true
+	}
+
+	// 订单商品行跳转：预置搜索关键词（条码/名称）
+	const presetKeyword = stringValue(payload['keyword'])
+
+	if (!applied && presetKeyword == '') {
+		return false
+	}
+	keyword.value = presetKeyword
+	currentPage.value = 1
+	const label = stringValue(payload['label'])
+	if (label != '') {
+		toastText = '已筛选：' + label
+	}
+	if (presetKeyword != '' && toastText == '') {
+		toastText = '已搜索：' + presetKeyword
+	}
+	if (toastText != '') {
+		uni.showToast({ title: toastText, icon: 'none', duration: 2000 })
+	}
+	return true
 }
 
 const listItems = computed((): UTSJSONObject[] => {
@@ -1568,7 +1797,20 @@ const summaryItems = computed((): UTSJSONObject[] => {
 })
 
 const hasActiveFilter = computed((): boolean => {
-	return keyword.value != '' || selectedFilters.value.length > 0 || sortOrdering.value != '-updated_at'
+	if (keyword.value != '' || sortOrdering.value != '-updated_at') {
+		return true
+	}
+	if (selectedFilters.value.length == 0) {
+		return false
+	}
+	// 仅剩默认商品状态筛选（草稿+启用）时不算主动筛选
+	if (selectedFilters.value.length == 1) {
+		const onlyFilter = selectedFilters.value[0]
+		if (onlyFilter.param == 'status' && onlyFilter.value == defaultStatusFilterValue) {
+			return false
+		}
+	}
+	return true
 })
 
 const emptyText = computed((): string => {
@@ -1623,12 +1865,21 @@ const filterDefinitions = computed((): ProductFilterDefinition[] => {
 
 onLoad(() => {
 	updateFilterPanelLayout()
+	// 默认商品状态筛选：草稿+启用（面板中可改选查看停用/停产）
+	setSelectedFilterValue('status', defaultStatusFilterValue)
+	// navigateTo 打开时 onLoad 先于 onShow：预筛选必须在首次请求前消费，
+	// 否则 onShow 里的二次 loadProducts 会被 isLoading 守卫拦下，筛选失效
+	consumePendingCategoryFilter()
 	loadProducts()
 })
 
 onShow(() => {
 	startProductVolumeKeyListener()
 	updateFilterPanelLayout()
+	if (consumePendingCategoryFilter()) {
+		loadProducts()
+		return
+	}
 	if (consumeProductListRefreshFlag()) {
 		loadProducts()
 		return

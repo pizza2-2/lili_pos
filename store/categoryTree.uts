@@ -1,0 +1,188 @@
+// 分类全量树内存缓存：tree/ 端点一次拉取（约1500节点，gzip 后几十KB），
+// 钻取/面包屑/搜索/层级校验全部本地完成，零逐层网络请求。
+// UTS 编译为原生 Kotlin/Swift，索引与搜索在原生侧为亚毫秒级。
+import { getCategoryTree, CategoryTreeNode } from '@/pkg/api/modules/category.uts'
+
+export class CategoryTreeStore {
+	nodes: CategoryTreeNode[] = [] as CategoryTreeNode[]
+	loaded: boolean = false
+	loading: boolean = false
+	maxLevel: number = 2
+	// 数据版本号：每次成功加载 +1，页面用它判断是否需要重算派生状态
+	version: number = 0
+
+	// 键用字符串而非 number：Android 端 Map 的键匹配走平台 equals，
+	// JSON 解析出的 Double 装箱与字面量 Int 装箱永不相等会导致查不到；
+	// UTS 的 number.toString() 遵循 JS 语义（0.0 → "0"），字符串键稳定一致
+	private byId: Map<string, CategoryTreeNode> = new Map<string, CategoryTreeNode>()
+	private byParent: Map<string, CategoryTreeNode[]> = new Map<string, CategoryTreeNode[]>()
+
+	private rebuildIndex(): void {
+		const nextById = new Map<string, CategoryTreeNode>()
+		const nextByParent = new Map<string, CategoryTreeNode[]>()
+		for (let index = 0; index < this.nodes.length; index += 1) {
+			const node = this.nodes[index]
+			nextById.set(node.id.toString(), node)
+			const parentKey = node.parent_id.toString()
+			let siblings = nextByParent.get(parentKey)
+			if (siblings == null) {
+				siblings = [] as CategoryTreeNode[]
+				nextByParent.set(parentKey, siblings)
+			}
+			siblings.push(node)
+		}
+		this.byId = nextById
+		this.byParent = nextByParent
+	}
+
+	async load(force: boolean = false): Promise<void> {
+		if (this.loading) {
+			return
+		}
+		if (this.loaded && !force) {
+			return
+		}
+		this.loading = true
+		try {
+			const response = await getCategoryTree()
+			this.nodes = response.items
+			this.maxLevel = response.max_level
+			this.rebuildIndex()
+			this.loaded = true
+			this.version += 1
+		} finally {
+			this.loading = false
+		}
+	}
+
+	nodeOf(id: number): CategoryTreeNode | null {
+		const node = this.byId.get(id.toString())
+		if (node == null) {
+			return null
+		}
+		return node
+	}
+
+	// parentId = 0 表示根层
+	childrenOf(parentId: number): CategoryTreeNode[] {
+		const children = this.byParent.get(parentId.toString())
+		if (children == null) {
+			return [] as CategoryTreeNode[]
+		}
+		return children
+	}
+
+	childrenCountOf(id: number): number {
+		return this.childrenOf(id).length
+	}
+
+	isLeaf(id: number): boolean {
+		return this.childrenOf(id).length == 0
+	}
+
+	// 从根到直接父级（不含自身）；带环保护
+	ancestorsOf(id: number): CategoryTreeNode[] {
+		const chain: CategoryTreeNode[] = [] as CategoryTreeNode[]
+		let current = this.nodeOf(id)
+		let guard = 0
+		while (current != null && current.parent_id > 0 && guard < 10) {
+			const parent = this.nodeOf(current.parent_id)
+			if (parent == null) {
+				break
+			}
+			chain.unshift(parent)
+			current = parent
+			guard += 1
+		}
+		return chain
+	}
+
+	// 完整路径文本，如「食品饮料 › 乳制品 › 酸奶」
+	fullNameOf(id: number): string {
+		const node = this.nodeOf(id)
+		if (node == null) {
+			return ''
+		}
+		const ancestors = this.ancestorsOf(id)
+		const parts: string[] = [] as string[]
+		for (let index = 0; index < ancestors.length; index += 1) {
+			parts.push(ancestors[index].name)
+		}
+		parts.push(node.name)
+		return parts.join(' › ')
+	}
+
+	// 祖先路径文本（不含自身）；根节点返回「一级分类」
+	pathTextOf(id: number): string {
+		const ancestors = this.ancestorsOf(id)
+		if (ancestors.length == 0) {
+			return '一级分类'
+		}
+		const parts: string[] = [] as string[]
+		for (let index = 0; index < ancestors.length; index += 1) {
+			parts.push(ancestors[index].name)
+		}
+		return parts.join(' › ')
+	}
+
+	// 子树高度（含自身），叶子=1；用于移动时的层级上限校验
+	subtreeHeightOf(id: number): number {
+		const children = this.childrenOf(id)
+		if (children.length == 0) {
+			return 1
+		}
+		let deepest = 0
+		for (let index = 0; index < children.length; index += 1) {
+			const height = this.subtreeHeightOf(children[index].id)
+			if (height > deepest) {
+				deepest = height
+			}
+		}
+		return deepest + 1
+	}
+
+	// 整棵子树 id（BFS），用于商品页预筛选等场景
+	subtreeIdsOf(id: number, includeSelf: boolean = true): number[] {
+		const result: number[] = [] as number[]
+		if (includeSelf) {
+			result.push(id)
+		}
+		const queue: number[] = [id]
+		let cursor = 0
+		while (cursor < queue.length) {
+			const currentId = queue[cursor]
+			cursor += 1
+			const children = this.childrenOf(currentId)
+			for (let index = 0; index < children.length; index += 1) {
+				result.push(children[index].id)
+				queue.push(children[index].id)
+			}
+		}
+		return result
+	}
+
+	// 本地即时搜索：匹配 名称 / 外文名 / 编码，大小写不敏感
+	search(keyword: string, limit: number = 50): CategoryTreeNode[] {
+		const needle = keyword.trim().toLowerCase()
+		const result: CategoryTreeNode[] = [] as CategoryTreeNode[]
+		if (needle == '') {
+			return result
+		}
+		for (let index = 0; index < this.nodes.length; index += 1) {
+			if (result.length >= limit) {
+				break
+			}
+			const node = this.nodes[index]
+			if (
+				node.name.toLowerCase().includes(needle) ||
+				(node.name_en != '' && node.name_en.toLowerCase().includes(needle)) ||
+				(node.code != '' && node.code.toLowerCase().includes(needle))
+			) {
+				result.push(node)
+			}
+		}
+		return result
+	}
+}
+
+export const categoryTreeStore = new CategoryTreeStore()

@@ -76,6 +76,17 @@
 					<view class="retry-btn" @click="loadDetails()"><text class="retry-btn-text">重新加载</text></view>
 				</view>
 
+				<!-- 收货即归类：在治理债的源头处理未分类商品 -->
+				<view v-if="uncategorizedProductIds().length > 0" class="classify-card">
+					<view class="classify-main">
+						<text class="classify-title">本页 {{ uncategorizedProductIds().length.toString() }} 个商品未分类</text>
+						<text class="classify-desc">未分类商品不继承税率 / 打印模板等分类规则</text>
+					</view>
+					<view class="classify-btn" @click="confirmAutoClassifyUncategorized">
+						<text class="classify-btn-text">智能归类</text>
+					</view>
+				</view>
+
 				<lili-UniversalList
 					:items="listItems"
 					keyField="id"
@@ -177,13 +188,18 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { batchUpdateProductCategory, ProductBatchActionResponse } from '@/pkg/api/modules/products.uts'
+import { batchAutoClassifyProductCategory, batchUpdateProductCategory, ProductBatchActionResponse } from '@/pkg/api/modules/products.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 import { checkPurchaseProduct, deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
+// #ifdef APP-ANDROID
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+// #endif
+// #ifdef APP-ANDROID
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+// #endif
 
 type PurchaseDetailSelectedFilter = {
 	param: string
@@ -202,7 +218,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const pageTotalAmount = ref('0.00')
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
@@ -546,12 +562,16 @@ function openUniqueSearchResult(response: PurchaseDetailListResponse, autoOpenUn
 	openDetailForm(detail.id.toString())
 }
 
+// 加载请求序号：并发时只应用最新一次请求的结果，新请求不再被在途请求拦截（修复返回页面后扫码搜索被静默丢弃）
+let detailsRequestSeq = 0
+
 async function loadDetails(autoOpenUnique: boolean = false) {
-	if (isLoading.value) return
 	if (purchaseId.value == '') {
 		errorMessage.value = '缺少采购单 ID'
 		return
 	}
+	detailsRequestSeq += 1
+	const requestSeq = detailsRequestSeq
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
@@ -563,10 +583,13 @@ async function loadDetails(autoOpenUnique: boolean = false) {
 			product: null,
 			is_fully_received: selectedFilterValue('is_fully_received') == '' ? null : selectedFilterValue('is_fully_received'),
 		})
+		if (requestSeq != detailsRequestSeq) return
 		applyResponse(response)
 		await loadPurchaseInfo()
+		if (requestSeq != detailsRequestSeq) return
 		openUniqueSearchResult(response, autoOpenUnique)
 	} catch (error) {
+		if (requestSeq != detailsRequestSeq) return
 		details.value = []
 		currentPage.value = 1
 		totalPages.value = 1
@@ -574,7 +597,7 @@ async function loadDetails(autoOpenUnique: boolean = false) {
 		pageTotalAmount.value = '0.00'
 		errorMessage.value = parseErrorMessage(error, '采购明细加载失败')
 	} finally {
-		isLoading.value = false
+		if (requestSeq == detailsRequestSeq) isLoading.value = false
 	}
 }
 
@@ -595,22 +618,26 @@ function consumeRefreshNeeded(): boolean {
 
 function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
 	const statusText = item.is_fully_received ? '已收齐' : '待收货'
+	// 变体明细：标题带上属性组合，条码优先显示变体条码
+	let title = stringValue(item.product_name, '商品 #' + item.product.toString())
+	if (item.variant_text != '') title = title + ' - ' + item.variant_text
+	const barcodeText = item.variant_barcode != '' ? item.variant_barcode : stringValue(item.product_barcode, '-')
 	return {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
-		title: stringValue(item.product_name, '商品 #' + item.product.toString()),
-		subtitle: '条码：' + stringValue(item.product_barcode, '-'),
+		title: title,
+		subtitle: '条码：' + barcodeText,
 		image: item.product_image,
 		images: item.product_images,
 		previewCover: item.product_preview_images.length > 0 ? item.product_preview_images[0] : item.product_image,
 		previewImages: item.product_preview_images,
 		mediaIds: item.product_media_ids,
-		amountText: '¥ ' + stringValue(item.amount, '0.00'),
+		amountText: stringValue(item.amount, '0.00') + ' zł',
 		skuText: stringValue(item.product_sku, '-'),
 		quantityText: item.received_quantity.toString() + '/' + item.quantity.toString() + '，剩余 ' + item.remaining_quantity.toString(),
 		progressText: stringValue(item.receive_progress, '0') + '%',
 		notesText: stringValue(item.notes, '-'),
-		tags: [statusText, '单价 ¥ ' + stringValue(item.unit_price, '0.00')] as string[],
+		tags: [statusText, '单价 ' + stringValue(item.unit_price, '0.00') + ' zł'] as string[],
 	} as UTSJSONObject
 }
 
@@ -677,7 +704,11 @@ function applySelectedFilters() {
 
 async function handleScannedBarcode(scanResult: string) {
 	const barcode = scanResult.trim()
-	if (barcode == '' || scanLookupRunning.value) return
+	if (barcode == '') return
+	if (scanLookupRunning.value) {
+		uni.showToast({ title: '上一次扫码还在处理中', icon: 'none', duration: 2000 })
+		return
+	}
 	if (purchaseId.value == '') {
 		searchByScannedBarcode(barcode)
 		return
@@ -699,6 +730,10 @@ async function handleScannedBarcode(scanResult: string) {
 }
 
 function handleScanSearch() {
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: true,
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -711,6 +746,7 @@ function handleScanSearch() {
 			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function unlockVolumeScanSoon() {
@@ -719,6 +755,7 @@ function unlockVolumeScanSoon() {
 	}, 1200)
 }
 
+// #ifdef APP-ANDROID
 function handleVolumeKeyEvent(event: VolumeKeyEvent) {
 	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') {
 		return
@@ -737,8 +774,10 @@ function startPurchaseDetailVolumeKeyListener() {
 		handleVolumeKeyEvent(event)
 	})
 }
+// #endif
 
 function schedulePurchaseDetailVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) {
 		clearTimeout(volumeKeyStartTimer)
 	}
@@ -746,15 +785,18 @@ function schedulePurchaseDetailVolumeKeyListener() {
 		volumeKeyStartTimer = 0
 		startPurchaseDetailVolumeKeyListener()
 	}, 260)
+	// #endif
 }
 
 function stopPurchaseDetailVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) {
 		clearTimeout(volumeKeyStartTimer)
 		volumeKeyStartTimer = 0
 	}
 	stopVolumeKeyListener()
 	volumeScanLocked.value = false
+	// #endif
 }
 function handleCreate() { uni.navigateTo({ url: '/pages/purchases/details/from?purchase=' + purchaseId.value }) }
 
@@ -891,6 +933,73 @@ function handleBatchToolbarAction(payload: UTSJSONObject) {
 	}
 }
 
+// ── 收货即归类：处理本单未分类商品 ──────────────────────────────
+
+function uncategorizedProductIds(): string[] {
+	const result: string[] = []
+	for (let index = 0; index < details.value.length; index += 1) {
+		const detail = details.value[index]
+		if (detail.product > 0 && detail.product_category <= 0) {
+			const idText = detail.product.toString()
+			if (!result.includes(idText)) {
+				result.push(idText)
+			}
+		}
+	}
+	return result
+}
+
+async function executeAutoClassifyUncategorized(): Promise<void> {
+	if (batchSubmitting.value) return
+	const ids = uncategorizedProductIds()
+	if (ids.length == 0) return
+	batchSubmitting.value = true
+	let successCount = 0
+	let failureCount = 0
+	let skippedCount = 0
+	try {
+		// 分片提交，避免单次处理过多商品触发请求超时
+		const chunkSize = 10
+		for (let start = 0; start < ids.length; start += chunkSize) {
+			const chunk: string[] = []
+			for (let index = start; index < ids.length && index < start + chunkSize; index += 1) {
+				chunk.push(ids[index])
+			}
+			try {
+				const response = await batchAutoClassifyProductCategory(chunk, 'auto', 10)
+				const summaryObject = parseObject(response.data['summary'])
+				if (summaryObject != null) {
+					successCount += numberValue(summaryObject['success_count'])
+					failureCount += numberValue(summaryObject['failure_count'])
+					skippedCount += numberValue(summaryObject['skipped_count'])
+				}
+			} catch (error) {
+				failureCount += chunk.length
+			}
+		}
+		let message = '归类成功 ' + successCount.toString()
+		if (failureCount > 0) message = message + '，失败 ' + failureCount.toString()
+		if (skippedCount > 0) message = message + '，无推荐 ' + skippedCount.toString()
+		uni.showToast({ title: message, icon: 'none', duration: 3500 })
+		loadDetails()
+	} finally {
+		batchSubmitting.value = false
+	}
+}
+
+function confirmAutoClassifyUncategorized() {
+	const count = uncategorizedProductIds().length
+	if (count == 0) return
+	uni.showModal({
+		title: '智能归类',
+		content: '将按名称/供应商/条码为本页 ' + count.toString() + ' 个未分类商品推荐并设置分类，无可靠推荐的商品会跳过。确定执行吗？',
+		success: (res) => {
+			if (!res.confirm) return
+			executeAutoClassifyUncategorized()
+		},
+	})
+}
+
 function promptReceive(item: UTSJSONObject) {
 	const id = stringValue(item['rawId'])
 	const defaultValue = stringValue(item['remainingValue'], '1')
@@ -961,7 +1070,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '明细数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'amount', label: '本页金额', value: pageTotalAmount.value + ' zł' } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })
@@ -1017,6 +1126,12 @@ onUnload(() => {
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.classify-card { flex-direction: row; align-items: center; background-color: #FFFBEB; border-radius: 10px; padding: 10px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FDE68A; }
+.classify-main { flex: 1; padding-right: 8px; }
+.classify-title { font-size: 14px; line-height: 20px; color: #92400E; font-weight: bold; }
+.classify-desc { margin-top: 2px; font-size: 12px; line-height: 16px; color: #B45309; }
+.classify-btn { padding-left: 14px; padding-right: 14px; padding-top: 8px; padding-bottom: 8px; border-radius: 10px; background-color: #0F766E; }
+.classify-btn-text { font-size: 13px; line-height: 18px; color: #FFFFFF; font-weight: bold; }
 .purchase-filter-panel { position: relative; padding-top: 2px; }
 .purchase-filter-content-scroll { padding-right: 2px; }
 .purchase-filter-scroll-inner { padding-bottom: 58px; }

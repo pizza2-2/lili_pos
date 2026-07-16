@@ -1,0 +1,765 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="分类对比"
+			searchPlaceholder="搜索分类名称"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+			@searchInput="handleSearchInput($event)"
+			@searchConfirm="handleSearchInput($event)"
+			@searchClear="handleSearchClear()"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<!-- 已选分类 + 对比操作 -->
+				<view class="card">
+					<view class="card-head">
+						<view class="card-title-wrap">
+							<text class="card-label">已选分类</text>
+							<text class="card-title">{{ selectedItems().length.toString() }} / 5</text>
+						</view>
+						<view class="chip-row">
+							<view v-for="option in dayOptions" :key="'days-' + option.toString()" :class="dayChipClass(option)" @click="setDays(option)">
+								<text :class="dayChipTextClass(option)">{{ option.toString() }}天</text>
+							</view>
+						</view>
+					</view>
+					<view v-if="selectedItems().length == 0" class="empty-state">
+						<text class="empty-text">从下方列表选择 2-5 个分类进行对比</text>
+					</view>
+					<view v-else class="selected-wrap">
+						<view v-for="item in selectedItems()" :key="'selected-' + item.id.toString()" class="selected-chip" @click="toggleSelect(item.id)">
+							<text class="selected-chip-text">{{ item.name }} ✕</text>
+						</view>
+					</view>
+					<view :class="canCompare() ? 'action-primary' : 'action-primary action-primary-disabled'" @click="runComparison">
+						<text class="action-primary-text">{{ comparing ? '对比中...' : '开始对比' }}</text>
+					</view>
+				</view>
+
+				<!-- 对比结果 -->
+				<text v-if="compareError != ''" class="error-text">{{ compareError }}</text>
+				<view v-if="compareItems.length > 0">
+					<view class="result-period-row">
+						<text class="result-period-text">{{ comparePeriodText }}</text>
+					</view>
+					<view v-for="item in compareItems" :key="'result-' + resultCategoryId(item)" class="card">
+						<view class="result-head">
+							<view class="result-title-wrap">
+								<text class="result-name">{{ resultCategoryName(item) }}</text>
+								<view v-if="resultLifecycle(item) != ''" class="lifecycle-tag">
+									<text class="lifecycle-tag-text">{{ resultLifecycle(item) }}</text>
+								</view>
+							</view>
+							<lili-score-badge :score="resultScore(item)"></lili-score-badge>
+						</view>
+						<view class="rank-chip-row">
+							<view :class="rankChipClass(item, 'sales_rank')">
+								<text class="rank-chip-text">销售 第{{ rankText(item, 'sales_rank') }}</text>
+							</view>
+							<view :class="rankChipClass(item, 'gross_profit_rank')">
+								<text class="rank-chip-text">毛利 第{{ rankText(item, 'gross_profit_rank') }}</text>
+							</view>
+							<view :class="rankChipClass(item, 'health_rank')">
+								<text class="rank-chip-text">评分 第{{ rankText(item, 'health_rank') }}</text>
+							</view>
+						</view>
+						<view class="metric-grid">
+							<lili-metric-card label="销售额" :value="stringField(item, 'sales_amount', '0.00') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="毛利" :value="stringField(item, 'gross_profit', '0.00') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="毛利率" :value="percentText(stringField(item, 'gross_margin'))"></lili-metric-card>
+							<lili-metric-card label="库存值" :value="stringField(item, 'inventory_value', '0.00') + ' zł'"></lili-metric-card>
+						</view>
+						<view class="result-meta-row">
+							<text class="result-meta">商品 {{ stringField(item, 'product_count', '0') }} · 启用 {{ stringField(item, 'active_product_count', '0') }} · 预警 {{ stringField(item, 'stock_warning_count', '0') }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 分类选择列表 -->
+				<view class="card">
+					<view class="card-head">
+						<view class="card-title-wrap">
+							<text class="card-label">选择分类</text>
+							<text class="card-title">{{ pickerTitle }}</text>
+						</view>
+						<view class="mini-action" @click="loadCandidates">
+							<text class="mini-action-text">{{ candidatesLoading ? '加载中' : '刷新' }}</text>
+						</view>
+					</view>
+					<text v-if="candidatesError != ''" class="error-text">{{ candidatesError }}</text>
+					<view v-if="filteredCandidates().length == 0 && !candidatesLoading" class="empty-state">
+						<text class="empty-text">没有匹配的分类</text>
+					</view>
+					<view
+						v-for="item in visibleCandidates()"
+						:key="'candidate-' + item.id.toString()"
+						class="candidate-row"
+						@click="toggleSelect(item.id)"
+					>
+						<view :class="isSelected(item.id) ? 'candidate-check candidate-check-active' : 'candidate-check'">
+							<text class="candidate-check-text">{{ isSelected(item.id) ? '✓' : '' }}</text>
+						</view>
+						<view class="candidate-main">
+							<text class="candidate-name">{{ item.full_name == '' ? item.name : item.full_name }}</text>
+							<text class="candidate-meta">日销 {{ item.sales_amount == '' ? '0.00' : item.sales_amount }} zł · 商品 {{ item.product_count.toString() }}</text>
+						</view>
+						<lili-score-badge :score="item.health_score"></lili-score-badge>
+					</view>
+					<view v-if="canShowMoreCandidates()" class="expand-row" @click="showMoreCandidates">
+						<text class="expand-text">展开更多</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import { getCategoryComparison, getCategoryHealthScores, CategoryHealthScoreItem } from '@/pkg/api/modules/category'
+
+const keyword = ref('')
+const candidatesLoading = ref(false)
+const candidatesError = ref('')
+const candidates = ref<CategoryHealthScoreItem[]>([] as CategoryHealthScoreItem[])
+const candidateRenderLimit = ref(20)
+const selectedIds = ref<string[]>([] as string[])
+const compareDays = ref(30)
+const comparing = ref(false)
+const compareError = ref('')
+const compareItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const comparePeriodText = ref('')
+
+const dayOptions = ref<number[]>([7, 30, 90] as number[])
+
+// ── 解析辅助 ────────────────────────────────────────────────────
+
+function parseErrorMessage(error: any): string {
+	let message = '数据加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '数据加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed == null) {
+			return {} as UTSJSONObject
+		}
+		return parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return [] as UTSJSONObject[]
+		}
+		return parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function stringField(item: UTSJSONObject, key: string, fallback: string = ''): string {
+	return stringValue(item[key], fallback)
+}
+
+function percentText(value: string): string {
+	const parsed = floatValue(value, -1)
+	if (parsed < 0) {
+		return '-'
+	}
+	return (parsed * 100).toFixed(1) + '%'
+}
+
+// ── 候选与选择 ───────────────────────────────────────────────────
+
+function isSelected(id: number): boolean {
+	return selectedIds.value.includes(id.toString())
+}
+
+function selectedItems(): CategoryHealthScoreItem[] {
+	const result: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < candidates.value.length; index += 1) {
+		if (isSelected(candidates.value[index].id)) {
+			result.push(candidates.value[index])
+		}
+	}
+	return result
+}
+
+function toggleSelect(id: number): void {
+	const idText = id.toString()
+	if (selectedIds.value.includes(idText)) {
+		const nextIds: string[] = []
+		for (let index = 0; index < selectedIds.value.length; index += 1) {
+			if (selectedIds.value[index] != idText) {
+				nextIds.push(selectedIds.value[index])
+			}
+		}
+		selectedIds.value = nextIds
+		return
+	}
+	if (selectedIds.value.length >= 5) {
+		uni.showToast({ title: '最多选择 5 个分类', icon: 'none', duration: 3000 })
+		return
+	}
+	selectedIds.value.push(idText)
+}
+
+function filteredCandidates(): CategoryHealthScoreItem[] {
+	if (keyword.value == '') {
+		return candidates.value
+	}
+	const result: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < candidates.value.length; index += 1) {
+		const item = candidates.value[index]
+		const target = item.full_name == '' ? item.name : item.full_name
+		if (target.includes(keyword.value)) {
+			result.push(item)
+		}
+	}
+	return result
+}
+
+function visibleCandidates(): CategoryHealthScoreItem[] {
+	const filtered = filteredCandidates()
+	if (filtered.length <= candidateRenderLimit.value) {
+		return filtered
+	}
+	const result: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < candidateRenderLimit.value; index += 1) {
+		result.push(filtered[index])
+	}
+	return result
+}
+
+function canShowMoreCandidates(): boolean {
+	return filteredCandidates().length > candidateRenderLimit.value
+}
+
+function showMoreCandidates(): void {
+	candidateRenderLimit.value = candidateRenderLimit.value + 20
+}
+
+const pickerTitle = computed((): string => {
+	return keyword.value == '' ? '按评分从低到高' : '搜索：' + keyword.value
+})
+
+async function loadCandidates(): Promise<void> {
+	if (candidatesLoading.value) {
+		return
+	}
+	candidatesLoading.value = true
+	candidatesError.value = ''
+	try {
+		const response = await getCategoryHealthScores(500, null)
+		candidates.value = response.items
+	} catch (error) {
+		candidatesError.value = parseErrorMessage(error)
+	} finally {
+		candidatesLoading.value = false
+	}
+}
+
+// ── 对比 ────────────────────────────────────────────────────────
+
+function canCompare(): boolean {
+	const count = selectedIds.value.length
+	return count >= 2 && count <= 5 && !comparing.value
+}
+
+async function runComparisonInternal(): Promise<void> {
+	if (comparing.value) {
+		return
+	}
+	comparing.value = true
+	compareError.value = ''
+	try {
+		const ids: string[] = []
+		for (let index = 0; index < selectedIds.value.length; index += 1) {
+			ids.push(selectedIds.value[index])
+		}
+		const response = await getCategoryComparison(ids, compareDays.value)
+		compareItems.value = objectArrayValue(response['items'])
+		const period = objectValue(response['period'])
+		const dateFrom = stringValue(period['date_from'])
+		const dateTo = stringValue(period['date_to'])
+		comparePeriodText.value = dateFrom == '' ? '' : '统计周期 ' + dateFrom + ' ~ ' + dateTo + ' · 含下级分类'
+	} catch (error) {
+		compareError.value = parseErrorMessage(error)
+	} finally {
+		comparing.value = false
+	}
+}
+
+function setDays(days: number): void {
+	compareDays.value = days
+	if (selectedIds.value.length >= 2) {
+		runComparisonInternal()
+	}
+}
+
+function dayChipClass(days: number): string {
+	return compareDays.value == days ? 'chip chip-active' : 'chip'
+}
+
+function dayChipTextClass(days: number): string {
+	return compareDays.value == days ? 'chip-text chip-text-active' : 'chip-text'
+}
+
+function runComparison(): void {
+	if (selectedIds.value.length < 2) {
+		uni.showToast({ title: '至少选择 2 个分类', icon: 'none', duration: 3000 })
+		return
+	}
+	runComparisonInternal()
+}
+
+// ── 结果展示 ────────────────────────────────────────────────────
+
+function resultCategory(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['category'])
+}
+
+function resultCategoryId(item: UTSJSONObject): string {
+	return stringValue(resultCategory(item)['id'], 'unknown')
+}
+
+function resultCategoryName(item: UTSJSONObject): string {
+	const category = resultCategory(item)
+	return stringValue(category['full_name'], stringValue(category['name'], '未知分类'))
+}
+
+function resultLifecycle(item: UTSJSONObject): string {
+	return stringValue(item['lifecycle_stage_label'])
+}
+
+function resultScore(item: UTSJSONObject): string {
+	return stringValue(item['health_score'])
+}
+
+function rankText(item: UTSJSONObject, key: string): string {
+	return stringValue(item[key], '-')
+}
+
+function rankChipClass(item: UTSJSONObject, key: string): string {
+	return rankText(item, key) == '1' ? 'rank-chip rank-chip-top' : 'rank-chip'
+}
+
+// ── 搜索与生命周期 ───────────────────────────────────────────────
+
+function handleSearchInput(value: any): void {
+	keyword.value = value as string
+	candidateRenderLimit.value = 20
+}
+
+function handleSearchClear(): void {
+	keyword.value = ''
+	candidateRenderLimit.value = 20
+}
+
+onLoad((event: OnLoadOptions) => {
+	const idsValue = event['ids']
+	if (idsValue != null) {
+		const rawIds = ('' + idsValue).split(',')
+		const initialIds: string[] = []
+		for (let index = 0; index < rawIds.length; index += 1) {
+			const idText = rawIds[index].trim()
+			if (idText != '' && idText != '0' && initialIds.length < 5) {
+				initialIds.push(idText)
+			}
+		}
+		selectedIds.value = initialIds
+	}
+	loadCandidates()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	background-color: #F4F6F8;
+}
+
+.page-content {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 60px;
+	background-color: #F4F6F8;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.card-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.card-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.card-title {
+	margin-top: 3px;
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.chip-row {
+	flex-direction: row;
+}
+
+.chip {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-left: 6px;
+}
+
+.chip-active {
+	background-color: #0F766E;
+}
+
+.chip-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.chip-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.empty-state {
+	padding-top: 12px;
+	padding-bottom: 12px;
+	align-items: center;
+}
+
+.empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.selected-wrap {
+	margin-top: 8px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.selected-chip {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 999px;
+	background-color: #CCFBF1;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.selected-chip-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #115E59;
+	font-weight: bold;
+}
+
+.action-primary {
+	margin-top: 10px;
+	height: 42px;
+	border-radius: 12px;
+	background-color: #0F766E;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-primary-disabled {
+	opacity: 0.5;
+}
+
+.action-primary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.error-text {
+	margin-top: 6px;
+	margin-bottom: 6px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #DC2626;
+}
+
+.result-period-row {
+	padding-left: 2px;
+	padding-bottom: 6px;
+}
+
+.result-period-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.result-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.result-title-wrap {
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
+	padding-right: 8px;
+}
+
+.result-name {
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.lifecycle-tag {
+	margin-left: 6px;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	border-radius: 999px;
+	background-color: #E0F2FE;
+}
+
+.lifecycle-tag-text {
+	font-size: 11px;
+	line-height: 15px;
+	color: #0369A1;
+}
+
+.rank-chip-row {
+	margin-top: 8px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.rank-chip {
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-right: 6px;
+	margin-bottom: 4px;
+}
+
+.rank-chip-top {
+	background-color: #FEF9C3;
+}
+
+.rank-chip-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.metric-grid {
+	margin-top: 6px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.result-meta-row {
+	margin-top: 4px;
+}
+
+.result-meta {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.candidate-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.candidate-check {
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5F5;
+	margin-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.candidate-check-active {
+	background-color: #0F766E;
+	border-color: #0F766E;
+}
+
+.candidate-check-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.candidate-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.candidate-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+
+.candidate-meta {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.expand-row {
+	margin-top: 8px;
+	align-items: center;
+	padding-top: 8px;
+}
+
+.expand-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F766E;
+	font-weight: bold;
+}
+</style>

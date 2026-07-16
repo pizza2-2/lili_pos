@@ -1,0 +1,202 @@
+import { baseUrl } from '@/pkg/api/index.uts'
+
+/**
+ * 远程日志：本地存储环形缓冲 + 定时批量上报到 Django (/api/app/logs/batch/)。
+ * 只收 warn/error；相同 level+tag+message 合并为 count 计数，避免同一错误刷爆缓冲。
+ * 上报失败不丢日志，留在缓冲等下一轮；缓冲超上限丢最旧的。
+ * 与 POS 项目 utils/logger.uts 同源，改动请两边同步。
+ */
+
+export type AppLogItem = {
+	level: string
+	tag: string
+	message: string
+	extra: string
+	count: number
+	happened_at: number
+}
+
+type LogBuffer = {
+	items: AppLogItem[]
+}
+
+const STORAGE_KEY = 'app_log_buffer_v1'
+const MAX_BUFFER = 200
+const MAX_MESSAGE = 2000
+const MAX_BATCH = 50
+const DEDUPE_LOOKBACK = 20
+const FLUSH_INTERVAL_MS = 60000
+const FIRST_FLUSH_DELAY_MS = 10000
+
+let logItems: AppLogItem[] = []
+let bufferLoaded = false
+let isFlushing = false
+let timerStarted = false
+let identityProvider: (() => string) | null = null
+// 收集/上报开关（由宿主注入，如读取应用设置的会话级开关）；未注入时默认开启
+let uploadEnabledProvider: (() => boolean) | null = null
+
+/** 注入开关：返回 false 时既不收集（record 直接丢弃）也不上报 */
+export function setLogUploadEnabledProvider(provider: (() => boolean) | null): void {
+	uploadEnabledProvider = provider
+}
+
+function isUploadEnabled(): boolean {
+	const p = uploadEnabledProvider
+	if (p == null) return true
+	try {
+		return p()
+	} catch (e) {
+		return true
+	}
+}
+
+/** 把任意错误对象转成可读字符串，供各调用点使用 */
+export function stringifyError(err: any | null): string {
+	if (err == null) return 'null'
+	if (err instanceof Error) {
+		return (err as Error).message
+	}
+	if (typeof err == 'string') return err as string
+	try {
+		return JSON.stringify(err)
+	} catch (e) {
+		return 'unstringifiable error'
+	}
+}
+
+function loadBuffer(): void {
+	if (bufferLoaded) return
+	bufferLoaded = true
+	const raw = uni.getStorageSync(STORAGE_KEY)
+	if (typeof raw == 'string' && (raw as string).length > 0) {
+		try {
+			const parsed = JSON.parse<LogBuffer>(raw as string)
+			if (parsed != null) {
+				logItems = (parsed as LogBuffer).items
+			}
+		} catch (e) {
+			// 缓冲损坏直接丢弃，从空缓冲开始
+			logItems = []
+		}
+	}
+}
+
+function persistBuffer(): void {
+	const data: LogBuffer = { items: logItems }
+	try {
+		uni.setStorageSync(STORAGE_KEY, JSON.stringify(data))
+	} catch (e) {
+		// 存储失败不影响业务
+	}
+}
+
+/** 批量上报缓冲中的日志；失败保留，等下一轮定时器 */
+export function flushLogs(): void {
+	loadBuffer()
+	if (!isUploadEnabled()) return
+	if (isFlushing) return
+	if (logItems.length == 0) return
+	isFlushing = true
+
+	const sendCount = logItems.length > MAX_BATCH ? MAX_BATCH : logItems.length
+	const items = logItems.slice(0, sendCount)
+	const systemInfo = uni.getSystemInfoSync()
+
+	let identity = ''
+	if (identityProvider != null) {
+		try {
+			identity = identityProvider!()
+		} catch (e) {
+			identity = ''
+		}
+	}
+
+	uni.request<UTSJSONObject>({
+		url: `${baseUrl}/api/app/logs/batch/`,
+		method: 'POST',
+		timeout: 10000,
+		data: {
+			appid: systemInfo.appId,
+			app_version: systemInfo.appVersion,
+			platform: systemInfo.platform,
+			identity: identity,
+			device_id: systemInfo.deviceId,
+			device_model: systemInfo.deviceModel,
+			logs: items
+		},
+		success: (res) => {
+			if (res.statusCode >= 200 && res.statusCode < 300) {
+				logItems.splice(0, sendCount)
+				persistBuffer()
+			}
+			isFlushing = false
+		},
+		fail: (_err) => {
+			isFlushing = false
+		}
+	})
+}
+
+function record(level: string, tag: string, message: string, extra: string): void {
+	// 开关关闭时不收集：只留 console 输出，不进缓冲不落存储
+	if (!isUploadEnabled()) return
+	loadBuffer()
+	let msg = message
+	if (msg.length > MAX_MESSAGE) {
+		msg = msg.substring(0, MAX_MESSAGE)
+	}
+	// 与最近条目相同则合并计数
+	const start = logItems.length > DEDUPE_LOOKBACK ? logItems.length - DEDUPE_LOOKBACK : 0
+	for (let i = logItems.length - 1; i >= start; i--) {
+		const item = logItems[i]
+		if (item.level == level && item.tag == tag && item.message == msg) {
+			item.count += 1
+			item.happened_at = Date.now()
+			persistBuffer()
+			return
+		}
+	}
+	logItems.push({
+		level: level,
+		tag: tag,
+		message: msg,
+		extra: extra,
+		count: 1,
+		happened_at: Date.now()
+	} as AppLogItem)
+	if (logItems.length > MAX_BUFFER) {
+		logItems.splice(0, logItems.length - MAX_BUFFER)
+	}
+	persistBuffer()
+}
+
+export function logWarn(tag: string, message: string, extra: string = ''): void {
+	console.warn(`[${tag}] ${message}`)
+	record('warn', tag, message, extra)
+}
+
+export function logError(tag: string, message: string, extra: string = ''): void {
+	console.error(`[${tag}] ${message}`)
+	record('error', tag, message, extra)
+}
+
+/**
+ * 在 App.uvue onLaunch 中调用一次。
+ * getIdentity 返回用户标识（如 "user:3 张三"），随每批日志上报。
+ */
+export function initLogger(getIdentity: (() => string) | null): void {
+	if (getIdentity != null) {
+		identityProvider = getIdentity
+	}
+	loadBuffer()
+	if (timerStarted) return
+	timerStarted = true
+	// 启动后先补传上次运行残留的日志，之后定时批量上传
+	setTimeout(() => {
+		flushLogs()
+	}, FIRST_FLUSH_DELAY_MS)
+	setInterval(() => {
+		flushLogs()
+	}, FLUSH_INTERVAL_MS)
+}

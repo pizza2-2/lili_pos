@@ -61,29 +61,42 @@ const groups = ref<MenuGroup[]>([
 			{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
 			{ label: '采购汇总', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/suppliers_procure/index', action: 'navigateTo', disabled: false },
 			{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
+			{ label: '退货记录', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/returns/index', action: 'navigateTo', disabled: false },
 			{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false },
 			{ label: '支出管理', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/expenses/index', action: 'navigateTo', disabled: false },
+			{ label: '支出类型', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/products/config-model/index?resource=expenditure-type', action: 'navigateTo', disabled: false },
+		],
+	},
+	{
+		label: '分类管理',
+		items: [
+			{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false },
+			{ label: '经营仪表盘', icon: '', iconPath: '/static/menu-icons/logs.svg', path: '/pages/category/dashboard', action: 'navigateTo', disabled: false },
+			{ label: '治理工具', icon: '', iconPath: '/static/menu-icons/permission.svg', path: '/pages/category/tools', action: 'navigateTo', disabled: false },
 		],
 	},
 	{
 		label: '商品与标签配置',
 		items: [
-			{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false },
+			{ label: '商品管理', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/tabbar/products', action: 'navigateTo', disabled: false },
 			{ label: '收银分类', icon: '', iconPath: '/static/menu-icons/cash-category.svg', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
 			{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false },
 			{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false },
 			{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false },
 			{ label: '标签模板', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/label-templates/index', action: 'navigateTo', disabled: false },
+			// #ifdef APP-ANDROID
 			{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
+			// #endif
 		],
 	},
 	{
 		label: '收银与店务配置',
 		items: [
 			{ label: '收银台', icon: '', iconPath: '/static/menu-icons/cash-register.svg', path: null, action: 'todo', disabled: true },
+			// #ifdef APP-ANDROID
 			{ label: '打印机设置', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/printer-settings/index', action: 'navigateTo', disabled: false },
+			// #endif
 			{ label: '支付', icon: '', iconPath: '/static/menu-icons/payment.svg', path: null, action: 'todo', disabled: true },
-			{ label: '权限', icon: '', iconPath: '/static/menu-icons/permission.svg', path: null, action: 'todo', disabled: true },
 		],
 	},
 	{

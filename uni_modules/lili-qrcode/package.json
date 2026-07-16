@@ -1,0 +1,60 @@
+{
+  "id": "lili-qrcode",
+  "displayName": "LILI 二维码生成",
+  "version": "1.0.0",
+  "description": "基于 ZXing 生成二维码模块矩阵，供标签打印绘制使用",
+  "keywords": [
+    "qrcode",
+    "zxing",
+    "label"
+  ],
+  "engines": {
+    "HBuilderX": "^4.71",
+    "uni-app-x": "^4.71"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "declaration": {
+      "ads": "无",
+      "data": "无",
+      "permissions": "无"
+    }
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": {
+        "tcb": "n",
+        "aliyun": "n"
+      },
+      "client": {
+        "Vue": {
+          "vue2": "n",
+          "vue3": "y"
+        },
+        "App": {
+          "app-vue": "n",
+          "app-nvue": "n",
+          "app-uvue": "y"
+        },
+        "H5-mobile": {
+          "Safari": "n",
+          "Android Browser": "n",
+          "微信浏览器(Android)": "n",
+          "QQ浏览器(Android)": "n"
+        },
+        "H5-pc": {
+          "Chrome": "n",
+          "IE": "n",
+          "Edge": "n",
+          "Firefox": "n",
+          "Safari": "n"
+        },
+        "小程序": {
+          "微信": "n"
+        }
+      }
+    }
+  }
+}

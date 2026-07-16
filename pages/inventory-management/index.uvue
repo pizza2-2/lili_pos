@@ -229,11 +229,16 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
 import { getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+// #ifdef APP-ANDROID
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+// #endif
+// #ifdef APP-ANDROID
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+// #endif
 
 type SelectOption = {
 	value: string
@@ -249,7 +254,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const totalQuantityText = ref('0')
 const alertCountText = ref('0')
 const supplierFilterValue = ref('')
@@ -616,8 +621,8 @@ function numberText(value: any | null): string {
 
 function moneyText(value: any | null): string {
 	const text = stringValue(value)
-	if (text == '') return '¥ 0.00'
-	return '¥ ' + text
+	if (text == '') return '0.00 zł'
+	return text + ' zł'
 }
 
 function imageListFromStock(stock: UTSJSONObject): string[] {
@@ -666,11 +671,17 @@ function stockToListItem(item: UTSJSONObject): UTSJSONObject {
 	if (supplierName != '未设置供应商') tags.push(supplierName)
 	const images = imageListFromStock(item)
 	const previewImages = previewImageListFromStock(item)
+	// 变体库存行：标题带属性组合，条码优先显示变体条码
+	const variantText = stringValue(item['variant_text'])
+	const variantBarcode = stringValue(item['variant_barcode'])
+	let title = stringValue(item['product_name'], '未命名商品')
+	if (variantText != '') title = title + ' - ' + variantText
+	const displayBarcode = variantBarcode != '' ? variantBarcode : barcode
 	return {
 		id: id,
 		rawId: id,
-		title: stringValue(item['product_name'], '未命名商品'),
-		subtitle: '条码：' + (barcode == '' ? '-' : barcode),
+		title: title,
+		subtitle: '条码：' + (displayBarcode == '' ? '-' : displayBarcode),
 		locationText: stringValue(item['location_name'], '未设置库存位置'),
 		image: images.length > 0 ? images[0] : '',
 		images: images,
@@ -728,13 +739,20 @@ function buildQuery(): InventoryListQuery {
 	} as InventoryListQuery
 }
 
+// 加载请求序号：并发时只应用最新一次请求的结果，新请求不再被在途请求拦截（避免扫码/搜索被静默丢弃）
+let stocksRequestSeq = 0
+
 async function loadStocks() {
-	if (isLoading.value) return
+	stocksRequestSeq += 1
+	const requestSeq = stocksRequestSeq
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
-		applyResponse(await getInventoryStocks(buildQuery()))
+		const response = await getInventoryStocks(buildQuery())
+		if (requestSeq != stocksRequestSeq) return
+		applyResponse(response)
 	} catch (error) {
+		if (requestSeq != stocksRequestSeq) return
 		stocks.value = [] as UTSJSONObject[]
 		currentPage.value = 1
 		totalPages.value = 1
@@ -743,7 +761,7 @@ async function loadStocks() {
 		alertCountText.value = '0'
 		errorMessage.value = parseErrorMessage(error, '库存加载失败')
 	} finally {
-		isLoading.value = false
+		if (requestSeq == stocksRequestSeq) isLoading.value = false
 	}
 }
 
@@ -956,6 +974,10 @@ async function handleScannedBarcode(scanResult: string) {
 }
 
 function handleScanSearch() {
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: true,
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -968,6 +990,7 @@ function handleScanSearch() {
 			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function unlockVolumeScanSoon() {
@@ -976,6 +999,7 @@ function unlockVolumeScanSoon() {
 	}, 1200)
 }
 
+// #ifdef APP-ANDROID
 function handleVolumeKeyEvent(event: VolumeKeyEvent) {
 	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') return
 	if (volumeScanLocked.value) return
@@ -990,22 +1014,27 @@ function startInventoryVolumeKeyListener() {
 		handleVolumeKeyEvent(event)
 	})
 }
+// #endif
 
 function scheduleInventoryVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) clearTimeout(volumeKeyStartTimer)
 	volumeKeyStartTimer = setTimeout(() => {
 		volumeKeyStartTimer = 0
 		startInventoryVolumeKeyListener()
 	}, 260)
+	// #endif
 }
 
 function stopInventoryVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) {
 		clearTimeout(volumeKeyStartTimer)
 		volumeKeyStartTimer = 0
 	}
 	stopVolumeKeyListener()
 	volumeScanLocked.value = false
+	// #endif
 }
 
 function consumeRefresh(): boolean {
@@ -1033,7 +1062,6 @@ const pageTitle = computed((): string => {
 })
 
 const homePath = computed((): string => {
-	if (productMode.value) return '/pages/tabbar/products'
 	return '/pages/tabbar/settings'
 })
 

@@ -1,0 +1,83 @@
+<template>
+	<view class="metric-card">
+		<text class="metric-card-label">{{ label }}</text>
+		<text class="metric-card-value">{{ value }}</text>
+		<text v-if="delta != ''" :class="deltaClass">{{ delta }}</text>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+const props = defineProps({
+	label: {
+		type: String,
+		default: '',
+	},
+	value: {
+		type: String,
+		default: '-',
+	},
+	// 环比文本，如 '+8.2%' / '-12.5%'，空串不显示
+	delta: {
+		type: String,
+		default: '',
+	},
+	// 上涨是否为利好（销售额=true，库存预警=false）
+	deltaGoodWhenUp: {
+		type: Boolean,
+		default: true,
+	},
+})
+
+const deltaClass = computed((): string => {
+	const text = props.delta
+	if (text.startsWith('-')) {
+		return props.deltaGoodWhenUp ? 'metric-card-delta metric-card-delta-bad' : 'metric-card-delta metric-card-delta-good'
+	}
+	if (text.startsWith('+')) {
+		return props.deltaGoodWhenUp ? 'metric-card-delta metric-card-delta-good' : 'metric-card-delta metric-card-delta-bad'
+	}
+	return 'metric-card-delta metric-card-delta-flat'
+})
+</script>
+
+<style>
+.metric-card {
+	flex: 1;
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+.metric-card-label {
+	font-size: 11px;
+	line-height: 15px;
+	color: #64748B;
+}
+
+.metric-card-value {
+	margin-top: 2px;
+	font-size: 15px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.metric-card-delta {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.metric-card-delta-good {
+	color: #16A34A;
+}
+
+.metric-card-delta-bad {
+	color: #DC2626;
+}
+
+.metric-card-delta-flat {
+	color: #94A3B8;
+}
+</style>

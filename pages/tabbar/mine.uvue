@@ -3,40 +3,49 @@
 		<view class="page">
 			<view class="status-bar-space"></view>
 
+			<!-- 用户信息卡（真实登录信息） -->
 			<view class="header">
 				<view class="user">
 					<view class="avatar">
 						<text class="avatar-text">{{ avatarText }}</text>
 					</view>
 					<text class="user-name">{{ displayName }}</text>
+					<text v-if="username != ''" class="user-account">账号：{{ username }}</text>
+					<view v-if="roleLabel != ''" class="role-badge">
+						<text class="role-badge-text">{{ roleLabel }}</text>
+					</view>
 				</view>
-
 				<view class="info">
 					<view class="info-item info-item-gap">
-						<text class="info-value">{{ useDaysText }}</text>
-						<text class="info-label">使用天数</text>
+						<text class="info-value">{{ companyName }}</text>
+						<text class="info-label">所属公司</text>
 					</view>
 					<view class="info-item">
-						<text class="info-value">{{ entryCountText }}</text>
-						<text class="info-label">记账笔数</text>
+						<text class="info-value">{{ permissionCountText }}</text>
+						<text class="info-label">权限数</text>
 					</view>
 				</view>
 			</view>
 
-			<view class="menu">
-				<view
-					v-for="(item, index) in menus"
-					:key="item.id"
-					:class="index < menus.length - 1 ? 'menu-item menu-item-border' : 'menu-item'"
-					@click="handleMenuClick(item)"
-				>
-					<view class="menu-icon-wrap">
-						<text :class="item.tone == 'danger' ? 'menu-icon menu-icon-danger' : 'menu-icon'">{{ item.icon }}</text>
+			<!-- 设置分组 -->
+			<view v-for="group in menuGroups" :key="group.label" class="menu-block">
+				<text class="menu-block-label">{{ group.label }}</text>
+				<view class="menu">
+					<view
+						v-for="(item, index) in group.items"
+						:key="item.key"
+						:class="index < group.items.length - 1 ? 'menu-item menu-item-border' : 'menu-item'"
+						@click="handleMenuClick(item)"
+					>
+						<view class="menu-icon-wrap">
+							<text :class="item.tone == 'danger' ? 'menu-icon menu-icon-danger' : 'menu-icon'">{{ item.icon }}</text>
+						</view>
+						<text :class="item.tone == 'danger' ? 'menu-text menu-text-danger' : 'menu-text'">{{ item.name }}</text>
+						<text v-if="item.path != ''" class="menu-arrow">›</text>
 					</view>
-					<text :class="item.tone == 'danger' ? 'menu-text menu-text-danger' : 'menu-text'">{{ item.name }}</text>
-					<text v-if="item.arrow" class="menu-arrow">›</text>
 				</view>
 			</view>
+			<view class="page-bottom-space"></view>
 		</view>
 	</scroll-view>
 </template>
@@ -44,76 +53,154 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { authState, clearAuthState } from '@/store/auth'
+import { getProfile, logout, ProfileResponse } from '@/pkg/api/modules/login'
+import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'
 
 type MenuItem = {
-	id: number
+	key: string
 	name: string
 	icon: string
-	key: string
-	arrow: boolean
+	path: string
 	tone?: string
+	requiresManage: boolean
 }
 
-const menus = ref<MenuItem[]>([
-	{ id: 1, name: '账本管理', icon: '☰', key: 'book', arrow: true },
-	{ id: 2, name: '联系客服', icon: '✆', key: 'service', arrow: true },
-	{ id: 3, name: '分享应用', icon: '⇪', key: 'share', arrow: false },
-	{ id: 4, name: '添加桌面', icon: '⊞', key: 'desktop', arrow: false },
-	{ id: 5, name: '退出登录', icon: '⎋', key: 'logout', arrow: false, tone: 'danger' },
-])
+type MenuGroup = {
+	label: string
+	items: MenuItem[]
+}
 
-const isLogin = computed(() : boolean => {
+const username = ref('')
+const profileName = ref('')
+const companyName = ref('-')
+const permissions = ref<string[]>([] as string[])
+const profileLoaded = ref(false)
+
+const isLogin = computed((): boolean => {
 	return authState.token != ''
 })
 
-const displayName = computed(() : string => {
-	if (authState.userInfo != null && authState.userInfo.name != '') {
-		return authState.userInfo.name
-	}
-	return '易师傅'
+const isManager = computed((): boolean => {
+	return permissions.value.includes('manage_users')
 })
 
-const avatarText = computed(() : string => {
+const displayName = computed((): string => {
+	if (profileName.value != '') return profileName.value
+	if (username.value != '') return username.value
+	const info = authState.userInfo
+	if (info != null && info.name != '') return info.name
+	return '未登录'
+})
+
+const avatarText = computed((): string => {
 	const name = displayName.value
-	if (name == '') return '易'
+	if (name == '' || name == '未登录') return '店'
 	return name.substring(0, 1)
 })
 
-const useDaysText = computed(() : string => {
-	if (!isLogin.value) return '0'
-	return '12'
+const roleLabel = computed((): string => {
+	if (!profileLoaded.value) return ''
+	return isManager.value ? '管理员' : '成员'
 })
 
-const entryCountText = computed(() : string => {
-	if (!isLogin.value) return '0'
-	return '43'
+const permissionCountText = computed((): string => {
+	if (!profileLoaded.value) return '-'
+	return permissions.value.length.toString()
 })
+
+const menuGroups = computed((): MenuGroup[] => {
+	const groups: MenuGroup[] = []
+	// 管理类设置只对有 manage_users 权限的用户展示
+	if (isManager.value) {
+		groups.push({
+			label: '管理设置',
+			items: [
+				{ key: 'company', name: '公司信息', icon: '☖', path: '/pages/company/settings', requiresManage: true } as MenuItem,
+				{ key: 'staff', name: '成员与权限', icon: '☺', path: '/pages/staff/index', requiresManage: true } as MenuItem,
+				{ key: 'recycle', name: '回收站', icon: '⟲', path: '/pages/recycle-bin/index', requiresManage: true } as MenuItem,
+			] as MenuItem[],
+		} as MenuGroup)
+	}
+	groups.push({
+		label: '应用',
+		items: [
+			{ key: 'appSettings', name: '应用设置', icon: '⚙', path: '/pages/account/app-settings', requiresManage: false } as MenuItem,
+		] as MenuItem[],
+	} as MenuGroup)
+	groups.push({
+		label: '账号与安全',
+		items: [
+			{ key: 'password', name: '修改密码', icon: '⚿', path: '/pages/account/change-password', requiresManage: false } as MenuItem,
+			{ key: 'logout', name: '退出登录', icon: '⎋', path: '', tone: 'danger', requiresManage: false } as MenuItem,
+		] as MenuItem[],
+	} as MenuGroup)
+	groups.push({
+		label: '关于',
+		items: [
+			{ key: 'checkUpdate', name: '检查更新', icon: '⟳', path: '', requiresManage: false } as MenuItem,
+		] as MenuItem[],
+	} as MenuGroup)
+	return groups
+})
+
+async function loadProfile() {
+	if (!isLogin.value) return
+	try {
+		const profile: ProfileResponse = await getProfile()
+		username.value = profile.username
+		profileName.value = profile.name
+		companyName.value = profile.company_name == '' ? '-' : profile.company_name
+		permissions.value = profile.permissions
+		profileLoaded.value = true
+	} catch (error) {
+		// 静默失败：页面仍可用本地缓存的名字展示
+	}
+}
+
+function executeLogout() {
+	// 通知服务端失效 token；失败也继续本地登出
+	logout().catch((_) => {})
+	clearAuthState()
+	uni.showToast({ title: '已退出登录', icon: 'success' })
+	setTimeout(() => {
+		uni.reLaunch({ url: '/pages/login/login' })
+	}, 300)
+}
 
 function handleLogout() {
 	if (!isLogin.value) {
-		uni.navigateTo({
-			url: '/pages/login/login',
-		})
+		uni.reLaunch({ url: '/pages/login/login' })
 		return
 	}
-
 	uni.showModal({
 		title: '提示',
 		content: '确定退出登录吗？',
 		success: (res) => {
-			if (!res.confirm) return
-			clearAuthState()
-			uni.showToast({
-				title: '已退出登录',
-				icon: 'success',
-			})
-			setTimeout(() => {
-				uni.navigateTo({
-					url: '/pages/login/login',
-				})
-			}, 300)
+			if (res.confirm) executeLogout()
 		},
 	})
+}
+
+function handleCheckUpdate() {
+	uni.showToast({ title: '正在检查更新…', icon: 'none' })
+	try {
+		checkUpdate().catch((err: any | null) => {
+			// 插件约定：reject 且 code == 0 表示已是最新版；其余为检查失败
+			if (err != null && err instanceof UTSJSONObject) {
+				const errObj = err as UTSJSONObject
+				const code = errObj.getNumber('code')
+				if (code != null && (code as number) == 0) {
+					uni.showToast({ title: '当前已是最新版本', icon: 'none' })
+					return
+				}
+			}
+			console.log('[Mine] checkUpdate:', err)
+			uni.showToast({ title: '检查更新失败，请稍后重试', icon: 'none' })
+		})
+	} catch (e) {
+		console.log('[Mine] checkUpdate error:', e)
+		uni.showToast({ title: '检查更新失败，请稍后重试', icon: 'none' })
+	}
 }
 
 function handleMenuClick(item: MenuItem) {
@@ -121,69 +208,49 @@ function handleMenuClick(item: MenuItem) {
 		handleLogout()
 		return
 	}
-
-	if (item.key == 'book') {
-		uni.showToast({
-			title: '账本管理待接入',
-			icon: 'none', duration: 3500,
-		})
+	if (item.key == 'checkUpdate') {
+		handleCheckUpdate()
 		return
 	}
-
-	if (item.key == 'service') {
-		uni.showToast({
-			title: '联系客服待接入',
-			icon: 'none', duration: 3500,
-		})
-		return
-	}
-
-	if (item.key == 'share') {
-		uni.showToast({
-			title: '分享应用待接入',
-			icon: 'none', duration: 3500,
-		})
-		return
-	}
-
-	if (item.key == 'desktop') {
-		uni.showToast({
-			title: '添加桌面待接入',
-			icon: 'none', duration: 3500,
-		})
+	if (item.path != '') {
+		uni.navigateTo({ url: item.path })
 	}
 }
+
+onShow(() => {
+	loadProfile()
+})
 </script>
 
 <style>
 .page-scroll {
-	background-color: #F5F5F5;
+	background-color: #F6F7FB;
 }
 
 .page {
-	background-color: #F5F5F5;
+	background-color: #F6F7FB;
 }
 
 .status-bar-space {
 	height: var(--status-bar-height);
-	background-color: #3C9BFD;
+	background-color: #0F172A;
 }
 
 .header {
-	background-color: #3C9BFD;
-	padding-bottom: 30px;
+	background-color: #0F172A;
+	padding-bottom: 26px;
 }
 
 .user {
 	align-items: center;
-	padding-top: 12px;
+	padding-top: 14px;
 }
 
 .avatar {
-	width: 80px;
-	height: 80px;
-	border-radius: 40px;
-	background-color: rgba(255, 255, 255, 0.3);
+	width: 76px;
+	height: 76px;
+	border-radius: 38px;
+	background-color: rgba(255, 255, 255, 0.16);
 	align-items: center;
 	justify-content: center;
 }
@@ -197,48 +264,89 @@ function handleMenuClick(item: MenuItem) {
 
 .user-name {
 	color: #FFFFFF;
-	font-size: 14px;
-	line-height: 20px;
+	font-size: 16px;
+	line-height: 22px;
+	font-weight: bold;
 	margin-top: 10px;
+}
+
+.user-account {
+	color: #94A3B8;
+	font-size: 12px;
+	line-height: 17px;
+	margin-top: 4px;
+}
+
+.role-badge {
+	margin-top: 8px;
+	border-radius: 10px;
+	background-color: rgba(14, 116, 110, 0.85);
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+}
+
+.role-badge-text {
+	font-size: 11px;
+	line-height: 15px;
+	color: #FFFFFF;
 }
 
 .info {
 	flex-direction: row;
-	margin-top: 30px;
+	margin-top: 22px;
 }
 
 .info-item {
 	flex: 1;
 	align-items: center;
+	padding-left: 10px;
+	padding-right: 10px;
 }
 
 .info-item-gap {
 	border-right-width: 1px;
 	border-right-style: solid;
-	border-right-color: rgba(255, 255, 255, 0.18);
+	border-right-color: rgba(255, 255, 255, 0.14);
 }
 
 .info-value {
 	color: #FFFFFF;
-	font-size: 24px;
-	line-height: 28px;
+	font-size: 16px;
+	line-height: 22px;
 	font-weight: bold;
+	text-align: center;
 }
 
 .info-label {
-	color: #FFFFFF;
+	color: #94A3B8;
 	font-size: 12px;
-	line-height: 18px;
-	margin-top: 8px;
+	line-height: 17px;
+	margin-top: 6px;
+}
+
+.menu-block {
+	margin-top: 12px;
+}
+
+.menu-block-label {
+	font-size: 12px;
+	line-height: 17px;
+	color: #94A3B8;
+	margin-left: 20px;
+	margin-bottom: 6px;
 }
 
 .menu {
 	background-color: #FFFFFF;
-	margin-top: 12px;
+	border-radius: 12px;
+	margin-left: 10px;
+	margin-right: 10px;
 }
 
 .menu-item {
-	height: 56px;
+	height: 54px;
 	flex-direction: row;
 	align-items: center;
 	padding-left: 16px;
@@ -248,7 +356,7 @@ function handleMenuClick(item: MenuItem) {
 .menu-item-border {
 	border-bottom-width: 1px;
 	border-bottom-style: solid;
-	border-bottom-color: #F0F0F0;
+	border-bottom-color: #F1F5F9;
 }
 
 .menu-icon-wrap {
@@ -258,9 +366,9 @@ function handleMenuClick(item: MenuItem) {
 }
 
 .menu-icon {
-	font-size: 18px;
-	line-height: 18px;
-	color: #3C9BFD;
+	font-size: 17px;
+	line-height: 17px;
+	color: #0F172A;
 }
 
 .menu-icon-danger {
@@ -271,7 +379,7 @@ function handleMenuClick(item: MenuItem) {
 	flex: 1;
 	font-size: 14px;
 	line-height: 20px;
-	color: #444444;
+	color: #334155;
 	padding-left: 10px;
 }
 
@@ -282,6 +390,10 @@ function handleMenuClick(item: MenuItem) {
 .menu-arrow {
 	font-size: 18px;
 	line-height: 18px;
-	color: #BDBDBD;
+	color: #CBD5E1;
+}
+
+.page-bottom-space {
+	height: 30px;
 }
 </style>

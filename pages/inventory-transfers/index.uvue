@@ -139,6 +139,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { approveInventoryTransfer, cancelInventoryTransfer, completeInventoryTransfer, getInventoryTransfers, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
@@ -158,7 +159,7 @@ const items = ref<UTSJSONObject[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const pageTotalQuantity = ref('0')
 const pageTransferredQuantity = ref('0')
 const statusFilter = ref('')

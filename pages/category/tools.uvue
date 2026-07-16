@@ -1,0 +1,1042 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="治理与整理"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="governance-card">
+					<view class="governance-head">
+						<view class="governance-title-wrap">
+							<text class="section-label">治理中心</text>
+							<text class="governance-title">主动问题</text>
+						</view>
+						<view class="mini-action" @click="loadCategoryGovernance">
+							<text class="mini-action-text">{{ governanceLoading ? '加载中' : '刷新' }}</text>
+						</view>
+					</view>
+					<text v-if="governanceError != ''" class="error-text">{{ governanceError }}</text>
+					<view class="governance-grid">
+						<view
+							v-for="item in governanceSummary"
+							:key="'governance-' + governanceType(item)"
+							:class="governanceCardClass(item)"
+							@click="selectGovernanceType(item)"
+						>
+							<text class="governance-label">{{ governanceLabel(item) }}</text>
+							<text :class="governanceCountClass(item)">{{ governanceCountText(item) }}</text>
+						</view>
+					</view>
+					<view v-if="currentGovernanceItems().length > 0" class="governance-preview">
+						<view
+							v-for="item in currentGovernanceItems()"
+							:key="governancePreviewKey(item)"
+							class="governance-preview-row"
+						>
+							<view class="governance-preview-main" @click="handleGovernanceItemTap(item)">
+								<text class="governance-preview-title">{{ governancePreviewTitle(item) }}</text>
+								<text class="governance-preview-desc">{{ governancePreviewDesc(item) }}</text>
+							</view>
+							<view v-if="governanceRowActionLabel() != ''" class="governance-row-action" @click="handleGovernanceRowAction(item)">
+								<text class="governance-row-action-text">{{ governanceRowActionLabel() }}</text>
+							</view>
+							<text v-else class="governance-row-chevron">›</text>
+						</view>
+					</view>
+					<view v-else-if="!governanceLoading" class="governance-empty">
+						<text class="governance-empty-text">当前类型暂无问题</text>
+					</view>
+					<view v-if="governanceBatchLabel() != ''" class="governance-actions">
+						<view class="action-primary" @click="confirmGovernanceBatch">
+							<text class="action-primary-text">{{ governanceBatchLabel() }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="template-card">
+					<view class="governance-head">
+						<view class="governance-title-wrap">
+							<text class="section-label">模板与整理</text>
+							<text class="governance-title">行业分类模板</text>
+						</view>
+						<view class="mini-action" @click="loadCategoryTemplates">
+							<text class="mini-action-text">{{ categoryTemplateLoading ? '加载中' : '刷新模板' }}</text>
+						</view>
+					</view>
+					<text v-if="categoryTemplateError != ''" class="error-text">{{ categoryTemplateError }}</text>
+					<view v-if="categoryTemplateItems.length > 0" class="template-list">
+						<view
+							v-for="item in categoryTemplateItems"
+							:key="templateKey(item)"
+							:class="templateRowClass(item)"
+							@click="previewCategoryTemplate(item)"
+						>
+							<view class="template-row-main">
+								<text class="template-title">{{ templateName(item) }}</text>
+								<text class="template-desc">{{ templateMeta(item) }}</text>
+							</view>
+							<view class="template-row-actions">
+								<view class="template-import" @click="confirmImportTemplate(item)">
+									<text class="template-import-text">导入</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view v-else class="template-empty">
+						<text class="template-desc">可导入行业分类模板，快速搭建分类结构。</text>
+					</view>
+
+					<view v-if="selectedCategoryTemplate() != null" class="template-preview-box">
+						<text class="template-preview-title">预览：{{ selectedTemplateName() }}</text>
+						<view v-for="root in selectedTemplateRoots()" :key="'template-root-' + templateNodeName(root)" class="template-tree-root">
+							<text class="template-tree-root-text">{{ templateNodeLabel(root) }}</text>
+							<view v-for="child in templateChildren(root)" :key="'template-child-' + templateNodeName(root) + '-' + templateNodeName(child)" class="template-tree-child">
+								<text class="template-tree-child-text">{{ templateNodeLabel(child) }}</text>
+								<view v-for="leaf in templateChildren(child)" :key="'template-leaf-' + templateNodeName(child) + '-' + templateNodeName(leaf)" class="template-tree-leaf">
+									<text class="template-tree-leaf-text">{{ templateNodeLabel(leaf) }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<view v-if="isOperating" class="operate-mask">
+			<view class="operate-card">
+				<text class="operate-text">处理中...</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { ref } from 'vue'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { getCategoryGovernance, getCategoryTemplates, importCategoryTemplate, mergeDuplicateCategories, patchCategory, CategoryGovernanceQuery } from '@/pkg/api/modules/category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const isOperating = ref(false)
+const hasShownOnce = ref(false)
+const governanceLoading = ref(false)
+const governanceError = ref('')
+const selectedGovernanceType = ref('uncategorized')
+const governanceSummary = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const governanceIssues = ref<UTSJSONObject>({} as UTSJSONObject)
+const categoryTemplateLoading = ref(false)
+const categoryTemplateError = ref('')
+const categoryTemplateItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const selectedCategoryTemplateKey = ref('')
+
+function parseErrorMessage(error: any): string {
+	let message = '数据加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '数据加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) {
+		return null
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return null
+	}
+	if (!text.startsWith('{')) {
+		return null
+	}
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	const parsed = parseObject(value)
+	if (parsed == null) {
+		return {} as UTSJSONObject
+	}
+	return parsed as UTSJSONObject
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return [] as UTSJSONObject[]
+	}
+	if (!text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return [] as UTSJSONObject[]
+		}
+		return parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function stringArrayValue(value: any | null): string[] {
+	if (value == null) return [] as string[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as string[]
+	const parsed = JSON.parseArray<any>(text)
+	if (parsed == null) return [] as string[]
+	const result: string[] = []
+	for (let index = 0; index < parsed.length; index += 1) {
+		result.push(stringValue(parsed[index]))
+	}
+	return result
+}
+
+function governanceType(item: UTSJSONObject): string {
+	return stringValue(item['type'])
+}
+
+function governanceLabel(item: UTSJSONObject): string {
+	return stringValue(item['label'], governanceType(item))
+}
+
+function governanceCountText(item: UTSJSONObject): string {
+	return stringValue(item['count'], '0')
+}
+
+function governanceCardClass(item: UTSJSONObject): string {
+	let className = 'governance-item'
+	if (selectedGovernanceType.value == governanceType(item)) {
+		className = className + ' governance-item-active'
+	}
+	return className
+}
+
+function governanceCountClass(item: UTSJSONObject): string {
+	const count = governanceCountText(item)
+	if (count != '0' && count != '') {
+		return 'governance-count governance-count-alert'
+	}
+	return 'governance-count'
+}
+
+function hasGovernanceType(typeValue: string): boolean {
+	for (let index = 0; index < governanceSummary.value.length; index += 1) {
+		if (governanceType(governanceSummary.value[index]) == typeValue) {
+			return true
+		}
+	}
+	return false
+}
+
+function selectGovernanceType(item: UTSJSONObject): void {
+	const nextType = governanceType(item)
+	if (nextType != '') {
+		selectedGovernanceType.value = nextType
+	}
+}
+
+function currentGovernanceItems(): UTSJSONObject[] {
+	const issue = objectValue(governanceIssues.value[selectedGovernanceType.value])
+	return objectArrayValue(issue['items'])
+}
+
+function governancePreviewKey(item: UTSJSONObject): string {
+	const idText = stringValue(item['id'])
+	if (idText != '') {
+		return selectedGovernanceType.value + '-' + idText
+	}
+	return selectedGovernanceType.value + '-' + stringValue(item['name'], 'item')
+}
+
+function governancePreviewTitle(item: UTSJSONObject): string {
+	if (selectedGovernanceType.value == 'duplicate_names') {
+		return stringValue(item['name'], '同名分类')
+	}
+	const fullName = stringValue(item['full_name'])
+	if (fullName != '') {
+		return fullName
+	}
+	const name = stringValue(item['name'])
+	if (name != '') {
+		return name
+	}
+	const categoryName = stringValue(item['category_full_name'], stringValue(item['category_name']))
+	return categoryName == '' ? '未分类商品' : categoryName
+}
+
+function governancePreviewDesc(item: UTSJSONObject): string {
+	if (selectedGovernanceType.value == 'duplicate_names') {
+		return '涉及 ' + stringValue(item['count'], '0') + ' 个分类'
+	}
+	const reason = stringValue(item['reason'])
+	if (reason == 'missing_kasa_category') {
+		return '未绑定收银分类'
+	}
+	if (reason == 'tax_rate_mismatch') {
+		return '税率 ' + stringValue(item['category_tax_rate'], '-') + ' / 收银 ' + stringValue(item['kasa_tax_rate'], '-')
+	}
+	const categoryName = stringValue(item['category_full_name'])
+	const statusText = stringValue(item['status_label'])
+	if (categoryName != '' && statusText != '') {
+		return categoryName + ' / ' + statusText
+	}
+	if (statusText != '') {
+		return statusText
+	}
+	return '商品 ' + stringValue(item['direct_product_count'], '0') + ' 个'
+}
+
+async function loadCategoryGovernance(): Promise<void> {
+	if (governanceLoading.value) {
+		return
+	}
+	governanceLoading.value = true
+	governanceError.value = ''
+	try {
+		const response = await getCategoryGovernance({
+			type: null,
+			limit: 20,
+			too_many_threshold: 100,
+		} as CategoryGovernanceQuery)
+		const payload = response.data
+		governanceSummary.value = objectArrayValue(payload['summary'])
+		governanceIssues.value = objectValue(payload['issues'])
+		if (!hasGovernanceType(selectedGovernanceType.value) && governanceSummary.value.length > 0) {
+			selectedGovernanceType.value = governanceType(governanceSummary.value[0])
+		}
+	} catch (error) {
+		governanceError.value = parseErrorMessage(error)
+	}
+	governanceLoading.value = false
+}
+
+function templateKey(item: UTSJSONObject): string {
+	return stringValue(item['key'], stringValue(item['template'], stringValue(item['name'], 'template')))
+}
+
+function templateName(item: UTSJSONObject): string {
+	return stringValue(item['label'], stringValue(item['name'], templateKey(item)))
+}
+
+function templateMeta(item: UTSJSONObject): string {
+	const missing = stringValue(item['missing_count'])
+	const total = stringValue(item['total_count'], stringValue(item['node_count']))
+	if (missing != '' && total != '') return '缺失 ' + missing + ' / 共 ' + total
+	return stringValue(item['description'], '行业分类模板')
+}
+
+function selectedCategoryTemplate(): UTSJSONObject | null {
+	if (categoryTemplateItems.value.length == 0) return null
+	if (selectedCategoryTemplateKey.value == '') return categoryTemplateItems.value[0]
+	for (let index = 0; index < categoryTemplateItems.value.length; index += 1) {
+		const item = categoryTemplateItems.value[index]
+		if (templateKey(item) == selectedCategoryTemplateKey.value) return item
+	}
+	return categoryTemplateItems.value[0]
+}
+
+function selectedTemplateName(): string {
+	const item = selectedCategoryTemplate()
+	if (item == null) return ''
+	return templateName(item as UTSJSONObject)
+}
+
+function templateRowClass(item: UTSJSONObject): string {
+	return templateKey(item) == selectedCategoryTemplateKey.value ? 'template-row template-row-active' : 'template-row'
+}
+
+function previewCategoryTemplate(item: UTSJSONObject): void {
+	selectedCategoryTemplateKey.value = templateKey(item)
+}
+
+function templateChildren(item: UTSJSONObject): UTSJSONObject[] {
+	return objectArrayValue(item['children'])
+}
+
+function selectedTemplateRoots(): UTSJSONObject[] {
+	const item = selectedCategoryTemplate()
+	if (item == null) return [] as UTSJSONObject[]
+	return objectArrayValue((item as UTSJSONObject)['tree'])
+}
+
+function templateNodeName(item: UTSJSONObject): string {
+	return stringValue(item['name'], '未命名分类')
+}
+
+function templateNodeLabel(item: UTSJSONObject): string {
+	let label = templateNodeName(item)
+	const taxRate = stringValue(item['tax_rate'])
+	const kasaKod = stringValue(item['kasa_category_kod'], stringValue(item['kasa_kod']))
+	if (taxRate != '') label = label + ' / 税率 ' + taxRate
+	if (kasaKod != '') label = label + ' / Kasa ' + kasaKod
+	return label
+}
+
+async function loadCategoryTemplates(): Promise<void> {
+	if (categoryTemplateLoading.value) return
+	categoryTemplateLoading.value = true
+	categoryTemplateError.value = ''
+	try {
+		const response = await getCategoryTemplates()
+		const payload = objectValue(response['data'])
+		categoryTemplateItems.value = objectArrayValue(payload['items'])
+		if (categoryTemplateItems.value.length > 0 && selectedCategoryTemplateKey.value == '') {
+			selectedCategoryTemplateKey.value = templateKey(categoryTemplateItems.value[0])
+		}
+	} catch (error) {
+		categoryTemplateError.value = parseErrorMessage(error)
+	} finally {
+		categoryTemplateLoading.value = false
+	}
+}
+
+async function executeImportTemplate(key: string): Promise<void> {
+	try {
+		isOperating.value = true
+		await importCategoryTemplate({ template: key, missing_only: true })
+		uni.showToast({ title: takeLatestResponseMessage('模板导入完成'), icon: 'success' })
+		await loadCategoryTemplates()
+		await loadCategoryGovernance()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function confirmImportTemplate(item: UTSJSONObject): void {
+	const key = templateKey(item)
+	if (key == '') return
+	uni.showModal({
+		title: '导入分类模板',
+		content: '确定导入「' + templateName(item) + '」中当前缺失的分类吗？',
+		success: (res) => {
+			if (!res.confirm) return
+			executeImportTemplate(key)
+		},
+	})
+}
+
+async function executeMergeDuplicateCategories(ids: string[], target: string): Promise<void> {
+	try {
+		isOperating.value = true
+		await mergeDuplicateCategories(ids, target)
+		uni.showToast({ title: takeLatestResponseMessage('重复分类合并完成'), icon: 'success' })
+		await loadCategoryGovernance()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+// 同名分类组的成员 id：后端返回 categories 数组，兼容旧的 ids 字段
+function duplicateGroupIds(group: UTSJSONObject): string[] {
+	const ids: string[] = []
+	const members = objectArrayValue(group['categories'])
+	for (let index = 0; index < members.length; index += 1) {
+		const idText = stringValue(members[index]['id'])
+		if (idText != '') {
+			ids.push(idText)
+		}
+	}
+	if (ids.length >= 2) {
+		return ids
+	}
+	return stringArrayValue(group['ids'])
+}
+
+function confirmMergeDuplicateGroup(group: UTSJSONObject): void {
+	const ids = duplicateGroupIds(group)
+	if (ids.length < 2) {
+		uni.showToast({ title: '同名分类数据不足', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.showModal({
+		title: '合并同名分类',
+		content: '确定合并「' + stringValue(group['name'], '同名分类') + '」这一组共 ' + ids.length.toString() + ' 个分类吗？保留最早创建的一个。',
+		success: (res) => {
+			if (!res.confirm) return
+			executeMergeDuplicateCategories(ids, ids[0])
+		},
+	})
+}
+
+// ── 治理动作闭环 ────────────────────────────────────────────────
+
+function isProductGovernanceType(typeValue: string): boolean {
+	return typeValue == 'uncategorized' || typeValue == 'uncategorized_sales' || typeValue == 'non_leaf_products'
+}
+
+function governanceRowActionLabel(): string {
+	const typeValue = selectedGovernanceType.value
+	if (typeValue == 'empty_categories') return '停用'
+	if (typeValue == 'duplicate_names') return '合并'
+	return ''
+}
+
+function governanceBatchLabel(): string {
+	const typeValue = selectedGovernanceType.value
+	if (isProductGovernanceType(typeValue)) return '去商品页批量处理'
+	if (typeValue == 'empty_categories') return '停用列出的空分类'
+	return ''
+}
+
+// 商品类治理问题跳转到商品管理页，带上对应语义筛选，在那里批量改分类/智能归类
+function goToProductsWithGovernanceFilter(): void {
+	const typeValue = selectedGovernanceType.value
+	const payload = {} as UTSJSONObject
+	if (typeValue == 'uncategorized') {
+		payload['uncategorized'] = 'true'
+		payload['label'] = '未分类商品'
+	} else if (typeValue == 'uncategorized_sales') {
+		payload['uncategorized'] = 'true'
+		payload['label'] = '未分类商品（含有销售）'
+	} else if (typeValue == 'non_leaf_products') {
+		payload['non_leaf_category'] = 'true'
+		payload['label'] = '挂在父级分类的商品'
+	} else {
+		return
+	}
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+function handleGovernanceItemTap(item: UTSJSONObject): void {
+	const typeValue = selectedGovernanceType.value
+	const idText = stringValue(item['id'])
+	if (isProductGovernanceType(typeValue)) {
+		if (idText != '') {
+			uni.navigateTo({ url: '/pages/products/from?id=' + idText + '&mode=edit' })
+		}
+		return
+	}
+	if (typeValue == 'kasa_mismatch' || typeValue == 'empty_categories') {
+		if (idText != '') {
+			uni.navigateTo({ url: '/pages/category/from?id=' + idText + '&mode=edit' })
+		}
+		return
+	}
+	if (typeValue == 'too_many_products') {
+		if (idText != '') {
+			uni.navigateTo({ url: '/pages/category/index?id=' + idText + '&name=' + encodeURIComponent(stringValue(item['name'])) })
+		}
+		return
+	}
+	if (typeValue == 'duplicate_names') {
+		confirmMergeDuplicateGroup(item)
+	}
+}
+
+async function executeDeactivateCategories(ids: string[]): Promise<void> {
+	if (ids.length == 0) {
+		return
+	}
+	isOperating.value = true
+	let successCount = 0
+	let failureCount = 0
+	try {
+		for (let index = 0; index < ids.length; index += 1) {
+			try {
+				const body = { is_active: false } as UTSJSONObject
+				await patchCategory(ids[index], body)
+				successCount += 1
+			} catch (error) {
+				failureCount += 1
+			}
+		}
+	} finally {
+		isOperating.value = false
+	}
+	if (failureCount > 0) {
+		uni.showToast({ title: '停用成功 ' + successCount.toString() + '，失败 ' + failureCount.toString(), icon: 'none', duration: 3500 })
+	} else {
+		uni.showToast({ title: '已停用 ' + successCount.toString() + ' 个分类', icon: 'success' })
+	}
+	await loadCategoryGovernance()
+}
+
+function handleGovernanceRowAction(item: UTSJSONObject): void {
+	const typeValue = selectedGovernanceType.value
+	if (typeValue == 'duplicate_names') {
+		confirmMergeDuplicateGroup(item)
+		return
+	}
+	if (typeValue == 'empty_categories') {
+		const idText = stringValue(item['id'])
+		if (idText == '') {
+			return
+		}
+		uni.showModal({
+			title: '停用空分类',
+			content: '确定停用「' + stringValue(item['name'], '该分类') + '」吗？停用后不影响历史数据，可随时重新启用。',
+			success: (res) => {
+				if (!res.confirm) return
+				executeDeactivateCategories([idText] as string[])
+			},
+		})
+	}
+}
+
+function currentGovernanceItemIds(): string[] {
+	const items = currentGovernanceItems()
+	const ids: string[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const idText = stringValue(items[index]['id'])
+		if (idText != '') {
+			ids.push(idText)
+		}
+	}
+	return ids
+}
+
+function confirmGovernanceBatch(): void {
+	const typeValue = selectedGovernanceType.value
+	const count = currentGovernanceItems().length
+	if (count == 0) {
+		uni.showToast({ title: '当前类型暂无问题', icon: 'none', duration: 3500 })
+		return
+	}
+	if (isProductGovernanceType(typeValue)) {
+		goToProductsWithGovernanceFilter()
+		return
+	}
+	if (typeValue == 'empty_categories') {
+		uni.showModal({
+			title: '批量停用空分类',
+			content: '确定停用列出的 ' + count.toString() + ' 个空分类吗？停用后可随时重新启用。',
+			success: (res) => {
+				if (!res.confirm) return
+				executeDeactivateCategories(currentGovernanceItemIds())
+			},
+		})
+	}
+}
+
+onLoad(() => {
+	loadCategoryGovernance()
+	loadCategoryTemplates()
+})
+
+onShow(() => {
+	// 从商品页/分类编辑页处理完返回时刷新治理计数，形成处理闭环
+	if (hasShownOnce.value) {
+		loadCategoryGovernance()
+	}
+	hasShownOnce.value = true
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	background-color: #F4F6F8;
+}
+
+.page-content {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 40px;
+	background-color: #F4F6F8;
+}
+
+.section-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.error-text {
+	margin-top: 8px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #DC2626;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.governance-card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.governance-head {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.governance-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.governance-title {
+	margin-top: 3px;
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.governance-grid {
+	margin-top: 12px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.governance-item {
+	width: 33%;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	align-items: center;
+	border-radius: 10px;
+}
+
+.governance-item-active {
+	background-color: #F0FDFA;
+}
+
+.governance-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.governance-count {
+	margin-top: 2px;
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.governance-count-alert {
+	color: #DC2626;
+}
+
+.governance-preview {
+	margin-top: 10px;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #F1F5F9;
+}
+
+.governance-preview-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F8FAFC;
+}
+
+.governance-preview-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.governance-row-action {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 8px;
+	background-color: #FEF2F2;
+}
+
+.governance-row-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #B91C1C;
+	font-weight: bold;
+}
+
+.governance-row-chevron {
+	font-size: 16px;
+	line-height: 22px;
+	color: #CBD5E1;
+	margin-left: 4px;
+}
+
+.governance-preview-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+
+.governance-preview-desc {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.governance-empty {
+	margin-top: 12px;
+	align-items: center;
+}
+
+.governance-empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.governance-actions {
+	margin-top: 12px;
+	flex-direction: row;
+}
+
+.action-primary {
+	flex: 1;
+	height: 40px;
+	border-radius: 12px;
+	background-color: #0F766E;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-primary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.template-card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.template-list {
+	margin-top: 10px;
+}
+
+.template-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.template-row-active {
+	background-color: #F0FDFA;
+	border-radius: 10px;
+	padding-left: 8px;
+	padding-right: 8px;
+}
+
+.template-row-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.template-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.template-desc {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.template-row-actions {
+	flex-direction: row;
+	align-items: center;
+}
+
+.template-import {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #0F766E;
+}
+
+.template-import-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.template-empty {
+	margin-top: 10px;
+}
+
+.template-preview-box {
+	margin-top: 12px;
+	padding: 10px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+}
+
+.template-preview-title {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.template-tree-root {
+	margin-top: 8px;
+}
+
+.template-tree-root-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.template-tree-child {
+	margin-top: 4px;
+	padding-left: 12px;
+}
+
+.template-tree-child-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #334155;
+}
+
+.template-tree-leaf {
+	margin-top: 2px;
+	padding-left: 12px;
+}
+
+.template-tree-leaf-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.operate-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.35);
+	align-items: center;
+	justify-content: center;
+}
+
+.operate-card {
+	padding: 18px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+}
+
+.operate-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+</style>

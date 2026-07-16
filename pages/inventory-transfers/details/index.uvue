@@ -142,11 +142,16 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createInventoryTransferItem, getInventoryStocks, getInventoryTransferDetail, getInventoryTransferItems, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+// #ifdef APP-ANDROID
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
+// #endif
+// #ifdef APP-ANDROID
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:inventory-transfers:index'
@@ -159,7 +164,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const pageTotalQuantity = ref('0')
 const pageTransferredQuantity = ref('0')
 const addPopupVisible = ref(false)
@@ -395,18 +400,25 @@ async function loadTransferInfo() {
 	}
 }
 
+// 加载请求序号：并发时只应用最新一次请求的结果，新请求不再被在途请求拦截（避免扫码/搜索被静默丢弃）
+let itemsRequestSeq = 0
+
 async function loadItems() {
-	if (isLoading.value) return
 	if (transferId.value == '') {
 		errorMessage.value = '缺少调拨单 ID'
 		return
 	}
+	itemsRequestSeq += 1
+	const requestSeq = itemsRequestSeq
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
 		await loadTransferInfo()
-		applyResponse(await getInventoryTransferItems(buildQuery()))
+		const response = await getInventoryTransferItems(buildQuery())
+		if (requestSeq != itemsRequestSeq) return
+		applyResponse(response)
 	} catch (error) {
+		if (requestSeq != itemsRequestSeq) return
 		items.value = [] as UTSJSONObject[]
 		currentPage.value = 1
 		totalPages.value = 1
@@ -415,7 +427,7 @@ async function loadItems() {
 		pageTransferredQuantity.value = '0'
 		errorMessage.value = parseErrorMessage(error, '调拨明细加载失败')
 	} finally {
-		isLoading.value = false
+		if (requestSeq == itemsRequestSeq) isLoading.value = false
 	}
 }
 
@@ -525,7 +537,11 @@ async function confirmAddItem() {
 
 async function handleScannedBarcode(scanResult: string) {
 	const barcode = scanResult.trim()
-	if (barcode == '' || scanLookupRunning.value) return
+	if (barcode == '') return
+	if (scanLookupRunning.value) {
+		uni.showToast({ title: '上一次扫码还在处理中', icon: 'none', duration: 2000 })
+		return
+	}
 	scanLookupRunning.value = true
 	try {
 		await loadTransferInfo()
@@ -562,6 +578,10 @@ async function handleScannedBarcode(scanResult: string) {
 }
 
 function handleScanSearch() {
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: true,
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -574,6 +594,7 @@ function handleScanSearch() {
 			uni.showToast({ title: message, icon: 'none', duration: 3500 })
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function handleSearchInput(value: string) { keyword.value = value }
@@ -607,6 +628,7 @@ function unlockVolumeScanSoon() {
 	}, 1200)
 }
 
+// #ifdef APP-ANDROID
 function handleVolumeKeyEvent(event: VolumeKeyEvent) {
 	if (event.key != 'VOLUME_UP' && event.key != 'VOLUME_DOWN') return
 	if (volumeScanLocked.value) return
@@ -620,22 +642,27 @@ function startDetailVolumeKeyListener() {
 		handleVolumeKeyEvent(event)
 	})
 }
+// #endif
 
 function scheduleDetailVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) clearTimeout(volumeKeyStartTimer)
 	volumeKeyStartTimer = setTimeout(() => {
 		volumeKeyStartTimer = 0
 		startDetailVolumeKeyListener()
 	}, 260)
+	// #endif
 }
 
 function stopDetailVolumeKeyListener() {
+	// #ifdef APP-ANDROID
 	if (volumeKeyStartTimer != 0) {
 		clearTimeout(volumeKeyStartTimer)
 		volumeKeyStartTimer = 0
 	}
 	stopVolumeKeyListener()
 	volumeScanLocked.value = false
+	// #endif
 }
 
 const pageTitle = computed((): string => {

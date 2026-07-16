@@ -1,19 +1,12 @@
 <template>
 	<view class="page">
-		<view class="nav-shell" :style="navShellStyle">
-			<view class="detail-nav">
-				<view class="nav-btn" @click="goBack">
-					<text class="nav-btn-text">&lt;</text>
-				</view>
-				<view class="nav-main">
-					<text class="nav-title">{{ pageTitle }}</text>
-					<text class="nav-subtitle">{{ pageSubtitle }}</text>
-				</view>
-				<view class="nav-home" @click="goHome">
-					<text class="nav-home-text">列表</text>
-				</view>
-			</view>
-		</view>
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showSearch="false"
+			:showHome="true"
+			homePath="/pages/orders/index"
+		/>
 
 		<!-- #ifdef APP -->
 		<scroll-view style="flex:1" class="page-scroll">
@@ -49,7 +42,7 @@
 					</view>
 					<view class="amount-line">
 						<text class="amount-label">订单金额</text>
-						<text class="amount-value">¥ {{ totalAmountText }}</text>
+						<text class="amount-value">{{ totalAmountText }} zł</text>
 					</view>
 					<view class="action-row">
 						<view class="action-btn action-btn-primary" @click="copyOrderNumber">
@@ -58,6 +51,9 @@
 						<view class="action-btn action-btn-light" @click="copyPayload">
 							<text class="action-btn-light-text">复制 Payload</text>
 						</view>
+					</view>
+					<view v-if="showRetryDeduction" class="retry-deduct-btn" @click="handleRetryDeduction">
+						<text class="retry-deduct-text">{{ retrying ? '正在重试扣减...' : '重试库存扣减' }}</text>
 					</view>
 				</view>
 
@@ -80,8 +76,46 @@
 					</view>
 				</view>
 
+				<view v-if="orderDetail != null && !isLoading" class="section-head-row">
+					<text class="section-head-title">商品明细</text>
+					<text class="section-head-note">{{ itemListItems.length.toString() }} 项{{ itemSourceNote }} · 点击行跳转商品管理</text>
+				</view>
+				<lili-UniversalList
+					v-if="orderDetail != null && !isLoading"
+					:items="itemListItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					tagField="tags"
+					:fields="itemFieldConfig"
+					:showImage="false"
+					:showChevron="true"
+					emptyText="该订单没有可展示的商品行"
+					emptyIcon="◎"
+					@item-click="handleItemTap"
+				/>
+
+				<view v-if="orderDetail != null && !isLoading && returnListItems.length > 0" class="section-head-row">
+					<text class="section-head-title">关联退货</text>
+					<text class="section-head-note">{{ returnListItems.length.toString() }} 笔 · 点击查看详情</text>
+				</view>
+				<lili-UniversalList
+					v-if="orderDetail != null && !isLoading && returnListItems.length > 0"
+					:items="returnListItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					tagField="tags"
+					:fields="returnFieldConfig"
+					:showImage="false"
+					:showChevron="true"
+					@item-click="handleReturnTap"
+				/>
+
 				<view v-if="orderDetail != null && !isLoading" class="section-card">
-					<text class="section-title">订单基础信息</text>
+					<text class="section-title">订单信息</text>
 					<view v-for="row in baseRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
 						<text class="info-label">{{ row['label'] }}</text>
 						<text class="info-value">{{ row['value'] }}</text>
@@ -97,40 +131,8 @@
 				</view>
 
 				<view v-if="orderDetail != null && !isLoading" class="section-card">
-					<text class="section-title">支付与库存状态</text>
+					<text class="section-title">处理与库存状态</text>
 					<view v-for="row in statusRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
-						<text class="info-label">{{ row['label'] }}</text>
-						<text class="info-value">{{ row['value'] }}</text>
-					</view>
-				</view>
-
-				<view v-if="orderDetail != null && !isLoading" class="section-card">
-					<view class="section-head">
-						<text class="section-title">商品明细</text>
-						<text class="section-note">{{ itemRows.length.toString() }} 项</text>
-					</view>
-					<view v-if="itemRows.length == 0" class="empty-box">
-						<text class="empty-text">payload 中没有 items / products / cart 商品行</text>
-					</view>
-					<view v-for="row in itemRows" :key="row.key" class="item-row">
-						<view class="item-main">
-							<text class="item-title">{{ row.title }}</text>
-							<text class="item-desc">{{ row.desc }}</text>
-							<text class="item-code">{{ row.code }}</text>
-						</view>
-						<view class="item-side">
-							<text class="item-qty">{{ row.quantity }}</text>
-							<text class="item-amount">{{ row.amount }}</text>
-						</view>
-					</view>
-				</view>
-
-				<view v-if="orderDetail != null && !isLoading" class="section-card">
-					<view class="section-head">
-						<text class="section-title">Payload 摘要</text>
-						<text class="section-note">{{ payloadSizeText }}</text>
-					</view>
-					<view v-for="row in payloadSummaryRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
 						<text class="info-label">{{ row['label'] }}</text>
 						<text class="info-value">{{ row['value'] }}</text>
 					</view>
@@ -154,22 +156,24 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { getOrderDetail, OrderItem } from '@/pkg/api/modules/orders.uts'
-
-type PayloadRow = {
-	key: string
-	title: string
-	desc: string
-	code: string
-	quantity: string
-	amount: string
-}
+import { getOrderDetail, OrderItem, OrderLine, OrderReturnBrief, retryOrderDeduction } from '@/pkg/api/modules/orders.uts'
 
 const orderId = ref('')
 const orderDetail = ref<OrderItem | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
-const navShellStyle = ref('')
+const retrying = ref(false)
+
+const itemFieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'unitPriceText', label: '单价:' } as UTSJSONObject,
+	{ key: 'quantityText', label: '数量:' } as UTSJSONObject,
+] as UTSJSONObject[])
+
+const returnFieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'itemsText', label: '商品数:' } as UTSJSONObject,
+	{ key: 'inventoryText', label: '库存:' } as UTSJSONObject,
+	{ key: 'reasonText', label: '原因:' } as UTSJSONObject,
+] as UTSJSONObject[])
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) return fallback
@@ -225,30 +229,30 @@ function boolText(value: boolean): string {
 function statusText(item: OrderItem): string {
 	const text = stringValue(item.status_display, item.status)
 	if (text != '') return text
-	if (item.status == 'received') return '已接收'
-	if (item.status == 'processed') return '已处理'
-	if (item.status == 'failed') return '处理失败'
 	return '-'
 }
 
 function paymentText(item: OrderItem): string {
 	const text = stringValue(item.payment_method_display, item.payment_method)
 	if (text != '') return text
-	if (item.payment_method == 'cash') return '现金'
-	if (item.payment_method == 'card') return '银行卡'
-	if (item.payment_method == 'mixed') return '混合支付'
-	if (item.payment_method == 'other') return '其他'
 	return '-'
 }
 
-function compactDate(value: string): string {
-	if (value == '') return '-'
-	if (value.length >= 16) return value.substring(0, 16)
-	return value
+// ISO 时间简化为 "YYYY-MM-DD HH:MM"
+function formatDateTime(raw: string): string {
+	if (raw == '') return '-'
+	const text = raw.replace('T', ' ')
+	if (text.length >= 16) return text.substring(0, 16)
+	return text
 }
 
 function currencyText(value: string): string {
 	return stringValue(value, '0.00')
+}
+
+function quantityText(value: number): string {
+	if (value == Math.floor(value)) return value.toString()
+	return value.toFixed(2)
 }
 
 function payloadTextValue(payload: UTSJSONObject): string {
@@ -280,56 +284,6 @@ function getPayloadItems(payload: UTSJSONObject): UTSJSONObject[] {
 	return parseObjectArray(payload['cart'])
 }
 
-function buildRowTitle(row: UTSJSONObject, index: number): string {
-	const name = stringValue(row['name'], stringValue(row['product_name'], stringValue(row['title'])))
-	if (name != '') return name
-	const barcode = stringValue(row['barcode'])
-	if (barcode != '') return '商品 ' + barcode
-	return '商品行 ' + (index + 1).toString()
-}
-
-function buildRowDesc(row: UTSJSONObject): string {
-	const price = stringValue(row['price'], stringValue(row['unit_price'], '-'))
-	const tax = stringValue(row['taxRate'], stringValue(row['tax_rate'], stringValue(row['vat_rate'], '-')))
-	const discount = stringValue(row['discountAmount'], stringValue(row['discount'], stringValue(row['discount_amount'], '-')))
-	return '单价 ' + price + ' / 税率 ' + tax + ' / 折扣 ' + discount
-}
-
-function addSummaryRow(rows: UTSJSONObject[], key: string, label: string, value: string) {
-	if (value == '') return
-	rows.push({ key: key, label: label, value: value } as UTSJSONObject)
-}
-
-function buildPayloadSummary(payload: UTSJSONObject): UTSJSONObject[] {
-	const rows: UTSJSONObject[] = []
-	const orderData = payloadOrderData(payload)
-	const payment = parseObject(orderData['payment'])
-	addSummaryRow(rows, 'order_number', '订单号', stringValue(payload['order_number'], stringValue(orderData['order_number'], stringValue(orderData['orderNumber']))))
-	addSummaryRow(rows, 'cashier_id', '收银员', stringValue(payload['cashier_id'], stringValue(orderData['cashier_id'])))
-	addSummaryRow(rows, 'cashier_name', '收银员姓名', stringValue(payload['cashier_name'], stringValue(orderData['cashier_name'])))
-	addSummaryRow(rows, 'kasa_number', '收银台', stringValue(payload['kasa_number'], stringValue(orderData['kasa_number'])))
-	addSummaryRow(rows, 'payment_method', '支付方式', payment == null ? stringValue(payload['payment_method'], stringValue(orderData['payment_method'])) : stringValue(payment!['method']))
-	addSummaryRow(rows, 'subtotal', 'Payload 小计', stringValue(orderData['subtotal'], stringValue(payload['subtotal'])))
-	addSummaryRow(rows, 'discount_total', 'Payload 折扣', stringValue(orderData['discountTotal'], stringValue(orderData['discount_total'], stringValue(payload['discountTotal']))))
-	addSummaryRow(rows, 'tax_total', 'Payload 税额', stringValue(orderData['taxTotal'], stringValue(orderData['tax_total'], stringValue(payload['taxTotal']))))
-	addSummaryRow(rows, 'total_amount', 'Payload 总额', stringValue(orderData['total'], stringValue(orderData['total_amount'], stringValue(payload['total_amount']))))
-	if (rows.length == 0) {
-		rows.push({ key: 'empty', label: '摘要', value: 'payload 未提供常用摘要字段' } as UTSJSONObject)
-	}
-	return rows
-}
-
-function numberValue(value: any | null): number {
-	const parsed = parseFloat(stringValue(value, '0'))
-	if (isNaN(parsed)) return 0
-	return parsed
-}
-
-function quantityText(value: number): string {
-	if (value == Math.floor(value)) return value.toString()
-	return value.toFixed(2)
-}
-
 function copyText(text: string, successTitle: string, emptyTitle: string) {
 	if (text == '' || text == '-') {
 		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
@@ -341,24 +295,6 @@ function copyText(text: string, successTitle: string, emptyTitle: string) {
 			uni.showToast({ title: successTitle, icon: 'success' })
 		},
 	})
-}
-
-function goBack() {
-	uni.navigateBack({
-		delta: 1,
-		fail: () => {
-			uni.redirectTo({ url: '/pages/orders/index' })
-		},
-	})
-}
-
-function goHome() {
-	uni.redirectTo({ url: '/pages/orders/index' })
-}
-
-function updateNavShellStyle() {
-	const info = uni.getWindowInfo()
-	navShellStyle.value = 'padding-top:' + info.statusBarHeight.toString() + 'px;'
 }
 
 async function loadDetail() {
@@ -402,16 +338,45 @@ function copyRowValue(row: UTSJSONObject) {
 	copyText(stringValue(row['value']), '内容已复制', '暂无内容')
 }
 
+async function handleRetryDeduction() {
+	if (retrying.value || orderDetail.value == null) return
+	retrying.value = true
+	try {
+		await retryOrderDeduction(orderId.value)
+		uni.showToast({ title: '库存扣减成功', icon: 'success' })
+	} catch (error) {
+		uni.showToast({ title: parseErrorMessage(error, '重试失败'), icon: 'none', duration: 3500 })
+	} finally {
+		retrying.value = false
+		loadDetail()
+	}
+}
+
+// 跳转商品管理并预置搜索该条码（复用分类页的 storage 预筛选通道）
+function jumpToProductSearch(barcode: string) {
+	if (barcode == '' || barcode == '-') {
+		uni.showToast({ title: '该商品行没有条码', icon: 'none', duration: 2500 })
+		return
+	}
+	const payload = { keyword: barcode } as UTSJSONObject
+	uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	uni.navigateTo({ url: '/pages/tabbar/products' })
+}
+
+function handleItemTap(payload: UTSJSONObject) {
+	jumpToProductSearch(stringValue(payload['barcode']))
+}
+
+function handleReturnTap(payload: UTSJSONObject) {
+	const id = stringValue(payload['rawId'])
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/returns/from?id=' + id })
+}
+
 const pageTitle = computed((): string => {
 	if (orderDetail.value == null) return '订单详情'
 	const detail = orderDetail.value as OrderItem
 	return stringValue(detail.order_number, '订单 #' + detail.id.toString())
-})
-
-const pageSubtitle = computed((): string => {
-	if (orderDetail.value == null) return orderId.value == '' ? '订单详情' : 'ID ' + orderId.value
-	const detail = orderDetail.value as OrderItem
-	return displayText(compactDate(stringValue(detail.order_time, detail.created_at)))
 })
 
 const orderNumberText = computed((): string => {
@@ -423,7 +388,7 @@ const orderNumberText = computed((): string => {
 const orderTimeText = computed((): string => {
 	if (orderDetail.value == null) return '-'
 	const detail = orderDetail.value as OrderItem
-	return compactDate(stringValue(detail.order_time, detail.created_at))
+	return formatDateTime(stringValue(detail.order_time, detail.created_at))
 })
 
 const statusDisplayText = computed((): string => {
@@ -449,29 +414,26 @@ const totalAmountText = computed((): string => {
 
 const itemCountText = computed((): string => {
 	if (orderDetail.value == null) return '0'
-	const detail = orderDetail.value as OrderItem
-	return getPayloadItems(detail.payload).length.toString()
+	return (orderDetail.value as OrderItem).item_count.toString()
 })
 
 const quantityCountText = computed((): string => {
 	if (orderDetail.value == null) return '0'
+	return quantityText((orderDetail.value as OrderItem).quantity_count)
+})
+
+const cashierDisplayText = computed((): string => {
+	if (orderDetail.value == null) return '-'
 	const detail = orderDetail.value as OrderItem
-	const rows = getPayloadItems(detail.payload)
-	let total = 0.0
-	for (let index = 0; index < rows.length; index += 1) {
-		total = total + numberValue(rows[index]['quantity'])
-	}
-	return quantityText(total)
+	const name = stringValue(detail.cashier_name)
+	if (name != '') return name + ' (' + stringValue(detail.cashier_id, '-') + ')'
+	return stringValue(detail.cashier_id, '-')
 })
 
 const payloadText = computed((): string => {
 	if (orderDetail.value == null) return '{}'
 	const detail = orderDetail.value as OrderItem
 	return payloadTextValue(detail.payload)
-})
-
-const payloadSizeText = computed((): string => {
-	return payloadText.value.length.toString() + ' 字符'
 })
 
 const statusPillClass = computed((): string => {
@@ -490,17 +452,99 @@ const statusTextClass = computed((): string => {
 	return 'status-pill-text status-pill-text-warn'
 })
 
+const showRetryDeduction = computed((): boolean => {
+	if (orderDetail.value == null || isLoading.value) return false
+	const detail = orderDetail.value as OrderItem
+	return !detail.inventory_deducted || detail.status == 'failed'
+})
+
+const hasStructuredItems = computed((): boolean => {
+	if (orderDetail.value == null) return false
+	return (orderDetail.value as OrderItem).items.length > 0
+})
+
+const itemSourceNote = computed((): string => {
+	if (orderDetail.value == null) return ''
+	return hasStructuredItems.value ? '' : ' (payload 解析)'
+})
+
+const itemListItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	if (orderDetail.value == null) return result
+	const detail = orderDetail.value as OrderItem
+
+	// 优先使用后端落库的结构化明细行
+	if (detail.items.length > 0) {
+		for (let index = 0; index < detail.items.length; index += 1) {
+			const line: OrderLine = detail.items[index]
+			const title = line.name != '' ? line.name : (line.barcode != '' ? '商品 ' + line.barcode : '商品行 ' + line.line_no.toString())
+			result.push({
+				id: 'line-' + line.line_no.toString(),
+				title: title,
+				subtitle: '条码 ' + stringValue(line.barcode, '-'),
+				barcode: line.barcode,
+				amountText: (line.amount == '' ? '-' : line.amount + ' zł'),
+				unitPriceText: stringValue(line.unit_price, '-'),
+				quantityText: 'x ' + quantityText(line.quantity),
+				tags: [stringValue(line.match_type_display, line.match_type)] as string[],
+			} as UTSJSONObject)
+		}
+		return result
+	}
+
+	// 历史订单兜底：从 payload 解析
+	const rows = getPayloadItems(detail.payload)
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		const name = stringValue(row['name'], stringValue(row['product_name'], stringValue(row['title'])))
+		const barcode = stringValue(row['barcode'])
+		const amount = stringValue(row['lineTotal'], stringValue(row['amount'], stringValue(row['total'], stringValue(row['total_amount'], '-'))))
+		result.push({
+			id: 'payload-' + index.toString(),
+			title: name != '' ? name : (barcode != '' ? '商品 ' + barcode : '商品行 ' + (index + 1).toString()),
+			subtitle: '条码 ' + stringValue(barcode, '-'),
+			barcode: barcode,
+			amountText: amount == '-' ? '-' : amount + ' zł',
+			unitPriceText: stringValue(row['price'], stringValue(row['unit_price'], '-')),
+			quantityText: 'x ' + stringValue(row['quantity'], '0'),
+			tags: [] as string[],
+		} as UTSJSONObject)
+	}
+	return result
+})
+
+const returnListItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	if (orderDetail.value == null) return result
+	const detail = orderDetail.value as OrderItem
+	for (let index = 0; index < detail.returns.length; index += 1) {
+		const item: OrderReturnBrief = detail.returns[index]
+		result.push({
+			id: 'return-' + item.id.toString(),
+			rawId: item.id.toString(),
+			title: item.return_number,
+			subtitle: '时间：' + formatDateTime(item.return_time),
+			amountText: '-' + item.gross_amount + ' zł',
+			itemsText: item.items_count.toString() + ' 件',
+			inventoryText: item.inventory_restored ? '已回补' : '未回补',
+			reasonText: stringValue(item.reason, '-'),
+			tags: [stringValue(item.status_display, item.status)] as string[],
+		} as UTSJSONObject)
+	}
+	return result
+})
+
 const baseRows = computed((): UTSJSONObject[] => {
 	if (orderDetail.value == null) return [] as UTSJSONObject[]
 	const detail = orderDetail.value as OrderItem
 	return [
 		{ key: 'order_number', label: '订单号', value: orderNumberText.value } as UTSJSONObject,
 		{ key: 'shop', label: '店铺', value: stringValue(detail.shop_name, detail.shop > 0 ? '店铺 #' + detail.shop.toString() : '-') } as UTSJSONObject,
-		{ key: 'order_time', label: '订单时间', value: compactDate(detail.order_time) } as UTSJSONObject,
-		{ key: 'created_at', label: '接收时间', value: compactDate(detail.created_at) } as UTSJSONObject,
-		{ key: 'updated_at', label: '更新时间', value: compactDate(detail.updated_at) } as UTSJSONObject,
-		{ key: 'cashier_id', label: '收银员', value: stringValue(detail.cashier_id, '-') } as UTSJSONObject,
+		{ key: 'cashier', label: '收银员', value: cashierDisplayText.value } as UTSJSONObject,
 		{ key: 'kasa_number', label: '收银台', value: stringValue(detail.kasa_number, '-') } as UTSJSONObject,
+		{ key: 'order_time', label: '订单时间', value: formatDateTime(detail.order_time) } as UTSJSONObject,
+		{ key: 'created_at', label: '接收时间', value: formatDateTime(detail.created_at) } as UTSJSONObject,
+		{ key: 'updated_at', label: '更新时间', value: formatDateTime(detail.updated_at) } as UTSJSONObject,
 	]
 })
 
@@ -523,39 +567,12 @@ const statusRows = computed((): UTSJSONObject[] => {
 		{ key: 'status', label: '订单状态', value: statusText(detail) } as UTSJSONObject,
 		{ key: 'error_message', label: '订单错误', value: stringValue(detail.error_message, '-') } as UTSJSONObject,
 		{ key: 'inventory_deducted', label: '库存已扣减', value: boolText(detail.inventory_deducted) } as UTSJSONObject,
-		{ key: 'inventory_deduct_time', label: '扣减时间', value: compactDate(detail.inventory_deduct_time) } as UTSJSONObject,
+		{ key: 'inventory_deduct_time', label: '扣减时间', value: formatDateTime(stringValue(detail.inventory_deduct_time)) } as UTSJSONObject,
 		{ key: 'inventory_deduct_error', label: '扣减错误', value: stringValue(detail.inventory_deduct_error, '-') } as UTSJSONObject,
 	]
 })
 
-const itemRows = computed((): PayloadRow[] => {
-	const result: PayloadRow[] = []
-	if (orderDetail.value == null) return result
-	const detail = orderDetail.value as OrderItem
-	const rows = getPayloadItems(detail.payload)
-	for (let index = 0; index < rows.length; index += 1) {
-		const row = rows[index]
-		const amount = stringValue(row['lineTotal'], stringValue(row['amount'], stringValue(row['total'], stringValue(row['total_amount'], '-'))))
-		result.push({
-			key: index.toString(),
-			title: buildRowTitle(row, index),
-			desc: buildRowDesc(row),
-			code: '条码 ' + stringValue(row['barcode'], '-'),
-			quantity: 'x ' + stringValue(row['quantity'], '0'),
-			amount: amount == '-' ? '-' : '¥ ' + amount,
-		} as PayloadRow)
-	}
-	return result
-})
-
-const payloadSummaryRows = computed((): UTSJSONObject[] => {
-	if (orderDetail.value == null) return [] as UTSJSONObject[]
-	const detail = orderDetail.value as OrderItem
-	return buildPayloadSummary(detail.payload)
-})
-
 onLoad((event: OnLoadOptions) => {
-	updateNavShellStyle()
 	const idValue = event['id']
 	orderId.value = idValue == null ? '' : ('' + idValue)
 	loadDetail()
@@ -571,67 +588,6 @@ onLoad((event: OnLoadOptions) => {
 .page-scroll {
 	flex: 1;
 	background-color: #F6F7FB;
-}
-
-.nav-shell {
-	background-color: #FFFFFF;
-	border-bottom-width: 1px;
-	border-bottom-style: solid;
-	border-bottom-color: #E5EAF1;
-}
-
-.detail-nav {
-	height: 58px;
-	padding-left: 8px;
-	padding-right: 8px;
-	flex-direction: row;
-	align-items: center;
-}
-
-.nav-btn,
-.nav-home {
-	width: 46px;
-	height: 40px;
-	border-radius: 8px;
-	align-items: center;
-	justify-content: center;
-}
-
-.nav-btn {
-	background-color: #F3F6FA;
-}
-
-.nav-btn-text {
-	font-size: 28px;
-	line-height: 28px;
-	color: #0F172A;
-}
-
-.nav-main {
-	flex: 1;
-	padding-left: 10px;
-	padding-right: 10px;
-}
-
-.nav-title {
-	font-size: 17px;
-	line-height: 22px;
-	font-weight: bold;
-	color: #0F172A;
-}
-
-.nav-subtitle {
-	font-size: 12px;
-	line-height: 17px;
-	color: #64748B;
-	margin-top: 1px;
-}
-
-.nav-home-text {
-	font-size: 13px;
-	line-height: 18px;
-	color: #0F172A;
-	font-weight: bold;
 }
 
 .page-content {
@@ -657,16 +613,14 @@ onLoad((event: OnLoadOptions) => {
 .action-row,
 .metric-grid,
 .section-head,
-.info-row,
-.item-row {
+.info-row {
 	flex-direction: row;
 	align-items: center;
 }
 
 .summary-head,
 .section-head,
-.info-row,
-.item-row {
+.info-row {
 	justify-content: space-between;
 }
 
@@ -713,7 +667,7 @@ onLoad((event: OnLoadOptions) => {
 
 .status-pill-text {
 	font-size: 12px;
-	line-height: 12px;
+	line-height: 17px;
 	font-weight: bold;
 }
 
@@ -760,7 +714,7 @@ onLoad((event: OnLoadOptions) => {
 
 .action-btn {
 	flex: 1;
-	height: 40px;
+	height: 42px;
 	border-radius: 8px;
 	align-items: center;
 	justify-content: center;
@@ -778,18 +732,32 @@ onLoad((event: OnLoadOptions) => {
 	border-color: #E2E8F0;
 }
 
-.action-btn-primary-text,
-.retry-btn-text,
-.small-copy-text {
-	font-size: 13px;
-	line-height: 13px;
+.action-btn-primary-text {
+	font-size: 14px;
+	line-height: 20px;
 	color: #FFFFFF;
 }
 
 .action-btn-light-text {
-	font-size: 13px;
-	line-height: 13px;
+	font-size: 14px;
+	line-height: 20px;
 	color: #334155;
+}
+
+.retry-deduct-btn {
+	margin-top: 8px;
+	height: 42px;
+	border-radius: 8px;
+	background-color: #B42318;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-deduct-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
 }
 
 .metric-grid {
@@ -804,14 +772,6 @@ onLoad((event: OnLoadOptions) => {
 	padding-left: 4px;
 	padding-right: 4px;
 	margin-bottom: 8px;
-}
-
-.metric-label,
-.metric-value {
-	background-color: #FFFFFF;
-}
-
-.metric-cell {
 	background-color: #FFFFFF;
 	border-radius: 8px;
 	border-width: 1px;
@@ -827,6 +787,29 @@ onLoad((event: OnLoadOptions) => {
 	color: #0F172A;
 	font-weight: bold;
 	margin-top: 4px;
+}
+
+.section-head-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 4px;
+	padding-right: 4px;
+	margin-top: 4px;
+	margin-bottom: 6px;
+}
+
+.section-head-title {
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.section-head-note {
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
 }
 
 .section-title {
@@ -856,92 +839,38 @@ onLoad((event: OnLoadOptions) => {
 	text-align: right;
 }
 
-.empty-box {
-	margin-top: 10px;
-	background-color: #F8FAFC;
-	border-radius: 8px;
-	padding: 16px;
-	align-items: center;
-}
-
-.empty-text,
-.state-title {
-	font-size: 14px;
-	line-height: 20px;
-	color: #64748B;
-	text-align: center;
-}
-
 .state-card {
 	align-items: center;
 }
 
 .state-title {
+	font-size: 14px;
+	line-height: 20px;
 	color: #0F172A;
 	font-weight: bold;
+	text-align: center;
 }
 
 .state-desc {
 	margin-top: 6px;
 }
 
-.item-row {
-	align-items: flex-start;
-	padding-top: 12px;
-	padding-bottom: 12px;
-	border-bottom-width: 1px;
-	border-bottom-style: solid;
-	border-bottom-color: #EEF2F7;
-}
-
-.item-main {
-	flex: 1;
-	padding-right: 10px;
-}
-
-.item-title {
-	font-size: 14px;
-	line-height: 20px;
-	color: #111827;
-	font-weight: bold;
-}
-
-.item-desc,
-.item-code {
-	font-size: 12px;
-	line-height: 18px;
-	color: #64748B;
-	margin-top: 2px;
-}
-
-.item-side {
-	width: 82px;
-	align-items: flex-end;
-}
-
-.item-qty {
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.item-amount {
-	font-size: 12px;
-	line-height: 18px;
-	color: #475569;
-	margin-top: 2px;
-}
-
 .small-copy-btn,
 .retry-btn {
-	height: 34px;
+	height: 36px;
 	border-radius: 8px;
 	background-color: #0F172A;
 	padding-left: 14px;
 	padding-right: 14px;
 	align-items: center;
 	justify-content: center;
+}
+
+.small-copy-text,
+.retry-btn-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #FFFFFF;
 }
 
 .payload-text {

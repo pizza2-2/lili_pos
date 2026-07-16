@@ -1,5 +1,6 @@
 import { baseUrl, request, timeOut } from '../index.uts'
 import { authState } from '@/store/auth'
+import { compressImageForUpload } from '@/pkg/util/imageCompress.uts'
 
 export type MediaFileQuery = {
 	company_id: string | null
@@ -559,13 +560,18 @@ function buildUploadFailMessage(err: UploadFileFail): string {
 	return message
 }
 
-function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: UTSJSONObject): Promise<UTSJSONObject[]> {
-	return new Promise((resolve, reject) => {
+async function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: UTSJSONObject): Promise<UTSJSONObject[]> {
+	// 图片逐个压缩后再上传（非图片扩展名原样跳过）
+	const uploadPaths: string[] = [] as string[]
+	for (let index = 0; index < items.length; index += 1) {
+		uploadPaths.push(await compressImageForUpload(items[index].filePath))
+	}
+	return await new Promise<UTSJSONObject[]>((resolve, reject) => {
 		const headers = buildUploadHeaders()
 		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut
 		const files: UploadFileOptionFiles[] = []
-		for (let index = 0; index < items.length; index += 1) {
-			const resolvedFilePath = normalizeUploadFilePath(items[index].filePath)
+		for (let index = 0; index < uploadPaths.length; index += 1) {
+			const resolvedFilePath = normalizeUploadFilePath(uploadPaths[index])
 			files.push({
 				name: 'files',
 				uri: resolvedFilePath,
@@ -609,10 +615,12 @@ function uploadBatchMediaFilesRequest(items: MediaBatchUploadItem[], formData: U
 	})
 }
 
-function uploadSingleMediaFile(item: MediaBatchUploadItem): Promise<UTSJSONObject> {
-	return new Promise((resolve, reject) => {
+async function uploadSingleMediaFile(item: MediaBatchUploadItem): Promise<UTSJSONObject> {
+	// 图片先压缩再上传（非图片扩展名原样跳过）
+	const uploadPath = await compressImageForUpload(item.filePath)
+	return await new Promise<UTSJSONObject>((resolve, reject) => {
 		const formData = item.formData == null ? ({} as UTSJSONObject) : item.formData!
-		const resolvedFilePath = normalizeUploadFilePath(item.filePath)
+		const resolvedFilePath = normalizeUploadFilePath(uploadPath)
 		const fieldName = item.name == null || item.name == '' ? 'file' : item.name!
 		const headers = buildUploadHeaders()
 		const uploadTimeout = timeOut < 120000 ? 120000 : timeOut

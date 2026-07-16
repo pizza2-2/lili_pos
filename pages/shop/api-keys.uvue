@@ -1,0 +1,298 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/shop/index" backgroundColor="#EEF2F7" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="loadError != ''" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ loadError }}</text>
+					<view class="retry-btn" @click="loadKeys"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<!-- 新密钥明文：只在创建/重置后展示一次 -->
+				<view v-if="plainKey != ''" class="card plain-card">
+					<text class="plain-title">请立即保存密钥明文（仅本次显示）</text>
+					<text class="plain-key">{{ plainKey }}</text>
+					<view class="plain-actions">
+						<view class="mini-btn" @click="copyPlainKey"><text class="mini-btn-text">复制</text></view>
+						<view class="mini-btn mini-btn-light" @click="dismissPlainKey"><text class="mini-btn-light-text">我已保存</text></view>
+					</view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">已有密钥</text>
+					<view v-if="keys.length == 0 && !isLoading" class="empty-state">
+						<text class="empty-text">暂无密钥，POS 收银机需要密钥才能连接</text>
+					</view>
+					<view v-for="item in keys" :key="'key-' + keyNumberOf(item).toString()" class="key-row">
+						<view class="key-main">
+							<text class="key-title">#{{ keyNumberOf(item).toString() }} {{ keyNameOf(item) }}</text>
+							<text class="key-meta">{{ keyMetaOf(item) }}</text>
+						</view>
+						<view class="key-actions">
+							<view class="mini-btn" @click="confirmRotate(keyNumberOf(item))"><text class="mini-btn-text">重置</text></view>
+							<view class="mini-btn mini-btn-light" @click="handleToggle(keyNumberOf(item))">
+								<text class="mini-btn-light-text">{{ keyEnabledOf(item) ? '禁用' : '启用' }}</text>
+							</view>
+							<view class="mini-btn mini-btn-danger" @click="confirmDelete(keyNumberOf(item))"><text class="mini-btn-danger-text">删除</text></view>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="availableNumbers.length > 0" class="card">
+					<text class="card-title">生成新密钥</text>
+					<view class="field-row">
+						<text class="field-label">编号</text>
+						<view class="number-options">
+							<view
+								v-for="num in availableNumbers"
+								:key="'num-' + num.toString()"
+								:class="selectedNumber == num ? 'number-chip number-chip-active' : 'number-chip'"
+								@click="selectNumber(num)"
+							>
+								<text :class="selectedNumber == num ? 'number-chip-text number-chip-text-active' : 'number-chip-text'">{{ num.toString() }}</text>
+							</view>
+						</view>
+					</view>
+					<view class="field-row">
+						<text class="field-label">备注名</text>
+						<input class="field-input" :value="newKeyName" placeholder="如：一号收银机" @input="onKeyNameInput" />
+					</view>
+					<view class="save-btn" @click="handleCreate">
+						<text class="save-btn-text">生成密钥</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { createShopApiKey, deleteShopApiKey, getShopApiKeys, rotateShopApiKey, toggleShopApiKey } from '@/pkg/api/modules/shops'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const shopId = ref(0)
+const shopName = ref('')
+const isLoading = ref(false)
+const loadError = ref('')
+const keys = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const availableNumbers = ref<number[]>([] as number[])
+const selectedNumber = ref(0)
+const newKeyName = ref('')
+const plainKey = ref('')
+
+const pageTitle = computed((): string => shopName.value == '' ? 'POS 密钥' : shopName.value + ' · POS 密钥')
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
+function keyNumberOf(item: UTSJSONObject): number {
+	const text = stringField(item, 'key_number', '0')
+	const parsed = parseInt(text)
+	return isNaN(parsed) ? 0 : parsed
+}
+
+function keyNameOf(item: UTSJSONObject): string {
+	return stringField(item, 'name', '未命名')
+}
+
+function keyEnabledOf(item: UTSJSONObject): boolean {
+	return stringField(item, 'is_enabled') == 'true'
+}
+
+function keyMetaOf(item: UTSJSONObject): string {
+	const state = keyEnabledOf(item) ? '启用中' : '已禁用'
+	const created = stringField(item, 'created_at')
+	return created == '' ? state : state + ' · ' + created.substring(0, 10)
+}
+
+async function loadKeys() {
+	if (isLoading.value || shopId.value <= 0) return
+	isLoading.value = true
+	loadError.value = ''
+	try {
+		const data = await getShopApiKeys(shopId.value)
+		const rawKeys = data['api_keys']
+		const keysText = rawKeys == null ? '[]' : JSON.stringify(rawKeys)
+		const parsedKeys = keysText != null && keysText.startsWith('[') ? JSON.parseArray<UTSJSONObject>(keysText!) : null
+		keys.value = parsedKeys == null ? ([] as UTSJSONObject[]) : parsedKeys!
+		const rawNumbers = data['available_numbers']
+		const numbersText = rawNumbers == null ? '[]' : JSON.stringify(rawNumbers)
+		const parsedNumbers = numbersText != null && numbersText.startsWith('[') ? JSON.parseArray<number>(numbersText!) : null
+		availableNumbers.value = parsedNumbers == null ? ([] as number[]) : parsedNumbers!
+		if (availableNumbers.value.length > 0 && !availableNumbers.value.includes(selectedNumber.value)) {
+			selectedNumber.value = availableNumbers.value[0]
+		}
+	} catch (error) {
+		const message = parseErrorMessage(error, 'API 密钥加载失败')
+		loadError.value = message
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function selectNumber(num: number) { selectedNumber.value = num }
+function onKeyNameInput(event: UniInputEvent) { newKeyName.value = event.detail.value }
+
+function showPlainKey(data: UTSJSONObject) {
+	const key = stringField(data, 'api_key')
+	if (key != '') {
+		plainKey.value = key
+	}
+}
+
+function copyPlainKey() {
+	if (plainKey.value == '') return
+	uni.setClipboardData({ data: plainKey.value, success: () => { uni.showToast({ title: '密钥已复制', icon: 'success' }) } })
+}
+
+function dismissPlainKey() { plainKey.value = '' }
+
+async function executeCreate() {
+	if (selectedNumber.value <= 0) {
+		uni.showToast({ title: '请选择密钥编号', icon: 'none', duration: 3000 })
+		return
+	}
+	try {
+		const result = await createShopApiKey(shopId.value, selectedNumber.value, newKeyName.value.trim())
+		showPlainKey(result)
+		newKeyName.value = ''
+		uni.showToast({ title: '密钥已创建，请立即保存明文', icon: 'none', duration: 3500 })
+		loadKeys()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '密钥创建失败'))
+	}
+}
+
+function handleCreate() { executeCreate() }
+
+async function executeRotate(keyNumber: number) {
+	try {
+		const result = await rotateShopApiKey(shopId.value, keyNumber)
+		showPlainKey(result)
+		uni.showToast({ title: '密钥已重置，请立即保存新明文', icon: 'none', duration: 3500 })
+		loadKeys()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '密钥重置失败'))
+	}
+}
+
+function confirmRotate(keyNumber: number) {
+	uni.showModal({
+		title: '重置密钥',
+		content: '重置后旧密钥立即失效，使用该密钥的收银机需要重新配置。确定重置 #' + keyNumber.toString() + ' 吗？',
+		success: (res) => { if (res.confirm) executeRotate(keyNumber) },
+	})
+}
+
+async function executeToggle(keyNumber: number) {
+	try {
+		await toggleShopApiKey(shopId.value, keyNumber)
+		loadKeys()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '密钥状态切换失败'))
+	}
+}
+
+function handleToggle(keyNumber: number) { executeToggle(keyNumber) }
+
+async function executeDelete(keyNumber: number) {
+	try {
+		await deleteShopApiKey(shopId.value, keyNumber)
+		uni.showToast({ title: '密钥已删除', icon: 'success' })
+		loadKeys()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '密钥删除失败'))
+	}
+}
+
+function confirmDelete(keyNumber: number) {
+	uni.showModal({
+		title: '删除密钥',
+		content: '删除后使用该密钥的收银机将无法连接。确定删除 #' + keyNumber.toString() + ' 吗？',
+		success: (res) => { if (res.confirm) executeDelete(keyNumber) },
+	})
+}
+
+onLoad((query: OnLoadOptions) => {
+	const idValue = query['id']
+	if (idValue != null && idValue != '') {
+		const parsed = parseInt('' + idValue)
+		if (!isNaN(parsed)) shopId.value = parsed
+	}
+	const nameValue = query['name']
+	if (nameValue != null && nameValue != '') {
+		shopName.value = '' + decodeURIComponent('' + nameValue)
+	}
+	if (shopId.value <= 0) {
+		loadError.value = '缺少店铺参数'
+		return
+	}
+	loadKeys()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.card { background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.plain-card { border-width: 1px; border-style: solid; border-color: #F59E0B; background-color: #FFFBEB; }
+.plain-title { font-size: 14px; line-height: 20px; color: #92400E; font-weight: bold; }
+.plain-key { font-size: 14px; line-height: 20px; color: #0F172A; margin-top: 8px; }
+.plain-actions { flex-direction: row; margin-top: 10px; }
+.key-row { flex-direction: row; align-items: center; justify-content: space-between; padding-top: 10px; padding-bottom: 10px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #F1F5F9; }
+.key-main { flex: 1; }
+.key-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.key-meta { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 2px; }
+.key-actions { flex-direction: row; }
+.mini-btn { margin-left: 6px; height: 32px; border-radius: 8px; background-color: #0F172A; padding-left: 10px; padding-right: 10px; align-items: center; justify-content: center; }
+.mini-btn-text { font-size: 12px; color: #FFFFFF; }
+.mini-btn-light { background-color: #F1F5F9; }
+.mini-btn-light-text { font-size: 12px; color: #334155; }
+.mini-btn-danger { background-color: #FEE2E2; }
+.mini-btn-danger-text { font-size: 12px; color: #B42318; }
+.empty-state { padding-top: 14px; padding-bottom: 8px; align-items: center; }
+.empty-text { font-size: 13px; line-height: 18px; color: #94A3B8; }
+.field-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.field-label { width: 64px; font-size: 14px; line-height: 20px; color: #475569; }
+.field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
+.number-options { flex: 1; flex-direction: row; flex-wrap: wrap; }
+.number-chip { width: 36px; height: 36px; border-radius: 8px; margin-right: 8px; align-items: center; justify-content: center; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.number-chip-active { background-color: #E0F2FE; border-color: #0284C7; }
+.number-chip-text { font-size: 14px; color: #4B5563; }
+.number-chip-text-active { color: #075985; font-weight: bold; }
+.save-btn { margin-top: 12px; height: 44px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
+.save-btn-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

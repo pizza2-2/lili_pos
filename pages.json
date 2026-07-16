@@ -29,6 +29,13 @@
 			}
 		},
 		{
+			"path": "pages/tabbar/category",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText":"工作台"
+			}
+		},
+		{
 			"path": "pages/tabbar/settings",
 			"style": {
 				"navigationStyle":"custom",
@@ -42,6 +49,7 @@
 				"navigationBarTitleText":"我的"
 			}
 		},
+		// #ifdef APP-ANDROID
 		{
 			"path": "pages/test/scan",
 			"style": {
@@ -49,9 +57,12 @@
 				"navigationBarTitleText":"扫码测试"
 			}
 		},
+		// #endif
+		// #ifdef APP
 		{	//应用升级
 			"path" : "uni_modules/uni-upgrade-center-app/pages/uni-app-x/upgrade-popup"
 		},
+		// #endif
 		{	//系统中使用的webview页面
 			"path" : "pages/webview/webview",
 			"style" : 
@@ -130,6 +141,41 @@
 			}
 		},
 		{
+			"path": "pages/category/tools",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/category/dashboard",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/category/analytics",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/category/comparison",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/category/period-report",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/shop/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -158,7 +204,7 @@
 			}
 		},
 		{
-			"path": "pages/products/discount-selector",
+			"path": "pages/products/variants",
 			"style": {
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""
@@ -166,13 +212,6 @@
 		},
 		{
 			"path": "pages/products/price-calculator",
-			"style": {
-				"navigationStyle":"custom",
-				"navigationBarTitleText": ""
-			}
-		},
-		{
-			"path": "pages/products/pricing-formula",
 			"style": {
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""
@@ -192,6 +231,7 @@
 				"navigationBarTitleText": ""
 			}
 		},
+		// #ifdef APP-ANDROID
 		{
 			"path": "pages/printer-settings/index",
 			"style": {
@@ -199,6 +239,7 @@
 				"navigationBarTitleText": ""
 			}
 		},
+		// #endif
 		{
 			"path": "pages/label-templates/index",
 			"style": {
@@ -319,6 +360,20 @@
 			}
 		},
 		{
+			"path": "pages/returns/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/returns/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/inventory-management/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -401,6 +456,55 @@
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""
 			}
+		},
+		{
+			"path": "pages/shop/api-keys",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/staff/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/staff/from",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/company/settings",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/account/app-settings",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/recycle-bin/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/account/change-password",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
 		}
 	],
 	"globalStyle": {
@@ -422,10 +526,10 @@
 				"text": "报表"
 			},
 			{
-				"pagePath": "pages/tabbar/products",
+				"pagePath": "pages/tabbar/category",
 				"iconPath": "static/tabBar/product (1).png",
 				"selectedIconPath": "static/tabBar/product (2).png",
-				"text": "商品"
+				"text": "工作台"
 			},
 			{
 				"pagePath": "pages/tabbar/settings",

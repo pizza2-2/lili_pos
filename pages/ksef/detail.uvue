@@ -321,9 +321,13 @@ import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { downloadKsefInvoicePdfFile, downloadKsefInvoiceXml, getKsefInvoiceDetail, KsefInvoiceDetail, linkKsefInvoiceSupplier, reviewKsefInvoicePayment, updateKsefInvoicePayment, uploadKsefInvoiceVouchers } from '@/pkg/api/modules/ksef'
 import { getSupplierList, SupplierItem } from '@/pkg/api/modules/suppliers'
+// #ifdef APP-ANDROID || APP-IOS
 import { createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan'
+// #endif
+// #ifdef APP-ANDROID
 import { renderPdfPages } from '@/uni_modules/lili-pdf'
 import { type PdfRenderFail, type PdfRenderPagesOptions, type PdfRenderResult } from '@/uni_modules/lili-pdf/utssdk/interface.uts'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:ksef:index'
@@ -695,6 +699,7 @@ function closeAttachmentPopup() {
 	attachmentPopupVisible.value = false
 }
 
+// #ifdef APP-ANDROID
 function renderPdfPagesAsync(filePath: string): Promise<PdfRenderResult> {
 	return new Promise((resolve, reject) => {
 		const options = {
@@ -711,9 +716,16 @@ function renderPdfPagesAsync(filePath: string): Promise<PdfRenderResult> {
 		renderPdfPages(options)
 	})
 }
+// #endif
 
 async function loadPdfPreview() {
 	if (invoiceId.value == '' || pdfLoading.value) return
+	// #ifndef APP-ANDROID
+	pdfPreviewPages.value = []
+	pdfPageCount.value = 0
+	pdfErrorMessage.value = '网页版暂不支持PDF预览'
+	// #endif
+	// #ifdef APP-ANDROID
 	pdfLoading.value = true
 	pdfErrorMessage.value = ''
 	pdfPreviewPages.value = []
@@ -747,6 +759,7 @@ async function loadPdfPreview() {
 	} finally {
 		pdfLoading.value = false
 	}
+	// #endif
 }
 
 function openPdfPopup() {

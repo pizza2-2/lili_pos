@@ -66,6 +66,7 @@ function resourceBasePath(): string {
 	if (resource.value == 'attribute-type') return attributeTypesPath()
 	if (resource.value == 'attribute-value') return attributeValuesPath()
 	if (resource.value == 'barcode-sequence') return barcodeSequencesPath()
+	if (resource.value == 'expenditure-type') return '/api/expenses/expenditure-types/'
 	return productDiscountsPath()
 }
 
@@ -73,6 +74,7 @@ function resourceTitle(): string {
 	if (resource.value == 'attribute-type') return '属性类型'
 	if (resource.value == 'attribute-value') return '属性值'
 	if (resource.value == 'barcode-sequence') return '条形码序列'
+	if (resource.value == 'expenditure-type') return '支出类型'
 	return '商品折扣'
 }
 
@@ -152,6 +154,13 @@ function defaultInitialData(): UTSJSONObject {
 			description: '',
 		} as UTSJSONObject
 	}
+	if (resource.value == 'expenditure-type') {
+		return {
+			name: '',
+			description: '',
+			is_active: true,
+		} as UTSJSONObject
+	}
 	return {
 		name: '',
 		name_en: '',
@@ -194,6 +203,12 @@ function normalizeDetail(data: UTSJSONObject): UTSJSONObject {
 		result['min_number'] = getStringField(data, 'min_number', '1')
 		result['max_number'] = getStringField(data, 'max_number', '9999999')
 		result['description'] = getStringField(data, 'description')
+		return result
+	}
+	if (resource.value == 'expenditure-type') {
+		result['name'] = getStringField(data, 'name')
+		result['description'] = getStringField(data, 'description')
+		result['is_active'] = getBooleanField(data, 'is_active')
 		return result
 	}
 	result['name'] = getStringField(data, 'name')
@@ -292,6 +307,13 @@ function buildPayload(formData: UTSJSONObject): UTSJSONObject {
 			min_number: parseInt(getStringField(formData, 'min_number', '1')),
 			max_number: parseInt(getStringField(formData, 'max_number', '9999999')),
 			description: getStringField(formData, 'description'),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'expenditure-type') {
+		return {
+			name: getStringField(formData, 'name'),
+			description: getStringField(formData, 'description'),
+			is_active: getBooleanField(formData, 'is_active'),
 		} as UTSJSONObject
 	}
 	return {
@@ -429,6 +451,18 @@ const formSections = computed((): UTSJSONObject[] => {
 				{ key: 'min_number', label: '最小序号', type: 'number', required: true } as UTSJSONObject,
 				{ key: 'max_number', label: '最大序号', type: 'number', required: true } as UTSJSONObject,
 				{ key: 'description', label: '说明', type: 'textarea' } as UTSJSONObject,
+			] as UTSJSONObject[],
+		} as UTSJSONObject]
+	}
+	if (resource.value == 'expenditure-type') {
+		return [{
+			key: 'base',
+			title: '支出类型',
+			defaultOpen: true,
+			fields: [
+				{ key: 'name', label: '类型名称', type: 'input', required: true, placeholder: '例如 房租、水电' } as UTSJSONObject,
+				{ key: 'description', label: '说明', type: 'textarea', placeholder: '选填' } as UTSJSONObject,
+				{ key: 'is_active', label: '启用', type: 'switch' } as UTSJSONObject,
 			] as UTSJSONObject[],
 		} as UTSJSONObject]
 	}

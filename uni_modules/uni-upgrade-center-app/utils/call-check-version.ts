@@ -1,3 +1,8 @@
+// #ifdef UNI-APP-X
+// 检查更新改走自建 Django 升级中心（NewDjango apps/upgrade_center），不依赖 uniCloud
+import { baseUrl } from '@/pkg/api/index.uts'
+// #endif
+
 export type StoreListItem = {
 	enable : boolean
 	id : string
@@ -65,41 +70,44 @@ export default function () : Promise<UniUpgradeCenterResult> {
 		// #endif
 		// #ifdef UNI-APP-X
 		if (typeof appId === 'string' && typeof appVersion === 'string' && appId.length > 0 && appVersion.length > 0) {
+			// 响应契约与 uni-upgrade-center 云函数同构：code>0 有新版本，code==0 已最新，code<0 错误
 			let data = {
-				action: 'checkVersion',
 				appid: appId,
 				appVersion: appVersion,
-				is_uniapp_x: true,
-				wgtVersion: '0.0.0.0.0.1'
+				uni_platform: systemInfo.platform
 			}
 			try {
-				uniCloud.callFunction({
-					name: 'uni-upgrade-center',
-					data: data
-				}).then(res => {
-					const code = res.result['code']
-					const codeIsNumber = ['Int', 'Long', 'number'].includes(typeof code)
-					if (codeIsNumber) {
-					  if ((code as number) == 0) {
-					    reject({
-					      code: res.result['code'],
-					      message: res.result['message']
-					    })
-					  } else if ((code as number) < 0) {
-					    reject({
-					      code: res.result['code'],
-					      message: res.result['message']
-					    })
-					  } else {
-              const result = JSON.parse<UniUpgradeCenterResult>(JSON.stringify(res.result)) as UniUpgradeCenterResult
-              resolve(result)
-            }
+				uni.request<UTSJSONObject>({
+					url: `${baseUrl}/api/app/check-version/`,
+					method: 'POST',
+					timeout: 10000,
+					data: data,
+					success: (res) => {
+						const resData = res.data
+						if (resData == null) {
+							reject('升级检查失败：响应为空')
+							return
+						}
+						const codeValue = resData.getNumber('code')
+						if (codeValue == null) {
+							reject('升级检查失败：响应缺少 code 字段')
+							return
+						}
+						const code = codeValue as number
+						const message = resData.getString('message') ?? ''
+						if (code <= 0) {
+							reject({
+								code: code,
+								message: message
+							})
+							return
+						}
+						const result = JSON.parse<UniUpgradeCenterResult>(JSON.stringify(resData)) as UniUpgradeCenterResult
+						resolve(result)
+					},
+					fail: (err) => {
+						reject(`升级检查请求失败: ${err.errMsg}`)
 					}
-				}).catch<void>((err : any | null) => {
-					const error = err as UniCloudError
-					if (error.errMsg == '未匹配到云函数[uni-upgrade-center]')
-						error.errMsg = '【uni-upgrade-center-app】未配置uni-upgrade-center，无法升级。参考: https://uniapp.dcloud.net.cn/uniCloud/upgrade-center.html'
-					reject(error.errMsg)
 				})
 			} catch (e) {
 				reject(e.message)

@@ -1,0 +1,52 @@
+import Charset from 'java.nio.charset.Charset'
+import Encoder from 'com.google.zxing.qrcode.encoder.Encoder'
+import ErrorCorrectionLevel from 'com.google.zxing.qrcode.decoder.ErrorCorrectionLevel'
+
+function qrEncoderContent(content: string): string {
+	// ZXing Encoder 默认按 ISO-8859-1 编码，非 ASCII 内容需先转成 UTF-8 字节再映射，扫码端按 UTF-8 解码
+	let ascii = true
+	for (let index = 0; index < content.length; index += 1) {
+		const code = content.charCodeAt(index)!
+		if (code > 126) {
+			ascii = false
+			break
+		}
+	}
+	if (ascii) return content
+	try {
+		return content.toByteArray(Charset.forName('UTF-8')).toString(Charset.forName('ISO-8859-1'))
+	} catch (error) {
+		return content
+	}
+}
+
+/**
+ * 生成二维码模块矩阵（纠错级别 M，不含静区）。
+ * 返回每行一个字符串，'1' 为黑模块、'0' 为白模块；内容为空或无法编码时返回空数组。
+ */
+export function qrcodeMatrix(content: string): string[] {
+	if (content.trim() == '') return [] as string[]
+	try {
+		const qr = Encoder.encode(qrEncoderContent(content), ErrorCorrectionLevel.M)
+		const matrix = qr.getMatrix()
+		if (matrix == null) return [] as string[]
+		const width = matrix!.getWidth()
+		const height = matrix!.getHeight()
+		const rows: string[] = []
+		let y: Int = 0
+		while (y < height) {
+			let row = ''
+			let x: Int = 0
+			while (x < width) {
+				row = row + (matrix!.get(x, y).toInt() == 1 ? '1' : '0')
+				x += 1
+			}
+			rows.push(row)
+			y += 1
+		}
+		return rows
+	} catch (error) {
+		console.log('[lili-qrcode] encode failed')
+		return [] as string[]
+	}
+}

@@ -1,0 +1,796 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="工作台"
+			:showBack="false"
+			:showSearch="false"
+			:showFilter="false"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="pageError != '' && !isLoading" class="state-card state-card-error">
+					<text class="state-title">数据加载失败</text>
+					<text class="state-desc">{{ pageError }}</text>
+					<button class="state-btn" @click="reload">
+						<text class="state-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在获取昨日日报...</text>
+				</view>
+
+				<view v-else>
+					<!-- 昨日日报 -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">昨日日报</text>
+								<text class="card-title">{{ briefDateText }}</text>
+							</view>
+							<view class="mini-action" @click="reload">
+								<text class="mini-action-text">{{ isLoading ? '加载中' : '刷新' }}</text>
+							</view>
+						</view>
+						<view v-if="lagText != ''" class="stale-row">
+							<text class="stale-text">⚠ {{ lagText }}</text>
+						</view>
+						<view v-if="briefDateText == '-'" class="empty-state">
+							<text class="empty-text">暂无日报数据，等待每日快照生成</text>
+						</view>
+						<view v-else>
+							<view class="hero-wrap">
+								<text class="hero-label">销售额</text>
+								<text class="hero-value">{{ salesText }}</text>
+								<text v-if="deltaText != ''" :class="deltaClass">{{ deltaText }}</text>
+							</view>
+							<view class="metric-row">
+								<view class="metric-cell">
+									<text class="metric-label">毛利</text>
+									<text class="metric-value">{{ profitText }}</text>
+								</view>
+								<view class="metric-cell">
+									<text class="metric-label">销售数量</text>
+									<text class="metric-value">{{ quantityText }}</text>
+								</view>
+								<view class="metric-cell">
+									<text class="metric-label">库存预警</text>
+									<text class="metric-value">{{ warningText }}</text>
+								</view>
+							</view>
+							<text v-if="unmatchedText != ''" class="unmatched-text">{{ unmatchedText }}</text>
+						</view>
+					</view>
+
+					<!-- 今日要点：注意力预算制，每天最多 10 条最值钱的问题 -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">今日要点</text>
+								<text class="card-title">新增 {{ newTodayCount.toString() }} · 恢复 {{ resolvedTodayCount.toString() }} · 存量 {{ problemOpenCount.toString() }} · 高危 {{ highOpenCount.toString() }}</text>
+							</view>
+						</view>
+						<view v-if="topInsights.length == 0" class="empty-state">
+							<text class="empty-text">今天没有新问题，存量清单在经营仪表盘查看</text>
+						</view>
+						<view v-for="item in topInsights" :key="'insight-' + insightId(item).toString()" class="insight-row">
+							<view class="insight-head">
+								<view :class="severityDotClass(item)"></view>
+								<text class="insight-title">{{ insightTitle(item) }}</text>
+							</view>
+							<text class="insight-meta">{{ insightMeta(item) }}</text>
+							<text v-if="insightSuggestion(item) != ''" class="insight-suggestion">{{ insightSuggestion(item) }}</text>
+							<view class="insight-actions">
+								<view class="insight-btn insight-btn-primary" @click="goInsightAnalytics(item)">
+									<text class="insight-btn-primary-text">查看分析</text>
+								</view>
+								<view class="insight-btn" @click="markInsightHandled(item)">
+									<text class="insight-btn-text">已处理</text>
+								</view>
+								<view class="insight-btn" @click="confirmDismissInsight(item)">
+									<text class="insight-btn-text">忽略</text>
+								</view>
+							</view>
+						</view>
+						<view class="expand-row" @click="goDashboard">
+							<text class="expand-text">查看存量问题清单 ›</text>
+						</view>
+					</view>
+
+					<!-- 快捷入口 -->
+					<view class="tools-row">
+						<view class="tools-cell" @click="goDashboard">
+							<text class="tools-cell-title">经营仪表盘</text>
+							<text class="tools-cell-desc">健康评分与洞察</text>
+						</view>
+						<view class="tools-cell" @click="goTools">
+							<text class="tools-cell-title">治理工具</text>
+							<text class="tools-cell-desc">分类与商品治理</text>
+						</view>
+						<view class="tools-cell" @click="goPeriodReport">
+							<text class="tools-cell-title">周期报告</text>
+							<text class="tools-cell-desc">月度 / 季度汇总</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<view v-if="isOperating" class="operate-mask">
+			<view class="operate-card">
+				<text class="operate-text">处理中...</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { ref } from 'vue'
+import { getCategoryDailyBrief, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const WORKBENCH_TAB_INDEX = 1
+const RELOAD_MIN_INTERVAL_MS = 60000
+
+const isLoading = ref(false)
+const isOperating = ref(false)
+const hasLoadedOnce = ref(false)
+const pageError = ref('')
+let lastLoadedAt = 0
+
+const briefDateText = ref('-')
+const lagText = ref('')
+const salesText = ref('-')
+const profitText = ref('-')
+const quantityText = ref('-')
+const warningText = ref('-')
+const unmatchedText = ref('')
+const deltaText = ref('')
+const deltaClass = ref('hero-delta')
+const highOpenCount = ref(0)
+const unreadCount = ref(0)
+const newTodayCount = ref(0)
+const problemOpenCount = ref(0)
+const resolvedTodayCount = ref(0)
+const featuredUnreadCount = ref(0)
+const topInsights = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+// ── 解析辅助 ────────────────────────────────────────────────────
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		return parsed == null ? ({} as UTSJSONObject) : (parsed as UTSJSONObject)
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		return parsed == null ? ([] as UTSJSONObject[]) : parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function parseErrorMessage(error: any): string {
+	let message = '数据加载失败'
+	if (error != null) {
+		const errorText = '' + error
+		if (errorText != '' && errorText != '[object Object]') {
+			message = errorText.startsWith('Error: ') ? errorText.substring(7) : errorText
+		}
+	}
+	return message
+}
+
+// ── 洞察行辅助 ──────────────────────────────────────────────────
+
+function insightId(item: UTSJSONObject): number {
+	return intValue(item['id'])
+}
+
+function insightTitle(item: UTSJSONObject): string {
+	return stringValue(item['title'], '未命名洞察')
+}
+
+function insightCategory(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['category'])
+}
+
+function insightMeta(item: UTSJSONObject): string {
+	const category = insightCategory(item)
+	let text = stringValue(category['full_name'], stringValue(category['name'], '-'))
+	const severityLabel = stringValue(item['severity_label'])
+	if (severityLabel != '') {
+		text = text + ' · ' + severityLabel
+	}
+	// 影响金额：所有问题统一折钱排序，是要点入选的依据
+	const impact = floatValue(item['impact_amount'])
+	if (impact > 0) {
+		text = text + ' · 影响约 ' + stringValue(item['impact_amount']) + ' zł'
+	}
+	const duration = intValue(item['duration_days'])
+	if (duration > 1) {
+		text = text + ' · 持续 ' + duration.toString() + ' 天'
+	}
+	return text
+}
+
+function insightSuggestion(item: UTSJSONObject): string {
+	return stringValue(item['suggestion'])
+}
+
+function severityDotClass(item: UTSJSONObject): string {
+	const severity = stringValue(item['severity'])
+	if (severity == 'high') return 'severity-dot severity-dot-high'
+	if (severity == 'medium') return 'severity-dot severity-dot-medium'
+	return 'severity-dot severity-dot-low'
+}
+
+// ── 角标 ────────────────────────────────────────────────────────
+
+function syncTabBadge(): void {
+	// 角标 = 没看过的今日要点数；打开工作台曝光后自动清零（曝光即已读）
+	const count = featuredUnreadCount.value
+	if (count > 0) {
+		uni.setTabBarBadge({
+			index: WORKBENCH_TAB_INDEX,
+			text: count > 99 ? '99+' : count.toString(),
+		})
+	} else {
+		uni.removeTabBarBadge({
+			index: WORKBENCH_TAB_INDEX,
+		})
+	}
+}
+
+// ── 数据加载 ────────────────────────────────────────────────────
+
+// 曝光即已读：要点已经展示给用户，静默标记，不再要求手动点已读
+function autoMarkFeaturedRead(items: UTSJSONObject[]): void {
+	const ids: number[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		const isRead = item['is_read']
+		if (typeof isRead == 'boolean' && (isRead as boolean) == true) {
+			continue
+		}
+		const id = intValue(item['id'])
+		if (id > 0) {
+			ids.push(id)
+		}
+	}
+	if (ids.length == 0) {
+		return
+	}
+	// 静默执行，失败不打扰用户（下次打开再补）
+	updateCategoryInsightStatus(ids, 'read').catch((_err) => {})
+}
+
+function applyBrief(brief: UTSJSONObject): void {
+	briefDateText.value = stringValue(brief['snapshot_date'], '-')
+
+	const lagDays = intValue(brief['lag_days'], -1)
+	if (lagDays > 0) {
+		lagText.value = '数据滞后 ' + lagDays.toString() + ' 天，日报管道可能存在缺口'
+	} else {
+		lagText.value = ''
+	}
+
+	const totals = objectValue(brief['totals'])
+	salesText.value = stringValue(totals['sales_amount'], '0') + ' zł'
+	profitText.value = stringValue(totals['gross_profit'], '0') + ' zł'
+	quantityText.value = stringValue(totals['sales_quantity'], '0')
+	warningText.value = stringValue(totals['stock_warning_count'], '0')
+
+	const unmatched = floatValue(totals['unmatched_sales_amount'])
+	unmatchedText.value = unmatched > 0 ? '未归类销售额 ' + stringValue(totals['unmatched_sales_amount']) + ' zł（条码/分类映射待治理）' : ''
+
+	const prevTotals = objectValue(brief['prev_totals'])
+	const current = floatValue(totals['sales_amount'])
+	const previous = floatValue(prevTotals['sales_amount'])
+	if (previous > 0) {
+		const pct = (current - previous) / previous * 100
+		const pctText = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%'
+		deltaText.value = '较前日 ' + pctText
+		deltaClass.value = pct >= 0 ? 'hero-delta hero-delta-up' : 'hero-delta hero-delta-down'
+	} else {
+		deltaText.value = ''
+		deltaClass.value = 'hero-delta'
+	}
+
+	const counts = objectValue(brief['insight_counts'])
+	highOpenCount.value = intValue(counts['high_open'])
+	unreadCount.value = intValue(counts['unread'])
+	newTodayCount.value = intValue(counts['new_today'])
+	resolvedTodayCount.value = intValue(counts['resolved_today'])
+	// problem_open 为新口径（排除机会类）；旧服务端没有该字段时退回 open
+	const problemOpen = intValue(counts['problem_open'], -1)
+	problemOpenCount.value = problemOpen >= 0 ? problemOpen : intValue(counts['open'])
+	topInsights.value = objectArrayValue(brief['top_insights'])
+
+	// 曝光即已读：用户已打开工作台看到要点，角标清零并静默标记已读
+	featuredUnreadCount.value = 0
+	autoMarkFeaturedRead(topInsights.value)
+}
+
+async function loadBrief(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		const brief = await getCategoryDailyBrief(0)
+		applyBrief(brief)
+		syncTabBadge()
+		hasLoadedOnce.value = true
+		lastLoadedAt = Date.now()
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function reload(): void {
+	loadBrief()
+}
+
+// ── 洞察操作 ────────────────────────────────────────────────────
+
+async function executeMarkInsight(id: number, action: string): Promise<void> {
+	if (id <= 0) {
+		return
+	}
+	isOperating.value = true
+	try {
+		await updateCategoryInsightStatus([id], action)
+		await loadBrief()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function markInsightHandled(item: UTSJSONObject): void {
+	executeMarkInsight(insightId(item), 'handle')
+}
+
+function confirmDismissInsight(item: UTSJSONObject): void {
+	uni.showModal({
+		title: '忽略洞察',
+		content: '忽略后此条洞察不再出现在待办中，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				executeMarkInsight(insightId(item), 'dismiss')
+			}
+		},
+	})
+}
+
+// ── 导航 ────────────────────────────────────────────────────────
+
+function goDashboard(): void {
+	uni.navigateTo({ url: '/pages/category/dashboard' })
+}
+
+function goTools(): void {
+	uni.navigateTo({ url: '/pages/category/tools' })
+}
+
+function goPeriodReport(): void {
+	uni.navigateTo({ url: '/pages/category/period-report' })
+}
+
+function goInsightAnalytics(item: UTSJSONObject): void {
+	const category = insightCategory(item)
+	const id = intValue(category['id'])
+	if (id <= 0) {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/category/analytics?id=' + id.toString() + '&name=' + encodeURIComponent(stringValue(category['name'])),
+	})
+}
+
+// ── 生命周期 ────────────────────────────────────────────────────
+
+onShow(() => {
+	if (!hasLoadedOnce.value || Date.now() - lastLoadedAt > RELOAD_MIN_INTERVAL_MS) {
+		loadBrief()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	flex: 1;
+}
+
+.page-content {
+	padding: 12px 12px 24px 12px;
+}
+
+.state-card {
+	margin-top: 80px;
+	padding: 24px 16px;
+	align-items: center;
+}
+
+.state-card-error {
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	text-align: center;
+}
+
+.state-btn {
+	margin-top: 16px;
+	padding: 8px 24px;
+	background-color: #0F172A;
+	border-radius: 8px;
+}
+
+.state-btn-text {
+	font-size: 13px;
+	color: #FFFFFF;
+}
+
+.card {
+	margin-top: 12px;
+	padding: 14px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.card-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card-title-wrap {
+	flex: 1;
+}
+
+.card-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.card-title {
+	margin-top: 2px;
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.mini-action {
+	padding: 6px 12px;
+	background-color: #F1F5F9;
+	border-radius: 8px;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	color: #334155;
+}
+
+.stale-row {
+	margin-top: 10px;
+	padding: 8px 10px;
+	background-color: #FEF3C7;
+	border-radius: 8px;
+}
+
+.stale-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #92400E;
+}
+
+.hero-wrap {
+	margin-top: 12px;
+	align-items: flex-start;
+}
+
+.hero-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.hero-value {
+	margin-top: 4px;
+	font-size: 30px;
+	line-height: 38px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.hero-delta {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.hero-delta-up {
+	color: #059669;
+}
+
+.hero-delta-down {
+	color: #DC2626;
+}
+
+.metric-row {
+	margin-top: 14px;
+	flex-direction: row;
+}
+
+.metric-cell {
+	flex: 1;
+	padding: 10px 8px;
+	margin-right: 8px;
+	background-color: #F8FAFC;
+	border-radius: 10px;
+	align-items: center;
+}
+
+.metric-label {
+	font-size: 11px;
+	line-height: 15px;
+	color: #94A3B8;
+}
+
+.metric-value {
+	margin-top: 4px;
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.unmatched-text {
+	margin-top: 10px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #B45309;
+}
+
+.empty-state {
+	margin-top: 16px;
+	padding: 12px;
+	align-items: center;
+}
+
+.empty-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #94A3B8;
+}
+
+.insight-row {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top-width: 1px;
+	border-top-color: #F1F5F9;
+}
+
+.insight-head {
+	flex-direction: row;
+	align-items: center;
+}
+
+.severity-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-right: 8px;
+}
+
+.severity-dot-high {
+	background-color: #DC2626;
+}
+
+.severity-dot-medium {
+	background-color: #F59E0B;
+}
+
+.severity-dot-low {
+	background-color: #10B981;
+}
+
+.insight-title {
+	flex: 1;
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.insight-meta {
+	margin-top: 4px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.insight-suggestion {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.insight-actions {
+	margin-top: 10px;
+	flex-direction: row;
+}
+
+.insight-btn {
+	padding: 6px 14px;
+	margin-right: 8px;
+	background-color: #F1F5F9;
+	border-radius: 8px;
+}
+
+.insight-btn-text {
+	font-size: 12px;
+	color: #334155;
+}
+
+.insight-btn-primary {
+	background-color: #0F172A;
+}
+
+.insight-btn-primary-text {
+	font-size: 12px;
+	color: #FFFFFF;
+}
+
+.expand-row {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top-width: 1px;
+	border-top-color: #F1F5F9;
+	align-items: center;
+}
+
+.expand-text {
+	font-size: 12px;
+	color: #2563EB;
+}
+
+.tools-row {
+	margin-top: 12px;
+	flex-direction: row;
+}
+
+.tools-cell {
+	flex: 1;
+	margin-right: 8px;
+	padding: 12px 10px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.tools-cell-title {
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.tools-cell-desc {
+	margin-top: 3px;
+	font-size: 10px;
+	line-height: 14px;
+	color: #94A3B8;
+}
+
+.operate-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.25);
+	align-items: center;
+	justify-content: center;
+}
+
+.operate-card {
+	padding: 14px 28px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.operate-text {
+	font-size: 13px;
+	color: #0F172A;
+}
+</style>

@@ -1,0 +1,103 @@
+// 上传前图片压缩：质量压缩 + 长边超限时等比缩边。
+// 手机相机原图普遍 3-8MB，压缩后约 300-500KB，是上传耗时的决定因素。
+// 任何环节失败都原样返回源路径，绝不阻塞上传流程。
+// 压缩档位由「应用设置 → 图片上传质量」控制：标准 1600/80，高清 2560/90，原图不压缩。
+import { getUploadImageQuality, UPLOAD_QUALITY_HIGH, UPLOAD_QUALITY_ORIGINAL } from '@/pkg/util/settings.uts'
+
+const compressibleExtensions = ['jpg', 'jpeg', 'png', 'webp']
+
+function currentMaxEdgePx(): number {
+	return getUploadImageQuality() == UPLOAD_QUALITY_HIGH ? 2560 : 1600
+}
+
+function currentCompressQuality(): number {
+	return getUploadImageQuality() == UPLOAD_QUALITY_HIGH ? 90 : 80
+}
+
+function extensionOf(path: string): string {
+	const queryIndex = path.indexOf('?')
+	const cleanPath = queryIndex >= 0 ? path.substring(0, queryIndex) : path
+	const dotIndex = cleanPath.lastIndexOf('.')
+	if (dotIndex < 0) {
+		return ''
+	}
+	return cleanPath.substring(dotIndex + 1).toLowerCase()
+}
+
+export function isCompressibleImagePath(path: string): boolean {
+	return compressibleExtensions.includes(extensionOf(path))
+}
+
+export function compressImageForUpload(src: string): Promise<string> {
+	return new Promise<string>((resolve, _reject) => {
+		if (!isCompressibleImagePath(src)) {
+			console.log('[imgCompress] 跳过(扩展名不在压缩列表):', src)
+			resolve(src)
+			return
+		}
+		if (getUploadImageQuality() == UPLOAD_QUALITY_ORIGINAL) {
+			console.log('[imgCompress] 跳过(设置为原图上传):', src)
+			resolve(src)
+			return
+		}
+		const maxEdgePx = currentMaxEdgePx()
+		const compressQuality = currentCompressQuality()
+		// #ifdef APP
+		uni.getImageInfo({
+			src: src,
+			success: (info: GetImageInfoSuccess) => {
+				console.log('[imgCompress] 原图尺寸:', info.width, 'x', info.height, src)
+				if (info.width >= info.height && info.width > maxEdgePx) {
+					uni.compressImage({
+						src: src,
+						quality: compressQuality,
+						compressedWidth: maxEdgePx,
+						success: (res: CompressImageSuccess) => {
+							console.log('[imgCompress] 完成: 宽压至', maxEdgePx, '->', res.tempFilePath)
+							resolve(res.tempFilePath)
+						},
+						fail: (_) => {
+							console.log('[imgCompress] 压缩失败, 原图上传:', src)
+							resolve(src)
+						},
+					})
+				} else if (info.height > info.width && info.height > maxEdgePx) {
+					uni.compressImage({
+						src: src,
+						quality: compressQuality,
+						compressedHeight: maxEdgePx,
+						success: (res: CompressImageSuccess) => {
+							console.log('[imgCompress] 完成: 高压至', maxEdgePx, '->', res.tempFilePath)
+							resolve(res.tempFilePath)
+						},
+						fail: (_) => {
+							console.log('[imgCompress] 压缩失败, 原图上传:', src)
+							resolve(src)
+						},
+					})
+				} else {
+					uni.compressImage({
+						src: src,
+						quality: compressQuality,
+						success: (res: CompressImageSuccess) => {
+							console.log('[imgCompress] 完成: 仅质量压缩 ->', res.tempFilePath)
+							resolve(res.tempFilePath)
+						},
+						fail: (_) => {
+							console.log('[imgCompress] 压缩失败, 原图上传:', src)
+							resolve(src)
+						},
+					})
+				}
+			},
+			fail: (_) => {
+				console.log('[imgCompress] 读取图片信息失败, 原图上传:', src)
+				resolve(src)
+			},
+		})
+		// #endif
+		// #ifndef APP
+		resolve(src)
+		// #endif
+	})
+}

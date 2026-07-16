@@ -1,4 +1,4 @@
-<template>
+﻿<template>
 	<view class="page">
 		<lili-universal-filter
 			:title="pageTitle"
@@ -38,9 +38,16 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { createCategory, getCategoryDetail, getCategoryList, translateCategoryName, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
+import { commitCategoryRuleSync, createCategory, getCategoryDetail, getCategoryList, previewCategoryRuleSync, translateCategoryName, updateCategory, CategoryItem, CategoryMutationData } from '@/pkg/api/modules/category'
+import { getProductPricingFormulaList, getPrintTemplateList, ProductPricingFormulaItem, PrintTemplateItem } from '@/pkg/api/modules/products.uts'
 import { getKasaCategoryOptions } from '@/pkg/api/modules/kasa_category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type RuleFieldChange = {
+	field: string
+	label: string
+	newValue: any | null
+}
 
 type SelectOption = {
 	value: string
@@ -70,6 +77,13 @@ const initialData = ref<UTSJSONObject>({
 	kasa_category_text: '',
 	tax_rate: '0.23',
 	tax_rate_text: '标准税率 23%',
+	default_pricing_formula_id: '',
+	default_pricing_formula_text: '',
+	default_print_template_id: '',
+	default_print_template_text: '',
+	pos_sale_enabled: true,
+	default_min_stock_level: '0',
+	default_reorder_point: '0',
 	sort_order: '0',
 	is_active: true,
 } as UTSJSONObject)
@@ -84,6 +98,13 @@ const currentFormData = ref<UTSJSONObject>({
 	kasa_category_text: '',
 	tax_rate: '0.23',
 	tax_rate_text: '标准税率 23%',
+	default_pricing_formula_id: '',
+	default_pricing_formula_text: '',
+	default_print_template_id: '',
+	default_print_template_text: '',
+	pos_sale_enabled: true,
+	default_min_stock_level: '0',
+	default_reorder_point: '0',
 	sort_order: '0',
 	is_active: true,
 } as UTSJSONObject)
@@ -199,6 +220,87 @@ async function fetchStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject>
 
 async function fetchTaxRateOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	return buildSelectResponse(taxRateOptions.value, params)
+}
+
+function formulaOptionText(item: ProductPricingFormulaItem): string {
+	return item.code == '' ? item.name : item.name + ' / ' + item.code
+}
+
+function printTemplateOptionText(item: PrintTemplateItem): string {
+	const typeText = item.template_type_display == '' ? item.template_type : item.template_type_display
+	return typeText == '' ? item.name : item.name + ' / ' + typeText
+}
+
+async function fetchPricingFormulaOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = stringValue(params['keyword'])
+	const id = stringValue(params['id'])
+	const response = await getProductPricingFormulaList({
+		search: keyword == '' ? null : keyword,
+		page: 1,
+		page_size: 50,
+		is_active: 'true',
+	})
+	const result: UTSJSONObject[] = []
+	if (id == '') {
+		result.push({ value: '', text: '不设置默认公式' } as UTSJSONObject)
+	}
+	for (let index = 0; index < response.results.length; index += 1) {
+		const item = response.results[index]
+		const value = item.id.toString()
+		if (id != '' && value != id) continue
+		result.push({ value: value, text: formulaOptionText(item) } as UTSJSONObject)
+	}
+	return { data: result, total: result.length } as UTSJSONObject
+}
+
+async function fetchPrintTemplateOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	const keyword = stringValue(params['keyword'])
+	const id = stringValue(params['id'])
+	const response = await getPrintTemplateList({
+		search: keyword == '' ? null : keyword,
+		page: 1,
+		page_size: 50,
+		template_type: 'product_label',
+		is_active: 'true',
+		is_default: null,
+	})
+	const result: UTSJSONObject[] = []
+	if (id == '') {
+		result.push({ value: '', text: '不设置默认模板' } as UTSJSONObject)
+	}
+	for (let index = 0; index < response.results.length; index += 1) {
+		const item = response.results[index]
+		const value = item.id.toString()
+		if (id != '' && value != id) continue
+		result.push({ value: value, text: printTemplateOptionText(item) } as UTSJSONObject)
+	}
+	return { data: result, total: result.length } as UTSJSONObject
+}
+
+async function resolvePricingFormulaTextByValue(idText: string, fallback: string = ''): Promise<string> {
+	if (idText == '') return ''
+	try {
+		const response = await getProductPricingFormulaList({ search: null, page: 1, page_size: 200, is_active: null })
+		for (let index = 0; index < response.results.length; index += 1) {
+			const item = response.results[index]
+			if (item.id.toString() == idText) return formulaOptionText(item)
+		}
+	} catch (error) {
+	}
+	return fallback
+}
+
+async function resolvePrintTemplateTextByValue(idText: string, fallback: string = ''): Promise<string> {
+	if (idText == '') return ''
+	try {
+		const response = await getPrintTemplateList({ search: null, page: 1, page_size: 200, template_type: null, is_active: null, is_default: null })
+		for (let index = 0; index < response.results.length; index += 1) {
+			const item = response.results[index]
+			if (item.id.toString() == idText) return printTemplateOptionText(item)
+		}
+	} catch (error) {
+	}
+	return fallback
 }
 
 async function fetchKasaCategoryOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
@@ -466,6 +568,8 @@ function buildInitialDataFromDetail(item: CategoryItem, parentText: string): UTS
 	const rawKasaCategoryName = raw['kasa_category_name']
 	const rawKasaCategoryInfo = parseObject(raw['kasa_category_info'])
 	const fallbackKasaCategoryText = rawKasaCategoryName == null ? buildKasaCategoryTextFromInfo(rawKasaCategoryInfo) : (rawKasaCategoryName as string)
+	const rawPricingFormulaId = raw['default_pricing_formula_id'] != null ? raw['default_pricing_formula_id'] : raw['default_pricing_formula']
+	const rawPrintTemplateId = raw['default_print_template_id'] != null ? raw['default_print_template_id'] : raw['default_print_template']
 	return {
 		name: item.name,
 		name_en: rawNameEn == null ? '' : (rawNameEn as string),
@@ -477,6 +581,13 @@ function buildInitialDataFromDetail(item: CategoryItem, parentText: string): UTS
 		kasa_category_text: fallbackKasaCategoryText,
 		tax_rate: item.tax_rate == '' ? '0.23' : item.tax_rate,
 		tax_rate_text: item.tax_rate == '' ? '标准税率 23%' : findTaxRateText(item.tax_rate),
+		default_pricing_formula_id: rawPricingFormulaId == null || intValue(rawPricingFormulaId, 0) <= 0 ? '' : ('' + rawPricingFormulaId),
+		default_pricing_formula_text: stringValue(raw['default_pricing_formula_name']),
+		default_print_template_id: rawPrintTemplateId == null || intValue(rawPrintTemplateId, 0) <= 0 ? '' : ('' + rawPrintTemplateId),
+		default_print_template_text: stringValue(raw['default_print_template_name']),
+		pos_sale_enabled: item.pos_sale_enabled,
+		default_min_stock_level: item.default_min_stock_level.toString(),
+		default_reorder_point: item.default_reorder_point.toString(),
 		sort_order: item.sort_order.toString(),
 		is_active: item.is_active,
 	} as UTSJSONObject
@@ -492,6 +603,14 @@ async function loadDetailData(idText: string): Promise<void> {
 		if (kasaCategoryIdText != '') {
 			detailData['kasa_category_text'] = await resolveKasaCategoryTextByValue(kasaCategoryIdText, currentKasaCategoryText)
 		}
+		const pricingFormulaIdText = stringValue(detailData['default_pricing_formula_id'])
+		if (pricingFormulaIdText != '') {
+			detailData['default_pricing_formula_text'] = await resolvePricingFormulaTextByValue(pricingFormulaIdText, stringValue(detailData['default_pricing_formula_text']))
+		}
+		const printTemplateIdText = stringValue(detailData['default_print_template_id'])
+		if (printTemplateIdText != '') {
+			detailData['default_print_template_text'] = await resolvePrintTemplateTextByValue(printTemplateIdText, stringValue(detailData['default_print_template_text']))
+		}
 		setInitialData(detailData)
 		parentInfo.value = {
 			id: detail.parent_id > 0 ? detail.parent_id.toString() : '',
@@ -505,11 +624,16 @@ async function loadDetailData(idText: string): Promise<void> {
 function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationData {
 	const normalizedParentId = normalizeNullableId(formDataObject['parent_id'])
 	const normalizedKasaCategoryId = normalizeNullableId(formDataObject['kasa_category_id'])
+	const normalizedPricingFormulaId = normalizeNullableId(formDataObject['default_pricing_formula_id'])
+	const normalizedPrintTemplateId = normalizeNullableId(formDataObject['default_print_template_id'])
 	const name = stringValue(formDataObject['name'])
 	const nameEn = stringValue(formDataObject['name_en'])
 	const code = stringValue(formDataObject['code'])
 	const description = stringValue(formDataObject['description'])
 	const taxRate = stringValue(formDataObject['tax_rate'], '0.23')
+	const posSaleEnabled = booleanValue(formDataObject['pos_sale_enabled'], true)
+	const defaultMinStockLevel = intValue(formDataObject['default_min_stock_level'], 0)
+	const defaultReorderPoint = intValue(formDataObject['default_reorder_point'], 0)
 	const sortOrder = intValue(formDataObject['sort_order'], 0)
 	const isActive = booleanValue(formDataObject['is_active'], true)
 	return {
@@ -522,6 +646,13 @@ function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationDa
 		kasa_category: normalizedKasaCategoryId,
 		kasa_category_id: normalizedKasaCategoryId,
 		tax_rate: taxRate == '' ? null : taxRate,
+		default_pricing_formula: normalizedPricingFormulaId,
+		default_pricing_formula_id: normalizedPricingFormulaId,
+		default_print_template: normalizedPrintTemplateId,
+		default_print_template_id: normalizedPrintTemplateId,
+		pos_sale_enabled: posSaleEnabled,
+		default_min_stock_level: defaultMinStockLevel,
+		default_reorder_point: defaultReorderPoint,
 		sort_order: sortOrder,
 		is_active: isActive,
 	} as UTSJSONObject
@@ -574,6 +705,128 @@ function goBackToList(): void {
 	}, 16)
 }
 
+function showConfirmDialog(title: string, content: string, confirmText: string, cancelText: string): Promise<boolean> {
+	return new Promise<boolean>((resolve) => {
+		uni.showModal({
+			title: title,
+			content: content,
+			confirmText: confirmText,
+			cancelText: cancelText,
+			success: (res) => {
+				resolve(res.confirm)
+			},
+			fail: (_) => {
+				resolve(false)
+			},
+		})
+	})
+}
+
+// 收集本次编辑改动的分类默认规则字段，用于保存后的规则同步预览
+function collectRuleFieldChanges(data: UTSJSONObject): RuleFieldChange[] {
+	const changes: RuleFieldChange[] = []
+	const initial = initialData.value
+
+	const taxBefore = stringValue(initial['tax_rate'])
+	const taxAfter = stringValue(data['tax_rate'])
+	if (taxAfter != '' && taxAfter != taxBefore) {
+		changes.push({ field: 'tax_rate', label: '税率', newValue: taxAfter } as RuleFieldChange)
+	}
+
+	const formulaBefore = normalizeNullableId(initial['default_pricing_formula_id'])
+	const formulaAfter = normalizeNullableId(data['default_pricing_formula_id'])
+	if (formulaAfter != formulaBefore) {
+		changes.push({
+			field: 'default_pricing_formula',
+			label: '默认价格公式',
+			newValue: formulaAfter == null ? null : parseInt(formulaAfter as string),
+		} as RuleFieldChange)
+	}
+
+	const templateBefore = normalizeNullableId(initial['default_print_template_id'])
+	const templateAfter = normalizeNullableId(data['default_print_template_id'])
+	if (templateAfter != templateBefore) {
+		changes.push({
+			field: 'default_print_template',
+			label: '默认打印模板',
+			newValue: templateAfter == null ? null : parseInt(templateAfter as string),
+		} as RuleFieldChange)
+	}
+
+	const posBefore = booleanValue(initial['pos_sale_enabled'], true)
+	const posAfter = booleanValue(data['pos_sale_enabled'], true)
+	if (posAfter != posBefore) {
+		changes.push({ field: 'pos_sale_enabled', label: 'POS 可售', newValue: posAfter } as RuleFieldChange)
+	}
+
+	const minStockBefore = intValue(initial['default_min_stock_level'], 0)
+	const minStockAfter = intValue(data['default_min_stock_level'], 0)
+	if (minStockAfter != minStockBefore) {
+		changes.push({ field: 'default_min_stock_level', label: '默认最低库存', newValue: minStockAfter } as RuleFieldChange)
+	}
+
+	const reorderBefore = intValue(initial['default_reorder_point'], 0)
+	const reorderAfter = intValue(data['default_reorder_point'], 0)
+	if (reorderAfter != reorderBefore) {
+		changes.push({ field: 'default_reorder_point', label: '默认补货点', newValue: reorderAfter } as RuleFieldChange)
+	}
+
+	return changes
+}
+
+// 规则变更后先预览影响面，用户确认后才同步到未覆盖商品
+async function maybeOfferRuleSync(changes: RuleFieldChange[]): Promise<void> {
+	let labels = ''
+	for (let index = 0; index < changes.length; index += 1) {
+		if (labels != '') {
+			labels = labels + '、'
+		}
+		labels = labels + changes[index].label
+	}
+	const proceed = await showConfirmDialog(
+		'同步分类规则',
+		'本次修改了' + labels + '。是否检查这些默认规则在分类商品上的同步情况？（已单独覆盖的商品不会被改动）',
+		'查看预览',
+		'暂不同步',
+	)
+	if (!proceed) {
+		return
+	}
+	for (let index = 0; index < changes.length; index += 1) {
+		const change = changes[index]
+		try {
+			const preview = await previewCategoryRuleSync(categoryId.value, change.field, change.newValue, false)
+			let willUpdate = 0
+			let willKeep = 0
+			const summaryText = JSON.stringify(preview['summary'])
+			if (summaryText != null && summaryText != '') {
+				const summary = JSON.parseObject<UTSJSONObject>(summaryText)
+				if (summary != null) {
+					willUpdate = intValue(summary['will_update'], 0)
+					willKeep = intValue(summary['will_keep_override'], 0)
+				}
+			}
+			if (willUpdate <= 0) {
+				uni.showToast({ title: change.label + '：商品无需同步', icon: 'none', duration: 2500 })
+				continue
+			}
+			const confirmed = await showConfirmDialog(
+				change.label + '同步预览',
+				willUpdate.toString() + ' 个商品使用分类默认值（将被更新），' + willKeep.toString() + ' 个已单独覆盖（保持不变）。确认同步吗？',
+				'确认同步',
+				'跳过',
+			)
+			if (!confirmed) {
+				continue
+			}
+			await commitCategoryRuleSync(categoryId.value, change.field, change.newValue, willUpdate, false)
+			uni.showToast({ title: change.label + '已同步到商品', icon: 'success' })
+		} catch (error) {
+			showErrorToast(parseErrorMessage(error, change.label + '同步失败'))
+		}
+	}
+}
+
 async function persistForm(payload: UTSJSONObject): Promise<void> {
 	if (submitting.value) {
 		return
@@ -602,6 +855,8 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		const body = buildMutationPayload(data)
 		const previousParentId = normalizeNullableId(initialData.value['parent_id'])
 		const currentParentId = normalizeNullableId(data['parent_id'])
+		// 在保存前基于原始数据收集规则字段变更，保存后提示同步
+		const ruleChanges = isEditing ? collectRuleFieldChanges(data) : ([] as RuleFieldChange[])
 		let refreshPayload: UTSJSONObject | null = null
 		let successMessage = isEditing ? '分类保存成功' : '分类创建成功'
 		if (isEditing) {
@@ -621,6 +876,11 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 			title: successMessage,
 			icon: 'success',
 		})
+		if (isEditing && ruleChanges.length > 0) {
+			uni.hideLoading()
+			savingVisible.value = false
+			await maybeOfferRuleSync(ruleChanges)
+		}
 		goBackToList()
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error, isEditing ? '分类保存失败' : '分类创建失败'))
@@ -786,6 +1046,62 @@ const formSections = ref<UTSJSONObject[]>([
 		] as UTSJSONObject[],
 	} as UTSJSONObject,
 	{
+		key: 'defaults',
+		title: '商品默认规则',
+		description: '',
+		defaultOpen: true,
+		fields: [
+			{
+				key: 'default_pricing_formula_id',
+				label: '默认价格公式',
+				type: 'bottomSelect',
+				textKey: 'default_pricing_formula_text',
+				title: '选择价格公式',
+				placeholder: '可不设置，商品创建后可单独覆盖',
+				searchPlaceholder: '请输入公式名称或编码',
+				emptyText: '暂无价格公式',
+				showAddAction: true,
+				showEditAction: true,
+				addPath: '/pages/products/pricing-formula/from',
+				editPath: '/pages/products/pricing-formula/from',
+				fetchData: fetchPricingFormulaOptions,
+			} as UTSJSONObject,
+			{
+				key: 'default_print_template_id',
+				label: '默认打印模板',
+				type: 'bottomSelect',
+				textKey: 'default_print_template_text',
+				title: '选择打印模板',
+				placeholder: '可不设置，打印时使用全局默认模板',
+				searchPlaceholder: '请输入模板名称',
+				emptyText: '暂无商品标签模板',
+				showAddAction: true,
+				showEditAction: true,
+				addPath: '/pages/label-templates/from',
+				editPath: '/pages/label-templates/from',
+				fetchData: fetchPrintTemplateOptions,
+			} as UTSJSONObject,
+			{
+				key: 'pos_sale_enabled',
+				label: '默认允许POS销售',
+				type: 'switch',
+				defaultValue: true,
+			} as UTSJSONObject,
+			{
+				key: 'default_min_stock_level',
+				label: '默认最低库存',
+				type: 'number',
+				placeholder: '请输入最低库存',
+			} as UTSJSONObject,
+			{
+				key: 'default_reorder_point',
+				label: '默认补货点',
+				type: 'number',
+				placeholder: '请输入补货点',
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
 		key: 'status',
 		title: '状态设置',
 		description: '',
@@ -848,6 +1164,13 @@ onLoad((event: OnLoadOptions) => {
 			kasa_category_text: '',
 			tax_rate: '0.23',
 			tax_rate_text: '标准税率 23%',
+			default_pricing_formula_id: '',
+			default_pricing_formula_text: '',
+			default_print_template_id: '',
+			default_print_template_text: '',
+			pos_sale_enabled: true,
+			default_min_stock_level: '0',
+			default_reorder_point: '0',
 			sort_order: '0',
 			is_active: true,
 		} as UTSJSONObject)

@@ -111,6 +111,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { getInventoryLocations, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
 
 const keyword = ref('')
@@ -122,7 +123,7 @@ const items = ref<UTSJSONObject[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const locationTypeFilter = ref<string | null>(null)
 const isActiveFilter = ref<string | null>(null)
 const selectedLocationType = ref<string | null>(null)

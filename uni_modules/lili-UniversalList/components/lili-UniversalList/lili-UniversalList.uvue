@@ -60,6 +60,16 @@
 							<view v-if="imageCount(item) > 1" class="lul-cover-count">
 								<text class="lul-cover-count-text">+{{ imageCount(item) - 1 }}</text>
 							</view>
+							<!-- tagPosition=cover：徽标悬浮图片左上角，不占纵向空间 -->
+							<view v-if="tagPosition == 'cover' && tagList(item).length > 0" class="lul-cover-tags">
+								<view
+									v-for="(tag, tagIndex) in tagList(item)"
+									:key="'ct-' + tag + '-' + tagIndex"
+									:class="coverTagClass(tag)"
+								>
+									<text :class="coverTagTextClass(tag)">{{ tag }}</text>
+								</view>
+							</view>
 						</view>
 
 						<view class="lul-main">
@@ -85,7 +95,7 @@
 								</view>
 							</view>
 
-							<view v-if="tagList(item).length > 0" class="lul-tags">
+							<view v-if="tagList(item).length > 0 && (tagPosition != 'cover' || firstImage(item) == '')" class="lul-tags">
 								<view
 									v-for="(tag, tagIndex) in tagList(item)"
 									:key="tag + '-' + tagIndex"
@@ -227,6 +237,8 @@ type Props = {
 	showImage?: boolean
 	fields?: UTSJSONObject[]
 	tagField?: string
+	// 徽标位置：body=正文行（默认），cover=悬浮图片左上角（无图时自动回退正文行）
+	tagPosition?: string
 	tagColorMap?: UTSJSONObject
 	showActions?: boolean
 	actions?: UTSJSONObject[]
@@ -273,6 +285,7 @@ const props = withDefaults(defineProps<Props>(), {
 	showImage: true,
 	fields: () : UTSJSONObject[] => [],
 	tagField: 'tags',
+	tagPosition: 'body',
 	tagColorMap: () : UTSJSONObject => ({
 		进行中: 'info',
 		已完成: 'success',
@@ -553,7 +566,7 @@ function displayField(item: UTSJSONObject, field: UTSJSONObject) : string {
 	const type = fieldType(field)
 	if (type == 'price') {
 		if (raw == '') return ''
-		return '¥ ' + raw
+		return raw + ' zł'
 	}
 	if (type == 'status') {
 		return raw
@@ -892,6 +905,16 @@ function tagClass(tag: string) : string {
 function tagTextClass(tag: string) : string {
 	const tone = toneForTag(tag)
 	return 'lul-tag-text lul-tag-text-' + tone
+}
+
+function coverTagClass(tag: string) : string {
+	const tone = toneForTag(tag)
+	return 'lul-cover-tag lul-tag-' + tone
+}
+
+function coverTagTextClass(tag: string) : string {
+	const tone = toneForTag(tag)
+	return 'lul-cover-tag-text lul-tag-text-' + tone
 }
 
 function actionClass(action: UTSJSONObject) : string {
@@ -1241,6 +1264,30 @@ defineExpose({
 .lul-cover {
 	width: 64px;
 	height: 64px;
+}
+
+.lul-cover-tags {
+	position: absolute;
+	left: 3px;
+	top: 3px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.lul-cover-tag {
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 1px;
+	padding-bottom: 1px;
+	border-radius: 6px;
+	margin-right: 3px;
+	margin-bottom: 3px;
+}
+
+.lul-cover-tag-text {
+	font-size: 10px;
+	line-height: 14px;
+	font-weight: bold;
 }
 
 .lul-cover-count {

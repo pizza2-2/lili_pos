@@ -12,6 +12,35 @@ export type OrderListQuery = {
 	date_to: string | null
 }
 
+export type OrderLine = {
+	id: number
+	line_no: number
+	barcode: string
+	name: string
+	source_type: string
+	quantity: number
+	unit_price: string
+	amount: string
+	match_type: string
+	match_type_display: string
+	product: number
+	variant: number
+	kasa_category: number
+}
+
+export type OrderReturnBrief = {
+	id: number
+	return_number: string
+	return_time: string
+	gross_amount: string
+	tax_amount: string
+	items_count: number
+	reason: string
+	status: string
+	status_display: string
+	inventory_restored: boolean
+}
+
 export type OrderItem = {
 	id: number
 	shop: number
@@ -19,6 +48,7 @@ export type OrderItem = {
 	order_number: string
 	payload: UTSJSONObject
 	cashier_id: string
+	cashier_name: string
 	kasa_number: string
 	payment_method: string
 	payment_method_display: string
@@ -37,6 +67,8 @@ export type OrderItem = {
 	updated_at: string
 	item_count: number
 	quantity_count: number
+	items: OrderLine[]
+	returns: OrderReturnBrief[]
 }
 
 export type OrderListResponse = {
@@ -49,6 +81,9 @@ export type OrderListResponse = {
 
 export type OrderStatistics = {
 	total_count: number
+	total_amount: string
+	tax_amount: string
+	discount_amount: string
 	inventory_deducted_count: number
 	inventory_pending_count: number
 	received_count: number
@@ -145,12 +180,20 @@ function buildQuery(data: OrderListQuery): UTSJSONObject {
 	return query
 }
 
+function floatValue(value: any | null): number {
+	const parsed = parseFloat(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
 function getPayloadItems(payload: UTSJSONObject): UTSJSONObject[] {
-	let rows = parseObjectArray(payload['items'])
+	const orderData = parseObject(payload['order_data'])
+	const source = orderData == null ? payload : orderData!
+	let rows = parseObjectArray(source['items'])
 	if (rows.length > 0) return rows
-	rows = parseObjectArray(payload['products'])
+	rows = parseObjectArray(source['products'])
 	if (rows.length > 0) return rows
-	rows = parseObjectArray(payload['cart'])
+	rows = parseObjectArray(source['cart'])
 	return rows
 }
 
@@ -163,10 +206,64 @@ function getPayloadQuantity(items: UTSJSONObject[]): number {
 	return total
 }
 
+function buildOrderLine(rawObject: UTSJSONObject): OrderLine {
+	return {
+		id: intValue(rawObject['id']),
+		line_no: intValue(rawObject['line_no']),
+		barcode: stringValue(rawObject['barcode']),
+		name: stringValue(rawObject['name']),
+		source_type: stringValue(rawObject['source_type']),
+		quantity: floatValue(rawObject['quantity']),
+		unit_price: stringValue(rawObject['unit_price']),
+		amount: stringValue(rawObject['amount']),
+		match_type: stringValue(rawObject['match_type']),
+		match_type_display: stringValue(rawObject['match_type_display']),
+		product: intValue(rawObject['product']),
+		variant: intValue(rawObject['variant']),
+		kasa_category: intValue(rawObject['kasa_category']),
+	} as OrderLine
+}
+
+function buildOrderLines(value: any | null): OrderLine[] {
+	const rawArray = parseObjectArray(value)
+	const result: OrderLine[] = []
+	for (let index = 0; index < rawArray.length; index += 1) result.push(buildOrderLine(rawArray[index]))
+	return result
+}
+
+function buildOrderReturn(rawObject: UTSJSONObject): OrderReturnBrief {
+	return {
+		id: intValue(rawObject['id']),
+		return_number: stringValue(rawObject['return_number']),
+		return_time: stringValue(rawObject['return_time']),
+		gross_amount: stringValue(rawObject['gross_amount']),
+		tax_amount: stringValue(rawObject['tax_amount']),
+		items_count: intValue(rawObject['items_count']),
+		reason: stringValue(rawObject['reason']),
+		status: stringValue(rawObject['status']),
+		status_display: stringValue(rawObject['status_display']),
+		inventory_restored: boolValue(rawObject['inventory_restored']),
+	} as OrderReturnBrief
+}
+
+function buildOrderReturns(value: any | null): OrderReturnBrief[] {
+	const rawArray = parseObjectArray(value)
+	const result: OrderReturnBrief[] = []
+	for (let index = 0; index < rawArray.length; index += 1) result.push(buildOrderReturn(rawArray[index]))
+	return result
+}
+
 function buildOrderItem(rawObject: UTSJSONObject): OrderItem {
 	const payload = parseObject(rawObject['payload'])
 	const payloadObject = payload == null ? ({} as UTSJSONObject) : payload!
-	const payloadItems = getPayloadItems(payloadObject)
+	// 商品项/件数优先取服务端字段；旧响应缺失时回退到 payload 解析
+	let itemCount = intValue(rawObject['item_count'])
+	let quantityCount = floatValue(rawObject['quantity_count'])
+	if (rawObject['item_count'] == null) {
+		const payloadItems = getPayloadItems(payloadObject)
+		itemCount = payloadItems.length
+		quantityCount = getPayloadQuantity(payloadItems)
+	}
 	return {
 		id: intValue(rawObject['id']),
 		shop: intValue(rawObject['shop']),
@@ -174,6 +271,7 @@ function buildOrderItem(rawObject: UTSJSONObject): OrderItem {
 		order_number: stringValue(rawObject['order_number']),
 		payload: payloadObject,
 		cashier_id: stringValue(rawObject['cashier_id']),
+		cashier_name: stringValue(rawObject['cashier_name']),
 		kasa_number: stringValue(rawObject['kasa_number']),
 		payment_method: stringValue(rawObject['payment_method']),
 		payment_method_display: stringValue(rawObject['payment_method_display']),
@@ -190,8 +288,10 @@ function buildOrderItem(rawObject: UTSJSONObject): OrderItem {
 		inventory_deduct_error: stringValue(rawObject['inventory_deduct_error']),
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
-		item_count: payloadItems.length,
-		quantity_count: getPayloadQuantity(payloadItems),
+		item_count: itemCount,
+		quantity_count: quantityCount,
+		items: buildOrderLines(rawObject['items']),
+		returns: buildOrderReturns(rawObject['returns']),
 	} as OrderItem
 }
 
@@ -227,11 +327,20 @@ function buildListResponse(raw: any, query: OrderListQuery): OrderListResponse {
 	return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as OrderListResponse
 }
 
+function amountText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') return '0.00'
+	return text
+}
+
 function buildStatistics(raw: any): OrderStatistics {
 	const rawObject = rawDataObject(raw)
 	const statusDistribution = parseObject(rawObject['status_distribution'])
 	return {
 		total_count: intValue(rawObject['total_count']),
+		total_amount: amountText(rawObject['total_amount']),
+		tax_amount: amountText(rawObject['tax_amount']),
+		discount_amount: amountText(rawObject['discount_amount']),
 		inventory_deducted_count: intValue(rawObject['inventory_deducted_count']),
 		inventory_pending_count: intValue(rawObject['inventory_pending_count']),
 		received_count: statusDistribution == null ? 0 : intValue(statusDistribution!['已接收']),
@@ -298,6 +407,11 @@ export async function getOrderList(data: OrderListQuery): Promise<OrderListRespo
 export async function getOrderDetail(id: number | string): Promise<OrderItem> {
 	const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true)
 	return buildOrderItem(rawDataObject(raw))
+}
+
+export async function retryOrderDeduction(id: number | string): Promise<boolean> {
+	await request('/api/orders/orders/' + stringValue(id) + '/retry-deduction/', 'POST', {} as UTSJSONObject, true)
+	return true
 }
 
 export async function getOrderFilterOptions(): Promise<OrderFilterOptionsResponse> {

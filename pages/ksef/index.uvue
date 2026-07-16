@@ -73,6 +73,28 @@
 					</view>
 				</view>
 
+				<!-- 手动同步：从 KSeF 拉取指定区间的发票元数据 -->
+				<view class="sync-card">
+					<view class="sync-card-head">
+						<text class="sync-card-title">手动同步</text>
+						<view class="sync-card-head-right">
+							<text v-if="manualSyncing" class="sync-card-state">同步中...</text>
+							<text class="stats-entry" @click="openMonthlyStats">月度统计 ›</text>
+						</view>
+					</view>
+					<view class="sync-card-actions">
+						<view :class="manualSyncing ? 'sync-btn sync-btn-disabled' : 'sync-btn'" @click="handleManualSync(7)">
+							<text class="sync-btn-text">近 7 天</text>
+						</view>
+						<view :class="manualSyncing ? 'sync-btn sync-btn-disabled' : 'sync-btn'" @click="handleManualSync(30)">
+							<text class="sync-btn-text">近 30 天</text>
+						</view>
+						<view :class="manualSyncing ? 'sync-btn sync-btn-disabled' : 'sync-btn'" @click="handleManualSync(90)">
+							<text class="sync-btn-text">近 90 天</text>
+						</view>
+					</view>
+				</view>
+
 				<lili-UniversalList
 					:items="listItems"
 					keyField="id"
@@ -108,13 +130,52 @@
 		<!-- #ifdef APP -->
 		</scroll-view>
 		<!-- #endif -->
+
+		<!-- 月度统计弹窗：可切换月份查看当月发票总额 -->
+		<lili-popup
+			:visible="statsVisible"
+			title="月度统计"
+			:autoClose="false"
+			:closeOnMask="true"
+			cancelText="回到本月"
+			confirmText="关闭"
+			@cancel="statsGoCurrentMonth"
+			@confirm="closeMonthlyStats"
+			@update:visible="onStatsVisibleChange"
+		>
+			<view class="stats-body">
+				<view class="stats-month-row">
+					<view class="stats-month-btn" @click="statsPrevMonth">
+						<text class="stats-month-btn-text">‹</text>
+					</view>
+					<text class="stats-month-text">{{ statsMonthText }}</text>
+					<view :class="statsCanGoNext ? 'stats-month-btn' : 'stats-month-btn stats-month-btn-disabled'" @click="statsNextMonth">
+						<text class="stats-month-btn-text">›</text>
+					</view>
+				</view>
+
+				<view v-if="statsLoading" class="stats-state">
+					<text class="stats-state-text">统计加载中...</text>
+				</view>
+				<view v-else-if="statsError != ''" class="stats-state">
+					<text class="stats-state-text-error">{{ statsError }}</text>
+				</view>
+				<view v-else class="stats-rows">
+					<view v-for="row in statsRows" :key="row.label" class="stats-row">
+						<text class="stats-row-label">{{ row.label }}</text>
+						<text :class="row.emphasis ? 'stats-row-value stats-row-value-strong' : 'stats-row-value'">{{ row.value }}</text>
+					</view>
+				</view>
+			</view>
+		</lili-popup>
 	</view>
 </template>
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { downloadKsefInvoiceXml, getKsefAutoSyncStatus, getKsefInvoiceFilterOptions, getKsefInvoiceList, KsefAutoSyncStatus, KsefFilterDefinition, KsefFilterOption, KsefFilterOptionsResponse, KsefInvoiceItem, KsefInvoiceListResponse } from '@/pkg/api/modules/ksef'
+import { downloadKsefInvoiceXml, getKsefAutoSyncStatus, getKsefInvoiceFilterOptions, getKsefInvoiceList, getKsefMonthlySummary, syncKsefInvoices, KsefAutoSyncStatus, KsefFilterDefinition, KsefFilterOption, KsefFilterOptionsResponse, KsefInvoiceItem, KsefInvoiceListResponse, KsefMonthlySummary } from '@/pkg/api/modules/ksef'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type KsefSelectedFilter = {
@@ -122,10 +183,17 @@ type KsefSelectedFilter = {
 	value: string
 }
 
+type StatsRow = {
+	label: string
+	value: string
+	emphasis: boolean
+}
+
 const refreshStorageKey = 'refresh:pages:ksef:index'
 const keyword = ref('')
 const filterVisible = ref(false)
 const isLoading = ref(false)
+const manualSyncing = ref(false)
 const errorMessage = ref('')
 const invoices = ref<KsefInvoiceItem[]>([])
 const status = ref<KsefAutoSyncStatus | null>(null)
@@ -134,7 +202,7 @@ const supplierFilterName = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<KsefFilterOptionsResponse | null>(null)
@@ -233,6 +301,99 @@ function parseErrorMessage(error: any, fallback: string = '操作失败'): strin
 		}
 	}
 	return message
+}
+
+// ── 月度统计弹窗 ──────────────────────────────────────────────
+const statsInitDate = new Date()
+const statsVisible = ref(false)
+const statsLoading = ref(false)
+const statsError = ref('')
+const statsData = ref<KsefMonthlySummary | null>(null)
+const statsYear = ref(statsInitDate.getFullYear())
+const statsMonth = ref(statsInitDate.getMonth() + 1)
+
+const statsMonthText = computed((): string => {
+	const m = statsMonth.value
+	return statsYear.value.toString() + '-' + (m < 10 ? '0' + m.toString() : m.toString())
+})
+
+// 不允许切到未来月份
+const statsCanGoNext = computed((): boolean => {
+	const now = new Date()
+	const curYear = now.getFullYear()
+	const curMonth = now.getMonth() + 1
+	if (statsYear.value < curYear) return true
+	return statsYear.value == curYear && statsMonth.value < curMonth
+})
+
+const statsRows = computed((): StatsRow[] => {
+	const data = statsData.value
+	if (data == null) return [] as StatsRow[]
+	return [
+		{ label: '发票数量', value: data.total_invoice_count.toString() + ' 张', emphasis: false } as StatsRow,
+		{ label: '发票总额', value: data.total_gross_amount, emphasis: true } as StatsRow,
+		{ label: '应付总额', value: data.total_amount_due, emphasis: false } as StatsRow,
+		{ label: '已付', value: data.paid_invoice_count.toString() + ' 张 / ' + data.paid_amount_total, emphasis: false } as StatsRow,
+		{ label: '未付', value: data.unpaid_invoice_count.toString() + ' 张 / ' + data.unpaid_amount_due_total, emphasis: false } as StatsRow,
+		{ label: '回款率', value: data.payment_completion_rate + '%', emphasis: false } as StatsRow,
+	] as StatsRow[]
+})
+
+async function loadMonthlyStats() {
+	statsLoading.value = true
+	statsError.value = ''
+	try {
+		statsData.value = await getKsefMonthlySummary(statsMonthText.value)
+	} catch (error) {
+		statsData.value = null
+		statsError.value = parseErrorMessage(error, '统计加载失败')
+	} finally {
+		statsLoading.value = false
+	}
+}
+
+function openMonthlyStats() {
+	const now = new Date()
+	statsYear.value = now.getFullYear()
+	statsMonth.value = now.getMonth() + 1
+	statsVisible.value = true
+	loadMonthlyStats()
+}
+
+function statsPrevMonth() {
+	if (statsMonth.value <= 1) {
+		statsYear.value = statsYear.value - 1
+		statsMonth.value = 12
+	} else {
+		statsMonth.value = statsMonth.value - 1
+	}
+	loadMonthlyStats()
+}
+
+function statsNextMonth() {
+	if (!statsCanGoNext.value) return
+	if (statsMonth.value >= 12) {
+		statsYear.value = statsYear.value + 1
+		statsMonth.value = 1
+	} else {
+		statsMonth.value = statsMonth.value + 1
+	}
+	loadMonthlyStats()
+}
+
+function statsGoCurrentMonth() {
+	const now = new Date()
+	statsYear.value = now.getFullYear()
+	statsMonth.value = now.getMonth() + 1
+	loadMonthlyStats()
+}
+
+function closeMonthlyStats() {
+	statsVisible.value = false
+}
+
+function onStatsVisibleChange(value: boolean) {
+	statsVisible.value = value
 }
 
 function applyListResponse(response: KsefInvoiceListResponse) {
@@ -337,6 +498,47 @@ async function loadAutoSyncStatus() {
 	} catch (error) {
 		status.value = null
 	}
+}
+
+// ── 手动同步 ────────────────────────────────────────────────────
+
+function twoDigit(value: number): string {
+	return value < 10 ? '0' + value.toString() : value.toString()
+}
+
+function dateTextWithOffset(offsetDays: number): string {
+	const target = new Date(Date.now() - offsetDays * 24 * 60 * 60 * 1000)
+	return target.getFullYear().toString() + '-' + twoDigit(target.getMonth() + 1) + '-' + twoDigit(target.getDate())
+}
+
+async function executeManualSync(days: number) {
+	if (manualSyncing.value) return
+	manualSyncing.value = true
+	try {
+		// 起点取区间首日 00:00，终点取今天 23:59，覆盖完整自然日
+		const dateFrom = dateTextWithOffset(days - 1) + 'T00:00:00'
+		const dateTo = dateTextWithOffset(0) + 'T23:59:59'
+		await syncKsefInvoices(dateFrom, dateTo)
+		uni.showToast({ title: takeLatestResponseMessage('KSeF 发票同步完成'), icon: 'success' })
+		currentPage.value = 1
+		loadInvoices()
+		loadAutoSyncStatus()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, 'KSeF 同步失败'))
+	} finally {
+		manualSyncing.value = false
+	}
+}
+
+function handleManualSync(days: number) {
+	if (manualSyncing.value) return
+	uni.showModal({
+		title: '手动同步',
+		content: '从 KSeF 拉取近 ' + days.toString() + ' 天的发票元数据？发票较多时可能需要一点时间。',
+		success: (res) => {
+			if (res.confirm) executeManualSync(days)
+		},
+	})
 }
 
 function handleFilterVisibleChange(value: boolean) {
@@ -762,6 +964,170 @@ onShow(() => {
 	border-style: solid;
 	border-color: #FECACA;
 	align-items: center;
+}
+
+.sync-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 12px;
+	margin-bottom: 8px;
+}
+
+.sync-card-head {
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.sync-card-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.sync-card-state {
+	font-size: 12px;
+	line-height: 17px;
+	color: #0369A1;
+}
+
+.sync-card-actions {
+	flex-direction: row;
+}
+
+.sync-btn {
+	height: 34px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding-left: 14px;
+	padding-right: 14px;
+	margin-right: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.sync-btn-disabled {
+	opacity: 0.5;
+}
+
+.sync-btn-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #334155;
+}
+
+.sync-card-head-right {
+	flex-direction: row;
+	align-items: center;
+}
+
+.stats-entry {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0369A1;
+	margin-left: 10px;
+}
+
+.stats-body {
+	width: 100%;
+}
+
+.stats-month-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 12px;
+}
+
+.stats-month-btn {
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	align-items: center;
+	justify-content: center;
+}
+
+.stats-month-btn-disabled {
+	opacity: 0.4;
+}
+
+.stats-month-btn-text {
+	font-size: 18px;
+	line-height: 20px;
+	color: #334155;
+}
+
+.stats-month-text {
+	width: 110px;
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+	text-align: center;
+}
+
+.stats-state {
+	min-height: 60px;
+	align-items: center;
+	justify-content: center;
+}
+
+.stats-state-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.stats-state-text-error {
+	font-size: 13px;
+	line-height: 18px;
+	color: #B42318;
+	text-align: center;
+}
+
+.stats-rows {
+	border-radius: 8px;
+	background-color: #F8FAFC;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+
+.stats-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+.stats-row-label {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.stats-row-value {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+}
+
+.stats-row-value-strong {
+	font-size: 15px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
 }
 
 .error-title {

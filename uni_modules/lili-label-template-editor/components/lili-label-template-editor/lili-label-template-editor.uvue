@@ -7,10 +7,13 @@
 			<view class="lte-tool" @click="addOriginalPriceField"><text class="lte-tool-text">原价</text></view>
 			<view class="lte-tool" @click="addDiscountPriceField"><text class="lte-tool-text">折扣价</text></view>
 			<view class="lte-tool" @click="addBarcodeField"><text class="lte-tool-text">条码</text></view>
+			<view class="lte-tool" @click="addQrcodeField"><text class="lte-tool-text">二维码</text></view>
 			<view class="lte-tool" @click="addSkuField"><text class="lte-tool-text">SKU</text></view>
 			<view class="lte-tool" @click="addKodField"><text class="lte-tool-text">KOD</text></view>
+			<view class="lte-tool" @click="addSpecificationField"><text class="lte-tool-text">属性</text></view>
 			<view class="lte-tool" @click="addHorizontalLine"><text class="lte-tool-text">横线</text></view>
 			<view class="lte-tool" @click="addVerticalLine"><text class="lte-tool-text">竖线</text></view>
+			<view class="lte-tool" @click="addDiagonalLine"><text class="lte-tool-text">斜线</text></view>
 			<view class="lte-tool" @click="addRectFrame"><text class="lte-tool-text">边框</text></view>
 			<view class="lte-tool" @click="addTextElement"><text class="lte-tool-text">自定义</text></view>
 			<view class="lte-tool" @click="resizeSelected(1)"><text class="lte-tool-text">字号+</text></view>
@@ -74,11 +77,22 @@
 					<switch :checked="selectedShowText" color="#111827" @change="handleShowTextChange" />
 				</view>
 			</view>
-			<view v-if="selectedType == 'hline' || selectedType == 'vline' || selectedType == 'rect'" class="lte-input-row">
+			<view v-if="selectedType == 'hline' || selectedType == 'vline' || selectedType == 'rect' || selectedType == 'dline'" class="lte-input-row">
 				<text class="lte-input-label">线宽(mm)</text>
 				<input class="lte-input" :value="selectedLineWidth" type="digit" placeholder="0.4" @input="handleLineWidthInput" />
 			</view>
-			<view v-if="selectedType != 'hline' && selectedType != 'vline' && selectedType != 'rect'" class="lte-input-row">
+			<view v-if="selectedType == 'dline'" class="lte-barcode-options">
+				<text class="lte-input-label">斜线方向</text>
+				<view class="lte-type-row">
+					<view :class="selectedDlineDirection == 'down' ? 'lte-type-chip lte-type-chip-active' : 'lte-type-chip'" @click="setDlineDirection('down')">
+						<text :class="selectedDlineDirection == 'down' ? 'lte-type-text lte-type-text-active' : 'lte-type-text'">左上→右下</text>
+					</view>
+					<view :class="selectedDlineDirection == 'up' ? 'lte-type-chip lte-type-chip-active' : 'lte-type-chip'" @click="setDlineDirection('up')">
+						<text :class="selectedDlineDirection == 'up' ? 'lte-type-text lte-type-text-active' : 'lte-type-text'">左下→右上</text>
+					</view>
+				</view>
+			</view>
+			<view v-if="selectedType != 'hline' && selectedType != 'vline' && selectedType != 'rect' && selectedType != 'dline'" class="lte-input-row">
 				<text class="lte-input-label">显示内容</text>
 				<input class="lte-input" :value="selectedContent" placeholder="请输入标签文字或条码" @input="handleContentInput" />
 			</view>
@@ -113,7 +127,9 @@
 
 <script setup lang="uts">
 import { computed, nextTick, onMounted, watch } from 'vue'
+// #ifdef APP-ANDROID
 import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
+// #endif
 
 type Props = {
 	elements: UTSJSONObject[]
@@ -131,6 +147,7 @@ type LabelElement = {
 	barcodeType: string
 	showText: boolean
 	lineWidth: number
+	direction: string
 	x: number
 	y: number
 	width: number
@@ -349,16 +366,26 @@ function buildPrintTspl(): string {
 }
 
 function connectedPrinterAddress(): string {
+	// #ifdef APP-ANDROID
 	return getPreferredPrinterAddress()
+	// #endif
+	// #ifndef APP-ANDROID
+	return ''
+	// #endif
 }
 
 function goPrinterSettings() {
+	// #ifdef APP-ANDROID
 	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({
 			url: '/pages/printer-settings/index',
 		})
 	}, 450)
+	// #endif
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版不支持标签打印', icon: 'none', duration: 3500 })
+	// #endif
 }
 
 function promptChoosePrinterAfterPrintFailure(message: string) {
@@ -429,10 +456,17 @@ function reserveElementKey(preferred: string, usedKeys: string[]): string {
 
 function normalizeElementType(value: string): string {
 	if (value == 'barcode') return 'barcode'
+	if (value == 'qrcode') return 'qrcode'
 	if (value == 'hline') return 'hline'
 	if (value == 'vline') return 'vline'
 	if (value == 'rect') return 'rect'
+	if (value == 'dline') return 'dline'
 	return 'text'
+}
+
+function normalizeDlineDirection(value: string): string {
+	if (value.toLowerCase() == 'up') return 'up'
+	return 'down'
 }
 
 function normalizeTextAlign(value: string): string {
@@ -456,9 +490,10 @@ function elementFromObject(item: UTSJSONObject, index: number): LabelElement {
 	const height = numberValue(stringValue(item['height']), type == 'barcode' ? 5 : 4)
 	const fontSize = intValue(stringValue(item['fontSize']), type == 'barcode' ? 12 : 18)
 	const lineWidth = numberValue(stringValue(item['lineWidth'], stringValue(item['line_width'])), 1)
+	const direction = normalizeDlineDirection(stringValue(item['direction'], 'down'))
 	const isBold = boldValue(item)
 	const textAlign = normalizeTextAlign(stringValue(item['textAlign'], stringValue(item['text_align'], 'left')))
-	return { key: key, label: label, type: type, source: source, content: content, barcodeType: barcodeType, showText: showText, lineWidth: lineWidth, x: x, y: y, width: width, height: height, fontSize: fontSize, isBold: isBold, textAlign: textAlign } as LabelElement
+	return { key: key, label: label, type: type, source: source, content: content, barcodeType: barcodeType, showText: showText, lineWidth: lineWidth, direction: direction, x: x, y: y, width: width, height: height, fontSize: fontSize, isBold: isBold, textAlign: textAlign } as LabelElement
 }
 
 function objectFromElement(item: LabelElement): UTSJSONObject {
@@ -471,6 +506,7 @@ function objectFromElement(item: LabelElement): UTSJSONObject {
 	result['barcodeType'] = item.barcodeType
 	result['showText'] = item.showText
 	result['lineWidth'] = item.lineWidth
+	result['direction'] = item.direction
 	result['x'] = Math.round(item.x * 10) / 10
 	result['y'] = Math.round(item.y * 10) / 10
 	result['width'] = Math.round(item.width * 10) / 10
@@ -658,6 +694,18 @@ function clampElement(item: LabelElement) {
 		if (item.lineWidth < 0.2) item.lineWidth = 0.2
 		item.width = item.lineWidth
 	}
+	if (item.type == 'dline') {
+		if (item.lineWidth < 0.2) item.lineWidth = 0.2
+	}
+	if (item.type == 'qrcode') {
+		// 二维码保持正方形，且不小于 6mm 保证可扫描
+		let side = Math.max(item.width, item.height)
+		if (side < 6) side = 6
+		const maxSide = Math.min(labelWidthMm(), labelHeightMm())
+		if (side > maxSide) side = maxSide
+		item.width = side
+		item.height = side
+	}
 	if (item.type != 'vline' && item.width < 2) item.width = 2
 	if (item.type != 'hline' && item.height < 1.5) item.height = 1.5
 	if (item.type == 'barcode' && item.height < 3) item.height = 3
@@ -712,6 +760,51 @@ function drawCanvasBarcode(context: DrawableContext, item: LabelElement) {
 	}
 }
 
+function qrPreviewSeed(content: string): number {
+	let hash = 5381
+	for (let index = 0; index < content.length; index += 1) {
+		hash = (hash * 33 + content.charCodeAt(index)!) % 1000003
+	}
+	return hash
+}
+
+function drawPreviewFinder(context: DrawableContext, x: number, y: number, module: number) {
+	context.fillStyle = '#111827'
+	context.fillRect(x, y, module * 7, module * 7)
+	context.fillStyle = '#FFFFFF'
+	context.fillRect(x + module, y + module, module * 5, module * 5)
+	context.fillStyle = '#111827'
+	context.fillRect(x + module * 2, y + module * 2, module * 3, module * 3)
+}
+
+function drawCanvasQrcode(context: DrawableContext, item: LabelElement) {
+	// 预览只画示意图形（三个定位角 + 按内容生成的伪随机点阵），真实二维码由打印端 ZXing 生成
+	const x = item.x * previewScale.value
+	const y = item.y * previewScale.value
+	const width = item.width * previewScale.value
+	const height = item.height * previewScale.value
+	const side = Math.min(width, height)
+	const moduleCount = 21
+	const module = Math.max(1, Math.floor(side / (moduleCount + 4)))
+	const drawSize = module * moduleCount
+	const offsetX = x + Math.max(0, (width - drawSize) / 2)
+	const offsetY = y + Math.max(0, (height - drawSize) / 2)
+	const seed = qrPreviewSeed(item.content)
+	context.fillStyle = '#111827'
+	for (let row = 0; row < moduleCount; row += 1) {
+		for (let col = 0; col < moduleCount; col += 1) {
+			const inFinder = (row <= 7 && col <= 7) || (row <= 7 && col >= moduleCount - 8) || (row >= moduleCount - 8 && col <= 7)
+			if (inFinder) continue
+			if ((seed + row * 31 + col * 17 + row * col * 7) % 97 < 46) {
+				context.fillRect(offsetX + col * module, offsetY + row * module, module, module)
+			}
+		}
+	}
+	drawPreviewFinder(context, offsetX, offsetY, module)
+	drawPreviewFinder(context, offsetX + (moduleCount - 7) * module, offsetY, module)
+	drawPreviewFinder(context, offsetX, offsetY + (moduleCount - 7) * module, module)
+}
+
 function drawCanvasGraphic(context: DrawableContext, item: LabelElement) {
 	const x = item.x * previewScale.value
 	const y = item.y * previewScale.value
@@ -727,6 +820,18 @@ function drawCanvasGraphic(context: DrawableContext, item: LabelElement) {
 	}
 	if (item.type == 'vline') {
 		context.fillRect(x, y, Math.max(1, linePx), Math.max(1, height))
+		return
+	}
+	if (item.type == 'dline') {
+		context.beginPath()
+		if (item.direction == 'up') {
+			context.moveTo(x, y + Math.max(1, height))
+			context.lineTo(x + Math.max(1, width), y)
+		} else {
+			context.moveTo(x, y)
+			context.lineTo(x + Math.max(1, width), y + Math.max(1, height))
+		}
+		context.stroke()
 		return
 	}
 	if (item.type == 'rect') {
@@ -756,7 +861,9 @@ function drawCanvasElement(context: DrawableContext, item: LabelElement) {
 	}
 	if (item.type == 'barcode') {
 		drawCanvasBarcode(context, item)
-	} else if (item.type == 'hline' || item.type == 'vline' || item.type == 'rect') {
+	} else if (item.type == 'qrcode') {
+		drawCanvasQrcode(context, item)
+	} else if (item.type == 'hline' || item.type == 'vline' || item.type == 'rect' || item.type == 'dline') {
 		drawCanvasGraphic(context, item)
 	} else {
 		drawCanvasText(context, item)
@@ -849,7 +956,7 @@ function loadElements(value: UTSJSONObject[]) {
 		next.push(item)
 	}
 	if (next.length == 0) {
-		next.push({ key: reserveElementKey('field-1', usedKeys), label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, lineWidth: 1, x: 2, y: 2, width: 18, height: 4, fontSize: 18, isBold: false, textAlign: 'left' } as LabelElement)
+		next.push({ key: reserveElementKey('field-1', usedKeys), label: '文本', type: 'text', source: 'custom', content: 'TEXT', barcodeType: 'CODE128', showText: true, lineWidth: 1, direction: 'down', x: 2, y: 2, width: 18, height: 4, fontSize: 18, isBold: false, textAlign: 'left' } as LabelElement)
 	}
 	elements.value = next
 	let nextKey = next[0].key
@@ -887,6 +994,7 @@ const selectedSourceText = computed((): string => {
 	if (current.type == 'hline') return '图形：横线'
 	if (current.type == 'vline') return '图形：竖线'
 	if (current.type == 'rect') return '图形：边框'
+	if (current.type == 'dline') return '图形：斜线'
 	if (current.source == 'custom') return '自定义字段'
 	if (current.source == 'name') return '商品名称 name'
 	if (current.source == 'name_cn') return '中文名 name_cn'
@@ -937,6 +1045,12 @@ const selectedLineWidth = computed((): string => {
 	return (item as LabelElement).lineWidth.toString()
 })
 
+const selectedDlineDirection = computed((): string => {
+	const item = getSelectedElement()
+	if (item == null) return 'down'
+	return (item as LabelElement).direction
+})
+
 function selectElement(key: any) {
 	selectedKey.value = stringValue(key)
 	updateSelectedSummary()
@@ -968,7 +1082,7 @@ function resizeSelected(delta: number) {
 }
 
 function makeMappedElement(type: string, label: string, source: string, content: string, x: number, y: number, width: number, height: number, fontSize: number, isBold: boolean = false, textAlign: string = 'left'): LabelElement {
-	return { key: makeKey(), label: label, type: type, source: source, content: content, barcodeType: type == 'barcode' ? 'EAN13' : 'CODE128', showText: type == 'barcode' ? false : true, lineWidth: 0.4, x: x, y: y, width: width, height: height, fontSize: fontSize, isBold: isBold, textAlign: normalizeTextAlign(textAlign) } as LabelElement
+	return { key: makeKey(), label: label, type: type, source: source, content: content, barcodeType: type == 'barcode' ? 'EAN13' : 'CODE128', showText: type == 'barcode' ? false : true, lineWidth: 0.4, direction: 'down', x: x, y: y, width: width, height: height, fontSize: fontSize, isBold: isBold, textAlign: normalizeTextAlign(textAlign) } as LabelElement
 }
 
 function makeElement(type: string, label: string, content: string, x: number, y: number, width: number, height: number, fontSize: number): LabelElement {
@@ -1020,6 +1134,10 @@ function addBarcodeField() {
 	addElement(makeMappedElement('barcode', '条码', 'barcode', '5901234123457', 2, 14, 24, 5, 12))
 }
 
+function addQrcodeField() {
+	addElement(makeMappedElement('qrcode', '二维码', 'barcode', '5901234123457', 2, 4, 12, 12, 12))
+}
+
 function addSkuField() {
 	addElement(makeMappedElement('text', 'SKU', 'sku', 'SKU001', 2, 17, 12, 3, 14))
 }
@@ -1028,12 +1146,21 @@ function addKodField() {
 	addElement(makeMappedElement('text', 'KOD', 'kod', 'KOD', 16, 17, 10, 3, 14, false, 'center'))
 }
 
+function addSpecificationField() {
+	// 变体属性组合（如"红色 / L"），无变体的商品打印时该区域留空
+	addElement(makeMappedElement('text', '属性', 'specification', '红色 / L', 2, 11, 24, 3, 14, false, 'center'))
+}
+
 function addHorizontalLine() {
 	addElement(makeMappedElement('hline', '横线', 'custom', '', 2, 8, 24, 0.4, 12))
 }
 
 function addVerticalLine() {
 	addElement(makeMappedElement('vline', '竖线', 'custom', '', 15, 2, 0.4, 14, 12))
+}
+
+function addDiagonalLine() {
+	addElement(makeMappedElement('dline', '斜线', 'custom', '', 2, 2, 10, 8, 12))
 }
 
 function addRectFrame() {
@@ -1084,6 +1211,16 @@ function handleLineWidthInput(event: any) {
 	current.lineWidth = numberValue(inputEvent.detail.value, current.lineWidth)
 	clampElement(current)
 	updateSelectedSummary()
+	emitChange()
+	renderCanvas()
+}
+
+function setDlineDirection(value: string) {
+	const item = getSelectedElement()
+	if (item == null) return
+	const current = item as LabelElement
+	if (current.type != 'dline') return
+	current.direction = normalizeDlineDirection(value)
 	emitChange()
 	renderCanvas()
 }
@@ -1163,9 +1300,12 @@ function validateCurrentElements(): string {
 		if (item.y + item.height > paperHeight + 0.05) return name + ' 超出纸张高度'
 		if (item.type == 'text' && isBlankTemplateText(item.content)) return name + ' 内容为空'
 		if (item.type == 'barcode' && isBlankTemplateText(item.content)) return name + ' 条码为空'
-		if ((item.type == 'hline' || item.type == 'vline' || item.type == 'rect') && item.lineWidth <= 0) return name + ' 线宽必须大于 0'
+		if (item.type == 'qrcode' && isBlankTemplateText(item.content)) return name + ' 二维码内容为空'
+		if (item.type == 'qrcode' && (item.width < 6 || item.height < 6)) return name + ' 二维码尺寸不能小于 6mm'
+		if ((item.type == 'hline' || item.type == 'vline' || item.type == 'rect' || item.type == 'dline') && item.lineWidth <= 0) return name + ' 线宽必须大于 0'
 		if (item.type == 'hline' && item.width < 0.5) return name + ' 横线长度过短'
 		if (item.type == 'vline' && item.height < 0.5) return name + ' 竖线长度过短'
+		if (item.type == 'dline' && item.width < 0.5 && item.height < 0.5) return name + ' 斜线长度过短'
 		if (item.type == 'barcode' && item.barcodeType == 'EAN13' && !isValidEan13Input(item.content)) {
 			return name + ' 不是有效 EAN13，请使用 12 位数字或正确校验位的 13 位数字'
 		}
@@ -1193,6 +1333,7 @@ async function printTestLabel() {
 	let responseMessage = ''
 	uni.showLoading({ title: '打印中', mask: true })
 	try {
+		// #ifdef APP-ANDROID
 		const response = await printLabelBitmapAsync({
 			address: address,
 			paperWidthMm: labelWidthMm(),
@@ -1204,6 +1345,7 @@ async function printTestLabel() {
 		} as UTSJSONObject)
 		responseSuccess = response.success
 		responseMessage = response.message
+		// #endif
 	} finally {
 		testPrinting.value = false
 		uni.hideLoading()

@@ -129,6 +129,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteKasaCategory, getKasaCategoryList, getKasaCategoryStatistics, getKasaCategoryTaxRates, KasaCategoryItem, KasaCategoryListResponse, KasaCategoryStatisticsResponse, KasaCategoryTaxRatesResponse, patchKasaCategory } from '@/pkg/api/modules/kasa_category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
@@ -148,7 +149,7 @@ const kasaCategories = ref<KasaCategoryItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const statistics = ref<KasaCategoryStatisticsResponse | null>(null)
 const taxRateLoading = ref(false)
 const taxRateResponse = ref<KasaCategoryTaxRatesResponse | null>(null)

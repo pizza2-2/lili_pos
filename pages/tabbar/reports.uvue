@@ -26,12 +26,23 @@
 				<text class="notice-desc">{{ errorMessage }}</text>
 			</view>
 
+			<view v-if="categoryLagText != ''" class="lag-row">
+				<text class="lag-text">⚠ {{ categoryLagText }}</text>
+			</view>
+
 			<view class="hero-card surface-animate">
 				<text class="hero-label">{{ currentPeriodLabel }}销售额</text>
 				<text class="hero-value">{{ moneyText(overview.sales_amount) }}</text>
+				<text v-if="salesDeltaText != ''" :class="salesDeltaClass">{{ salesDeltaText }}</text>
 				<view class="hero-meta">
 					<text class="hero-meta-text">订单 {{ overview.order_count.toString() }}</text>
 					<text class="hero-meta-text">客单价 {{ moneyText(overview.average_order_value) }}</text>
+					<text v-if="overview.return_count > 0" class="hero-meta-text">退货 {{ moneyText(overview.return_amount) }}</text>
+				</view>
+				<view v-if="overview.gross_profit != ''" class="hero-meta">
+					<text class="hero-meta-text">估算毛利 {{ moneyText(overview.gross_profit) }}</text>
+					<text class="hero-meta-text">毛利率 {{ overview.gross_margin }}%</text>
+					<text v-if="grossDeltaText != ''" :class="grossDeltaClass">{{ grossDeltaText }}</text>
 				</view>
 			</view>
 
@@ -90,7 +101,7 @@
 				<view v-if="topProducts.length == 0" class="empty-row">
 					<text class="empty-text">暂无商品排行</text>
 				</view>
-				<view v-for="(item, index) in topProducts" :key="item.key" class="rank-row">
+				<view v-for="(item, index) in topProducts" :key="item.key" class="rank-row" @click="openProductSalesDetail">
 					<view :class="index == 0 ? 'rank-index rank-index-top' : 'rank-index'">
 						<text :class="index == 0 ? 'rank-index-text rank-index-text-top' : 'rank-index-text'">{{ (index + 1).toString() }}</text>
 					</view>
@@ -110,12 +121,14 @@
 			<view class="section surface-animate">
 				<view class="section-header">
 					<text class="section-title">最佳分类</text>
-					<text class="section-meta">商品分类</text>
+					<view class="section-action" @click="openCategoryDashboard">
+						<text class="section-action-text">经营仪表盘</text>
+					</view>
 				</view>
 				<view v-if="topCategories.length == 0" class="empty-row">
 					<text class="empty-text">暂无分类排行</text>
 				</view>
-				<view v-for="(item, index) in topCategories" :key="item.key" class="rank-row">
+				<view v-for="(item, index) in topCategories" :key="item.key" class="rank-row" @click="goCategoryAnalytics(item)">
 					<view :class="index == 0 ? 'rank-index rank-index-top' : 'rank-index'">
 						<text :class="index == 0 ? 'rank-index-text rank-index-text-top' : 'rank-index-text'">{{ (index + 1).toString() }}</text>
 					</view>
@@ -171,6 +184,23 @@
 				</view>
 			</view>
 
+			<view v-if="hourlyTrend.length > 0 && maxHourlyAmount > 0" class="section surface-animate">
+				<text class="section-title">分时段销售</text>
+				<view class="hourly-chart">
+					<view v-for="item in hourlyTrend" :key="'hour-' + item.hour.toString()" class="hourly-col">
+						<view class="hourly-bar" :style="'height:' + hourlyHeight(item.amount) + '%'"></view>
+					</view>
+				</view>
+				<view class="hourly-axis">
+					<text class="hourly-axis-text">0点</text>
+					<text class="hourly-axis-text">6点</text>
+					<text class="hourly-axis-text">12点</text>
+					<text class="hourly-axis-text">18点</text>
+					<text class="hourly-axis-text">23点</text>
+				</view>
+				<text v-if="peakHourText != ''" class="hourly-peak">{{ peakHourText }}</text>
+			</view>
+
 			<view class="section surface-animate">
 				<text class="section-title">支付方式</text>
 				<view v-for="item in paymentMethods" :key="item.key" class="list-row">
@@ -224,7 +254,10 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { DashboardReport, ReportAlert, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
+import { DashboardReport, ReportAlert, ReportHourlyItem, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportPrevious, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
+import { getCategoryDailyBrief } from '@/pkg/api/modules/category'
+import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'
+import { resolveReportStartPeriod, setReportLastPeriod } from '@/pkg/util/settings.uts'
 
 type PeriodOption = {
 	key: ReportPeriod
@@ -237,7 +270,8 @@ const periodOptions = [
 	{ key: 'month', label: '本月' } as PeriodOption,
 ] as PeriodOption[]
 
-const selectedPeriod = ref<ReportPeriod>('today')
+// 初始周期由「应用设置 → 报表默认周期」决定（含「记住上次」模式）
+const selectedPeriod = ref<ReportPeriod>(resolveReportStartPeriod())
 const isLoading = ref(false)
 const errorMessage = ref('')
 const overview = ref<ReportOverview>({
@@ -248,7 +282,25 @@ const overview = ref<ReportOverview>({
 	expense_amount: '0.00',
 	arrears_amount: '0.00',
 	net_cashflow: '0.00',
+	gross_profit: '',
+	gross_margin: '',
+	cost_missing_amount: '',
+	return_amount: '0.00',
+	return_count: 0,
+	net_sales_amount: '0.00',
 } as ReportOverview)
+const previous = ref<ReportPrevious>({
+	date_from: '',
+	date_to: '',
+	sales_amount: '',
+	order_count: 0,
+	average_order_value: '',
+	gross_profit: '',
+	return_amount: '',
+	net_sales_amount: '',
+} as ReportPrevious)
+const hourlyTrend = ref<ReportHourlyItem[]>([] as ReportHourlyItem[])
+const categoryLagText = ref('')
 const salesTrend = ref<ReportTrendItem[]>([] as ReportTrendItem[])
 const paymentMethods = ref<ReportPaymentMethod[]>([] as ReportPaymentMethod[])
 const topProducts = ref<ReportRankItem[]>([] as ReportRankItem[])
@@ -275,9 +327,9 @@ function amountNumber(value: string): number {
 
 function moneyText(value: string): string {
 	if (value == '') {
-		return '¥ 0.00'
+		return '0.00 zł'
 	}
-	return '¥ ' + value
+	return value + ' zł'
 }
 
 function rankMaxAmount(items: ReportRankItem[]): number {
@@ -393,21 +445,117 @@ function rankWidth(value: string, maxValue: number): number {
 
 function rankSubtitle(item: ReportRankItem): string {
 	let text = item.quantity + ' 件 / ' + item.order_count.toString() + ' 单 / 占比 ' + item.share + '%'
+	if (item.gross_profit != '') {
+		text = text + ' / 毛利 ' + item.gross_profit + ' zł'
+	}
 	if (item.subtitle != '') {
 		text = item.subtitle + ' · ' + text
 	}
 	return text
 }
 
+// ── 环比 ────────────────────────────────────────────────────────
+
+function deltaPctText(current: number, prev: number): string {
+	if (prev <= 0) {
+		return ''
+	}
+	const pct = (current - prev) / prev * 100
+	return '较上期 ' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%'
+}
+
+function deltaPctClass(current: number, prev: number): string {
+	if (prev <= 0) {
+		return 'delta-text'
+	}
+	return current >= prev ? 'delta-text delta-up' : 'delta-text delta-down'
+}
+
+const salesDeltaText = computed(() : string => {
+	return deltaPctText(amountNumber(overview.value.sales_amount), amountNumber(previous.value.sales_amount))
+})
+
+const salesDeltaClass = computed(() : string => {
+	return deltaPctClass(amountNumber(overview.value.sales_amount), amountNumber(previous.value.sales_amount))
+})
+
+const grossDeltaText = computed(() : string => {
+	return deltaPctText(amountNumber(overview.value.gross_profit), amountNumber(previous.value.gross_profit))
+})
+
+const grossDeltaClass = computed(() : string => {
+	return deltaPctClass(amountNumber(overview.value.gross_profit), amountNumber(previous.value.gross_profit))
+})
+
+// ── 分时段 ──────────────────────────────────────────────────────
+
+const maxHourlyAmount = computed(() : number => {
+	let maxValue = 0
+	for (let index = 0; index < hourlyTrend.value.length; index += 1) {
+		const parsed = amountNumber(hourlyTrend.value[index].amount)
+		if (parsed > maxValue) {
+			maxValue = parsed
+		}
+	}
+	return maxValue
+})
+
+function hourlyHeight(value: string): number {
+	const maxValue = maxHourlyAmount.value
+	if (maxValue <= 0) {
+		return 0
+	}
+	const parsed = amountNumber(value)
+	if (parsed <= 0) {
+		return 0
+	}
+	const height = Math.round((parsed / maxValue) * 100)
+	return height < 4 ? 4 : height
+}
+
+const peakHourText = computed(() : string => {
+	let peakHour = -1
+	let peakAmount = 0
+	for (let index = 0; index < hourlyTrend.value.length; index += 1) {
+		const parsed = amountNumber(hourlyTrend.value[index].amount)
+		if (parsed > peakAmount) {
+			peakAmount = parsed
+			peakHour = hourlyTrend.value[index].hour
+		}
+	}
+	if (peakHour < 0) {
+		return ''
+	}
+	return '高峰时段 ' + peakHour.toString() + ':00-' + (peakHour + 1).toString() + ':00 · ' + moneyText(peakAmount.toFixed(2))
+})
+
 function applyReport(data: DashboardReport) {
 	overview.value = data.overview
+	previous.value = data.previous
 	salesTrend.value = data.sales_trend
+	hourlyTrend.value = data.hourly_trend
 	paymentMethods.value = data.payment_methods
 	topProducts.value = data.top_products
 	topCategories.value = data.top_categories
 	topKasaCategories.value = data.top_kasa_categories
 	inventory.value = data.inventory
 	alerts.value = data.alerts
+}
+
+// 分类日报滞后提示：无权限或接口失败时静默忽略，不影响报表主体
+async function loadCategoryLag() {
+	try {
+		const brief = await getCategoryDailyBrief(0)
+		const lagValue = brief['lag_days']
+		const lagDays = lagValue == null ? -1 : parseInt('' + lagValue)
+		if (!isNaN(lagDays) && lagDays > 0) {
+			categoryLagText.value = '分类日报数据滞后 ' + lagDays.toString() + ' 天，趋势类指标可能不完整'
+		} else {
+			categoryLagText.value = ''
+		}
+	} catch (error) {
+		categoryLagText.value = ''
+	}
 }
 
 function parseErrorMessage(error: any): string {
@@ -442,6 +590,7 @@ function changePeriod(period: ReportPeriod) {
 		return
 	}
 	selectedPeriod.value = period
+	setReportLastPeriod(period)
 	loadReport()
 }
 
@@ -449,8 +598,37 @@ function openProductSalesDetail() {
 	uni.navigateTo({ url: '/pages/reports/product-sales?period=' + selectedPeriod.value })
 }
 
+function openCategoryDashboard() {
+	uni.navigateTo({ url: '/pages/category/dashboard' })
+}
+
+function goCategoryAnalytics(item: ReportRankItem) {
+	// key 形如 'category:123'
+	const parts = item.key.split(':')
+	if (parts.length != 2 || parts[0] != 'category') {
+		return
+	}
+	const id = parseInt(parts[1])
+	if (isNaN(id) || id <= 0) {
+		return
+	}
+	uni.navigateTo({ url: '/pages/category/analytics?id=' + id.toString() + '&name=' + encodeURIComponent(item.label) })
+}
+
 onLoad(() => {
 	loadReport()
+	loadCategoryLag()
+})
+
+onReady(() => {
+	// 启动时静默检查更新；有新版本时插件自行弹窗，已最新/失败仅记录日志
+	try {
+		checkUpdate().catch((err: any | null) => {
+			console.log('[Reports] checkUpdate:', err)
+		})
+	} catch (e) {
+		console.log('[Reports] checkUpdate error:', e)
+	}
 })
 
 onShow(() => {
@@ -461,6 +639,73 @@ onShow(() => {
 <style>
 .page-scroll {
 	background-color: #F6F7FB;
+}
+
+.lag-row {
+	margin-top: 8px;
+	padding: 8px 10px;
+	background-color: #FEF3C7;
+	border-radius: 8px;
+}
+
+.lag-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #92400E;
+}
+
+.delta-text {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #94A3B8;
+}
+
+.delta-up {
+	color: #34D399;
+}
+
+.delta-down {
+	color: #F87171;
+}
+
+.hourly-chart {
+	margin-top: 12px;
+	height: 90px;
+	flex-direction: row;
+	align-items: flex-end;
+}
+
+.hourly-col {
+	flex: 1;
+	height: 90px;
+	justify-content: flex-end;
+	padding-left: 1px;
+	padding-right: 1px;
+}
+
+.hourly-bar {
+	background-color: #6366F1;
+	border-radius: 2px;
+}
+
+.hourly-axis {
+	margin-top: 4px;
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+.hourly-axis-text {
+	font-size: 10px;
+	line-height: 14px;
+	color: #94A3B8;
+}
+
+.hourly-peak {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #475569;
 }
 
 .page {

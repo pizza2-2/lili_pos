@@ -1,0 +1,630 @@
+<template>
+	<view class="page">
+		<view class="nav-shell" :style="navShellStyle">
+			<view class="detail-nav">
+				<view class="nav-btn" @click="goBack">
+					<text class="nav-btn-text">&lt;</text>
+				</view>
+				<view class="nav-main">
+					<text class="nav-title">{{ pageTitle }}</text>
+					<text class="nav-subtitle">{{ pageSubtitle }}</text>
+				</view>
+				<view class="nav-home" @click="goHome">
+					<text class="nav-home-text">列表</text>
+				</view>
+			</view>
+		</view>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="isLoading" class="state-card">
+					<text class="state-title">正在加载退货详情</text>
+					<text class="state-desc">退货 ID：{{ displayText(returnId) }}</text>
+				</view>
+
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadDetail">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<view v-if="returnDetail == null && !isLoading && errorMessage == ''" class="state-card">
+					<text class="state-title">暂无退货数据</text>
+					<text class="state-desc">没有读取到当前退货详情</text>
+				</view>
+
+				<view v-if="returnDetail != null && !isLoading" class="summary-card">
+					<view class="summary-head">
+						<view class="summary-main">
+							<text class="summary-title">{{ returnNumberText }}</text>
+							<text class="summary-subtitle">{{ returnTimeText }}</text>
+						</view>
+						<view :class="statusPillClass">
+							<text :class="statusTextClass">{{ statusDisplayText }}</text>
+						</view>
+					</view>
+					<view class="amount-line">
+						<text class="amount-label">退货金额</text>
+						<text class="amount-value">-{{ grossAmountText }} zł</text>
+					</view>
+					<view class="action-row">
+						<view class="action-btn action-btn-primary" @click="openOriginalOrder">
+							<text class="action-btn-primary-text">查看原订单</text>
+						</view>
+						<view class="action-btn action-btn-light" @click="copyReturnNumber">
+							<text class="action-btn-light-text">复制退货号</text>
+						</view>
+					</view>
+				</view>
+
+				<view v-if="returnDetail != null && !isLoading" class="section-card">
+					<text class="section-title">退货基础信息</text>
+					<view v-for="row in baseRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
+						<text class="info-label">{{ row['label'] }}</text>
+						<text class="info-value">{{ row['value'] }}</text>
+					</view>
+				</view>
+
+				<view v-if="returnDetail != null && !isLoading" class="section-card">
+					<text class="section-title">金额与数量</text>
+					<view v-for="row in amountRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
+						<text class="info-label">{{ row['label'] }}</text>
+						<text class="info-value">{{ row['value'] }}</text>
+					</view>
+				</view>
+
+				<view v-if="returnDetail != null && !isLoading" class="section-card">
+					<text class="section-title">处理与库存状态</text>
+					<view v-for="row in statusRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
+						<text class="info-label">{{ row['label'] }}</text>
+						<text class="info-value">{{ row['value'] }}</text>
+					</view>
+				</view>
+
+				<view v-if="returnDetail != null && !isLoading" class="section-card">
+					<text class="section-title">合规登记信息</text>
+					<view v-for="row in complianceRows" :key="row['key']" class="info-row" @click="copyRowValue(row)">
+						<text class="info-label">{{ row['label'] }}</text>
+						<text class="info-value">{{ row['value'] }}</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getReturnDetail, ReturnItem } from '@/pkg/api/modules/returns.uts'
+
+const returnId = ref('')
+const returnDetail = ref<ReturnItem | null>(null)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const navShellStyle = ref('')
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function displayText(value: string): string {
+	if (value == '') return '-'
+	return value
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+// ISO 时间简化为 "YYYY-MM-DD HH:MM"
+function compactDate(value: string): string {
+	if (value == '') return '-'
+	const text = value.replace('T', ' ')
+	if (text.length >= 16) return text.substring(0, 16)
+	return text
+}
+
+function boolText(value: boolean): string {
+	return value ? '是' : '否'
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
+		return
+	}
+	uni.setClipboardData({
+		data: text,
+		success: () => {
+			uni.showToast({ title: successTitle, icon: 'success' })
+		},
+	})
+}
+
+function goBack() {
+	uni.navigateBack({
+		delta: 1,
+		fail: () => {
+			uni.redirectTo({ url: '/pages/returns/index' })
+		},
+	})
+}
+
+function goHome() {
+	uni.redirectTo({ url: '/pages/returns/index' })
+}
+
+function updateNavShellStyle() {
+	const info = uni.getWindowInfo()
+	navShellStyle.value = 'padding-top:' + info.statusBarHeight.toString() + 'px;'
+}
+
+async function loadDetail() {
+	if (returnId.value == '') {
+		errorMessage.value = '缺少退货 ID'
+		return
+	}
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const detail = await getReturnDetail(returnId.value)
+		returnDetail.value = detail
+	} catch (error) {
+		returnDetail.value = null
+		errorMessage.value = parseErrorMessage(error, '退货详情加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function copyReturnNumber() {
+	if (returnDetail.value == null) {
+		copyText('', '退货号已复制', '暂无退货号')
+		return
+	}
+	const detail = returnDetail.value as ReturnItem
+	copyText(stringValue(detail.return_number, '退货 #' + detail.id.toString()), '退货号已复制', '暂无退货号')
+}
+
+function openOriginalOrder() {
+	if (returnDetail.value == null) return
+	const detail = returnDetail.value as ReturnItem
+	if (detail.original_order <= 0) {
+		uni.showToast({ title: '原订单尚未同步到后端', icon: 'none', duration: 3500 })
+		return
+	}
+	uni.navigateTo({ url: '/pages/orders/from?id=' + detail.original_order.toString() })
+}
+
+function copyRowValue(row: UTSJSONObject) {
+	copyText(stringValue(row['value']), '内容已复制', '暂无内容')
+}
+
+const pageTitle = computed((): string => {
+	if (returnDetail.value == null) return '退货详情'
+	const detail = returnDetail.value as ReturnItem
+	return stringValue(detail.return_number, '退货 #' + detail.id.toString())
+})
+
+const pageSubtitle = computed((): string => {
+	if (returnDetail.value == null) return returnId.value == '' ? '退货详情' : 'ID ' + returnId.value
+	const detail = returnDetail.value as ReturnItem
+	return displayText(compactDate(stringValue(detail.return_time, detail.created_at)))
+})
+
+const returnNumberText = computed((): string => {
+	if (returnDetail.value == null) return '-'
+	const detail = returnDetail.value as ReturnItem
+	return stringValue(detail.return_number, '退货 #' + detail.id.toString())
+})
+
+const returnTimeText = computed((): string => {
+	if (returnDetail.value == null) return '-'
+	const detail = returnDetail.value as ReturnItem
+	return compactDate(stringValue(detail.return_time, detail.created_at))
+})
+
+const statusDisplayText = computed((): string => {
+	if (returnDetail.value == null) return '-'
+	const detail = returnDetail.value as ReturnItem
+	return stringValue(detail.status_display, detail.status)
+})
+
+const grossAmountText = computed((): string => {
+	if (returnDetail.value == null) return '0.00'
+	return (returnDetail.value as ReturnItem).gross_amount
+})
+
+const statusPillClass = computed((): string => {
+	if (returnDetail.value == null) return 'status-pill'
+	const status = (returnDetail.value as ReturnItem).status
+	if (status == 'processed') return 'status-pill status-pill-ok'
+	if (status == 'failed') return 'status-pill status-pill-error'
+	return 'status-pill status-pill-warn'
+})
+
+const statusTextClass = computed((): string => {
+	if (returnDetail.value == null) return 'status-pill-text'
+	const status = (returnDetail.value as ReturnItem).status
+	if (status == 'processed') return 'status-pill-text status-pill-text-ok'
+	if (status == 'failed') return 'status-pill-text status-pill-text-error'
+	return 'status-pill-text status-pill-text-warn'
+})
+
+const baseRows = computed((): UTSJSONObject[] => {
+	if (returnDetail.value == null) return [] as UTSJSONObject[]
+	const detail = returnDetail.value as ReturnItem
+	return [
+		{ key: 'return_number', label: '退货号', value: returnNumberText.value } as UTSJSONObject,
+		{ key: 'original_order_number', label: '原订单号', value: stringValue(detail.original_order_number, '-') } as UTSJSONObject,
+		{ key: 'shop', label: '店铺', value: stringValue(detail.shop_name, detail.shop > 0 ? '店铺 #' + detail.shop.toString() : '-') } as UTSJSONObject,
+		{ key: 'sale_time', label: '原销售时间', value: compactDate(detail.sale_time) } as UTSJSONObject,
+		{ key: 'return_time', label: '退货时间', value: compactDate(detail.return_time) } as UTSJSONObject,
+		{ key: 'created_at', label: '接收时间', value: compactDate(detail.created_at) } as UTSJSONObject,
+		{ key: 'cashier', label: '收银员', value: stringValue(detail.cashier_name, stringValue(detail.cashier_id, '-')) } as UTSJSONObject,
+		{ key: 'kasa_number', label: '收银台', value: stringValue(detail.kasa_number, '-') } as UTSJSONObject,
+	]
+})
+
+const amountRows = computed((): UTSJSONObject[] => {
+	if (returnDetail.value == null) return [] as UTSJSONObject[]
+	const detail = returnDetail.value as ReturnItem
+	return [
+		{ key: 'gross_amount', label: '退货含税金额', value: detail.gross_amount } as UTSJSONObject,
+		{ key: 'tax_amount', label: '退货税额', value: detail.tax_amount } as UTSJSONObject,
+		{ key: 'items_count', label: '退货商品数量', value: detail.items_count.toString() } as UTSJSONObject,
+		{ key: 'reason', label: '退货原因', value: stringValue(detail.reason, '-') } as UTSJSONObject,
+	]
+})
+
+const statusRows = computed((): UTSJSONObject[] => {
+	if (returnDetail.value == null) return [] as UTSJSONObject[]
+	const detail = returnDetail.value as ReturnItem
+	return [
+		{ key: 'status', label: '处理状态', value: statusDisplayText.value } as UTSJSONObject,
+		{ key: 'error_message', label: '处理错误', value: stringValue(detail.error_message, '-') } as UTSJSONObject,
+		{ key: 'inventory_restored', label: '库存已回补', value: boolText(detail.inventory_restored) } as UTSJSONObject,
+		{ key: 'inventory_restore_time', label: '回补时间', value: compactDate(detail.inventory_restore_time) } as UTSJSONObject,
+		{ key: 'inventory_restore_error', label: '回补错误', value: stringValue(detail.inventory_restore_error, '-') } as UTSJSONObject,
+	]
+})
+
+const complianceRows = computed((): UTSJSONObject[] => {
+	if (returnDetail.value == null) return [] as UTSJSONObject[]
+	const detail = returnDetail.value as ReturnItem
+	return [
+		{ key: 'evidence_document_number', label: '销售凭证编号', value: stringValue(detail.evidence_document_number, '-') } as UTSJSONObject,
+		{ key: 'printer_unique_number', label: '财政设备唯一号', value: stringValue(detail.printer_unique_number, '-') } as UTSJSONObject,
+		{ key: 'protocol_type', label: '协议类型', value: stringValue(detail.protocol_type, '-') } as UTSJSONObject,
+	]
+})
+
+onLoad((event: OnLoadOptions) => {
+	updateNavShellStyle()
+	const idValue = event['id']
+	returnId.value = idValue == null ? '' : ('' + idValue)
+	loadDetail()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.nav-shell {
+	background-color: #FFFFFF;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #E5EAF1;
+}
+
+.detail-nav {
+	height: 58px;
+	padding-left: 8px;
+	padding-right: 8px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.nav-btn,
+.nav-home {
+	width: 46px;
+	height: 40px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.nav-btn {
+	background-color: #F3F6FA;
+}
+
+.nav-btn-text {
+	font-size: 28px;
+	line-height: 28px;
+	color: #0F172A;
+}
+
+.nav-main {
+	flex: 1;
+	padding-left: 10px;
+	padding-right: 10px;
+}
+
+.nav-title {
+	font-size: 17px;
+	line-height: 22px;
+	font-weight: bold;
+	color: #0F172A;
+}
+
+.nav-subtitle {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+	margin-top: 1px;
+}
+
+.nav-home-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.page-content {
+	padding: 10px;
+	padding-bottom: 96px;
+}
+
+.summary-card,
+.section-card,
+.state-card,
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5EAF1;
+	padding: 14px;
+	margin-bottom: 10px;
+}
+
+.summary-head,
+.amount-line,
+.action-row,
+.info-row {
+	flex-direction: row;
+	align-items: center;
+}
+
+.summary-head,
+.info-row {
+	justify-content: space-between;
+}
+
+.summary-main {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.summary-title {
+	font-size: 20px;
+	line-height: 26px;
+	font-weight: bold;
+	color: #0F172A;
+}
+
+.summary-subtitle {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 4px;
+}
+
+.status-pill {
+	min-width: 62px;
+	height: 30px;
+	border-radius: 8px;
+	padding-left: 10px;
+	padding-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.status-pill-ok {
+	background-color: #DCFCE7;
+}
+
+.status-pill-warn {
+	background-color: #FEF3C7;
+}
+
+.status-pill-error {
+	background-color: #FEE2E2;
+}
+
+.status-pill-text {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: bold;
+}
+
+.status-pill-text-ok {
+	color: #166534;
+}
+
+.status-pill-text-warn {
+	color: #92400E;
+}
+
+.status-pill-text-error {
+	color: #991B1B;
+}
+
+.amount-line {
+	margin-top: 14px;
+	background-color: #F8FAFC;
+	border-radius: 8px;
+	padding: 12px;
+	justify-content: space-between;
+}
+
+.amount-label,
+.info-label,
+.state-desc {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.amount-value {
+	font-size: 22px;
+	line-height: 28px;
+	font-weight: bold;
+	color: #B42318;
+}
+
+.action-row {
+	margin-top: 12px;
+}
+
+.action-btn {
+	flex: 1;
+	height: 40px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-btn-primary {
+	background-color: #0F172A;
+	margin-right: 8px;
+}
+
+.action-btn-light {
+	background-color: #F3F6FA;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.action-btn-primary-text,
+.retry-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+}
+
+.action-btn-light-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #334155;
+}
+
+.section-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.info-row {
+	padding-top: 10px;
+	padding-bottom: 10px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #EEF2F7;
+}
+
+.info-label {
+	width: 96px;
+}
+
+.info-value {
+	flex: 1;
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+	text-align: right;
+}
+
+.state-card {
+	align-items: center;
+}
+
+.state-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	text-align: center;
+}
+
+.state-desc {
+	margin-top: 6px;
+}
+
+.retry-btn {
+	height: 34px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 14px;
+	padding-right: 14px;
+	align-items: center;
+	justify-content: center;
+	margin-top: 14px;
+}
+
+.error-card {
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+</style>

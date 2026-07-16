@@ -1,0 +1,220 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="成员与权限"
+			searchPlaceholder="用户名、姓名"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/mine"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="meta"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载成员"
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showPagination="false"
+					summaryTitle="成员概览"
+					:summaryItems="summaryItems"
+					:showFloatingAdd="true"
+					floatingAddText="新增成员"
+					@menu="handleMenu"
+					@floating-add="handleCreate"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getStaffList } from '@/pkg/api/modules/accounts'
+
+const refreshStorageKey = 'refresh:pages:staff:index'
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'permission_count', label: '权限数' } as UTSJSONObject,
+	{ key: 'cashier_account', label: '收银账号' } as UTSJSONObject,
+	{ key: 'email', label: '邮箱' } as UTSJSONObject,
+])
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'edit', text: '编辑' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
+function permissionCodes(item: UTSJSONObject): string[] {
+	const raw = item['permissions']
+	if (raw == null) return [] as string[]
+	const text = JSON.stringify(raw)
+	if (text == null || !text.startsWith('[')) return [] as string[]
+	const parsed = JSON.parseArray<string>(text!)
+	return parsed == null ? ([] as string[]) : parsed!
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		items.value = await getStaffList()
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		const message = parseErrorMessage(error, '成员加载失败')
+		errorMessage.value = message
+		uni.showToast({ title: message, icon: 'none', duration: 3500 })
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value }
+function handleSearchClear() { keyword.value = '' }
+
+function staffItem(item: UTSJSONObject): UTSJSONObject {
+	const username = stringField(item, 'username', '-')
+	const name = stringField(item, 'name')
+	const codes = permissionCodes(item)
+	const tags: string[] = []
+	tags.push(stringField(item, 'is_active') == 'true' ? '启用' : '停用')
+	if (codes.includes('manage_users')) {
+		tags.push('管理员')
+	}
+	return {
+		id: stringField(item, 'id'),
+		rawId: stringField(item, 'id'),
+		title: name == '' ? username : name,
+		subtitle: '账号：' + username,
+		meta: stringField(item, 'phone', '-'),
+		permission_count: codes.length.toString(),
+		cashier_account: stringField(item, 'cashier_account', '-'),
+		email: stringField(item, 'email', '-'),
+		tags: tags,
+	} as UTSJSONObject
+}
+
+function matchesKeyword(item: UTSJSONObject): boolean {
+	if (keyword.value == '') return true
+	const lower = keyword.value.toLowerCase()
+	const username = stringField(item, 'username').toLowerCase()
+	const name = stringField(item, 'name').toLowerCase()
+	return username.includes(lower) || name.includes(lower)
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null) return
+	const actionKey = stringField(action as UTSJSONObject, 'key')
+	if (actionKey == 'reload') loadItems()
+	else if (actionKey == 'edit' && item != null) {
+		uni.navigateTo({ url: '/pages/staff/from?id=' + stringField(item as UTSJSONObject, 'rawId') })
+	}
+}
+
+function handleCreate() {
+	uni.navigateTo({ url: '/pages/staff/from' })
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) {
+		const item = items.value[index]
+		if (matchesKeyword(item)) {
+			result.push(staffItem(item))
+		}
+	}
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的成员'
+	return '暂无成员，点击右下角新增'
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	let activeCount = 0
+	for (let index = 0; index < items.value.length; index += 1) {
+		const value = items.value[index]['is_active']
+		if (value != null && ('' + value) == 'true') activeCount += 1
+	}
+	return [
+		{ key: 'total', label: '成员数', value: items.value.length.toString() } as UTSJSONObject,
+		{ key: 'active', label: '启用中', value: activeCount.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => { loadItems() })
+onShow(() => {
+	const flag = uni.getStorageSync(refreshStorageKey)
+	if (flag != null && flag != '') {
+		uni.removeStorageSync(refreshStorageKey)
+		loadItems()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

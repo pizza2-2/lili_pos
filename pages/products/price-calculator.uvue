@@ -5,7 +5,7 @@
 			:showBack="true"
 			:showSearch="false"
 			:showHome="true"
-			homePath="/pages/tabbar/products"
+			homePath="/pages/tabbar/settings"
 			backgroundColor="#EEF2F7"
 		/>
 

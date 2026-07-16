@@ -134,6 +134,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { adjustInventoryCheck, approveInventoryCheck, completeInventoryCheck, deleteInventoryCheck, getInventoryChecks, InventoryListQuery, InventoryListResponse, startInventoryCheck } from '@/pkg/api/modules/inventory'
@@ -153,7 +154,7 @@ const items = ref<UTSJSONObject[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const statusFilter = ref('')
 const locationFilterValue = ref('')
 const locationFilterText = ref('')
@@ -576,6 +577,7 @@ function checkItem(item: UTSJSONObject): UTSJSONObject {
 		categoryText: stringValue(item['category_names'], '-'),
 		progressText: checked.toString() + '/' + total.toString() + ' (' + progress + ')',
 		totalItemsText: total.toString(),
+		uncheckedCount: total > checked ? total - checked : 0,
 		discrepancyText: stringValue(item['discrepancy_items'], '0'),
 		tags: [status] as string[],
 		menuActions: menuActionsForStatus(statusValue),
@@ -618,7 +620,7 @@ async function runDelete(id: string) {
 	}
 }
 
-async function runAction(actionName: string, id: string, statusValue: string) {
+async function runAction(actionName: string, id: string, statusValue: string, zeroUnchecked: boolean = false) {
 	try {
 		if (actionName == 'start-check') {
 			await startInventoryCheck(id)
@@ -633,7 +635,7 @@ async function runAction(actionName: string, id: string, statusValue: string) {
 			} else if (statusValue == 'APPROVED') {
 				await adjustInventoryCheck(id)
 			} else {
-				await completeInventoryCheck(id)
+				await completeInventoryCheck(id, zeroUnchecked)
 			}
 			uni.setStorageSync(refreshStorageKey, '1')
 			loadItems()
@@ -647,8 +649,8 @@ async function runAction(actionName: string, id: string, statusValue: string) {
 	}
 }
 
-function confirmRunAction(actionKey: string, id: string, statusValue: string, title: string, content: string) {
-	uni.showModal({ title: title, content: content, success: (res) => { if (res.confirm) runAction(actionKey, id, statusValue) } })
+function confirmRunAction(actionKey: string, id: string, statusValue: string, title: string, content: string, zeroUnchecked: boolean = false) {
+	uni.showModal({ title: title, content: content, success: (res) => { if (res.confirm) runAction(actionKey, id, statusValue, zeroUnchecked) } })
 }
 
 function confirmDelete(id: string) {
@@ -666,7 +668,14 @@ function handleMenu(payload: UTSJSONObject) {
 	if (actionKey == 'details') navigateToDetails(id)
 	else if (actionKey == 'edit') navigateToEdit(id)
 	else if (actionKey == 'start-check') confirmRunAction(actionKey, id, statusValue, '开始盘点', '确定开始这张盘点单吗？')
-	else if (actionKey == 'complete-check') confirmRunAction(actionKey, id, statusValue, '完成盘点', '完成后会直接按差异调整库存，并跳转到库存管理。确定继续吗？')
+	else if (actionKey == 'complete-check') {
+		const uncheckedCount = intValue(itemObject['uncheckedCount'])
+		if (statusValue == 'IN_PROGRESS' && uncheckedCount > 0) {
+			confirmRunAction(actionKey, id, statusValue, '完成盘点', '仍有 ' + uncheckedCount.toString() + ' 项未盘点，完成后将按实际数量 0 处理（记为盘亏）并直接调整库存。确定继续吗？', true)
+		} else {
+			confirmRunAction(actionKey, id, statusValue, '完成盘点', '完成后会直接按差异调整库存，并跳转到库存管理。确定继续吗？')
+		}
+	}
 	else if (actionKey == 'delete') confirmDelete(id)
 	else if (actionKey == 'reload') loadItems()
 }

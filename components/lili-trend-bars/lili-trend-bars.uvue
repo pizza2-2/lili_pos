@@ -1,0 +1,138 @@
+<template>
+	<view class="trend-wrap">
+		<view class="trend-tip-row">
+			<text class="trend-tip">{{ tipText }}</text>
+		</view>
+		<view class="trend-bars" :style="barsHeightStyle">
+			<view
+				v-for="(barHeight, index) in barHeights"
+				:key="'trend-bar-' + index"
+				class="trend-bar-slot"
+				@click="handleTap(index)"
+			>
+				<view :class="barClass(index)" :style="'height:' + barHeight + 'px'"></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import type { PropType } from 'vue'
+
+const props = defineProps({
+	// 每根柱子的数值（如每日销售额）
+	values: {
+		type: Array as PropType<number[]>,
+		default: (): number[] => [] as number[],
+	},
+	// 与 values 对应的标签（如日期），可为空
+	labels: {
+		type: Array as PropType<string[]>,
+		default: (): string[] => [] as string[],
+	},
+	height: {
+		type: Number,
+		default: 56,
+	},
+	// 数值单位后缀，用于点选提示，如 'zł'
+	unit: {
+		type: String,
+		default: '',
+	},
+})
+
+const activeIndex = ref(-1)
+
+const maxValue = computed((): number => {
+	let max = 0
+	for (let index = 0; index < props.values.length; index += 1) {
+		if (props.values[index] > max) {
+			max = props.values[index]
+		}
+	}
+	return max
+})
+
+const barHeights = computed((): number[] => {
+	const result: number[] = []
+	for (let index = 0; index < props.values.length; index += 1) {
+		if (maxValue.value <= 0) {
+			result.push(2)
+			continue
+		}
+		const barHeight = Math.round(props.values[index] / maxValue.value * (props.height - 4))
+		result.push(barHeight < 2 ? 2 : barHeight)
+	}
+	return result
+})
+
+const barsHeightStyle = computed((): string => {
+	return 'height:' + props.height.toString() + 'px'
+})
+
+const tipText = computed((): string => {
+	if (props.values.length == 0) {
+		return '暂无趋势数据'
+	}
+	let index = activeIndex.value
+	if (index < 0 || index >= props.values.length) {
+		index = props.values.length - 1
+	}
+	const label = index < props.labels.length ? props.labels[index] : ''
+	const valueText = props.values[index].toFixed(2) + (props.unit == '' ? '' : ' ' + props.unit)
+	return label == '' ? valueText : label + '  ' + valueText
+})
+
+function barClass(index: number): string {
+	let current = activeIndex.value
+	if (current < 0 || current >= props.values.length) {
+		current = props.values.length - 1
+	}
+	return index == current ? 'trend-bar trend-bar-active' : 'trend-bar'
+}
+
+function handleTap(index: number): void {
+	activeIndex.value = index
+}
+</script>
+
+<style>
+.trend-wrap {
+	margin-top: 8px;
+}
+
+.trend-tip-row {
+	flex-direction: row;
+	justify-content: flex-end;
+}
+
+.trend-tip {
+	font-size: 11px;
+	line-height: 15px;
+	color: #64748B;
+}
+
+.trend-bars {
+	margin-top: 4px;
+	flex-direction: row;
+	align-items: flex-end;
+}
+
+.trend-bar-slot {
+	flex: 1;
+	margin-left: 1px;
+	margin-right: 1px;
+	justify-content: flex-end;
+	height: 100%;
+}
+
+.trend-bar {
+	border-radius: 2px;
+	background-color: #99F6E4;
+}
+
+.trend-bar-active {
+	background-color: #0F766E;
+}
+</style>

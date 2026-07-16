@@ -1,0 +1,406 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="false" backgroundColor="#EEF2F7" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="card">
+					<text class="card-title">账号信息</text>
+					<view v-if="!isEdit" class="field-row">
+						<text class="field-label">用户名 *</text>
+						<input class="field-input" :value="username" placeholder="登录用户名" @input="onUsernameInput" />
+					</view>
+					<view v-if="isEdit" class="field-row">
+						<text class="field-label">用户名</text>
+						<text class="field-static">{{ username }}</text>
+					</view>
+					<view v-if="!isEdit" class="field-row">
+						<text class="field-label">密码 *</text>
+						<input class="field-input" :value="password" placeholder="至少 6 位" :password="true" @input="onPasswordInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">姓名</text>
+						<input class="field-input" :value="displayName" placeholder="成员姓名" @input="onNameInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">手机号</text>
+						<input class="field-input" :value="phone" placeholder="联系电话" @input="onPhoneInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">邮箱</text>
+						<input class="field-input" :value="email" placeholder="选填" @input="onEmailInput" />
+					</view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">收银信息</text>
+					<view class="field-row">
+						<text class="field-label">收银账号</text>
+						<input class="field-input" :value="cashierAccount" placeholder="6 位数字，选填" type="number" :maxlength="6" @input="onCashierAccountInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">收银 ID</text>
+						<input class="field-input" :value="cashierId" placeholder="公司内唯一，选填" type="number" @input="onCashierIdInput" />
+					</view>
+				</view>
+
+				<view v-if="isEdit" class="card">
+					<text class="card-title">状态与安全</text>
+					<view class="field-row">
+						<text class="field-label">启用账号</text>
+						<switch :checked="isActive" @change="onActiveChange" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">重置密码</text>
+						<input class="field-input" :value="newPassword" placeholder="输入新密码后点右侧按钮" :password="true" @input="onNewPasswordInput" />
+						<view class="mini-btn" @click="handleResetPassword">
+							<text class="mini-btn-text">重置</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="card">
+					<view class="perm-head">
+						<text class="card-title">权限（已选 {{ checkedCodes.length.toString() }} 项）</text>
+					</view>
+					<text v-if="catalogError != ''" class="perm-error">{{ catalogError }}</text>
+					<view v-for="group in permissionGroups" :key="groupKey(group)" class="perm-group">
+						<view class="perm-group-head" @click="toggleGroup(group)">
+							<text class="perm-group-title">{{ groupLabel(group) }}</text>
+							<text class="perm-group-toggle">{{ groupToggleText(group) }}</text>
+						</view>
+						<view class="perm-options">
+							<view
+								v-for="perm in groupPermissions(group)"
+								:key="permCode(perm)"
+								:class="isChecked(permCode(perm)) ? 'perm-chip perm-chip-active' : 'perm-chip'"
+								@click="togglePermission(permCode(perm))"
+							>
+								<text :class="isChecked(permCode(perm)) ? 'perm-chip-text perm-chip-text-active' : 'perm-chip-text'">{{ permLabel(perm) }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="save-btn" @click="handleSave">
+					<text class="save-btn-text">{{ isEdit ? '保存修改' : '创建成员' }}</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+	createStaff,
+	getPermissionCatalog,
+	getStaffDetail,
+	grantPermissions,
+	resetStaffPassword,
+	revokePermissions,
+	updateStaff,
+} from '@/pkg/api/modules/accounts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const refreshStorageKey = 'refresh:pages:staff:index'
+
+const staffId = ref(0)
+const submitting = ref(false)
+
+const username = ref('')
+const password = ref('')
+const displayName = ref('')
+const phone = ref('')
+const email = ref('')
+const cashierAccount = ref('')
+const cashierId = ref('')
+const isActive = ref(true)
+const newPassword = ref('')
+
+const permissionGroups = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const catalogError = ref('')
+const checkedCodes = ref<string[]>([] as string[])
+const originalCodes = ref<string[]>([] as string[])
+
+const isEdit = computed((): boolean => staffId.value > 0)
+const pageTitle = computed((): string => isEdit.value ? '编辑成员' : '新增成员')
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
+function toObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || !text.startsWith('[')) return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text!)
+	return parsed == null ? ([] as UTSJSONObject[]) : parsed!
+}
+
+function toStringArray(value: any | null): string[] {
+	if (value == null) return [] as string[]
+	const text = JSON.stringify(value)
+	if (text == null || !text.startsWith('[')) return [] as string[]
+	const parsed = JSON.parseArray<string>(text!)
+	return parsed == null ? ([] as string[]) : parsed!
+}
+
+// ── 输入处理 ────────────────────────────────────────────────────
+
+function onUsernameInput(event: UniInputEvent) { username.value = event.detail.value }
+function onPasswordInput(event: UniInputEvent) { password.value = event.detail.value }
+function onNameInput(event: UniInputEvent) { displayName.value = event.detail.value }
+function onPhoneInput(event: UniInputEvent) { phone.value = event.detail.value }
+function onEmailInput(event: UniInputEvent) { email.value = event.detail.value }
+function onCashierAccountInput(event: UniInputEvent) { cashierAccount.value = event.detail.value }
+function onCashierIdInput(event: UniInputEvent) { cashierId.value = event.detail.value }
+function onNewPasswordInput(event: UniInputEvent) { newPassword.value = event.detail.value }
+function onActiveChange(event: UniSwitchChangeEvent) { isActive.value = event.detail.value }
+
+// ── 权限勾选 ────────────────────────────────────────────────────
+
+function groupKey(group: UTSJSONObject): string { return stringField(group, 'key') }
+function groupLabel(group: UTSJSONObject): string { return stringField(group, 'label') }
+function groupPermissions(group: UTSJSONObject): UTSJSONObject[] { return toObjectArray(group['permissions']) }
+function permCode(perm: UTSJSONObject): string { return stringField(perm, 'code') }
+function permLabel(perm: UTSJSONObject): string { return stringField(perm, 'label') }
+
+function isChecked(code: string): boolean {
+	return checkedCodes.value.includes(code)
+}
+
+function togglePermission(code: string) {
+	if (code == '') return
+	const next: string[] = []
+	let removed = false
+	for (let index = 0; index < checkedCodes.value.length; index += 1) {
+		const item = checkedCodes.value[index]
+		if (item == code) {
+			removed = true
+			continue
+		}
+		next.push(item)
+	}
+	if (!removed) next.push(code)
+	checkedCodes.value = next
+}
+
+function groupCheckedCount(group: UTSJSONObject): number {
+	const perms = groupPermissions(group)
+	let count = 0
+	for (let index = 0; index < perms.length; index += 1) {
+		if (isChecked(permCode(perms[index]))) count += 1
+	}
+	return count
+}
+
+function groupToggleText(group: UTSJSONObject): string {
+	const perms = groupPermissions(group)
+	return groupCheckedCount(group) == perms.length && perms.length > 0 ? '取消全选' : '全选'
+}
+
+function toggleGroup(group: UTSJSONObject) {
+	const perms = groupPermissions(group)
+	const selectAll = groupCheckedCount(group) < perms.length
+	const next: string[] = []
+	for (let index = 0; index < checkedCodes.value.length; index += 1) {
+		next.push(checkedCodes.value[index])
+	}
+	for (let index = 0; index < perms.length; index += 1) {
+		const code = permCode(perms[index])
+		const position = next.indexOf(code)
+		if (selectAll && position < 0) next.push(code)
+		if (!selectAll && position >= 0) next.splice(position, 1)
+	}
+	checkedCodes.value = next
+}
+
+// ── 数据加载 ────────────────────────────────────────────────────
+
+async function loadCatalog() {
+	try {
+		const catalog = await getPermissionCatalog()
+		permissionGroups.value = toObjectArray(catalog['groups'])
+		catalogError.value = ''
+	} catch (error) {
+		catalogError.value = parseErrorMessage(error, '权限目录加载失败')
+	}
+}
+
+async function loadDetail() {
+	if (staffId.value <= 0) return
+	try {
+		const detail = await getStaffDetail(staffId.value)
+		username.value = stringField(detail, 'username')
+		displayName.value = stringField(detail, 'name')
+		phone.value = stringField(detail, 'phone')
+		email.value = stringField(detail, 'email')
+		cashierAccount.value = stringField(detail, 'cashier_account')
+		cashierId.value = stringField(detail, 'cashier_id')
+		isActive.value = stringField(detail, 'is_active') == 'true'
+		const codes = toStringArray(detail['permissions'])
+		checkedCodes.value = codes
+		originalCodes.value = codes
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '成员详情加载失败'))
+	}
+}
+
+// ── 保存 ────────────────────────────────────────────────────────
+
+function markRefreshNeeded() { uni.setStorageSync(refreshStorageKey, '1') }
+
+function goBack() {
+	uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/staff/index' }) } })
+}
+
+function buildProfileBody(): UTSJSONObject {
+	const body = {
+		name: displayName.value.trim(),
+		phone: phone.value.trim(),
+		email: email.value.trim(),
+		cashier_account: cashierAccount.value.trim(),
+	} as UTSJSONObject
+	const cashierIdText = cashierId.value.trim()
+	if (cashierIdText == '') {
+		body['cashier_id'] = null
+	} else {
+		const parsed = parseInt(cashierIdText)
+		if (!isNaN(parsed)) body['cashier_id'] = parsed
+	}
+	return body
+}
+
+function diffCodes(source: string[], exclude: string[]): string[] {
+	const result: string[] = []
+	for (let index = 0; index < source.length; index += 1) {
+		const code = source[index]
+		if (!exclude.includes(code)) result.push(code)
+	}
+	return result
+}
+
+async function persistCreate() {
+	if (username.value.trim() == '' || password.value.length < 6) {
+		uni.showToast({ title: '请填写用户名和至少 6 位的密码', icon: 'none', duration: 3500 })
+		return
+	}
+	const body = buildProfileBody()
+	body['username'] = username.value.trim()
+	body['password'] = password.value
+	body['permissions'] = checkedCodes.value
+	await createStaff(body)
+}
+
+async function persistUpdate() {
+	const body = buildProfileBody()
+	body['is_active'] = isActive.value
+	await updateStaff(staffId.value, body)
+	// 权限差量：新勾选的授权、取消勾选的撤销
+	const toGrant = diffCodes(checkedCodes.value, originalCodes.value)
+	const toRevoke = diffCodes(originalCodes.value, checkedCodes.value)
+	if (toGrant.length > 0) await grantPermissions(staffId.value, toGrant)
+	if (toRevoke.length > 0) await revokePermissions(staffId.value, toRevoke)
+}
+
+async function executeSave() {
+	if (submitting.value) return
+	submitting.value = true
+	const actionText = isEdit.value ? '保存成员' : '创建成员'
+	uni.showLoading({ title: actionText + '中...', mask: true })
+	try {
+		if (isEdit.value) await persistUpdate()
+		else await persistCreate()
+		markRefreshNeeded()
+		uni.showToast({ title: actionText + '成功', icon: 'success' })
+		goBack()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+function handleSave() {
+	executeSave()
+}
+
+async function executeResetPassword() {
+	if (newPassword.value.length < 6) {
+		uni.showToast({ title: '新密码至少 6 位', icon: 'none', duration: 3500 })
+		return
+	}
+	try {
+		await resetStaffPassword(staffId.value, newPassword.value)
+		newPassword.value = ''
+		uni.showToast({ title: '密码已重置', icon: 'success' })
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '密码重置失败'))
+	}
+}
+
+function handleResetPassword() {
+	executeResetPassword()
+}
+
+onLoad((query: OnLoadOptions) => {
+	const idValue = query['id']
+	if (idValue != null && idValue != '') {
+		const parsed = parseInt('' + idValue)
+		if (!isNaN(parsed)) staffId.value = parsed
+	}
+	loadCatalog()
+	if (staffId.value > 0) loadDetail()
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.card { background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.field-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.field-label { width: 84px; font-size: 14px; line-height: 20px; color: #475569; }
+.field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
+.field-static { flex: 1; font-size: 14px; line-height: 20px; color: #0F172A; }
+.mini-btn { margin-left: 8px; height: 36px; border-radius: 8px; background-color: #0F172A; padding-left: 14px; padding-right: 14px; align-items: center; justify-content: center; }
+.mini-btn-text { font-size: 13px; color: #FFFFFF; }
+.perm-head { flex-direction: row; justify-content: space-between; align-items: center; }
+.perm-error { font-size: 13px; line-height: 18px; color: #B42318; margin-top: 6px; }
+.perm-group { margin-top: 12px; }
+.perm-group-head { flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.perm-group-title { font-size: 14px; line-height: 20px; color: #111827; font-weight: bold; }
+.perm-group-toggle { font-size: 13px; line-height: 18px; color: #0369A1; }
+.perm-options { flex-direction: row; flex-wrap: wrap; }
+.perm-chip { min-height: 32px; border-radius: 8px; padding-left: 10px; padding-right: 10px; padding-top: 5px; padding-bottom: 5px; margin-right: 8px; margin-bottom: 8px; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.perm-chip-active { background-color: #E0F2FE; border-color: #0284C7; }
+.perm-chip-text { font-size: 12px; line-height: 17px; color: #4B5563; }
+.perm-chip-text-active { color: #075985; font-weight: bold; }
+.save-btn { margin-top: 6px; height: 46px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
+.save-btn-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
+</style>

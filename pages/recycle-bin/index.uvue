@@ -1,0 +1,224 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="回收站"
+			searchPlaceholder="名称、编码、条码"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/mine"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+		<view class="tab-row">
+			<view v-for="tab in tabs" :key="tab.key" :class="activeTab == tab.key ? 'tab-item tab-item-active' : 'tab-item'" @click="switchTab(tab.key)">
+				<text :class="activeTab == tab.key ? 'tab-text tab-text-active' : 'tab-text'">{{ tab.label }}</text>
+			</view>
+		</view>
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadItems"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+				<view v-if="isLoading" class="empty-state">
+					<text class="empty-text">正在加载</text>
+				</view>
+				<view v-if="!isLoading && items.length == 0 && errorMessage == ''" class="empty-state">
+					<text class="empty-text">回收站是空的</text>
+				</view>
+				<view v-for="item in items" :key="activeTab + '-' + itemId(item).toString()" class="row-card">
+					<view class="row-main">
+						<text class="row-title">{{ itemTitle(item) }}</text>
+						<text class="row-meta">{{ itemMeta(item) }}</text>
+					</view>
+					<view class="restore-btn" @click="confirmRestore(item)">
+						<text class="restore-btn-text">恢复</text>
+					</view>
+				</view>
+				<text v-if="activeTab == 'category' && items.length > 0" class="foot-hint">恢复分类会连同其已删除的子分类和上级分类一起恢复</text>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	getDeletedCategories,
+	getDeletedKasaCategories,
+	getDeletedProducts,
+	getDeletedSuppliers,
+	restoreCategory,
+	restoreKasaCategory,
+	restoreProduct,
+	restoreSupplierById,
+} from '@/pkg/api/modules/recycle'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type TabOption = {
+	key: string
+	label: string
+}
+
+const tabs = ref<TabOption[]>([
+	{ key: 'product', label: '商品' } as TabOption,
+	{ key: 'category', label: '分类' } as TabOption,
+	{ key: 'kasa', label: '收银分类' } as TabOption,
+	{ key: 'supplier', label: '供应商' } as TabOption,
+])
+const activeTab = ref('product')
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
+function itemId(item: UTSJSONObject): number {
+	const parsed = parseInt(stringField(item, 'id', '0'))
+	return isNaN(parsed) ? 0 : parsed
+}
+
+function itemTitle(item: UTSJSONObject): string {
+	return stringField(item, 'name', '未命名')
+}
+
+function formatDate(value: string): string {
+	return value.length >= 10 ? value.substring(0, 10) : value
+}
+
+function itemMeta(item: UTSJSONObject): string {
+	const deletedAt = formatDate(stringField(item, 'deleted_at'))
+	if (activeTab.value == 'product') {
+		const barcode = stringField(item, 'barcode', '-')
+		return '条码：' + barcode + ' · 删除于 ' + deletedAt
+	}
+	if (activeTab.value == 'kasa') {
+		const kod = stringField(item, 'unique_kod', '-')
+		return '编码：' + kod + ' · 删除于 ' + deletedAt
+	}
+	if (activeTab.value == 'supplier') {
+		return '删除于 ' + deletedAt
+	}
+	const count = stringField(item, 'products_count', '0')
+	return '商品数：' + count + ' · 删除于 ' + deletedAt
+}
+
+async function loadItems() {
+	if (isLoading.value) return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		if (activeTab.value == 'product') {
+			items.value = await getDeletedProducts(keyword.value)
+		} else if (activeTab.value == 'kasa') {
+			items.value = await getDeletedKasaCategories(keyword.value)
+		} else if (activeTab.value == 'supplier') {
+			items.value = await getDeletedSuppliers(keyword.value)
+		} else {
+			items.value = await getDeletedCategories(keyword.value)
+		}
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		errorMessage.value = parseErrorMessage(error, '回收站加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function switchTab(key: string) {
+	if (activeTab.value == key) return
+	activeTab.value = key
+	items.value = [] as UTSJSONObject[]
+	loadItems()
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; loadItems() }
+function handleSearchClear() { keyword.value = ''; loadItems() }
+
+async function executeRestore(item: UTSJSONObject) {
+	const id = itemId(item)
+	if (id <= 0) return
+	try {
+		if (activeTab.value == 'product') {
+			await restoreProduct(id)
+		} else if (activeTab.value == 'kasa') {
+			await restoreKasaCategory(id)
+		} else if (activeTab.value == 'supplier') {
+			await restoreSupplierById(id)
+		} else {
+			await restoreCategory(id)
+		}
+		uni.showToast({ title: '已恢复', icon: 'success' })
+		loadItems()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '恢复失败'))
+	}
+}
+
+function confirmRestore(item: UTSJSONObject) {
+	const extra = activeTab.value == 'category' ? '（会连同已删除的子分类和上级一起恢复）' : ''
+	uni.showModal({
+		title: '恢复确认',
+		content: '确定恢复「' + itemTitle(item) + '」吗？' + extra,
+		success: (res) => { if (res.confirm) executeRestore(item) },
+	})
+}
+
+onLoad(() => { loadItems() })
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.tab-row { flex-direction: row; background-color: #FFFFFF; padding-left: 10px; padding-right: 10px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #E5E7EB; }
+.tab-item { padding: 12px; align-items: center; }
+.tab-item-active { border-bottom-width: 2px; border-bottom-style: solid; border-bottom-color: #0F172A; }
+.tab-text { font-size: 14px; line-height: 20px; color: #64748B; }
+.tab-text-active { color: #0F172A; font-weight: bold; }
+.row-card { flex-direction: row; align-items: center; justify-content: space-between; background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 8px; }
+.row-main { flex: 1; margin-right: 10px; }
+.row-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; }
+.row-meta { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 3px; }
+.restore-btn { height: 34px; border-radius: 8px; background-color: #0F766E; padding-left: 14px; padding-right: 14px; align-items: center; justify-content: center; }
+.restore-btn-text { font-size: 13px; color: #FFFFFF; }
+.empty-state { padding-top: 60px; align-items: center; }
+.empty-text { font-size: 14px; line-height: 20px; color: #94A3B8; }
+.foot-hint { font-size: 12px; line-height: 17px; color: #94A3B8; margin-top: 8px; text-align: center; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

@@ -122,6 +122,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { getOrderFilterOptions, getOrderList, getOrderStatistics, OrderFilterDefinition, OrderFilterOptionsResponse, OrderItem, OrderListQuery, OrderListResponse, OrderSelectedFilter, OrderStatistics } from '@/pkg/api/modules/orders.uts'
 
 type DatePresetOption = {
@@ -138,8 +139,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
-const pageTotalAmount = ref('0.00')
+const pageSize = ref(getListPageSize())
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
 const filterOptions = ref<OrderFilterOptionsResponse | null>(null)
@@ -154,6 +154,9 @@ const datePresetOptions = ref<DatePresetOption[]>([
 ])
 const statistics = ref<OrderStatistics>({
 	total_count: 0,
+	total_amount: '0.00',
+	tax_amount: '0.00',
+	discount_amount: '0.00',
 	inventory_deducted_count: 0,
 	inventory_pending_count: 0,
 	received_count: 0,
@@ -348,12 +351,6 @@ function applyResponse(response: OrderListResponse) {
 	totalPages.value = response.total_pages
 	totalCount.value = response.total_count
 	pageSize.value = response.page_size
-	let total = 0.0
-	for (let index = 0; index < response.results.length; index += 1) {
-		const amount = parseFloat(response.results[index].total_amount)
-		if (!isNaN(amount)) total = total + amount
-	}
-	pageTotalAmount.value = total.toFixed(2)
 }
 
 async function loadStatistics() {
@@ -379,7 +376,6 @@ async function loadOrders() {
 		currentPage.value = 1
 		totalPages.value = 1
 		totalCount.value = 0
-		pageTotalAmount.value = '0.00'
 		errorMessage.value = parseErrorMessage(error, '订单加载失败')
 	} finally {
 		isLoading.value = false
@@ -390,9 +386,23 @@ async function loadOrders() {
 	}
 }
 
+// ISO 时间简化为 "YYYY-MM-DD HH:MM"
+function formatDateTime(raw: string): string {
+	if (raw == '') return '-'
+	const text = raw.replace('T', ' ')
+	if (text.length >= 16) return text.substring(0, 16)
+	return text
+}
+
+function cashierDisplay(item: OrderItem): string {
+	const name = stringValue(item.cashier_name)
+	if (name != '') return name + ' / 台' + stringValue(item.kasa_number, '-')
+	return stringValue(item.cashier_id, '-') + ' / 台' + stringValue(item.kasa_number, '-')
+}
+
 function orderToListItem(item: OrderItem): UTSJSONObject {
 	const shopText = stringValue(item.shop_name, item.shop > 0 ? '店铺 #' + item.shop.toString() : '-')
-	const timeText = stringValue(item.order_time, stringValue(item.created_at, '-'))
+	const timeText = formatDateTime(stringValue(item.order_time, stringValue(item.created_at)))
 	const itemCountText = item.item_count.toString() + '项 / ' + item.quantity_count.toString() + '件'
 	const amountDetailText = '小计 ' + stringValue(item.subtotal, '0.00') + ' / 税 ' + stringValue(item.tax_amount, '0.00') + ' / 折扣 ' + stringValue(item.discount_amount, '0.00')
 	return {
@@ -401,9 +411,9 @@ function orderToListItem(item: OrderItem): UTSJSONObject {
 		orderNumber: item.order_number,
 		title: stringValue(item.order_number, '订单 #' + item.id.toString()),
 		subtitle: '时间：' + timeText,
-		amountText: '¥ ' + stringValue(item.total_amount, '0.00'),
+		amountText: stringValue(item.total_amount, '0.00') + ' zł',
 		shopText: shopText,
-		cashierText: stringValue(item.cashier_id, '-') + ' / ' + stringValue(item.kasa_number, '-'),
+		cashierText: cashierDisplay(item),
 		itemsText: itemCountText,
 		amountDetailText: amountDetailText,
 		inventoryText: item.inventory_deducted ? '已扣减' : '未扣减',
@@ -523,7 +533,8 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
 		{ key: 'total', label: '订单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'pageAmount', label: '本页金额', value: '¥ ' + pageTotalAmount.value } as UTSJSONObject,
+		{ key: 'totalAmount', label: '销售额', value: statistics.value.total_amount + ' zł' } as UTSJSONObject,
+		{ key: 'taxAmount', label: '税额', value: statistics.value.tax_amount + ' zł' } as UTSJSONObject,
 		{ key: 'processed', label: '已处理', value: statistics.value.processed_count.toString() } as UTSJSONObject,
 		{ key: 'pendingStock', label: '待扣库存', value: statistics.value.inventory_pending_count.toString() } as UTSJSONObject,
 		{ key: 'failed', label: '异常', value: statistics.value.failed_count.toString() } as UTSJSONObject,

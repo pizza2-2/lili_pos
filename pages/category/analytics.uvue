@@ -1,0 +1,1334 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			:title="pageTitle"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="pageError != '' && !isLoading" class="state-card state-card-error">
+					<text class="state-title">分析数据加载失败</text>
+					<text class="state-desc">{{ pageError }}</text>
+					<button class="state-btn" @click="loadAll">
+						<text class="state-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在聚合销售、毛利、库存数据...</text>
+				</view>
+
+				<view v-else>
+					<!-- 头部：分类信息 + 周期选择 -->
+					<view class="card">
+						<view class="header-row">
+							<view class="header-main">
+								<text class="header-name">{{ categoryFullName }}</text>
+								<view class="header-tags">
+									<lili-score-badge :score="categoryScore"></lili-score-badge>
+									<view v-if="lifecycleLabelText != ''" class="lifecycle-tag">
+										<text class="lifecycle-tag-text">{{ lifecycleLabelText }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+						<text class="period-text">{{ periodText }}</text>
+						<view class="chip-row">
+							<view v-for="option in periodOptions" :key="'period-' + option.toString()" :class="periodChipClass(option)" @click="setPeriod(option)">
+								<text :class="periodChipTextClass(option)">{{ option.toString() }}天</text>
+							</view>
+						</view>
+						<scroll-view v-if="shopOptions.length > 1" class="shop-chip-scroll" :direction="'horizontal'" :show-scrollbar="false">
+							<view class="chip-row">
+								<view :class="shopChipClass(0)" @click="selectShop(0)">
+									<text :class="shopChipTextClass(0)">全部门店</text>
+								</view>
+								<view v-for="shop in shopOptions" :key="'shop-' + shopOptionId(shop).toString()" :class="shopChipClass(shopOptionId(shop))" @click="selectShop(shopOptionId(shop))">
+									<text :class="shopChipTextClass(shopOptionId(shop))">{{ shopOptionName(shop) }}</text>
+								</view>
+							</view>
+						</scroll-view>
+					</view>
+
+					<!-- Tab 切换 -->
+					<view class="tab-row">
+						<view v-for="tab in tabOptions" :key="'tab-' + tab.key" :class="tabClass(tab.key)" @click="setTab(tab.key)">
+							<text :class="tabTextClass(tab.key)">{{ tab.label }}</text>
+						</view>
+					</view>
+
+					<!-- 销售 -->
+					<view v-if="activeTab == 'sales'">
+						<view class="card">
+							<text class="card-label">期间销售</text>
+							<view class="metric-grid">
+								<lili-metric-card label="销售额" :value="moneyText(summaryText('sales_amount'))"></lili-metric-card>
+								<lili-metric-card label="订单数" :value="summaryText('order_count', '0')"></lili-metric-card>
+								<lili-metric-card label="客单价" :value="moneyText(summaryText('avg_order_amount'))"></lili-metric-card>
+								<lili-metric-card label="销量" :value="summaryText('sales_quantity', '0')"></lili-metric-card>
+							</view>
+							<lili-trend-bars v-if="salesTrendValues.length > 0" :values="salesTrendValues" :labels="trendLabels" :height="64" unit="zł"></lili-trend-bars>
+							<text v-if="unmatchedText != ''" class="note-text">{{ unmatchedText }}</text>
+						</view>
+						<view class="card">
+							<text class="card-label">销售集中度（累计口径）</text>
+							<lili-ratio-bar label="Top5 商品销售占比" :ratio="top5Share" :warnThreshold="0.7"></lili-ratio-bar>
+							<text v-if="isConcentrated" class="warn-text">集中度偏高：头部商品缺货会显著影响该分类销售</text>
+							<view v-for="item in topProducts" :key="'top-' + stringField(item, 'id')" class="list-row">
+								<view class="list-main">
+									<text class="list-title">{{ stringField(item, 'name', '未命名商品') }}</text>
+									<text class="list-meta">{{ topProductMeta(item) }}</text>
+								</view>
+								<text class="list-value">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+							</view>
+							<view v-if="topProducts.length == 0" class="empty-state">
+								<text class="empty-text">期间内暂无商品销售记录</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 毛利 -->
+					<view v-if="activeTab == 'profit'">
+						<view class="card">
+							<text class="card-label">期间毛利（估算）</text>
+							<view class="metric-grid">
+								<lili-metric-card label="毛利额" :value="moneyText(profitText('amount'))"></lili-metric-card>
+								<lili-metric-card label="毛利率" :value="percentText(profitText('margin'))"></lili-metric-card>
+								<lili-metric-card label="销售额" :value="moneyText(profitText('sales_amount'))"></lili-metric-card>
+							</view>
+							<lili-trend-bars v-if="profitTrendValues.length > 0" :values="profitTrendValues" :labels="trendLabels" :height="64" unit="zł"></lili-trend-bars>
+							<text class="note-text">毛利按商品成本价/库存均价估算，非财务口径</text>
+						</view>
+					</view>
+
+					<!-- 库存 -->
+					<view v-if="activeTab == 'inventory'">
+						<view class="card">
+							<text class="card-label">库存现状</text>
+							<view class="metric-grid">
+								<lili-metric-card label="库存量" :value="inventoryText('quantity', '0')"></lili-metric-card>
+								<lili-metric-card label="可用量" :value="inventoryText('available_quantity', '0')"></lili-metric-card>
+								<lili-metric-card label="库存值" :value="moneyText(inventoryText('value'))"></lili-metric-card>
+								<lili-metric-card label="预警商品" :value="inventoryText('stock_warning_count', '0')" :deltaGoodWhenUp="false"></lili-metric-card>
+							</view>
+						</view>
+						<view class="card">
+							<text class="card-label">预警商品</text>
+							<view v-for="item in warningProducts" :key="'warn-' + stringField(item, 'product_id')" class="list-row">
+								<view class="list-main">
+									<text class="list-title">{{ stringField(item, 'product_name', '未命名商品') }}</text>
+									<text class="list-meta">{{ warningProductMeta(item) }}</text>
+								</view>
+								<text class="list-value list-value-warn">{{ alertStatusLabel(stringField(item, 'alert_status')) }}</text>
+							</view>
+							<view v-if="warningProducts.length == 0" class="empty-state">
+								<text class="empty-text">暂无库存预警商品</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 商品结构 -->
+					<view v-if="activeTab == 'structure'">
+						<view class="card">
+							<text class="card-label">商品结构</text>
+							<view class="metric-grid">
+								<lili-metric-card label="商品总数" :value="structureText('total_count', '0')"></lili-metric-card>
+								<lili-metric-card label="启用" :value="structureText('active_count', '0')"></lili-metric-card>
+								<lili-metric-card label="停用/停产" :value="inactiveCountText"></lili-metric-card>
+								<lili-metric-card label="草稿" :value="structureText('draft_count', '0')"></lili-metric-card>
+							</view>
+						</view>
+						<view class="card">
+							<text class="card-label">结构问题</text>
+							<view class="issue-line">
+								<text class="issue-name">销售价为空或为 0</text>
+								<text :class="issueValueClass(structureText('missing_price_count', '0'))">{{ structureText('missing_price_count', '0') }}</text>
+							</view>
+							<view class="issue-line">
+								<text class="issue-name">无库存记录</text>
+								<text :class="issueValueClass(structureText('no_stock_count', '0'))">{{ structureText('no_stock_count', '0') }}</text>
+							</view>
+							<view class="issue-line">
+								<text class="issue-name">缺定价公式或打印模板</text>
+								<text :class="issueValueClass(structureText('missing_category_rule_count', '0'))">{{ structureText('missing_category_rule_count', '0') }}</text>
+							</view>
+							<view class="issue-line">
+								<text class="issue-name">允许 POS 销售</text>
+								<text class="issue-value">{{ structureText('pos_sale_enabled_count', '0') }}</text>
+							</view>
+						</view>
+						<view v-if="byCategoryRows.length > 1" class="card">
+							<text class="card-label">子分类商品分布</text>
+							<view v-for="item in byCategoryRows" :key="'bycat-' + stringField(item, 'category_id')" class="list-row">
+								<view class="list-main">
+									<text class="list-title">{{ stringField(item, 'category_name', '未分类') }}</text>
+								</view>
+								<text class="list-value">{{ stringField(item, 'count', '0') }} 个</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 洞察建议 -->
+					<view v-if="activeTab == 'insights'">
+						<view class="card">
+							<view class="card-head">
+								<text class="card-label">系统洞察</text>
+								<view class="mini-action" @click="loadInsights">
+									<text class="mini-action-text">{{ insightsLoading ? '加载中' : '刷新' }}</text>
+								</view>
+							</view>
+							<text v-if="insightsError != ''" class="error-text">{{ insightsError }}</text>
+							<view v-for="item in insightItems" :key="'insight-' + stringField(item, 'id')" class="insight-row">
+								<view class="insight-head">
+									<view :class="severityDotClass(item)"></view>
+									<text class="insight-title">{{ stringField(item, 'title', '经营洞察') }}</text>
+								</view>
+								<text class="insight-meta">{{ insightMeta(item) }}</text>
+								<text v-if="stringField(item, 'suggestion') != ''" class="insight-suggestion">{{ stringField(item, 'suggestion') }}</text>
+								<view class="insight-actions">
+									<view v-if="insightJumpLabel(item) != ''" class="insight-btn insight-btn-primary" @click="goInsightProducts(item)">
+										<text class="insight-btn-primary-text">{{ insightJumpLabel(item) }}</text>
+									</view>
+									<view v-if="!booleanField(item, 'is_read')" class="insight-btn" @click="markInsight(item, 'read')">
+										<text class="insight-btn-text">已读</text>
+									</view>
+									<view class="insight-btn" @click="markInsight(item, 'dismiss')">
+										<text class="insight-btn-text">忽略</text>
+									</view>
+								</view>
+							</view>
+							<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
+								<text class="empty-text">该分类暂无待处理洞察</text>
+							</view>
+						</view>
+						<view v-if="suggestions.length > 0" class="card">
+							<text class="card-label">运营建议</text>
+							<view v-for="(item, index) in suggestions" :key="'suggestion-' + index" class="suggestion-row">
+								<text class="suggestion-text">· {{ stringField(item, 'text') }}</text>
+							</view>
+						</view>
+						<view v-if="abnormalProducts.length > 0" class="card">
+							<text class="card-label">异常商品</text>
+							<view v-for="item in abnormalProducts" :key="'abnormal-' + stringField(item, 'product_id') + '-' + stringField(item, 'type')" class="list-row">
+								<view class="list-main">
+									<text class="list-title">{{ stringField(item, 'name', '未命名商品') }}</text>
+									<text class="list-meta">{{ stringField(item, 'reason') }}</text>
+								</view>
+								<text class="list-value">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+							</view>
+						</view>
+					</view>
+
+					<!-- 底部操作 -->
+					<view class="bottom-actions">
+						<view class="action-primary" @click="goToProducts">
+							<text class="action-primary-text">查看分类商品</text>
+						</view>
+						<view class="action-secondary" @click="goToComparison">
+							<text class="action-secondary-text">对比其他分类</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<view v-if="isOperating" class="operate-mask">
+			<view class="operate-card">
+				<text class="operate-text">处理中...</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import { getCategoryAnalytics, getCategoryInsights, updateCategoryInsightStatus, CategoryInsightsQuery } from '@/pkg/api/modules/category'
+import { getShopList, ShopListQuery } from '@/pkg/api/modules/shops'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type TabOption = {
+	key: string
+	label: string
+}
+
+const categoryId = ref(0)
+const categoryNameParam = ref('')
+const isLoading = ref(false)
+const isOperating = ref(false)
+const hasLoadedOnce = ref(false)
+const pageError = ref('')
+const periodDays = ref(30)
+const activeTab = ref('sales')
+
+const analyticsData = ref<UTSJSONObject>({} as UTSJSONObject)
+const salesTrendValues = ref<number[]>([] as number[])
+const profitTrendValues = ref<number[]>([] as number[])
+const trendLabels = ref<string[]>([] as string[])
+const topProducts = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const warningProducts = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const byCategoryRows = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const suggestions = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const abnormalProducts = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+const insightsLoading = ref(false)
+const insightsError = ref('')
+const insightItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+const periodOptions = ref<number[]>([7, 30, 90] as number[])
+
+// 店铺口径切换：0 = 全部门店（公司汇总行）；选择跨页面持久化
+const SHOP_FILTER_STORAGE_KEY = 'category:selected-shop'
+const shopFilterId = ref(0)
+const shopOptions = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const tabOptions = ref<TabOption[]>([
+	{ key: 'sales', label: '销售' } as TabOption,
+	{ key: 'profit', label: '毛利' } as TabOption,
+	{ key: 'inventory', label: '库存' } as TabOption,
+	{ key: 'structure', label: '结构' } as TabOption,
+	{ key: 'insights', label: '洞察' } as TabOption,
+])
+
+// ── 解析辅助 ────────────────────────────────────────────────────
+
+function parseErrorMessage(error: any): string {
+	let message = '分析数据加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '分析数据加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return {} as UTSJSONObject
+	}
+	if (!text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed == null) {
+			return {} as UTSJSONObject
+		}
+		return parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return [] as UTSJSONObject[]
+	}
+	if (!text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return [] as UTSJSONObject[]
+		}
+		return parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function stringField(item: UTSJSONObject, key: string, fallback: string = ''): string {
+	return stringValue(item[key], fallback)
+}
+
+function booleanField(item: UTSJSONObject, key: string): boolean {
+	const text = stringValue(item[key]).toLowerCase()
+	return text == 'true' || text == '1'
+}
+
+function moneyText(value: string): string {
+	return value == '' ? '0.00 zł' : value + ' zł'
+}
+
+function percentText(value: string): string {
+	const parsed = floatValue(value, -1)
+	if (parsed < 0) {
+		return '-'
+	}
+	return (parsed * 100).toFixed(1) + '%'
+}
+
+// ── 数据段读取 ───────────────────────────────────────────────────
+
+function sectionObject(key: string): UTSJSONObject {
+	return objectValue(analyticsData.value[key])
+}
+
+function summaryText(key: string, fallback: string = '0.00'): string {
+	return stringValue(sectionObject('summary')[key], fallback)
+}
+
+function profitText(key: string, fallback: string = '0.00'): string {
+	return stringValue(sectionObject('gross_profit')[key], fallback)
+}
+
+function inventoryText(key: string, fallback: string = '0.00'): string {
+	return stringValue(sectionObject('inventory')[key], fallback)
+}
+
+function structureText(key: string, fallback: string = '0'): string {
+	return stringValue(sectionObject('product_structure')[key], fallback)
+}
+
+const pageTitle = computed((): string => {
+	const category = sectionObject('category')
+	const name = stringValue(category['name'])
+	if (name != '') {
+		return name + ' · 分析'
+	}
+	return categoryNameParam.value == '' ? '分类分析' : categoryNameParam.value + ' · 分析'
+})
+
+const categoryFullName = computed((): string => {
+	const category = sectionObject('category')
+	return stringValue(category['full_name'], stringValue(category['name'], categoryNameParam.value))
+})
+
+const categoryScore = computed((): string => {
+	return stringValue(sectionObject('category')['health_score'])
+})
+
+const lifecycleLabelText = computed((): string => {
+	return stringValue(sectionObject('category')['lifecycle_stage_label'])
+})
+
+const periodText = computed((): string => {
+	const period = sectionObject('period')
+	const dateFrom = stringValue(period['date_from'])
+	const dateTo = stringValue(period['date_to'])
+	if (dateFrom == '' || dateTo == '') {
+		return '统计周期 ' + periodDays.value.toString() + ' 天'
+	}
+	return dateFrom + ' ~ ' + dateTo + ' · 含下级分类'
+})
+
+const unmatchedText = computed((): string => {
+	const value = summaryText('unmatched_sales_amount', '0.00')
+	if (value == '0.00' || value == '') {
+		return ''
+	}
+	return '另有 ' + value + ' zł 销售无法归属到商品（未匹配条码）'
+})
+
+const top5Share = computed((): number => {
+	const concentration = objectValue(sectionObject('sales')['concentration'])
+	return floatValue(concentration['top5_share'])
+})
+
+const isConcentrated = computed((): boolean => {
+	const concentration = objectValue(sectionObject('sales')['concentration'])
+	const text = stringValue(concentration['is_concentrated']).toLowerCase()
+	return text == 'true' || text == '1'
+})
+
+const inactiveCountText = computed((): string => {
+	const inactive = intValue(sectionObject('product_structure')['inactive_count'])
+	const discontinued = intValue(sectionObject('product_structure')['discontinued_count'])
+	return (inactive + discontinued).toString()
+})
+
+function topProductMeta(item: UTSJSONObject): string {
+	const share = percentText(stringField(item, 'share'))
+	const quantity = stringField(item, 'sales_quantity', '0')
+	return '占比 ' + share + ' · 销量 ' + quantity
+}
+
+function warningProductMeta(item: UTSJSONObject): string {
+	const location = stringField(item, 'location_name')
+	const quantity = stringField(item, 'quantity', '0')
+	let text = '库存 ' + quantity
+	if (location != '') {
+		text = text + ' · ' + location
+	}
+	return text
+}
+
+function alertStatusLabel(status: string): string {
+	if (status == 'OUT_OF_STOCK') return '缺货'
+	if (status == 'LOW_STOCK') return '低库存'
+	return status
+}
+
+function issueValueClass(countText: string): string {
+	return countText != '0' && countText != '' ? 'issue-value issue-value-alert' : 'issue-value'
+}
+
+// ── 洞察 ────────────────────────────────────────────────────────
+
+function severityDotClass(item: UTSJSONObject): string {
+	const severity = stringField(item, 'severity')
+	if (severity == 'high') return 'severity-dot severity-dot-high'
+	if (severity == 'medium') return 'severity-dot severity-dot-medium'
+	return 'severity-dot severity-dot-low'
+}
+
+function insightMeta(item: UTSJSONObject): string {
+	const severityLabel = stringField(item, 'severity_label')
+	const dateText = stringField(item, 'snapshot_date')
+	let text = severityLabel
+	if (dateText != '') {
+		text = text == '' ? dateText : text + ' · ' + dateText
+	}
+	return text
+}
+
+async function loadInsights(): Promise<void> {
+	if (insightsLoading.value || categoryId.value <= 0) {
+		return
+	}
+	insightsLoading.value = true
+	insightsError.value = ''
+	try {
+		const response = await getCategoryInsights({
+			severity: null,
+			insight_type: null,
+			category_id: categoryId.value,
+			status: 'active',
+			limit: 20,
+		} as CategoryInsightsQuery)
+		insightItems.value = objectArrayValue(response['items'])
+	} catch (error) {
+		insightsError.value = parseErrorMessage(error)
+	} finally {
+		insightsLoading.value = false
+	}
+}
+
+async function executeMarkInsight(item: UTSJSONObject, action: string): Promise<void> {
+	const id = intValue(item['id'])
+	if (id <= 0) {
+		return
+	}
+	try {
+		isOperating.value = true
+		await updateCategoryInsightStatus([id], action)
+		await loadInsights()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function markInsight(item: UTSJSONObject, action: string): void {
+	executeMarkInsight(item, action)
+}
+
+function insightJumpLabel(item: UTSJSONObject): string {
+	const action = objectValue(item['action'])
+	// 本页就是分类分析页，只有跳商品列表的 action 才需要按钮
+	if (stringValue(action['type']) != 'product_list') {
+		return ''
+	}
+	return stringValue(action['label'], '查看商品')
+}
+
+// 洞察跳转：带语义筛选跳商品页（payload 协议与分类治理工具一致）
+function goInsightProducts(item: UTSJSONObject): void {
+	const action = objectValue(item['action'])
+	const params = objectValue(action['params'])
+	const payload = {} as UTSJSONObject
+	const targetCategoryId = intValue(params['category'])
+	if (targetCategoryId > 0) {
+		payload['category_id'] = targetCategoryId.toString()
+		payload['category_name'] = categoryNameParam.value
+	}
+	const semanticParams = ['stock_warning', 'no_sales', 'cost_missing', 'cost_inversion']
+	for (let index = 0; index < semanticParams.length; index += 1) {
+		const key = semanticParams[index]
+		if (stringValue(params[key]) == 'true') {
+			payload[key] = 'true'
+		}
+	}
+	payload['label'] = stringField(item, 'title', '洞察商品')
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+// ── 数据加载 ────────────────────────────────────────────────────
+
+function applyTrendData(): void {
+	const sales = sectionObject('sales')
+	const points = objectArrayValue(sales['trend'])
+	const salesValues: number[] = []
+	const profitValues: number[] = []
+	const labels: string[] = []
+	for (let index = 0; index < points.length; index += 1) {
+		const point = points[index]
+		salesValues.push(floatValue(point['sales_amount']))
+		profitValues.push(floatValue(point['gross_profit']))
+		const dateText = stringValue(point['date'])
+		labels.push(dateText.length >= 10 ? dateText.substring(5) : dateText)
+	}
+	salesTrendValues.value = salesValues
+	profitTrendValues.value = profitValues
+	trendLabels.value = labels
+
+	const concentration = objectValue(sales['concentration'])
+	topProducts.value = objectArrayValue(concentration['top_products'])
+	warningProducts.value = objectArrayValue(sectionObject('inventory')['warning_products'])
+	byCategoryRows.value = objectArrayValue(sectionObject('product_structure')['by_category'])
+	const insightSection = sectionObject('insights')
+	suggestions.value = objectArrayValue(insightSection['suggestions'])
+	abnormalProducts.value = objectArrayValue(insightSection['abnormal_products'])
+}
+
+async function loadAll(): Promise<void> {
+	if (isLoading.value || categoryId.value <= 0) {
+		return
+	}
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		const response = await getCategoryAnalytics(categoryId.value, periodDays.value, true, shopFilterId.value)
+		analyticsData.value = response
+		applyTrendData()
+		hasLoadedOnce.value = true
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+	loadInsights()
+}
+
+// ── 交互 ────────────────────────────────────────────────────────
+
+function setPeriod(days: number): void {
+	if (periodDays.value == days) {
+		return
+	}
+	periodDays.value = days
+	loadAll()
+}
+
+function periodChipClass(days: number): string {
+	return periodDays.value == days ? 'chip chip-active' : 'chip'
+}
+
+function periodChipTextClass(days: number): string {
+	return periodDays.value == days ? 'chip-text chip-text-active' : 'chip-text'
+}
+
+// ── 店铺口径切换 ────────────────────────────────────────────────
+
+function shopOptionId(shop: UTSJSONObject): number {
+	return intValue(shop['id'])
+}
+
+function shopOptionName(shop: UTSJSONObject): string {
+	return stringValue(shop['name'], '未命名店铺')
+}
+
+function shopChipClass(id: number): string {
+	return shopFilterId.value == id ? 'chip chip-active' : 'chip'
+}
+
+function shopChipTextClass(id: number): string {
+	return shopFilterId.value == id ? 'chip-text chip-text-active' : 'chip-text'
+}
+
+function selectShop(id: number): void {
+	if (shopFilterId.value == id) {
+		return
+	}
+	shopFilterId.value = id
+	try {
+		uni.setStorageSync(SHOP_FILTER_STORAGE_KEY, id.toString())
+	} catch (error) {
+	}
+	loadAll()
+}
+
+function restoreShopFilter(): void {
+	try {
+		const savedId = intValue(uni.getStorageSync(SHOP_FILTER_STORAGE_KEY))
+		if (savedId > 0) {
+			shopFilterId.value = savedId
+		}
+	} catch (error) {
+	}
+}
+
+async function loadShopOptions(): Promise<void> {
+	try {
+		const response = await getShopList({ search: null, page: 1, page_size: 50 } as ShopListQuery)
+		const options: UTSJSONObject[] = []
+		let savedFound = false
+		for (let index = 0; index < response.results.length; index += 1) {
+			const shop = response.results[index]
+			options.push({ id: shop.id, name: shop.name } as UTSJSONObject)
+			if (shop.id == shopFilterId.value) {
+				savedFound = true
+			}
+		}
+		shopOptions.value = options
+		// 持久化的店铺已不存在（被删或换公司）时回退到全部门店
+		if (shopFilterId.value > 0 && !savedFound) {
+			shopFilterId.value = 0
+		}
+	} catch (error) {
+		// 店铺列表加载失败不阻塞分析页，仅隐藏选择器
+		shopOptions.value = [] as UTSJSONObject[]
+	}
+}
+
+function setTab(key: string): void {
+	activeTab.value = key
+}
+
+function tabClass(key: string): string {
+	return activeTab.value == key ? 'tab-item tab-item-active' : 'tab-item'
+}
+
+function tabTextClass(key: string): string {
+	return activeTab.value == key ? 'tab-text tab-text-active' : 'tab-text'
+}
+
+function goToProducts(): void {
+	// 商品管理页已移出 tabbar，可直接 navigateTo（返回键回到分析页）；
+	// 分析范围已含全部后代分类，复用 scope.category_ids 做预置筛选
+	const category = sectionObject('category')
+	const name = stringValue(category['name'], categoryNameParam.value)
+	let idsText = categoryId.value.toString()
+	const ids: string[] = []
+	const rawScope = sectionObject('scope')['category_ids']
+	if (rawScope != null) {
+		const rawText = JSON.stringify(rawScope)
+		if (rawText != null && rawText != '' && rawText.startsWith('[')) {
+			try {
+				const parsedIds = JSON.parseArray<any>(rawText)
+				if (parsedIds != null) {
+					for (let index = 0; index < parsedIds.length; index += 1) {
+						const idText = stringValue(parsedIds[index])
+						if (idText != '' && idText != '0') {
+							ids.push(idText)
+						}
+					}
+				}
+			} catch (error) {
+			}
+		}
+	}
+	if (ids.length > 0) {
+		idsText = ids.join(',')
+	}
+	const payload = {
+		category_ids: idsText,
+		category_name: name,
+	} as UTSJSONObject
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			// 跳转失败时清掉预筛选，避免下次打开商品页带上幽灵筛选
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+function goToComparison(): void {
+	uni.navigateTo({
+		url: '/pages/category/comparison?ids=' + categoryId.value.toString(),
+	})
+}
+
+// ── 生命周期 ────────────────────────────────────────────────────
+
+onLoad((event: OnLoadOptions) => {
+	const idValue = event['id']
+	const nameValue = event['name']
+	categoryId.value = idValue == null ? 0 : intValue(idValue)
+	categoryNameParam.value = nameValue == null ? '' : stringValue(decodeURIComponent('' + nameValue))
+	if (categoryId.value <= 0) {
+		pageError.value = '缺少分类参数'
+		return
+	}
+	restoreShopFilter()
+	// 先校验持久化的店铺仍有效，再按该口径加载分析数据
+	loadShopOptions().then(() => {
+		loadAll()
+	})
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	background-color: #F4F6F8;
+}
+
+.page-content {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 60px;
+	background-color: #F4F6F8;
+}
+
+.state-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.state-card-error {
+	border-color: #FECACA;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	font-size: 14px;
+	line-height: 21px;
+	color: #64748B;
+	margin-top: 8px;
+}
+
+.state-btn {
+	height: 40px;
+	margin-top: 14px;
+	background-color: #0F766E;
+	border-radius: 12px;
+	border-width: 0px;
+}
+
+.state-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.card-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.header-row {
+	flex-direction: row;
+	align-items: flex-start;
+}
+
+.header-main {
+	flex: 1;
+}
+
+.header-name {
+	font-size: 18px;
+	line-height: 25px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.header-tags {
+	margin-top: 6px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.lifecycle-tag {
+	margin-left: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: #E0F2FE;
+}
+
+.lifecycle-tag-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #0369A1;
+	font-weight: bold;
+}
+
+.period-text {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.chip-row {
+	margin-top: 10px;
+	flex-direction: row;
+}
+
+.shop-chip-scroll {
+	margin-top: 2px;
+	width: 100%;
+}
+
+.chip {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-right: 8px;
+}
+
+.chip-active {
+	background-color: #0F766E;
+}
+
+.chip-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.chip-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.tab-row {
+	flex-direction: row;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 4px;
+	margin-bottom: 10px;
+}
+
+.tab-item {
+	flex: 1;
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-radius: 9px;
+}
+
+.tab-item-active {
+	background-color: #0F766E;
+}
+
+.tab-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.tab-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.metric-grid {
+	margin-top: 8px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.note-text {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.warn-text {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #D97706;
+}
+
+.error-text {
+	margin-top: 8px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #DC2626;
+}
+
+.list-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.list-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.list-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+
+.list-meta {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.list-value {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.list-value-warn {
+	color: #DC2626;
+}
+
+.empty-state {
+	padding-top: 16px;
+	padding-bottom: 16px;
+	align-items: center;
+}
+
+.empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.issue-line {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F8FAFC;
+}
+
+.issue-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #334155;
+}
+
+.issue-value {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.issue-value-alert {
+	color: #DC2626;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.insight-row {
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.insight-head {
+	flex-direction: row;
+	align-items: center;
+}
+
+.severity-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-right: 8px;
+}
+
+.severity-dot-high {
+	background-color: #DC2626;
+}
+
+.severity-dot-medium {
+	background-color: #F59E0B;
+}
+
+.severity-dot-low {
+	background-color: #22C55E;
+}
+
+.insight-title {
+	flex: 1;
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.insight-meta {
+	margin-top: 3px;
+	padding-left: 16px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.insight-suggestion {
+	margin-top: 4px;
+	padding-left: 16px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #0369A1;
+}
+
+.insight-actions {
+	margin-top: 8px;
+	padding-left: 16px;
+	flex-direction: row;
+}
+
+.insight-btn {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+	margin-right: 8px;
+}
+
+.insight-btn-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.insight-btn-primary {
+	background-color: #0F766E;
+}
+
+.insight-btn-primary-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.suggestion-row {
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+.suggestion-text {
+	font-size: 13px;
+	line-height: 19px;
+	color: #334155;
+}
+
+.bottom-actions {
+	flex-direction: row;
+	margin-bottom: 10px;
+}
+
+.action-primary {
+	flex: 1;
+	height: 44px;
+	border-radius: 12px;
+	background-color: #0F766E;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-primary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.action-secondary {
+	flex: 1;
+	height: 44px;
+	margin-left: 10px;
+	border-radius: 12px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #0F766E;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-secondary-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F766E;
+	font-weight: bold;
+}
+
+.operate-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.35);
+	align-items: center;
+	justify-content: center;
+}
+
+.operate-card {
+	padding: 18px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+}
+
+.operate-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+</style>

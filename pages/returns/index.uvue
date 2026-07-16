@@ -1,0 +1,525 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="退货记录"
+			searchPlaceholder="退货号、原订单号、收银员"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:filterActive="hasActiveFilter"
+			filterText="筛选"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="return-filter-panel">
+					<view class="return-filter-groups">
+						<view class="return-filter-group">
+							<text class="return-filter-title">日期范围</text>
+							<view class="return-filter-options">
+								<view
+									v-for="option in datePresetOptions"
+									:key="'date-' + option.key"
+									:class="datePresetValue == option.key ? 'return-filter-option return-filter-option-active' : 'return-filter-option'"
+									@click="selectDatePreset(option.key)"
+								>
+									<text :class="datePresetValue == option.key ? 'return-filter-option-text return-filter-option-text-active' : 'return-filter-option-text'">{{ option.text }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view v-if="filterOptionsLoading" class="return-filter-state">
+						<text class="return-filter-state-text">筛选选项加载中...</text>
+					</view>
+					<view v-else-if="filterOptionsError != ''" class="return-filter-state">
+						<text class="return-filter-state-text">{{ filterOptionsError }}</text>
+					</view>
+					<view v-else-if="filterDefinitions.length == 0" class="return-filter-state return-filter-state-small">
+						<text class="return-filter-state-text">暂无更多筛选项</text>
+					</view>
+					<view v-else class="return-filter-groups">
+						<view v-for="filter in filterDefinitions" :key="filter.key" class="return-filter-group">
+							<text class="return-filter-title">{{ filter.label }}</text>
+							<view class="return-filter-options">
+								<view
+									v-for="option in filter.options"
+									:key="filter.key + '-' + option.value"
+									:class="isFilterOptionSelected(filter.param, option.value) ? 'return-filter-option return-filter-option-active' : 'return-filter-option'"
+									@click="toggleFilterOption(filter.param, option.value)"
+								>
+									<text :class="isFilterOptionSelected(filter.param, option.value) ? 'return-filter-option-text return-filter-option-text-active' : 'return-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view class="return-filter-actions">
+						<view class="return-filter-btn return-filter-btn-light" @click="handleFilterReset">
+							<text class="return-filter-btn-light-text">重置</text>
+						</view>
+						<view class="return-filter-btn return-filter-btn-primary" @click="applySelectedFilters">
+							<text class="return-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadReturns"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载退货记录"
+					:keepContentOnLoading="true"
+					inlineLoadingText="退货数据刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="退货概览"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					:showFloatingAdd="false"
+					@item-click="handleItemClick"
+					@field-click="handleFieldClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
+import { getReturnFilterOptions, getReturnList, getReturnStatistics, ReturnFilterDefinition, ReturnFilterOptionsResponse, ReturnItem, ReturnListQuery, ReturnListResponse, ReturnStatistics } from '@/pkg/api/modules/returns.uts'
+
+type DatePresetOption = {
+	key: string
+	text: string
+}
+
+type SelectedFilter = {
+	param: string
+	value: string
+}
+
+const keyword = ref('')
+const filterVisible = ref(false)
+const returns = ref<ReturnItem[]>([])
+const isLoading = ref(false)
+const reloadAfterLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(getListPageSize())
+const filterOptionsLoading = ref(false)
+const filterOptionsError = ref('')
+const filterOptions = ref<ReturnFilterOptionsResponse | null>(null)
+const selectedFilters = ref<SelectedFilter[]>([])
+const datePresetValue = ref('all')
+const datePresetOptions = ref<DatePresetOption[]>([
+	{ key: 'all', text: '全部' } as DatePresetOption,
+	{ key: 'today', text: '今天' } as DatePresetOption,
+	{ key: 'week', text: '本周' } as DatePresetOption,
+	{ key: 'month', text: '本月' } as DatePresetOption,
+	{ key: 'year', text: '本年' } as DatePresetOption,
+])
+const statistics = ref<ReturnStatistics>({
+	total_count: 0,
+	gross_amount: '0.00',
+	tax_amount: '0.00',
+	restored_count: 0,
+	pending_count: 0,
+	processed_count: 0,
+	failed_count: 0,
+} as ReturnStatistics)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'shopText', label: '店铺:' } as UTSJSONObject,
+	{ key: 'originalOrderText', label: '原订单:' } as UTSJSONObject,
+	{ key: 'cashierText', label: '收银员:' } as UTSJSONObject,
+	{ key: 'itemsText', label: '商品数:' } as UTSJSONObject,
+	{ key: 'reasonText', label: '原因:' } as UTSJSONObject,
+	{ key: 'inventoryText', label: '库存:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'copy', text: '复制退货号' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function setSelectedFilterValue(param: string, value: string) {
+	const nextFilters: SelectedFilter[] = []
+	let updated = false
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) {
+			if (value != '') {
+				nextFilters.push({ param: param, value: value } as SelectedFilter)
+			}
+			updated = true
+			continue
+		}
+		nextFilters.push(filter)
+	}
+	if (!updated && value != '') {
+		nextFilters.push({ param: param, value: value } as SelectedFilter)
+	}
+	selectedFilters.value = nextFilters
+}
+
+function selectedFilterValue(param: string): string {
+	for (let index = 0; index < selectedFilters.value.length; index += 1) {
+		const filter = selectedFilters.value[index]
+		if (filter.param == param) return filter.value
+	}
+	return ''
+}
+
+function isFilterOptionSelected(param: string, value: string): boolean {
+	return selectedFilterValue(param) == value
+}
+
+function toggleFilterOption(param: string, value: string) {
+	const currentValue = selectedFilterValue(param)
+	setSelectedFilterValue(param, currentValue == value ? '' : value)
+}
+
+function pad2(value: number): string {
+	return value < 10 ? '0' + value.toString() : value.toString()
+}
+
+function dateValue(date: Date): string {
+	return date.getFullYear().toString() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate())
+}
+
+function addDays(date: Date, days: number): Date {
+	return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function todayDate(): Date {
+	const now = new Date()
+	return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function datePresetLabel(): string {
+	if (datePresetValue.value == 'week') return '本周'
+	if (datePresetValue.value == 'month') return '本月'
+	if (datePresetValue.value == 'year') return '本年'
+	if (datePresetValue.value == 'all') return '全部'
+	return '今天'
+}
+
+function dateRangeFrom(): string | null {
+	if (datePresetValue.value == 'all') return null
+	const today = todayDate()
+	if (datePresetValue.value == 'week') {
+		const weekday = today.getDay()
+		const diff = weekday == 0 ? 6 : weekday - 1
+		return dateValue(addDays(today, 0 - diff))
+	}
+	if (datePresetValue.value == 'month') return dateValue(new Date(today.getFullYear(), today.getMonth(), 1))
+	if (datePresetValue.value == 'year') return dateValue(new Date(today.getFullYear(), 0, 1))
+	return dateValue(today)
+}
+
+function dateRangeTo(): string | null {
+	if (datePresetValue.value == 'all') return null
+	return dateValue(todayDate())
+}
+
+function selectDatePreset(value: string) {
+	datePresetValue.value = value
+}
+
+function buildQuery(page: number): ReturnListQuery {
+	const query: ReturnListQuery = {
+		search: keyword.value == '' ? null : keyword.value,
+		page: page,
+		page_size: pageSize.value,
+		status: selectedFilterValue('status') == '' ? null : selectedFilterValue('status'),
+		cashier_id: selectedFilterValue('cashier_id') == '' ? null : selectedFilterValue('cashier_id'),
+		inventory_restored: selectedFilterValue('inventory_restored') == '' ? null : selectedFilterValue('inventory_restored'),
+		date_from: dateRangeFrom(),
+		date_to: dateRangeTo(),
+	}
+	return query
+}
+
+function applyResponse(response: ReturnListResponse) {
+	returns.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadStatistics() {
+	try {
+		statistics.value = await getReturnStatistics(buildQuery(1))
+	} catch (error) {
+	}
+}
+
+async function loadReturns() {
+	if (isLoading.value) {
+		reloadAfterLoading.value = true
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getReturnList(buildQuery(currentPage.value))
+		applyResponse(response)
+		await loadStatistics()
+	} catch (error) {
+		returns.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '退货记录加载失败')
+	} finally {
+		isLoading.value = false
+		if (reloadAfterLoading.value) {
+			reloadAfterLoading.value = false
+			loadReturns()
+		}
+	}
+}
+
+// ISO 时间简化为 "YYYY-MM-DD HH:MM"
+function compactDate(value: string): string {
+	if (value == '') return '-'
+	const text = value.replace('T', ' ')
+	if (text.length >= 16) return text.substring(0, 16)
+	return text
+}
+
+function returnToListItem(item: ReturnItem): UTSJSONObject {
+	const shopText = stringValue(item.shop_name, item.shop > 0 ? '店铺 #' + item.shop.toString() : '-')
+	const timeText = compactDate(stringValue(item.return_time, item.created_at))
+	const cashierText = stringValue(item.cashier_name, stringValue(item.cashier_id, '-')) + ' / ' + stringValue(item.kasa_number, '-')
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		returnNumber: item.return_number,
+		title: stringValue(item.return_number, '退货 #' + item.id.toString()),
+		subtitle: '时间：' + timeText,
+		amountText: '-' + item.gross_amount + ' zł',
+		shopText: shopText,
+		originalOrderText: stringValue(item.original_order_number, '-'),
+		cashierText: cashierText,
+		itemsText: item.items_count.toString() + ' 件',
+		reasonText: stringValue(item.reason, '-'),
+		inventoryText: item.inventory_restored ? '已回补' : '未回补',
+		tags: [stringValue(item.status_display, item.status)] as string[],
+	} as UTSJSONObject
+}
+
+function reloadFirstPage() {
+	currentPage.value = 1
+	loadReturns()
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; reloadFirstPage() }
+function handleSearchClear() { keyword.value = ''; reloadFirstPage() }
+
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+
+async function loadFilterOptions() {
+	if (filterOptions.value != null || filterOptionsLoading.value) return
+	filterOptionsLoading.value = true
+	filterOptionsError.value = ''
+	try {
+		filterOptions.value = await getReturnFilterOptions()
+	} catch (error) {
+		filterOptionsError.value = parseErrorMessage(error, '筛选选项加载失败')
+	} finally {
+		filterOptionsLoading.value = false
+	}
+}
+
+function handleFilterOpen() {
+	loadFilterOptions()
+}
+
+function handleFilterReset() {
+	selectedFilters.value = [] as SelectedFilter[]
+	datePresetValue.value = 'all'
+	filterVisible.value = false
+	reloadFirstPage()
+}
+
+function applySelectedFilters() {
+	filterVisible.value = false
+	reloadFirstPage()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadReturns()
+}
+
+function openDetail(id: string) {
+	if (id == '') return
+	uni.navigateTo({ url: '/pages/returns/from?id=' + id })
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	openDetail(stringValue(payload['rawId'], stringValue(payload['id'])))
+}
+
+function handleFieldClick(payload: UTSJSONObject) {
+	copyText(stringValue(payload['value']), '内容已复制', '暂无内容')
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const itemObject = item as UTSJSONObject
+	const id = stringValue(itemObject['rawId'])
+	if (actionKey == 'detail') {
+		openDetail(id)
+		return
+	}
+	if (actionKey == 'copy') {
+		copyText(stringValue(itemObject['returnNumber']), '退货号已复制', '暂无退货号')
+	}
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < returns.value.length; index += 1) result.push(returnToListItem(returns.value[index]))
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '' || selectedFilters.value.length > 0) return datePresetLabel() + '没有匹配的退货记录'
+	if (datePresetValue.value != 'all') return datePresetLabel() + '暂无退货记录'
+	return '暂无退货记录'
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return selectedFilters.value.length > 0 || datePresetValue.value != 'all'
+})
+
+const filterDefinitions = computed((): ReturnFilterDefinition[] => {
+	if (filterOptions.value == null) return [] as ReturnFilterDefinition[]
+	return filterOptions.value!.filters
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	return [
+		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
+		{ key: 'total', label: '退货笔数', value: totalCount.value.toString() } as UTSJSONObject,
+		{ key: 'grossAmount', label: '退货金额', value: statistics.value.gross_amount + ' zł' } as UTSJSONObject,
+		{ key: 'taxAmount', label: '退货税额', value: statistics.value.tax_amount + ' zł' } as UTSJSONObject,
+		{ key: 'restored', label: '已回补库存', value: statistics.value.restored_count.toString() } as UTSJSONObject,
+		{ key: 'pending', label: '待回补', value: statistics.value.pending_count.toString() } as UTSJSONObject,
+	]
+})
+
+onLoad(() => { loadReturns() })
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.return-filter-panel { position: relative; padding-top: 2px; padding-bottom: 52px; background-color: #FFFFFF; }
+.return-filter-state { height: 112px; border-radius: 8px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.return-filter-state-small { height: 58px; }
+.return-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.return-filter-groups { margin-bottom: 6px; }
+.return-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 8px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.return-filter-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.return-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.return-filter-option { min-width: 58px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.return-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.return-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.return-filter-option-text-active { color: #FFFFFF; font-weight: bold; }
+.return-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.return-filter-btn { flex: 1; height: 38px; border-radius: 8px; align-items: center; justify-content: center; }
+.return-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.return-filter-btn-primary { background-color: #0F172A; }
+.return-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.return-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

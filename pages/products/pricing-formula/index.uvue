@@ -62,6 +62,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import {
 	ProductPricingFormulaItem,
 	ProductPricingFormulaListResponse,
@@ -77,7 +78,7 @@ const formulas = ref<ProductPricingFormulaItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 
 const fieldConfig = ref<UTSJSONObject[]>([
 	{ key: 'expression', label: '表达式' } as UTSJSONObject,

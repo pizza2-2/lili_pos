@@ -69,6 +69,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { getShopMediaList, ShopMediaFile, ShopMediaItem, ShopMediaListResponse } from '@/pkg/api/modules/shops'
 
 const shopMediaListRefreshStorageKey = 'refresh:pages:shop:media'
@@ -79,7 +80,7 @@ const records = ref<ShopMediaItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const shopId = ref('')
 const shopName = ref('')
 

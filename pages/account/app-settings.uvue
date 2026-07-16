@@ -1,0 +1,170 @@
+<template>
+	<view class="page">
+		<lili-universal-filter title="应用设置" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/tabbar/mine" backgroundColor="#EEF2F7" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="card">
+					<text class="card-title">数据与网络</text>
+					<view class="field-row">
+						<text class="field-label">图片上传质量</text>
+						<view class="chip-options">
+							<view
+								v-for="option in qualityOptions"
+								:key="option.value"
+								:class="uploadQuality == option.value ? 'chip chip-active' : 'chip'"
+								@click="selectUploadQuality(option.value)"
+							>
+								<text :class="uploadQuality == option.value ? 'chip-text chip-text-active' : 'chip-text'">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+					<text class="card-hint">标准：长边压到 1600px，省流量；高清：长边 2560px；原图：不压缩，上传最慢。</text>
+					<view class="field-row">
+						<text class="field-label">列表每页数量</text>
+						<view class="chip-options">
+							<view
+								v-for="option in pageSizeOptions"
+								:key="option.value"
+								:class="listPageSize == option.value ? 'chip chip-active' : 'chip'"
+								@click="selectListPageSize(option.value)"
+							>
+								<text :class="listPageSize == option.value ? 'chip-text chip-text-active' : 'chip-text'">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+					<text class="card-hint">列表页每次加载的条数，网络差时建议调小。对下次打开的列表生效。</text>
+				</view>
+
+				<view class="card">
+					<text class="card-title">报表</text>
+					<view class="field-row">
+						<text class="field-label">默认周期</text>
+						<view class="chip-options">
+							<view
+								v-for="option in periodOptions"
+								:key="option.value"
+								:class="reportPeriod == option.value ? 'chip chip-active' : 'chip'"
+								@click="selectReportPeriod(option.value)"
+							>
+								<text :class="reportPeriod == option.value ? 'chip-text chip-text-active' : 'chip-text'">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+					<text class="card-hint">打开报表页时默认展示的时间范围；「记住上次」会沿用你上次选择的周期。</text>
+				</view>
+
+				<view class="card">
+					<text class="card-title">更新与诊断</text>
+					<view class="field-row">
+						<text class="field-label field-label-wide">启动时自动检查更新</text>
+						<switch :checked="autoCheckUpdate" @change="onAutoCheckUpdateChange" />
+					</view>
+					<view class="field-row">
+						<text class="field-label field-label-wide">上报错误日志</text>
+						<switch :checked="logUploadEnabled" @change="onLogUploadChange" />
+					</view>
+					<text class="card-hint">默认关闭。开启后本次运行期间收集并上报 App 错误信息用于排查问题（不含业务数据）；关闭 App 后自动恢复关闭。</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	getUploadImageQuality,
+	setUploadImageQuality,
+	getListPageSize,
+	setListPageSize,
+	getReportDefaultPeriod,
+	setReportDefaultPeriod,
+	isAutoCheckUpdateEnabled,
+	setAutoCheckUpdateEnabled,
+	isLogUploadEnabled,
+	setLogUploadEnabled,
+	UPLOAD_QUALITY_STANDARD,
+	UPLOAD_QUALITY_HIGH,
+	UPLOAD_QUALITY_ORIGINAL,
+	REPORT_PERIOD_TODAY,
+	REPORT_PERIOD_WEEK,
+	REPORT_PERIOD_MONTH,
+	REPORT_PERIOD_LAST,
+} from '@/pkg/util/settings.uts'
+
+type OptionItem = {
+	value: string
+	label: string
+}
+
+const qualityOptions = [
+	{ value: UPLOAD_QUALITY_STANDARD, label: '标准' } as OptionItem,
+	{ value: UPLOAD_QUALITY_HIGH, label: '高清' } as OptionItem,
+	{ value: UPLOAD_QUALITY_ORIGINAL, label: '原图' } as OptionItem,
+] as OptionItem[]
+
+const pageSizeOptions = [
+	{ value: '10', label: '10' } as OptionItem,
+	{ value: '20', label: '20' } as OptionItem,
+	{ value: '50', label: '50' } as OptionItem,
+	{ value: '100', label: '100' } as OptionItem,
+] as OptionItem[]
+
+const periodOptions = [
+	{ value: REPORT_PERIOD_TODAY, label: '今日' } as OptionItem,
+	{ value: REPORT_PERIOD_WEEK, label: '本周' } as OptionItem,
+	{ value: REPORT_PERIOD_MONTH, label: '本月' } as OptionItem,
+	{ value: REPORT_PERIOD_LAST, label: '记住上次' } as OptionItem,
+] as OptionItem[]
+
+const uploadQuality = ref(getUploadImageQuality())
+const listPageSize = ref(getListPageSize().toString())
+const reportPeriod = ref(getReportDefaultPeriod())
+const autoCheckUpdate = ref(isAutoCheckUpdateEnabled())
+const logUploadEnabled = ref(isLogUploadEnabled())
+
+function selectUploadQuality(value: string) {
+	uploadQuality.value = value
+	setUploadImageQuality(value)
+}
+
+function selectListPageSize(value: string) {
+	listPageSize.value = value
+	setListPageSize(parseInt(value))
+}
+
+function selectReportPeriod(value: string) {
+	reportPeriod.value = value
+	setReportDefaultPeriod(value)
+}
+
+function onAutoCheckUpdateChange(event: UniSwitchChangeEvent) {
+	autoCheckUpdate.value = event.detail.value
+	setAutoCheckUpdateEnabled(event.detail.value)
+}
+
+function onLogUploadChange(event: UniSwitchChangeEvent) {
+	logUploadEnabled.value = event.detail.value
+	setLogUploadEnabled(event.detail.value)
+}
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.card { background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.card-hint { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 4px; }
+.field-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.field-label { width: 98px; font-size: 14px; line-height: 20px; color: #475569; }
+.field-label-wide { flex: 1; }
+.chip-options { flex: 1; flex-direction: row; flex-wrap: wrap; }
+.chip { min-height: 32px; border-radius: 8px; padding-left: 12px; padding-right: 12px; padding-top: 5px; padding-bottom: 5px; margin-right: 8px; margin-bottom: 6px; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.chip-active { background-color: #E0F2FE; border-color: #0284C7; }
+.chip-text { font-size: 13px; color: #4B5563; }
+.chip-text-active { color: #075985; font-weight: bold; }
+</style>

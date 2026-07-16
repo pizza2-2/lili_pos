@@ -19,6 +19,7 @@ import UUID from 'java.util.UUID'
 import Charset from 'java.nio.charset.Charset'
 import Thread from 'java.lang.Thread'
 import Runnable from 'java.lang.Runnable'
+import { qrcodeMatrix } from '@/uni_modules/lili-qrcode'
 
 export type LabelPrinterDevice = {
 	name: string
@@ -890,6 +891,40 @@ function drawBitmapBarcode(canvas: Canvas, paint: Paint, element: UTSJSONObject,
 	}
 }
 
+function drawBitmapQrcode(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
+	const content = labelString(element['content'])
+	if (content.trim() == '') return
+	const x = Math.round(labelNumber(element['x'], 0) * dotsPerMm)
+	const y = Math.round(labelNumber(element['y'], 0) * dotsPerMm)
+	const width = Math.max(8, Math.round(labelNumber(element['width'], 10) * dotsPerMm))
+	const height = Math.max(8, Math.round(labelNumber(element['height'], 10) * dotsPerMm))
+	const side = Math.min(width, height)
+	const rows = qrcodeMatrix(content)
+	if (rows.length == 0) {
+		console.log('[lili-label-printer] qrcode encode failed: ' + content)
+		return
+	}
+	const moduleCount = rows.length
+	// 四周各留 2 个模块的静区，保证可扫描
+	let moduleSize = Math.floor(side / (moduleCount + 4))
+	if (moduleSize < 1) moduleSize = 1
+	const drawSize = moduleSize * moduleCount
+	const offsetX = x + Math.max(0, Math.floor((width - drawSize) / 2))
+	const offsetY = y + Math.max(0, Math.floor((height - drawSize) / 2))
+	paint.setColor(Color.BLACK)
+	paint.setAntiAlias(false)
+	for (let row = 0; row < moduleCount; row += 1) {
+		const line = rows[row]
+		for (let col = 0; col < line.length; col += 1) {
+			if (line.substring(col, col + 1) == '1') {
+				const left = offsetX + col * moduleSize
+				const top = offsetY + row * moduleSize
+				canvas.drawRect(left.toFloat(), top.toFloat(), (left + moduleSize).toFloat(), (top + moduleSize).toFloat(), paint)
+			}
+		}
+	}
+}
+
 function drawBitmapGraphic(canvas: Canvas, paint: Paint, element: UTSJSONObject, dotsPerMm: number) {
 	const type = labelString(element['type'], 'text')
 	const x = Math.round(labelNumber(element['x'], 0) * dotsPerMm)
@@ -907,6 +942,17 @@ function drawBitmapGraphic(canvas: Canvas, paint: Paint, element: UTSJSONObject,
 		canvas.drawRect(x.toFloat(), y.toFloat(), (x + lineWidth).toFloat(), (y + height).toFloat(), paint)
 		return
 	}
+	if (type == 'dline') {
+		const direction = labelString(element['direction'], 'down')
+		paint.setStrokeWidth(lineWidth.toFloat())
+		if (direction == 'up') {
+			canvas.drawLine(x.toFloat(), (y + height).toFloat(), (x + width).toFloat(), y.toFloat(), paint)
+		} else {
+			canvas.drawLine(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
+		}
+		paint.setStrokeWidth((0).toFloat())
+		return
+	}
 	if (type == 'rect') {
 		canvas.drawRect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + lineWidth).toFloat(), paint)
 		canvas.drawRect(x.toFloat(), (y + height - lineWidth).toFloat(), (x + width).toFloat(), (y + height).toFloat(), paint)
@@ -919,7 +965,9 @@ function drawBitmapElement(canvas: Canvas, paint: Paint, element: UTSJSONObject,
 	const type = labelString(element['type'], 'text')
 	if (type == 'barcode') {
 		drawBitmapBarcode(canvas, paint, element, dotsPerMm)
-	} else if (type == 'hline' || type == 'vline' || type == 'rect') {
+	} else if (type == 'qrcode') {
+		drawBitmapQrcode(canvas, paint, element, dotsPerMm)
+	} else if (type == 'hline' || type == 'vline' || type == 'rect' || type == 'dline') {
 		drawBitmapGraphic(canvas, paint, element, dotsPerMm)
 	} else {
 		drawBitmapText(canvas, paint, element, dotsPerMm)

@@ -1,0 +1,589 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="周期经营报告"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="pageError != '' && !isLoading" class="state-card state-card-error">
+					<text class="state-title">报告加载失败</text>
+					<text class="state-desc">{{ pageError }}</text>
+					<button class="state-btn" @click="loadReport">
+						<text class="state-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在汇总周期数据...</text>
+				</view>
+
+				<view v-else>
+					<!-- 周期切换 + 汇总 -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">{{ periodRangeText }}</text>
+								<text class="card-title">{{ periodType == 'quarterly' ? '季度报告' : '月度报告' }}</text>
+							</view>
+							<view class="chip-row">
+								<view :class="periodChipClass('monthly')" @click="setPeriodType('monthly')">
+									<text :class="periodChipTextClass('monthly')">月度</text>
+								</view>
+								<view :class="periodChipClass('quarterly')" @click="setPeriodType('quarterly')">
+									<text :class="periodChipTextClass('quarterly')">季度</text>
+								</view>
+							</view>
+						</view>
+						<view class="metric-grid">
+							<lili-metric-card label="总销售" :value="summaryText('sales_amount') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="总毛利" :value="summaryText('gross_profit') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="毛利率" :value="percentText(summaryText('gross_margin_rate', ''))"></lili-metric-card>
+							<lili-metric-card label="有数据分类" :value="summaryText('category_count', '0')"></lili-metric-card>
+						</view>
+					</view>
+
+					<!-- 分类明细（按销售额降序） -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">分类明细</text>
+								<text class="card-title">按销售额排序</text>
+							</view>
+							<view class="mini-action" @click="loadReport">
+								<text class="mini-action-text">{{ isLoading ? '加载中' : '刷新' }}</text>
+							</view>
+						</view>
+						<view v-if="reportItems.length == 0" class="empty-state">
+							<text class="empty-text">周期内暂无快照数据</text>
+						</view>
+						<view
+							v-for="(item, index) in visibleItems()"
+							:key="'report-' + itemCategoryId(item)"
+							class="report-row"
+							@click="goAnalytics(item)"
+						>
+							<view class="report-index-wrap">
+								<text class="report-index-text">{{ (index + 1).toString() }}</text>
+							</view>
+							<view class="report-main">
+								<text class="report-name">{{ itemCategoryName(item) }}</text>
+								<text class="report-meta">{{ reportMetaText(item) }}</text>
+							</view>
+							<view class="report-side">
+								<text class="report-amount">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+								<text :class="growthClass(item)">{{ growthText(item) }}</text>
+							</view>
+						</view>
+						<view v-if="canShowMore()" class="expand-row" @click="showMore">
+							<text class="expand-text">展开更多</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import { getCategoryPeriodReport } from '@/pkg/api/modules/category'
+
+const isLoading = ref(false)
+const hasLoadedOnce = ref(false)
+const pageError = ref('')
+const periodType = ref('monthly')
+const reportData = ref<UTSJSONObject>({} as UTSJSONObject)
+const reportItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const renderLimit = ref(30)
+
+// ── 解析辅助 ────────────────────────────────────────────────────
+
+function parseErrorMessage(error: any): string {
+	let message = '报告加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '报告加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function floatValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed == null) {
+			return {} as UTSJSONObject
+		}
+		return parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return [] as UTSJSONObject[]
+		}
+		return parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function stringField(item: UTSJSONObject, key: string, fallback: string = ''): string {
+	return stringValue(item[key], fallback)
+}
+
+function percentText(value: string): string {
+	const parsed = floatValue(value, -1)
+	if (parsed < 0) {
+		return '-'
+	}
+	return (parsed * 100).toFixed(1) + '%'
+}
+
+// ── 数据段读取 ───────────────────────────────────────────────────
+
+function summaryText(key: string, fallback: string = '0.00'): string {
+	return stringValue(objectValue(reportData.value['summary'])[key], fallback)
+}
+
+const periodRangeText = computed((): string => {
+	const period = objectValue(reportData.value['period'])
+	const dateFrom = stringValue(period['date_from'])
+	const dateTo = stringValue(period['date_to'])
+	if (dateFrom == '' || dateTo == '') {
+		return '统计周期'
+	}
+	return dateFrom + ' ~ ' + dateTo
+})
+
+function itemCategory(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['category'])
+}
+
+function itemCategoryId(item: UTSJSONObject): string {
+	return stringValue(itemCategory(item)['id'], 'unknown')
+}
+
+function itemCategoryName(item: UTSJSONObject): string {
+	const category = itemCategory(item)
+	return stringValue(category['full_name'], stringValue(category['name'], '未知分类'))
+}
+
+function reportMetaText(item: UTSJSONObject): string {
+	let text = '毛利率 ' + percentText(stringField(item, 'gross_margin_rate'))
+	text = text + ' · 订单 ' + stringField(item, 'order_count', '0')
+	const warningCount = stringField(item, 'max_stock_warning_count', '0')
+	if (warningCount != '0') {
+		text = text + ' · 预警 ' + warningCount
+	}
+	return text
+}
+
+function growthText(item: UTSJSONObject): string {
+	const raw = item['sales_growth_rate']
+	if (raw == null) {
+		return '环比 -'
+	}
+	const rate = floatValue(raw, 0) * 100
+	if (rate > 0) {
+		return '环比 +' + rate.toFixed(1) + '%'
+	}
+	if (rate < 0) {
+		return '环比 ' + rate.toFixed(1) + '%'
+	}
+	return '环比 0.0%'
+}
+
+function growthClass(item: UTSJSONObject): string {
+	const raw = item['sales_growth_rate']
+	if (raw == null) {
+		return 'report-growth report-growth-flat'
+	}
+	const rate = floatValue(raw, 0)
+	if (rate > 0) {
+		return 'report-growth report-growth-up'
+	}
+	if (rate < 0) {
+		return 'report-growth report-growth-down'
+	}
+	return 'report-growth report-growth-flat'
+}
+
+function visibleItems(): UTSJSONObject[] {
+	if (reportItems.value.length <= renderLimit.value) {
+		return reportItems.value
+	}
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < renderLimit.value; index += 1) {
+		result.push(reportItems.value[index])
+	}
+	return result
+}
+
+function canShowMore(): boolean {
+	return reportItems.value.length > renderLimit.value
+}
+
+function showMore(): void {
+	renderLimit.value = renderLimit.value + 30
+}
+
+// ── 加载与交互 ───────────────────────────────────────────────────
+
+async function loadReport(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		const response = await getCategoryPeriodReport(periodType.value, 200)
+		reportData.value = response
+		reportItems.value = objectArrayValue(response['items'])
+		renderLimit.value = 30
+		hasLoadedOnce.value = true
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function setPeriodType(value: string): void {
+	if (periodType.value == value) {
+		return
+	}
+	periodType.value = value
+	loadReport()
+}
+
+function periodChipClass(value: string): string {
+	return periodType.value == value ? 'chip chip-active' : 'chip'
+}
+
+function periodChipTextClass(value: string): string {
+	return periodType.value == value ? 'chip-text chip-text-active' : 'chip-text'
+}
+
+function goAnalytics(item: UTSJSONObject): void {
+	const category = itemCategory(item)
+	const idText = stringValue(category['id'])
+	if (idText == '' || idText == '0') {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/category/analytics?id=' + idText + '&name=' + encodeURIComponent(stringValue(category['name'])),
+	})
+}
+
+onLoad(() => {
+	loadReport()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	background-color: #F4F6F8;
+}
+
+.page-content {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 60px;
+	background-color: #F4F6F8;
+}
+
+.state-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.state-card-error {
+	border-color: #FECACA;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	font-size: 14px;
+	line-height: 21px;
+	color: #64748B;
+	margin-top: 8px;
+}
+
+.state-btn {
+	height: 40px;
+	margin-top: 14px;
+	background-color: #0F766E;
+	border-radius: 12px;
+	border-width: 0px;
+}
+
+.state-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.card-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.card-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.card-title {
+	margin-top: 3px;
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.chip-row {
+	flex-direction: row;
+}
+
+.chip {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-left: 6px;
+}
+
+.chip-active {
+	background-color: #0F766E;
+}
+
+.chip-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.chip-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.metric-grid {
+	margin-top: 8px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.empty-state {
+	padding-top: 12px;
+	padding-bottom: 12px;
+	align-items: center;
+}
+
+.empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.report-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.report-index-wrap {
+	width: 26px;
+	align-items: center;
+}
+
+.report-index-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+	font-weight: bold;
+}
+
+.report-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.report-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.report-meta {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.report-side {
+	align-items: flex-end;
+}
+
+.report-amount {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.report-growth {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.report-growth-up {
+	color: #16A34A;
+}
+
+.report-growth-down {
+	color: #DC2626;
+}
+
+.report-growth-flat {
+	color: #94A3B8;
+}
+
+.expand-row {
+	margin-top: 8px;
+	align-items: center;
+	padding-top: 8px;
+}
+
+.expand-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F766E;
+	font-weight: bold;
+}
+</style>

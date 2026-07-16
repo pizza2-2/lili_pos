@@ -96,6 +96,9 @@ type Props = {
 	fixed?: boolean
 	backgroundColor?: string
 	homePath?: string
+	// 为 true 时返回键只发出 back 事件、不执行 navigateBack，
+	// 供页内钻取类页面拦截实现"逐层返回"
+	interceptBack?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -115,7 +118,8 @@ const props = withDefaults(defineProps<Props>(), {
 	filterText: '筛选',
 	fixed: true,
 	backgroundColor: '#FFFFFF',
-	homePath: '/pages/tabbar/products',
+	homePath: '/pages/tabbar/settings',
+	interceptBack: false,
 })
 
 const emit = defineEmits<{
@@ -164,6 +168,9 @@ function clearSearch() {
 
 function handleBack() {
 	emit('back')
+	if (props.interceptBack) {
+		return
+	}
 	uni.navigateBack({
 		delta: 1,
 		fail: () => {

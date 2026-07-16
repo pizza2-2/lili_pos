@@ -1,7 +1,10 @@
 <script lang="uts">
 	import { isAgreePrivacyState } from '@/store/global'
-	import { getAuthStateByStorageSync } from '@/store/auth'
+	import { authState, getAuthStateByStorageSync } from '@/store/auth'
 	import { routerPermission,removeRouterPermission } from '@/pkg/router/permission'	//路由拦截
+	import { initLogger, logError, stringifyError, setLogUploadEnabledProvider } from '@/pkg/util/logger.uts'	//远程日志
+	import { isAutoCheckUpdateEnabled, isLogUploadEnabled } from '@/pkg/util/settings.uts'	//应用设置
+	import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'	//应用升级检查
 	
 	// #ifdef APP-ANDROID
 	import { registerOSPermission,unregisterOSPermission } from '@/pkg/util/osPermission'	//系统权限申请相关
@@ -20,6 +23,28 @@
 			// #endif
 			getAuthStateByStorageSync() //同步从本地存储中获取authState的值
 			routerPermission()			//添加路由拦截权限
+			// 远程日志：缓冲上报到 Django，身份取当前登录用户；上报开关跟随应用设置
+			setLogUploadEnabledProvider((): boolean => isLogUploadEnabled())
+			initLogger((): string => {
+				const info = authState.userInfo
+				if (info != null && info.name != '') {
+					return 'user:' + info.id.toString() + ' ' + info.name
+				}
+				return ''
+			})
+
+			// 启动自动检查更新（应用设置可关闭）；静默执行，有新版本时由升级中心弹窗
+			if (isAutoCheckUpdateEnabled()) {
+				setTimeout(() => {
+					try {
+						checkUpdate().catch((_err: any | null) => {
+							// 已是最新版或检查失败都保持静默，手动检查入口在「我的」页
+						})
+					} catch (e) {
+						console.log('[App] auto checkUpdate error:', e)
+					}
+				}, 3000)
+			}
 			
 			// #ifdef APP
 			// 监听同意隐私政策状态变化
@@ -71,7 +96,9 @@
 		},
 		// #endif
 		onError: function(err: any){
-			console.log(err)	//监听全局错误，可以在这里实现错误上报
+			console.log(err)
+			// 全局未捕获错误上报到 Django（pkg/util/logger.uts）
+			logError('app.onError', stringifyError(err))
 		},
 		onExit: function () {
 			console.log('App Exit')

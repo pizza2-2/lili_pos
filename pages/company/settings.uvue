@@ -1,0 +1,265 @@
+<template>
+	<view class="page">
+		<lili-universal-filter title="公司信息" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/tabbar/mine" backgroundColor="#EEF2F7" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="loadError != ''" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ loadError }}</text>
+					<view class="retry-btn" @click="loadSettings"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">基本资料</text>
+					<view class="field-row">
+						<text class="field-label">公司名称</text>
+						<input class="field-input" :value="companyName" placeholder="公司名称" @input="onNameInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">公司编码</text>
+						<text class="field-static">{{ companyCode }}</text>
+					</view>
+					<view class="field-row">
+						<text class="field-label">NIP</text>
+						<input class="field-input" :value="nip" placeholder="10 位数字或带连字符格式" @input="onNipInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">街道地址</text>
+						<input class="field-input" :value="address" placeholder="街道地址" @input="onAddressInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">邮编</text>
+						<input class="field-input" :value="postalCode" placeholder="例如 00-001" @input="onPostalInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">城市</text>
+						<input class="field-input" :value="city" placeholder="城市" @input="onCityInput" />
+					</view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">KSeF / 财政部凭据</text>
+					<text class="card-hint">{{ hasMinistryToken ? '已配置 Token（出于安全不回显）。输入新值保存即可覆盖。' : '尚未配置财政部 Token。' }}</text>
+					<view class="field-row">
+						<text class="field-label">Token</text>
+						<input class="field-input" :value="ministryToken" placeholder="输入新 Token 覆盖，留空保持不变" :password="true" @input="onTokenInput" />
+					</view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">名称翻译</text>
+					<view class="field-row">
+						<text class="field-label">启用翻译</text>
+						<switch :checked="translationEnabled" @change="onTranslationToggle" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">服务商</text>
+						<view class="backend-options">
+							<view
+								v-for="backend in translationBackends"
+								:key="backendValue(backend)"
+								:class="translationBackend == backendValue(backend) ? 'backend-chip backend-chip-active' : 'backend-chip'"
+								@click="selectBackend(backendValue(backend))"
+							>
+								<text :class="translationBackend == backendValue(backend) ? 'backend-chip-text backend-chip-text-active' : 'backend-chip-text'">{{ backendLabel(backend) }}</text>
+							</view>
+						</view>
+					</view>
+					<text class="card-hint">{{ hasTranslationKey ? '已配置翻译 API Key（不回显）。输入新值保存即可覆盖。' : '尚未配置翻译 API Key。' }}</text>
+					<view class="field-row">
+						<text class="field-label">API Key</text>
+						<input class="field-input" :value="translationApiKey" placeholder="输入新 Key 覆盖，留空保持不变" :password="true" @input="onTranslationKeyInput" />
+					</view>
+				</view>
+
+				<view class="card">
+					<text class="card-title">POS 收银配置</text>
+					<view class="field-row">
+						<text class="field-label">名称来源</text>
+						<view class="backend-options">
+							<view
+								v-for="source in posNameSources"
+								:key="backendValue(source)"
+								:class="posNameSource == backendValue(source) ? 'backend-chip backend-chip-active' : 'backend-chip'"
+								@click="selectPosNameSource(backendValue(source))"
+							>
+								<text :class="posNameSource == backendValue(source) ? 'backend-chip-text backend-chip-text-active' : 'backend-chip-text'">{{ backendLabel(source) }}</text>
+							</view>
+						</view>
+					</view>
+					<text class="card-hint">收银端商品名称（同步与小票）的取值来源；所选来源为空时自动回退到分类英文名、Kasa 分类英文名。保存后收银端会在下次同步时自动刷新全部名称。</text>
+				</view>
+
+				<view class="save-btn" @click="handleSave">
+					<text class="save-btn-text">保存设置</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { getCompanySettings, updateCompanySettings } from '@/pkg/api/modules/accounts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const loadError = ref('')
+const submitting = ref(false)
+
+const companyName = ref('')
+const companyCode = ref('')
+const nip = ref('')
+const address = ref('')
+const postalCode = ref('')
+const city = ref('')
+const ministryToken = ref('')
+const hasMinistryToken = ref(false)
+const translationEnabled = ref(false)
+const translationBackend = ref('')
+const translationApiKey = ref('')
+const hasTranslationKey = ref(false)
+const translationBackends = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const posNameSource = ref('category')
+const posNameSources = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const message = stringField(parsed!, 'message')
+			if (message != '') return message
+		}
+	} catch (parseError) {
+		return text
+	}
+	return text
+}
+
+function toObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || !text.startsWith('[')) return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text!)
+	return parsed == null ? ([] as UTSJSONObject[]) : parsed!
+}
+
+function backendValue(backend: UTSJSONObject): string { return stringField(backend, 'value') }
+function backendLabel(backend: UTSJSONObject): string { return stringField(backend, 'label') }
+
+function onNameInput(event: UniInputEvent) { companyName.value = event.detail.value }
+function onNipInput(event: UniInputEvent) { nip.value = event.detail.value }
+function onAddressInput(event: UniInputEvent) { address.value = event.detail.value }
+function onPostalInput(event: UniInputEvent) { postalCode.value = event.detail.value }
+function onCityInput(event: UniInputEvent) { city.value = event.detail.value }
+function onTokenInput(event: UniInputEvent) { ministryToken.value = event.detail.value }
+function onTranslationKeyInput(event: UniInputEvent) { translationApiKey.value = event.detail.value }
+function onTranslationToggle(event: UniSwitchChangeEvent) { translationEnabled.value = event.detail.value }
+function selectBackend(value: string) { translationBackend.value = value }
+function selectPosNameSource(value: string) { posNameSource.value = value }
+
+async function loadSettings() {
+	loadError.value = ''
+	try {
+		const data = await getCompanySettings()
+		companyName.value = stringField(data, 'name')
+		companyCode.value = stringField(data, 'code', '-')
+		nip.value = stringField(data, 'nip')
+		address.value = stringField(data, 'address')
+		postalCode.value = stringField(data, 'postal_code')
+		city.value = stringField(data, 'city')
+		hasMinistryToken.value = stringField(data, 'has_ministry_of_finance_token') == 'true'
+		translationEnabled.value = stringField(data, 'translation_enabled') == 'true'
+		translationBackend.value = stringField(data, 'translation_backend')
+		hasTranslationKey.value = stringField(data, 'has_translation_api_key') == 'true'
+		translationBackends.value = toObjectArray(data['translation_backends'])
+		posNameSource.value = stringField(data, 'pos_name_source', 'category')
+		posNameSources.value = toObjectArray(data['pos_name_sources'])
+	} catch (error) {
+		loadError.value = parseErrorMessage(error, '公司设置加载失败')
+	}
+}
+
+async function executeSave() {
+	if (submitting.value) return
+	if (companyName.value.trim() == '') {
+		uni.showToast({ title: '公司名称不能为空', icon: 'none', duration: 3500 })
+		return
+	}
+	submitting.value = true
+	uni.showLoading({ title: '保存中...', mask: true })
+	try {
+		const body = {
+			name: companyName.value.trim(),
+			nip: nip.value.trim(),
+			address: address.value.trim(),
+			postal_code: postalCode.value.trim(),
+			city: city.value.trim(),
+			translation_enabled: translationEnabled.value,
+			translation_backend: translationBackend.value,
+			pos_name_source: posNameSource.value,
+		} as UTSJSONObject
+		// 凭据字段：留空表示保持不变，只有输入了新值才提交
+		if (ministryToken.value.trim() != '') {
+			body['ministry_of_finance_token'] = ministryToken.value.trim()
+		}
+		if (translationApiKey.value.trim() != '') {
+			body['translation_api_key'] = translationApiKey.value.trim()
+		}
+		const data = await updateCompanySettings(body)
+		hasMinistryToken.value = stringField(data, 'has_ministry_of_finance_token') == 'true'
+		hasTranslationKey.value = stringField(data, 'has_translation_api_key') == 'true'
+		ministryToken.value = ''
+		translationApiKey.value = ''
+		uni.showToast({ title: '公司设置已保存', icon: 'success' })
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '公司设置保存失败'))
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+function handleSave() {
+	executeSave()
+}
+
+onLoad(() => { loadSettings() })
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.card { background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.card-hint { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 4px; }
+.field-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.field-label { width: 84px; font-size: 14px; line-height: 20px; color: #475569; }
+.field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
+.field-static { flex: 1; font-size: 14px; line-height: 20px; color: #0F172A; }
+.backend-options { flex: 1; flex-direction: row; flex-wrap: wrap; }
+.backend-chip { min-height: 32px; border-radius: 8px; padding-left: 12px; padding-right: 12px; padding-top: 5px; padding-bottom: 5px; margin-right: 8px; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
+.backend-chip-active { background-color: #E0F2FE; border-color: #0284C7; }
+.backend-chip-text { font-size: 13px; color: #4B5563; }
+.backend-chip-text-active { color: #075985; font-weight: bold; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.save-btn { margin-top: 6px; height: 46px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
+.save-btn-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
+</style>

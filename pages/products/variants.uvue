@@ -1,0 +1,1044 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="规格变体"
+			searchPlaceholder="输入变体SKU、条码"
+			:searchValue="keyword"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="false"
+			:showHome="false"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+		/>
+
+		<view v-if="productNameParam != '' || basePriceParam != ''" class="product-bar">
+			<text class="product-bar-name">{{ productNameParam }}</text>
+			<text v-if="basePriceParam != ''" class="product-bar-price">基础售价 {{ basePriceParam }}</text>
+		</view>
+
+		<scroll-view class="page-scroll" scroll-y="true">
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadVariants">
+						<text class="retry-btn-text">重新加载</text>
+					</view>
+				</view>
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="name"
+					subtitleField="skuText"
+					metaField="barcodeText"
+					tagField="tags"
+					:tagColorMap="tagColorMap"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载规格变体"
+					:keepContentOnLoading="true"
+					inlineLoadingText="规格变体刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					:showFloatingAdd="true"
+					floatingAddText="生成变体"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+					@floating-add="openGenerator"
+				/>
+			</view>
+		</scroll-view>
+
+		<!-- 变体生成器：按属性值勾选组合，后端笛卡尔积生成 -->
+		<page-container
+			:show="generatorVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closeGenerator"
+		>
+			<view class="sheet-panel">
+				<view class="sheet-handle"></view>
+				<view class="sheet-head">
+					<view>
+						<text class="sheet-title">生成规格变体</text>
+						<text class="sheet-subtitle">勾选属性值，自动组合生成，已存在的组合会跳过</text>
+					</view>
+					<view class="sheet-close" @click="closeGenerator">
+						<text class="sheet-close-text">关闭</text>
+					</view>
+				</view>
+
+				<scroll-view class="generator-scroll" scroll-y="true">
+					<view v-if="attributeTypesLoading" class="generator-state">
+						<text class="generator-state-text">正在加载属性字典...</text>
+					</view>
+					<view v-else-if="attributeTypesError != ''" class="generator-state">
+						<text class="generator-state-text">{{ attributeTypesError }}</text>
+						<view class="generator-retry" @click="loadAttributeGroups">
+							<text class="generator-retry-text">重试</text>
+						</view>
+					</view>
+					<view v-else-if="attributeGroups.length == 0" class="generator-state">
+						<text class="generator-state-text">暂无属性字典，请先到「功能 → 商品属性」维护属性类型和属性值</text>
+					</view>
+					<view v-else>
+						<view v-for="group in attributeGroups" :key="'attr-group-' + group.id" class="generator-group">
+							<text class="generator-group-title">{{ group.name }}</text>
+							<view class="generator-options">
+								<view
+									v-for="option in group.options"
+									:key="'attr-value-' + option.id"
+									:class="isValueSelected(option.id) ? 'generator-option generator-option-active' : 'generator-option'"
+									@click="toggleValueSelection(option.id)"
+								>
+									<view v-if="option.colorHex != ''" class="generator-option-dot" :style="'background-color:' + option.colorHex"></view>
+									<text :class="isValueSelected(option.id) ? 'generator-option-text generator-option-text-active' : 'generator-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+
+				<view class="generator-summary">
+					<text :class="combinationCount > 200 ? 'generator-summary-text generator-summary-warn' : 'generator-summary-text'">{{ generatorSummaryText }}</text>
+				</view>
+
+				<view class="sheet-actions">
+					<view class="sheet-secondary-btn" @click="closeGenerator">
+						<text class="sheet-secondary-text">取消</text>
+					</view>
+					<view :class="canGenerate ? 'sheet-primary-btn' : 'sheet-primary-btn sheet-primary-btn-disabled'" @click="submitGenerate">
+						<text class="sheet-primary-text">{{ generating ? '生成中...' : '生成变体' }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
+
+		<!-- 变体改价：设置或清除价格覆盖 -->
+		<page-container
+			:show="priceEditorVisible"
+			position="bottom"
+			:round="true"
+			:overlay="true"
+			:duration="240"
+			overlay-style="background-color: rgba(15, 23, 42, 0.42);"
+			custom-style="background-color: #FFFFFF;"
+			@clickoverlay="closePriceEditor"
+		>
+			<view class="sheet-panel">
+				<view class="sheet-handle"></view>
+				<view class="sheet-head">
+					<view>
+						<text class="sheet-title">变体改价</text>
+						<text class="sheet-subtitle">{{ priceEditorLabel }}</text>
+					</view>
+					<view class="sheet-close" @click="closePriceEditor">
+						<text class="sheet-close-text">关闭</text>
+					</view>
+				</view>
+
+				<view class="price-field">
+					<text class="price-label">覆盖售价</text>
+					<input
+						class="price-input"
+						type="digit"
+						:value="priceEditorValue"
+						placeholder="留空表示跟随商品基础售价"
+						@input="handlePriceInput"
+					/>
+					<text class="price-hint">{{ priceEditorHint }}</text>
+				</view>
+
+				<view class="sheet-actions">
+					<view class="sheet-secondary-btn" @click="closePriceEditor">
+						<text class="sheet-secondary-text">取消</text>
+					</view>
+					<view class="sheet-primary-btn" @click="submitPriceEditor">
+						<text class="sheet-primary-text">{{ priceSaving ? '保存中...' : '保存' }}</text>
+					</view>
+				</view>
+			</view>
+		</page-container>
+
+		<lili-print-confirm-popup
+			:visible="printPopupVisible"
+			templateType="product_label"
+			:printData="variantPrintData"
+			@update:visible="handlePrintPopupVisibleChange"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
+import {
+	deleteProductConfig,
+	generateProductVariants,
+	getProductConfigList,
+	patchProductConfig,
+	attributeTypesPath,
+	productVariantsPath,
+} from '@/pkg/api/modules/products.uts'
+import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type AttributeValueOption = {
+	id: string
+	label: string
+	colorHex: string
+}
+
+type AttributeTypeGroup = {
+	id: string
+	name: string
+	options: AttributeValueOption[]
+}
+
+const productIdParam = ref('')
+const productNameParam = ref('')
+const basePriceParam = ref('')
+
+const keyword = ref('')
+const isLoading = ref(false)
+const errorMessage = ref('')
+const items = ref<UTSJSONObject[]>([])
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(getListPageSize())
+
+const generatorVisible = ref(false)
+const attributeTypesLoading = ref(false)
+const attributeTypesError = ref('')
+const attributeGroups = ref<AttributeTypeGroup[]>([])
+// 数字键装箱陷阱：集合查找一律用字符串 id
+const selectedValueIds = ref<string[]>([])
+const generating = ref(false)
+
+const priceEditorVisible = ref(false)
+const priceEditorVariantId = ref('')
+const priceEditorLabel = ref('')
+const priceEditorValue = ref('')
+const priceSaving = ref(false)
+
+const printPopupVisible = ref(false)
+const variantPrintData = ref<UTSJSONObject>({} as UTSJSONObject)
+
+const productListRefreshStorageKey = 'refresh:pages:products:index'
+const variantCountRefreshStorageKey = 'refresh:pages:products:variant-count'
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'price', text: '改价' } as UTSJSONObject,
+	{ key: 'toggle-status', text: '启用/停用' } as UTSJSONObject,
+	{ key: 'print', text: '打印标签' } as UTSJSONObject,
+	{ key: 'delete', text: '删除' } as UTSJSONObject,
+	{ key: 'reload', text: '刷新' } as UTSJSONObject,
+])
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'priceText', label: '售价：' } as UTSJSONObject,
+	{ key: 'salesText', label: '销量：' } as UTSJSONObject,
+])
+
+const tagColorMap = ref<UTSJSONObject>({
+	草稿: 'info',
+	启用: 'success',
+	停用: 'danger',
+	停产: 'warning',
+})
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function getStringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
+	const value = obj[key]
+	const text = stringValue(value)
+	return text == '' ? fallback : text
+}
+
+function getNumberField(obj: UTSJSONObject, key: string): number {
+	const value = obj[key]
+	if (value == null) return 0
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function parseErrorMessage(error: any | null, fallback: string): string {
+	const latestMessage = takeLatestResponseMessage()
+	if (latestMessage != '') return latestMessage
+	if (error == null) return fallback
+	const text = stringValue(error)
+	return text == '' || text == '[object Object]' ? fallback : text
+}
+
+function parseObjectArrayField(obj: UTSJSONObject, key: string): UTSJSONObject[] {
+	const raw = obj[key]
+	if (raw == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(raw)
+	if (text == null || text == '' || !text.startsWith('[')) return [] as UTSJSONObject[]
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) return [] as UTSJSONObject[]
+		return parsed!
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function markProductListRefreshNeeded() {
+	uni.setStorageSync(productListRefreshStorageKey, '1')
+	uni.setStorageSync(variantCountRefreshStorageKey, '1')
+}
+
+function variantComboText(item: UTSJSONObject): string {
+	const displayItems = parseObjectArrayField(item, 'attribute_values_display')
+	const parts: string[] = []
+	for (let index = 0; index < displayItems.length; index += 1) {
+		const value = getStringField(displayItems[index], 'value')
+		if (value != '') parts.push(value)
+	}
+	return parts.join(' / ')
+}
+
+function variantStatusText(status: string): string {
+	if (status == 'ACTIVE') return '启用'
+	if (status == 'INACTIVE') return '停用'
+	if (status == 'DISCONTINUED') return '停产'
+	return '草稿'
+}
+
+function variantPriceText(item: UTSJSONObject): string {
+	const effective = getStringField(item, 'effective_price', '-')
+	const override = item['price_override']
+	if (override == null) {
+		return effective + '（跟随商品）'
+	}
+	return effective + '（覆盖）'
+}
+
+function itemToListItem(item: UTSJSONObject): UTSJSONObject {
+	const combo = variantComboText(item)
+	const sku = getStringField(item, 'sku', '-')
+	const status = getStringField(item, 'status')
+	const tags: string[] = []
+	tags.push(variantStatusText(status))
+	return {
+		id: getStringField(item, 'id'),
+		rawId: getStringField(item, 'id'),
+		name: combo == '' ? sku : combo,
+		skuText: 'SKU：' + sku,
+		barcodeText: '条码：' + getStringField(item, 'barcode', '-'),
+		priceText: variantPriceText(item),
+		salesText: getStringField(item, 'total_sales_quantity', '0'),
+		tags: tags,
+	} as UTSJSONObject
+}
+
+function findVariantById(id: string): UTSJSONObject | null {
+	for (let index = 0; index < items.value.length; index += 1) {
+		const item = items.value[index]
+		if (getStringField(item, 'id') == id) {
+			return item
+		}
+	}
+	return null
+}
+
+function applyListResponse(response: UTSJSONObject) {
+	const rawResults = response['results']
+	if (rawResults == null) {
+		items.value = [] as UTSJSONObject[]
+	} else {
+		items.value = rawResults as UTSJSONObject[]
+	}
+	totalCount.value = getNumberField(response, 'total_count')
+	totalPages.value = getNumberField(response, 'total_pages')
+	currentPage.value = getNumberField(response, 'current_page')
+	pageSize.value = getNumberField(response, 'page_size')
+	if (totalPages.value <= 0) totalPages.value = 1
+	if (currentPage.value <= 0) currentPage.value = 1
+	if (pageSize.value <= 0) pageSize.value = 20
+}
+
+async function loadVariants() {
+	if (isLoading.value) return
+	if (productIdParam.value == '') return
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const extra = {
+			product: productIdParam.value,
+		} as UTSJSONObject
+		const response = await getProductConfigList(productVariantsPath(), keyword.value == '' ? null : keyword.value, currentPage.value, pageSize.value, extra)
+		applyListResponse(response)
+	} catch (error) {
+		items.value = [] as UTSJSONObject[]
+		totalCount.value = 0
+		totalPages.value = 1
+		currentPage.value = 1
+		errorMessage.value = parseErrorMessage(error, '规格变体加载失败')
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function handleSearchInput(value: string) {
+	keyword.value = value
+}
+
+function handleSearchConfirm(value: string) {
+	keyword.value = value
+	currentPage.value = 1
+	loadVariants()
+}
+
+function handleSearchClear() {
+	keyword.value = ''
+	currentPage.value = 1
+	loadVariants()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadVariants()
+}
+
+// ── 属性字典 / 生成器 ────────────────────────────────
+
+function buildAttributeGroups(rawTypes: UTSJSONObject[]): AttributeTypeGroup[] {
+	const groups: AttributeTypeGroup[] = []
+	for (let typeIndex = 0; typeIndex < rawTypes.length; typeIndex += 1) {
+		const rawType = rawTypes[typeIndex]
+		const rawValues = parseObjectArrayField(rawType, 'values')
+		const options: AttributeValueOption[] = []
+		for (let valueIndex = 0; valueIndex < rawValues.length; valueIndex += 1) {
+			const rawValue = rawValues[valueIndex]
+			const valueId = getStringField(rawValue, 'id')
+			if (valueId == '') continue
+			options.push({
+				id: valueId,
+				label: getStringField(rawValue, 'value', '-'),
+				colorHex: getStringField(rawValue, 'color_hex'),
+			} as AttributeValueOption)
+		}
+		if (options.length == 0) continue
+		groups.push({
+			id: getStringField(rawType, 'id'),
+			name: getStringField(rawType, 'name', '未命名属性'),
+			options: options,
+		} as AttributeTypeGroup)
+	}
+	return groups
+}
+
+async function loadAttributeGroups() {
+	if (attributeTypesLoading.value) return
+	attributeTypesLoading.value = true
+	attributeTypesError.value = ''
+	try {
+		const response = await getProductConfigList(attributeTypesPath(), null, 1, 100)
+		const rawResults = response['results']
+		const rawTypes = rawResults == null ? ([] as UTSJSONObject[]) : (rawResults as UTSJSONObject[])
+		attributeGroups.value = buildAttributeGroups(rawTypes)
+	} catch (error) {
+		attributeGroups.value = [] as AttributeTypeGroup[]
+		attributeTypesError.value = parseErrorMessage(error, '属性字典加载失败')
+	} finally {
+		attributeTypesLoading.value = false
+	}
+}
+
+function isValueSelected(valueId: string): boolean {
+	return selectedValueIds.value.includes(valueId)
+}
+
+function toggleValueSelection(valueId: string) {
+	const current = selectedValueIds.value
+	if (current.includes(valueId)) {
+		const next: string[] = []
+		for (let index = 0; index < current.length; index += 1) {
+			if (current[index] != valueId) next.push(current[index])
+		}
+		selectedValueIds.value = next
+	} else {
+		const next = current.slice(0)
+		next.push(valueId)
+		selectedValueIds.value = next
+	}
+}
+
+const combinationCount = computed((): number => {
+	let total = 1
+	let anySelected = false
+	for (let groupIndex = 0; groupIndex < attributeGroups.value.length; groupIndex += 1) {
+		const group = attributeGroups.value[groupIndex]
+		let selectedCount = 0
+		for (let optionIndex = 0; optionIndex < group.options.length; optionIndex += 1) {
+			if (selectedValueIds.value.includes(group.options[optionIndex].id)) {
+				selectedCount += 1
+			}
+		}
+		if (selectedCount > 0) {
+			anySelected = true
+			total = total * selectedCount
+		}
+	}
+	return anySelected ? total : 0
+})
+
+const canGenerate = computed((): boolean => {
+	return combinationCount.value > 0 && combinationCount.value <= 200 && !generating.value
+})
+
+const generatorSummaryText = computed((): string => {
+	const count = combinationCount.value
+	if (count <= 0) return '请至少勾选一个属性值'
+	if (count > 200) return '将生成 ' + count + ' 个组合，超出单次 200 个上限，请减少勾选'
+	return '已选 ' + selectedValueIds.value.length + ' 个属性值，将生成 ' + count + ' 个组合'
+})
+
+function openGenerator() {
+	generatorVisible.value = true
+	if (attributeGroups.value.length == 0 && !attributeTypesLoading.value) {
+		loadAttributeGroups()
+	}
+}
+
+function closeGenerator() {
+	generatorVisible.value = false
+}
+
+async function submitGenerate() {
+	if (!canGenerate.value) {
+		if (combinationCount.value <= 0) {
+			uni.showToast({ title: '请至少勾选一个属性值', icon: 'none', duration: 3500 })
+		} else if (combinationCount.value > 200) {
+			uni.showToast({ title: '一次最多生成 200 个组合', icon: 'none', duration: 3500 })
+		}
+		return
+	}
+	const ids: number[] = []
+	for (let index = 0; index < selectedValueIds.value.length; index += 1) {
+		const parsed = parseInt(selectedValueIds.value[index])
+		if (!isNaN(parsed)) ids.push(parsed)
+	}
+	if (ids.length == 0) {
+		uni.showToast({ title: '请至少勾选一个属性值', icon: 'none', duration: 3500 })
+		return
+	}
+	generating.value = true
+	try {
+		const result = await generateProductVariants(productIdParam.value, ids)
+		const created = getNumberField(result, 'created_count')
+		const skipped = getNumberField(result, 'skipped_count')
+		uni.showToast({
+			title: '新增 ' + created + ' 个，跳过已存在 ' + skipped + ' 个',
+			icon: 'none',
+			duration: 3500,
+		})
+		generatorVisible.value = false
+		selectedValueIds.value = [] as string[]
+		markProductListRefreshNeeded()
+		currentPage.value = 1
+		loadVariants()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '变体生成失败'))
+	} finally {
+		generating.value = false
+	}
+}
+
+// ── 改价 ────────────────────────────────────────────
+
+function openPriceEditor(itemObject: UTSJSONObject) {
+	const id = getStringField(itemObject, 'rawId', getStringField(itemObject, 'id'))
+	if (id == '') return
+	const raw = findVariantById(id)
+	if (raw == null) return
+	priceEditorVariantId.value = id
+	const combo = variantComboText(raw)
+	priceEditorLabel.value = combo == '' ? getStringField(raw, 'sku', '-') : combo
+	const override = raw['price_override']
+	priceEditorValue.value = override == null ? '' : stringValue(override)
+	priceEditorVisible.value = true
+}
+
+function closePriceEditor() {
+	priceEditorVisible.value = false
+}
+
+function handlePriceInput(event: any) {
+	const inputEvent = event as UniInputEvent
+	priceEditorValue.value = inputEvent.detail.value
+}
+
+const priceEditorHint = computed((): string => {
+	if (basePriceParam.value == '') return '留空并保存 = 清除覆盖，跟随商品基础售价'
+	return '留空并保存 = 清除覆盖，跟随商品基础售价 ' + basePriceParam.value
+})
+
+async function submitPriceEditor() {
+	if (priceSaving.value) return
+	const idText = priceEditorVariantId.value
+	if (idText == '') return
+	const body = {} as UTSJSONObject
+	const text = priceEditorValue.value.trim()
+	if (text == '') {
+		body['price_override'] = null
+	} else {
+		const parsed = parseFloat(text)
+		if (isNaN(parsed) || parsed < 0) {
+			uni.showToast({ title: '请输入有效价格', icon: 'none', duration: 3500 })
+			return
+		}
+		body['price_override'] = parsed.toFixed(2)
+	}
+	priceSaving.value = true
+	try {
+		await patchProductConfig(productVariantsPath(), idText, body)
+		uni.showToast({ title: '价格已保存', icon: 'success' })
+		priceEditorVisible.value = false
+		markProductListRefreshNeeded()
+		loadVariants()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '价格保存失败'))
+	} finally {
+		priceSaving.value = false
+	}
+}
+
+// ── 标签打印 ─────────────────────────────────────────
+
+function openPrintPopup(id: string) {
+	const raw = findVariantById(id)
+	if (raw == null) return
+	const combo = variantComboText(raw)
+	const baseName = productNameParam.value == '' ? getStringField(raw, 'product_name') : productNameParam.value
+	const name = combo == '' ? baseName : baseName + ' - ' + combo
+	const price = getStringField(raw, 'effective_price', '0.00')
+	const data = {} as UTSJSONObject
+	data['name'] = name
+	data['name_cn'] = name
+	data['name_en'] = ''
+	data['name_other'] = ''
+	data['price'] = price
+	data['base_sales_price'] = price
+	data['discount_price'] = price
+	data['barcode'] = getStringField(raw, 'barcode')
+	data['sku'] = getStringField(raw, 'sku')
+	data['specification'] = combo
+	data['quantity'] = '1'
+	variantPrintData.value = data
+	printPopupVisible.value = true
+}
+
+function handlePrintPopupVisibleChange(value: boolean) {
+	printPopupVisible.value = value
+}
+
+// ── 状态切换 / 删除 ──────────────────────────────────
+
+async function toggleVariantStatus(id: string) {
+	const raw = findVariantById(id)
+	if (raw == null) return
+	const status = getStringField(raw, 'status')
+	const nextStatus = status == 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+	try {
+		await patchProductConfig(productVariantsPath(), id, { status: nextStatus } as UTSJSONObject)
+		uni.showToast({ title: nextStatus == 'ACTIVE' ? '已启用' : '已停用', icon: 'success' })
+		markProductListRefreshNeeded()
+		loadVariants()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '状态修改失败'))
+	}
+}
+
+async function confirmDeleteVariant(id: string) {
+	try {
+		await deleteProductConfig(productVariantsPath(), id)
+		uni.showToast({ title: takeLatestResponseMessage('删除成功'), icon: 'success' })
+		markProductListRefreshNeeded()
+		loadVariants()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '删除失败'))
+	}
+}
+
+function resolveListClickItem(payload: UTSJSONObject): UTSJSONObject {
+	const wrappedItem = payload['item']
+	if (wrappedItem != null) {
+		return wrappedItem as UTSJSONObject
+	}
+	return payload
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	openPriceEditor(resolveListClickItem(payload))
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const key = getStringField(action as UTSJSONObject, 'key')
+	const itemObject = item as UTSJSONObject
+	const id = getStringField(itemObject, 'rawId')
+	if (key == 'price') {
+		openPriceEditor(itemObject)
+		return
+	}
+	if (key == 'toggle-status') {
+		if (id != '') toggleVariantStatus(id)
+		return
+	}
+	if (key == 'print') {
+		if (id != '') openPrintPopup(id)
+		return
+	}
+	if (key == 'delete') {
+		if (id == '') return
+		uni.showModal({
+			title: '删除变体',
+			content: '确定删除这个规格变体吗？',
+			success: (res) => {
+				if (res.confirm) confirmDeleteVariant(id)
+			},
+		})
+		return
+	}
+	if (key == 'reload') {
+		loadVariants()
+	}
+}
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	if (keyword.value != '') return '没有匹配的规格变体'
+	return '暂无规格变体，点击右下角生成'
+})
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < items.value.length; index += 1) {
+		result.push(itemToListItem(items.value[index]))
+	}
+	return result
+})
+
+onLoad((event: OnLoadOptions) => {
+	const productValue = event['product']
+	productIdParam.value = productValue == null ? '' : (productValue as string)
+	const nameValue = event['name']
+	if (nameValue != null) {
+		const nameText = nameValue as string
+		let decoded = ''
+		try {
+			decoded = stringValue(decodeURIComponent(nameText))
+		} catch (error) {
+			decoded = ''
+		}
+		productNameParam.value = decoded == '' ? nameText : decoded
+	}
+	const basePriceValue = event['base_price']
+	basePriceParam.value = basePriceValue == null ? '' : (basePriceValue as string)
+	if (productIdParam.value == '') {
+		uni.showToast({ title: '缺少商品ID', icon: 'none', duration: 3500 })
+		return
+	}
+	loadVariants()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+.product-bar {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	background-color: #FFFFFF;
+	padding: 10px 14px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #E2E8F0;
+}
+.product-bar-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	flex: 1;
+}
+.product-bar-price {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-left: 8px;
+}
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+.page-content {
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 6px;
+	padding-bottom: 96px;
+}
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 18px;
+	margin-bottom: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+.retry-btn-text {
+	font-size: 14px;
+	line-height: 14px;
+	color: #FFFFFF;
+}
+.sheet-panel {
+	background-color: #FFFFFF;
+	border-top-left-radius: 16px;
+	border-top-right-radius: 16px;
+	padding: 12px 14px 20px 14px;
+}
+.sheet-handle {
+	width: 40px;
+	height: 4px;
+	border-radius: 2px;
+	background-color: #CBD5E1;
+	align-self: center;
+	margin-bottom: 10px;
+}
+.sheet-head {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 10px;
+}
+.sheet-title {
+	font-size: 17px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+}
+.sheet-subtitle {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 2px;
+}
+.sheet-close {
+	padding: 6px 10px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+}
+.sheet-close-text {
+	font-size: 13px;
+	color: #475569;
+}
+.generator-scroll {
+	height: 320px;
+}
+.generator-state {
+	padding: 30px 10px;
+	align-items: center;
+}
+.generator-state-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #64748B;
+	text-align: center;
+}
+.generator-retry {
+	margin-top: 12px;
+	height: 36px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 16px;
+	padding-right: 16px;
+	align-items: center;
+	justify-content: center;
+}
+.generator-retry-text {
+	font-size: 13px;
+	color: #FFFFFF;
+}
+.generator-group {
+	margin-bottom: 12px;
+}
+.generator-group-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-bottom: 8px;
+}
+.generator-options {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.generator-option {
+	height: 34px;
+	border-radius: 8px;
+	padding-left: 12px;
+	padding-right: 12px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+.generator-option-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 5px;
+	margin-right: 6px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: rgba(15, 23, 42, 0.15);
+}
+.generator-option-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+.generator-option-text {
+	font-size: 13px;
+	color: #475569;
+}
+.generator-option-text-active {
+	color: #FFFFFF;
+}
+.generator-summary {
+	padding: 8px 2px;
+}
+.generator-summary-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #475569;
+}
+.generator-summary-warn {
+	color: #B42318;
+}
+.sheet-actions {
+	flex-direction: row;
+	margin-top: 8px;
+}
+.sheet-secondary-btn {
+	flex: 1;
+	height: 44px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5E1;
+	align-items: center;
+	justify-content: center;
+	margin-right: 10px;
+}
+.sheet-secondary-text {
+	font-size: 15px;
+	color: #334155;
+}
+.sheet-primary-btn {
+	flex: 1;
+	height: 44px;
+	border-radius: 10px;
+	background-color: #0F172A;
+	align-items: center;
+	justify-content: center;
+}
+.sheet-primary-btn-disabled {
+	background-color: #94A3B8;
+}
+.sheet-primary-text {
+	font-size: 15px;
+	color: #FFFFFF;
+}
+.price-field {
+	margin-bottom: 12px;
+}
+.price-label {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-bottom: 8px;
+}
+.price-input {
+	height: 44px;
+	border-radius: 10px;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding-left: 12px;
+	padding-right: 12px;
+	font-size: 15px;
+	color: #0F172A;
+}
+.price-hint {
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	margin-top: 6px;
+}
+</style>

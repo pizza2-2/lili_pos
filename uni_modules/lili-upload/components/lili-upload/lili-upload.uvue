@@ -41,6 +41,7 @@
 </template>
 
 <script setup lang="uts">
+import { compressImageForUpload } from '@/pkg/util/imageCompress.uts'
 import liliPopup from '../../../lili-popup/components/lili-popup/lili-popup.uvue'
 import { deleteMediaFile } from '@/pkg/api/modules/media.uts'
 
@@ -304,30 +305,33 @@ function endUploading() {
 function uploadImage(path: string, index: number) {
 	console.log('lili-upload uploadImage start:', index, path)
 	beginUploading()
-	try {
-		uni.uploadFile({
-			url: props.action,
-			filePath: path,
-			name: props.name,
-			header: props.headers,
-			formData: props.formData,
-			success: (res) => {
-				console.log('lili-upload uploadImage success:', index, path, res.statusCode)
-				emit('upload', buildUploadPayload(index, path, res.data))
-				endUploading()
-			},
-			fail: (err) => {
-				const message = err.errMsg
-				console.log('lili-upload uploadImage fail:', index, path, message)
-				emitError('upload', path, message)
-				endUploading()
-			},
-		})
-	} catch (error) {
-		const message = safeErrorMessage(error, '上传失败')
-		emitError('upload', path, message == '' ? '上传失败' : message)
-		endUploading()
-	}
+	// 先压缩再上传（压缩失败自动回退原图）；预览与回显仍用原路径 path
+	compressImageForUpload(path).then((uploadPath: string) => {
+		try {
+			uni.uploadFile({
+				url: props.action,
+				filePath: uploadPath,
+				name: props.name,
+				header: props.headers,
+				formData: props.formData,
+				success: (res) => {
+					console.log('lili-upload uploadImage success:', index, path, res.statusCode)
+					emit('upload', buildUploadPayload(index, path, res.data))
+					endUploading()
+				},
+				fail: (err) => {
+					const message = err.errMsg
+					console.log('lili-upload uploadImage fail:', index, path, message)
+					emitError('upload', path, message)
+					endUploading()
+				},
+			})
+		} catch (error) {
+			const message = safeErrorMessage(error, '上传失败')
+			emitError('upload', path, message == '' ? '上传失败' : message)
+			endUploading()
+		}
+	})
 }
 
 function handleChoose() {

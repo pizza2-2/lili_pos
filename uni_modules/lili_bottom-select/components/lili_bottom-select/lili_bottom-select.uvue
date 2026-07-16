@@ -174,12 +174,14 @@
 </template>
 
 <script setup lang="uts">
+// #ifdef APP-ANDROID
 import {
 	scanCode,
 	type GeneralCallbackResult,
 	type ScanCodeOption,
 	type ScanCodeSuccessCallbackResult,
 } from '@/uni_modules/lime-scan'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type SelectChangePayload = {
@@ -271,6 +273,8 @@ type Props = {
 	 */
 	selectableLevel?: number
 	selectableLevelMessage?: string
+	selectableLeafOnly?: boolean
+	selectableLeafOnlyMessage?: string
 
 	placeholder?: string
 	title?: string
@@ -311,6 +315,8 @@ const props = withDefaults(defineProps<Props>(), {
 	accordion: false,
 	selectableLevel: -1,
 	selectableLevelMessage: '',
+	selectableLeafOnly: false,
+	selectableLeafOnlyMessage: '',
 
 	placeholder: '请选择',
 	title: '请选择',
@@ -412,36 +418,6 @@ function getNumberField(obj: UTSJSONObject, key: string) : number {
 	return value as number
 }
 
-function getItemLevel(item: UTSJSONObject) : number {
-	const value = item['level']
-	if (value == null) return -1
-	if (typeof value == 'number') return value as number
-	const parsed = parseInt('' + value)
-	if (isNaN(parsed)) return -1
-	return parsed
-}
-
-function isItemSelectable(item: UTSJSONObject) : boolean {
-	if (props.selectableLevel < 0) return true
-	return getItemLevel(item) == props.selectableLevel
-}
-
-function showUnselectableMessage() {
-	const message = props.selectableLevelMessage
-	if (message != '') {
-		uni.showToast({
-			title: message,
-			icon: 'none', duration: 3500,
-		})
-	}
-}
-
-function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
-	const value = obj[key]
-	if (value == null) return []
-	return value as UTSJSONObject[]
-}
-
 function getTreeChildren(item: UTSJSONObject) : UTSJSONObject[] {
 	const value = item[props.childrenKey]
 	if (value == null) return []
@@ -456,19 +432,73 @@ function getBooleanField(obj: UTSJSONObject, key: string) : boolean {
 	return text == 'true' || text == '1' || text == 'yes'
 }
 
+function itemHasChildren(item: UTSJSONObject) : boolean {
+	if (getTreeChildren(item).length > 0) {
+		return true
+	}
+	return getBooleanField(item, 'has_children')
+}
+
+function getItemLevel(item: UTSJSONObject) : number {
+	const value = item['level']
+	if (value == null) return -1
+	if (typeof value == 'number') return value as number
+	const parsed = parseInt('' + value)
+	if (isNaN(parsed)) return -1
+	return parsed
+}
+
+function isItemLeaf(item: UTSJSONObject) : boolean {
+	const canSelectProductValue = item['can_select_product']
+	if (canSelectProductValue != null) {
+		return getBooleanField(item, 'can_select_product')
+	}
+	const isLeafValue = item['is_leaf']
+	if (isLeafValue != null) {
+		return getBooleanField(item, 'is_leaf')
+	}
+	return !itemHasChildren(item)
+}
+
+function isItemSelectableByLeaf(item: UTSJSONObject) : boolean {
+	if (!props.selectableLeafOnly) return true
+	return isItemLeaf(item)
+}
+
+function isItemSelectable(item: UTSJSONObject) : boolean {
+	if (!isItemSelectableByLeaf(item)) return false
+	if (props.selectableLevel < 0) return true
+	return getItemLevel(item) == props.selectableLevel
+}
+
+function showUnselectableMessage(item: UTSJSONObject) {
+	let message = ''
+	if (!isItemSelectableByLeaf(item)) {
+		message = props.selectableLeafOnlyMessage
+	}
+	if (message == '') {
+		message = props.selectableLevelMessage
+	}
+	if (message != '') {
+		uni.showToast({
+			title: message,
+			icon: 'none', duration: 3500,
+		})
+	}
+}
+
+function getListField(obj: UTSJSONObject, key: string) : UTSJSONObject[] {
+	const value = obj[key]
+	if (value == null) return []
+	return value as UTSJSONObject[]
+}
+
 function cloneItem(item: UTSJSONObject) : UTSJSONObject {
 	const next = {} as UTSJSONObject
 	for (const key in item) {
 		next[key] = item[key]
 	}
 	return next
-}
-
-function itemHasChildren(item: UTSJSONObject) : boolean {
-	if (getTreeChildren(item).length > 0) {
-		return true
-	}
-	return getBooleanField(item, 'has_children')
 }
 
 function hasTreeChildren(item: UTSJSONObject) : boolean {
@@ -1331,6 +1361,10 @@ async function applyScanKeyword(scanResult: string) {
 
 function handleScanSearch() {
 	if (props.disabled) return
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持扫码', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	scanCode({
 		onlyFromCamera: props.scanOnlyFromCamera,
 		success: (res: ScanCodeSuccessCallbackResult) => {
@@ -1344,6 +1378,7 @@ function handleScanSearch() {
 			})
 		},
 	} as ScanCodeOption)
+	// #endif
 }
 
 function toggleMultiItem(item: UTSJSONObject) {
@@ -1383,7 +1418,7 @@ function toggleMultiItem(item: UTSJSONObject) {
 function onItemClick(item: UTSJSONObject) {
 	if (props.disabled) return
 	if (!isItemSelectable(item)) {
-		showUnselectableMessage()
+		showUnselectableMessage(item)
 		return
 	}
 

@@ -29,12 +29,24 @@ export type CategoryItem = {
 	sort_order: number
 	tax_rate: string
 	kasa_category_id: number
+	default_pricing_formula_id: number
+	default_pricing_formula_name: string
+	default_print_template_id: number
+	default_print_template_name: string
+	pos_sale_enabled: boolean
+	default_min_stock_level: number
+	default_reorder_point: number
 	products_count: number
 	children_count: number
+	has_children: boolean
 	is_active: boolean
 	is_leaf: boolean
+	can_add_child: boolean
+	can_select_product: boolean
 	full_name: string
 	path: string
+	lifecycle_stage: string
+	health_score: string
 	created_at: string
 	updated_at: string
 	raw: UTSJSONObject
@@ -49,6 +61,28 @@ export type CategoryListResponse = {
 	page_size: number
 }
 
+// 全量轻量树节点（tree/ 端点）：只含列表渲染与本地搜索所需的最小字段，
+// kasa 绑定 / 价格公式 / 打印模板等重字段仍走 detail 按需获取
+export type CategoryTreeNode = {
+	id: number
+	parent_id: number
+	name: string
+	name_en: string
+	code: string
+	level: number
+	is_active: boolean
+	sort_order: number
+	tax_rate: string
+	health_score: string
+	products_count: number
+}
+
+export type CategoryTreeResponse = {
+	items: CategoryTreeNode[]
+	count: number
+	max_level: number
+}
+
 export type CategoryMutationData = UTSJSONObject
 
 export type CategorySortItem = UTSJSONObject
@@ -57,6 +91,25 @@ export type CategoryStatisticsResponse = {
 	data: UTSJSONObject
 }
 
+export type CategoryWorkbenchResponse = {
+	data: UTSJSONObject
+}
+
+
+
+
+export type CategoryGovernanceResponse = {
+	data: UTSJSONObject
+}
+
+export type CategoryGovernanceQuery = {
+	type: string | null
+	limit: number | null
+	too_many_threshold: number | null
+}
+
+
+
 export type CategoryRootsQuery = {
 	search: string | null
 	level: number | string | null
@@ -64,6 +117,84 @@ export type CategoryRootsQuery = {
 	ordering: string | null
 }
 
+export type CategoryTemplateImportData = {
+	template: string
+	missing_only: boolean
+}
+
+export type CategoryRecommendationQuery = {
+	product: string | null
+	product_id: string | null
+	name: string | null
+	query: string | null
+	barcode: string | null
+	supplier: string | null
+	limit: number | null
+}
+
+export type CategoryHealthScoreItem = {
+	id: number
+	name: string
+	full_name: string
+	level: number
+	lifecycle_stage: string
+	lifecycle_stage_label: string
+	health_score: string
+	snapshot_date: string
+	sales_amount: string
+	gross_profit: string
+	stock_warning_count: number
+	product_count: number
+}
+
+export type CategoryHealthSummary = {
+	total_scored: number
+	healthy_count: number
+	warning_count: number
+	risk_count: number
+	unscored_count: number
+}
+
+export type CategoryHealthScoresResponse = {
+	snapshot_date: string
+	items: CategoryHealthScoreItem[]
+	count: number
+	summary: CategoryHealthSummary
+}
+
+export type CategoryTrendPoint = {
+	date: string
+	sales_amount: string
+	sales_quantity: string
+	gross_profit: string
+	order_count: number
+	stock_warning_count: number
+}
+
+export type CategoryTrendSummary = {
+	sales_amount: string
+	gross_profit: string
+	sales_quantity: string
+	order_count: number
+	stock_warning_count: number
+}
+
+export type CategoryTrendResponse = {
+	category_id: number
+	date_from: string
+	date_to: string
+	days: number
+	trend: CategoryTrendPoint[]
+	summary: CategoryTrendSummary
+}
+
+export type CategoryInsightsQuery = {
+	severity: string | null
+	insight_type: string | null
+	category_id: number | null
+	status: string | null
+	limit: number | null
+}
 function stringValue(value: any | null): string {
 	if (value == null) {
 		return ''
@@ -103,8 +234,16 @@ function parseObject(value: any | null): UTSJSONObject | null {
 	if (text == null || text == '') {
 		return null
 	}
+	// Android 端 JSON.parseObject 对非对象文本会抛异常而非返回 null
+	if (!text.startsWith('{')) {
+		return null
+	}
 
-	return JSON.parseObject<UTSJSONObject>(text)
+	try {
+		return JSON.parseObject<UTSJSONObject>(text)
+	} catch (error) {
+		return null
+	}
 }
 
 function parseObjectArray(value: any | null): UTSJSONObject[] {
@@ -116,13 +255,20 @@ function parseObjectArray(value: any | null): UTSJSONObject[] {
 	if (text == null || text == '') {
 		return []
 	}
-
-	const parsed = JSON.parseArray<UTSJSONObject>(text)
-	if (parsed == null) {
+	// Android 端 JSON.parseArray 对非数组文本会抛异常而非返回 null
+	if (!text.startsWith('[')) {
 		return []
 	}
 
-	return parsed!
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return []
+		}
+		return parsed!
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
 }
 
 function buildCategoryItemFromObject(rawObject: UTSJSONObject): CategoryItem {
@@ -135,12 +281,24 @@ function buildCategoryItemFromObject(rawObject: UTSJSONObject): CategoryItem {
 		sort_order: intValue(rawObject['sort_order']),
 		tax_rate: stringValue(rawObject['tax_rate']),
 		kasa_category_id: intValue(rawObject['kasa_category_id'] != null ? rawObject['kasa_category_id'] : rawObject['kasa_category']),
+		default_pricing_formula_id: intValue(rawObject['default_pricing_formula_id'] != null ? rawObject['default_pricing_formula_id'] : rawObject['default_pricing_formula']),
+		default_pricing_formula_name: stringValue(rawObject['default_pricing_formula_name']),
+		default_print_template_id: intValue(rawObject['default_print_template_id'] != null ? rawObject['default_print_template_id'] : rawObject['default_print_template']),
+		default_print_template_name: stringValue(rawObject['default_print_template_name']),
+		pos_sale_enabled: rawObject['pos_sale_enabled'] == null ? true : booleanValue(rawObject['pos_sale_enabled']),
+		default_min_stock_level: intValue(rawObject['default_min_stock_level']),
+		default_reorder_point: intValue(rawObject['default_reorder_point']),
 		products_count: intValue(rawObject['products_count']),
 		children_count: intValue(rawObject['children_count']),
+		has_children: booleanValue(rawObject['has_children']),
 		is_active: booleanValue(rawObject['is_active']),
 		is_leaf: booleanValue(rawObject['is_leaf']) || stringValue(rawObject['status']) == 'leaf',
+		can_add_child: booleanValue(rawObject['can_add_child']),
+		can_select_product: booleanValue(rawObject['can_select_product']),
 		full_name: stringValue(rawObject['full_name']),
 		path: stringValue(rawObject['path']),
+		lifecycle_stage: stringValue(rawObject['lifecycle_stage']),
+		health_score: stringValue(rawObject['health_score']),
 		created_at: stringValue(rawObject['created_at']),
 		updated_at: stringValue(rawObject['updated_at']),
 		raw: rawObject,
@@ -158,6 +316,15 @@ function buildCategoryArrayFromValue(value: any | null): CategoryItem[] {
 		}
 		if (rawObject['children'] != null) {
 			return buildCategoryArrayFromValue(rawObject['children'])
+		}
+		if (rawObject['descendants'] != null) {
+			return buildCategoryArrayFromValue(rawObject['descendants'])
+		}
+		if (rawObject['siblings'] != null) {
+			return buildCategoryArrayFromValue(rawObject['siblings'])
+		}
+		if (rawObject['ancestors'] != null) {
+			return buildCategoryArrayFromValue(rawObject['ancestors'])
 		}
 		if (rawObject['data'] != null) {
 			return buildCategoryArrayFromValue(rawObject['data'])
@@ -359,11 +526,30 @@ function buildCategoryRootsQuery(data: CategoryRootsQuery): UTSJSONObject {
 	return query
 }
 
+function buildCategoryGovernanceQuery(data: CategoryGovernanceQuery | null): UTSJSONObject {
+	const query = {} as UTSJSONObject
+	if (data == null) {
+		return query
+	}
+	if (data.type != null && data.type != '') {
+		query['type'] = data.type
+	}
+	if (data.limit != null && data.limit > 0) {
+		query['limit'] = data.limit
+	}
+	if (data.too_many_threshold != null && data.too_many_threshold > 0) {
+		query['too_many_threshold'] = data.too_many_threshold
+	}
+	return query
+}
+
 function buildIncludeSelfQuery(includeSelf: boolean): UTSJSONObject {
 	return {
 		include_self: includeSelf,
 	} as UTSJSONObject
 }
+
+
 
 function categoryDetailPath(id: number | string): string {
 	return categoryBasePath + stringValue(id) + '/'
@@ -433,6 +619,97 @@ export function deleteCategory(id: number | string): Promise<any> {
 	return request(categoryDetailPath(id), 'DELETE', {} as UTSJSONObject, true)
 }
 
+function buildCategoryTreeNode(rawObject: UTSJSONObject): CategoryTreeNode {
+	return {
+		id: intValue(rawObject['id']),
+		parent_id: intValue(rawObject['parent_id']),
+		name: stringValue(rawObject['name']),
+		name_en: stringValue(rawObject['name_en']),
+		code: stringValue(rawObject['code']),
+		level: intValue(rawObject['level']),
+		is_active: booleanValue(rawObject['is_active']),
+		sort_order: intValue(rawObject['sort_order']),
+		tax_rate: stringValue(rawObject['tax_rate']),
+		health_score: stringValue(rawObject['health_score']),
+		products_count: intValue(rawObject['products_count']),
+	} as CategoryTreeNode
+}
+
+// 快路径构造：request 已返回解析好的 UTSJSONObject，用类型化 getter 直读，
+// 避免通用防御式解析（stringify→parse 往返 + 逐字段字符串转换）。
+// 整树约1500节点且解析发生在主线程，这条路径的性能直接决定页面是否卡顿。
+function buildCategoryTreeNodeFast(rawObject: UTSJSONObject): CategoryTreeNode {
+	const id = rawObject.getNumber('id')
+	const parentId = rawObject.getNumber('parent_id')
+	const name = rawObject.getString('name')
+	const nameEn = rawObject.getString('name_en')
+	const code = rawObject.getString('code')
+	const level = rawObject.getNumber('level')
+	const isActive = rawObject.getBoolean('is_active')
+	const sortOrder = rawObject.getNumber('sort_order')
+	const taxRate = rawObject.getString('tax_rate')
+	const healthScore = rawObject.getString('health_score')
+	const productsCount = rawObject.getNumber('products_count')
+	return {
+		id: id == null ? 0 : id,
+		parent_id: parentId == null ? 0 : parentId,
+		name: name == null ? '' : name,
+		name_en: nameEn == null ? '' : nameEn,
+		code: code == null ? '' : code,
+		level: level == null ? 0 : level,
+		is_active: isActive == null ? true : isActive,
+		sort_order: sortOrder == null ? 0 : sortOrder,
+		tax_rate: taxRate == null ? '' : taxRate,
+		health_score: healthScore == null ? '' : healthScore,
+		products_count: productsCount == null ? 0 : productsCount,
+	} as CategoryTreeNode
+}
+
+export async function getCategoryTree(): Promise<CategoryTreeResponse> {
+	const raw = await request(categoryBasePath + 'tree/', 'GET', {} as UTSJSONObject, true)
+	// 快路径：类型化直读
+	try {
+		const fastObject = raw as UTSJSONObject
+		const fastItems = fastObject.getArray('items')
+		if (fastItems != null) {
+			const items: CategoryTreeNode[] = []
+			for (let index = 0; index < fastItems.length; index += 1) {
+				items.push(buildCategoryTreeNodeFast(fastItems[index] as UTSJSONObject))
+			}
+			const rawCount = fastObject.getNumber('count')
+			let maxLevel = 2
+			const rawMaxLevel = fastObject.getNumber('max_level')
+			if (rawMaxLevel != null) {
+				if (rawMaxLevel > 0) {
+					maxLevel = rawMaxLevel
+				}
+			}
+			return {
+				items: items,
+				count: rawCount == null ? items.length : rawCount,
+				max_level: maxLevel,
+			} as CategoryTreeResponse
+		}
+	} catch (error) {
+	}
+	// 慢路径兜底：响应结构异常时按通用防御式解析
+	const rawObject = buildObjectResponse(raw, '分类树响应解析失败')
+	const rawItems = parseObjectArray(rawObject['items'])
+	const items: CategoryTreeNode[] = []
+	for (let index = 0; index < rawItems.length; index += 1) {
+		items.push(buildCategoryTreeNode(rawItems[index]))
+	}
+	let maxLevel = intValue(rawObject['max_level'])
+	if (maxLevel <= 0) {
+		maxLevel = 2
+	}
+	return {
+		items: items,
+		count: intValue(rawObject['count']),
+		max_level: maxLevel,
+	} as CategoryTreeResponse
+}
+
 export async function getCategoryRoots(query: CategoryRootsQuery | null = null): Promise<CategoryItem[]> {
 	const requestQuery = query == null ? buildCategoryRootsQuery({
 		search: null,
@@ -487,6 +764,23 @@ export async function getCategoryStatistics(query: CategoryListQuery | null = nu
 	} as CategoryStatisticsResponse
 }
 
+export async function getCategoryWorkbench(id: number | string): Promise<CategoryWorkbenchResponse> {
+	const raw = await request(categoryDetailPath(id) + 'workbench/', 'GET', {} as UTSJSONObject, true)
+	return {
+		data: buildObjectResponse(raw, '分类工作台统计响应解析失败'),
+	} as CategoryWorkbenchResponse
+}
+
+
+
+
+export async function getCategoryGovernance(query: CategoryGovernanceQuery | null = null): Promise<CategoryGovernanceResponse> {
+	const raw = await request(categoryBasePath + 'governance/', 'GET', buildCategoryGovernanceQuery(query), true)
+	return {
+		data: buildObjectResponse(raw, '分类治理数据响应解析失败'),
+	} as CategoryGovernanceResponse
+}
+
 export async function updateCategoryProductsCount(id: number | string): Promise<UTSJSONObject> {
 	const raw = await request(categoryDetailPath(id) + 'update_products_count/', 'POST', {} as UTSJSONObject, true)
 	return buildObjectResponse(raw, '更新分类商品数量响应解析失败')
@@ -510,4 +804,304 @@ export async function translateCategoryName(text: string): Promise<UTSJSONObject
 export async function batchTranslateCategories(force: boolean = false): Promise<UTSJSONObject> {
 	const raw = await request(categoryBasePath + 'batch_translate/', 'POST', buildTranslateBody(force), true)
 	return buildObjectResponse(raw, '批量翻译分类响应解析失败')
+}
+
+export async function getCategoryTemplates(): Promise<UTSJSONObject> {
+	const raw = await request(categoryBasePath + 'templates/', 'GET', {} as UTSJSONObject, true)
+	return buildObjectResponse(raw, '分类模板响应解析失败')
+}
+
+export async function importCategoryTemplate(data: CategoryTemplateImportData): Promise<UTSJSONObject> {
+	const body = {
+		template: data.template,
+		missing_only: data.missing_only,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'import-template/', 'POST', body, true)
+	return buildObjectResponse(raw, '分类模板导入响应解析失败')
+}
+
+export async function getCategoryRecommendations(data: CategoryRecommendationQuery): Promise<UTSJSONObject> {
+	const query = {} as UTSJSONObject
+	if (data.product != null && data.product != '') query['product'] = data.product
+	if (data.product_id != null && data.product_id != '') query['product_id'] = data.product_id
+	if (data.name != null && data.name != '') query['name'] = data.name
+	if (data.query != null && data.query != '') query['query'] = data.query
+	if (data.barcode != null && data.barcode != '') query['barcode'] = data.barcode
+	if (data.supplier != null && data.supplier != '') query['supplier'] = data.supplier
+	if (data.limit != null && data.limit > 0) query['limit'] = data.limit
+	const raw = await request(categoryBasePath + 'recommend-categories/', 'GET', query, true)
+	return buildObjectResponse(raw, '分类推荐响应解析失败')
+}
+
+export async function mergeDuplicateCategories(ids: string[], target: string): Promise<UTSJSONObject> {
+	const nextIds: any[] = []
+	for (let index = 0; index < ids.length; index += 1) {
+		const text = stringValue(ids[index])
+		const parsed = parseInt(text)
+		if (!isNaN(parsed) && '' + parsed == text) {
+			nextIds.push(parsed)
+		} else {
+			nextIds.push(text)
+		}
+	}
+	const body = {
+		ids: nextIds,
+		target: target,
+		target_id: target,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'merge-duplicates/', 'POST', body, true)
+	return buildObjectResponse(raw, '重复分类合并响应解析失败')
+}
+
+// ── 分类经营分析（健康评分 / 趋势 / 洞察 / 规则同步） ─────────────────
+
+function buildHealthScoreItem(rawObject: UTSJSONObject): CategoryHealthScoreItem {
+	return {
+		id: intValue(rawObject['id']),
+		name: stringValue(rawObject['name']),
+		full_name: stringValue(rawObject['full_name']),
+		level: intValue(rawObject['level']),
+		lifecycle_stage: stringValue(rawObject['lifecycle_stage']),
+		lifecycle_stage_label: stringValue(rawObject['lifecycle_stage_label']),
+		health_score: stringValue(rawObject['health_score']),
+		snapshot_date: stringValue(rawObject['snapshot_date']),
+		sales_amount: stringValue(rawObject['sales_amount']),
+		gross_profit: stringValue(rawObject['gross_profit']),
+		stock_warning_count: intValue(rawObject['stock_warning_count']),
+		product_count: intValue(rawObject['product_count']),
+	} as CategoryHealthScoreItem
+}
+
+export async function getCategoryHealthScores(limit: number = 100, date: string | null = null): Promise<CategoryHealthScoresResponse> {
+	const query = {} as UTSJSONObject
+	if (limit > 0) {
+		query['limit'] = limit
+	}
+	if (date != null && date != '') {
+		query['date'] = date
+	}
+	const raw = await request(categoryBasePath + 'health-scores/', 'GET', query, false)
+	const rawObject = buildObjectResponse(raw, '分类健康评分响应解析失败')
+	const rawItems = parseObjectArray(rawObject['items'])
+	const items: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < rawItems.length; index += 1) {
+		items.push(buildHealthScoreItem(rawItems[index]))
+	}
+	const rawSummary = parseObject(rawObject['summary'])
+	const summary: CategoryHealthSummary = rawSummary == null ? {
+		total_scored: 0,
+		healthy_count: 0,
+		warning_count: 0,
+		risk_count: 0,
+		unscored_count: 0,
+	} as CategoryHealthSummary : {
+		total_scored: intValue(rawSummary['total_scored']),
+		healthy_count: intValue(rawSummary['healthy_count']),
+		warning_count: intValue(rawSummary['warning_count']),
+		risk_count: intValue(rawSummary['risk_count']),
+		unscored_count: intValue(rawSummary['unscored_count']),
+	} as CategoryHealthSummary
+	return {
+		snapshot_date: stringValue(rawObject['snapshot_date']),
+		items: items,
+		count: intValue(rawObject['count']),
+		summary: summary,
+	} as CategoryHealthScoresResponse
+}
+
+function buildTrendPoint(rawObject: UTSJSONObject): CategoryTrendPoint {
+	return {
+		date: stringValue(rawObject['date']),
+		sales_amount: stringValue(rawObject['sales_amount']),
+		sales_quantity: stringValue(rawObject['sales_quantity']),
+		gross_profit: stringValue(rawObject['gross_profit']),
+		order_count: intValue(rawObject['order_count']),
+		stock_warning_count: intValue(rawObject['stock_warning_count']),
+	} as CategoryTrendPoint
+}
+
+function buildTrendSummary(rawObject: UTSJSONObject | null): CategoryTrendSummary {
+	if (rawObject == null) {
+		return {
+			sales_amount: '0.00',
+			gross_profit: '0.00',
+			sales_quantity: '0',
+			order_count: 0,
+			stock_warning_count: 0,
+		} as CategoryTrendSummary
+	}
+	return {
+		sales_amount: stringValue(rawObject['sales_amount']),
+		gross_profit: stringValue(rawObject['gross_profit']),
+		sales_quantity: stringValue(rawObject['sales_quantity']),
+		order_count: intValue(rawObject['order_count']),
+		stock_warning_count: intValue(rawObject['stock_warning_count']),
+	} as CategoryTrendSummary
+}
+
+export async function getCategoryTrend(id: number | string, days: number = 30, includeDescendants: boolean = true, dateTo: string | null = null, shopId: number = 0): Promise<CategoryTrendResponse> {
+	const query = {
+		days: days,
+		include_descendants: includeDescendants,
+	} as UTSJSONObject
+	if (dateTo != null && dateTo != '') {
+		query['date_to'] = dateTo
+	}
+	if (shopId > 0) {
+		query['shop_id'] = shopId
+	}
+	const raw = await request(categoryDetailPath(id) + 'trend/', 'GET', query, false)
+	const rawObject = buildObjectResponse(raw, '分类趋势响应解析失败')
+	const rawPoints = parseObjectArray(rawObject['trend'])
+	const points: CategoryTrendPoint[] = []
+	for (let index = 0; index < rawPoints.length; index += 1) {
+		points.push(buildTrendPoint(rawPoints[index]))
+	}
+	return {
+		category_id: intValue(rawObject['category_id']),
+		date_from: stringValue(rawObject['date_from']),
+		date_to: stringValue(rawObject['date_to']),
+		days: intValue(rawObject['days']),
+		trend: points,
+		summary: buildTrendSummary(parseObject(rawObject['summary'])),
+	} as CategoryTrendResponse
+}
+
+export async function getCategoryAnalytics(id: number | string, days: number = 30, includeDescendants: boolean = true, shopId: number = 0): Promise<UTSJSONObject> {
+	const query = {
+		days: days,
+		include_descendants: includeDescendants,
+	} as UTSJSONObject
+	if (shopId > 0) {
+		query['shop_id'] = shopId
+	}
+	const raw = await request(categoryDetailPath(id) + 'analytics/', 'GET', query, false)
+	return buildObjectResponse(raw, '分类分析响应解析失败')
+}
+
+export async function getCategoryDailyBrief(shopId: number = 0): Promise<UTSJSONObject> {
+	const query = {} as UTSJSONObject
+	if (shopId > 0) {
+		query['shop_id'] = shopId
+	}
+	const raw = await request(categoryBasePath + 'daily-brief/', 'GET', query, false)
+	return buildObjectResponse(raw, '日报摘要响应解析失败')
+}
+
+export async function getCategoryInsights(query: CategoryInsightsQuery | null = null): Promise<UTSJSONObject> {
+	const requestQuery = {} as UTSJSONObject
+	if (query != null) {
+		if (query.severity != null && query.severity != '') {
+			requestQuery['severity'] = query.severity
+		}
+		if (query.insight_type != null && query.insight_type != '') {
+			requestQuery['type'] = query.insight_type
+		}
+		if (query.category_id != null && query.category_id > 0) {
+			requestQuery['category'] = query.category_id
+		}
+		if (query.status != null && query.status != '') {
+			requestQuery['status'] = query.status
+		}
+		if (query.limit != null && query.limit > 0) {
+			requestQuery['limit'] = query.limit
+		}
+	}
+	const raw = await request(categoryBasePath + 'insights/', 'GET', requestQuery, false)
+	return buildObjectResponse(raw, '分类洞察响应解析失败')
+}
+
+export async function updateCategoryInsightStatus(ids: number[], action: string): Promise<UTSJSONObject> {
+	const body = {
+		ids: ids,
+		action: action,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'insights/status/', 'POST', body, true)
+	return buildObjectResponse(raw, '洞察状态更新响应解析失败')
+}
+
+// 分组问题清单：同父分类同类型 ≥3 条合并为聚合卡，按影响金额排序
+// kind: problem(默认，排除机会类) | opportunity | all
+export async function getCategoryInsightsGrouped(kind: string = 'problem', severity: string = '', limit: number = 100): Promise<UTSJSONObject> {
+	const query = {
+		kind: kind,
+		limit: limit,
+	} as UTSJSONObject
+	if (severity != '') {
+		query['severity'] = severity
+	}
+	const raw = await request(categoryBasePath + 'insights/grouped/', 'GET', query, false)
+	return buildObjectResponse(raw, '分组洞察响应解析失败')
+}
+
+// 静默洞察：选中洞察的 (分类, 类型) 在 days 天内不再提醒
+export async function snoozeCategoryInsights(ids: number[], days: number = 30): Promise<UTSJSONObject> {
+	const body = {
+		ids: ids,
+		days: days,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'insights/snooze/', 'POST', body, true)
+	return buildObjectResponse(raw, '洞察静默响应解析失败')
+}
+
+export async function previewCategoryRuleSync(id: number | string, field: string, newValue: any | null, includeDescendants: boolean = false): Promise<UTSJSONObject> {
+	const body = {
+		field: field,
+		new_value: newValue,
+		mode: 'preview',
+		include_descendants: includeDescendants,
+	} as UTSJSONObject
+	const raw = await request(categoryDetailPath(id) + 'rule-sync/', 'POST', body, true)
+	return buildObjectResponse(raw, '规则同步预览响应解析失败')
+}
+
+export async function commitCategoryRuleSync(id: number | string, field: string, newValue: any | null, expectedWillUpdate: number, includeDescendants: boolean = false): Promise<UTSJSONObject> {
+	const body = {
+		field: field,
+		new_value: newValue,
+		mode: 'commit',
+		include_descendants: includeDescendants,
+		expected_will_update: expectedWillUpdate,
+	} as UTSJSONObject
+	const raw = await request(categoryDetailPath(id) + 'rule-sync/', 'POST', body, true)
+	return buildObjectResponse(raw, '规则同步提交响应解析失败')
+}
+
+export async function getCategoryComparison(ids: string[], days: number = 30): Promise<UTSJSONObject> {
+	const query = {
+		category_ids: ids.join(','),
+		days: days,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'comparison/', 'GET', query, false)
+	return buildObjectResponse(raw, '分类对比响应解析失败')
+}
+
+export async function suggestCategorySplit(id: number | string, limit: number = 50): Promise<UTSJSONObject> {
+	const body = {
+		limit: limit,
+	} as UTSJSONObject
+	const raw = await request(categoryDetailPath(id) + 'suggest-split/', 'POST', body, true)
+	return buildObjectResponse(raw, '分类拆分建议响应解析失败')
+}
+
+export async function getCategoryRuleChangeLog(id: number | string, limit: number = 50): Promise<UTSJSONObject> {
+	const query = {
+		limit: limit,
+	} as UTSJSONObject
+	const raw = await request(categoryDetailPath(id) + 'rule-change-log/', 'GET', query, false)
+	return buildObjectResponse(raw, '分类规则变更历史响应解析失败')
+}
+
+export async function recordCategoryRecommendationEvent(data: UTSJSONObject): Promise<UTSJSONObject> {
+	const raw = await request(categoryBasePath + 'recommendation-events/', 'POST', data, false)
+	return buildObjectResponse(raw, '推荐事件记录响应解析失败')
+}
+
+export async function getCategoryPeriodReport(period: string = 'monthly', limit: number = 100): Promise<UTSJSONObject> {
+	const query = {
+		period: period,
+		limit: limit,
+	} as UTSJSONObject
+	const raw = await request(categoryBasePath + 'period-report/', 'GET', query, false)
+	return buildObjectResponse(raw, '分类周期报告响应解析失败')
 }

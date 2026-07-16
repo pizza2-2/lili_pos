@@ -105,6 +105,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { ProductSalesQuery, ProductSalesResponse, ProductSalesSummary, ReportPeriod, ReportRankItem, getProductSalesReport } from '@/pkg/api/modules/reports.uts'
 
 type PeriodOption = {
@@ -160,7 +161,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const summary = ref<ProductSalesSummary>({
 	sales_amount: '0.00',
 	order_count: 0,
@@ -192,8 +193,8 @@ function firstStringField(obj: UTSJSONObject, keys: string[]): string {
 }
 
 function moneyText(value: string): string {
-	if (value == '') return '¥ 0.00'
-	return '¥ ' + value
+	if (value == '') return '0.00 zł'
+	return value + ' zł'
 }
 
 function codeText(value: string): string {

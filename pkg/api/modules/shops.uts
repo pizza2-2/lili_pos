@@ -460,3 +460,47 @@ export async function updateShopMedia(id: number | string, data: ShopMediaMutati
 	const raw = await request(shopMediaDetailPath(id), 'PUT', buildShopMediaMutationBody(data), false)
 	return buildShopMediaItemResponse(raw)
 }
+
+// ── POS API 密钥管理（需要 shop_api_key_manage 权限） ─────────────
+
+function toKeyObject(raw: any | null, errorMessage: string): UTSJSONObject {
+	if (raw == null) {
+		throw new Error(errorMessage)
+	}
+	const text = JSON.stringify(raw)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		throw new Error(errorMessage)
+	}
+	const parsed = JSON.parseObject<UTSJSONObject>(text!)
+	if (parsed == null) {
+		throw new Error(errorMessage)
+	}
+	return parsed!
+}
+
+export async function getShopApiKeys(shopId: number | string): Promise<UTSJSONObject> {
+	const raw = await request(shopDetailPath(shopId) + 'api-keys/', 'GET', {} as UTSJSONObject, false)
+	return toKeyObject(raw, 'API 密钥列表解析失败')
+}
+
+// 返回体含 api_key 明文，仅创建时可见一次
+export async function createShopApiKey(shopId: number | string, keyNumber: number, name: string): Promise<UTSJSONObject> {
+	const body = { key_number: keyNumber, name: name } as UTSJSONObject
+	const raw = await request(shopDetailPath(shopId) + 'api-keys/create/', 'POST', body, true)
+	return toKeyObject(raw, 'API 密钥创建响应解析失败')
+}
+
+// 返回体含新 api_key 明文，仅本次可见
+export async function rotateShopApiKey(shopId: number | string, keyNumber: number): Promise<UTSJSONObject> {
+	const raw = await request(shopDetailPath(shopId) + 'api-keys/' + keyNumber.toString() + '/rotate/', 'POST', {} as UTSJSONObject, true)
+	return toKeyObject(raw, 'API 密钥重置响应解析失败')
+}
+
+export async function toggleShopApiKey(shopId: number | string, keyNumber: number): Promise<UTSJSONObject> {
+	const raw = await request(shopDetailPath(shopId) + 'api-keys/' + keyNumber.toString() + '/toggle/', 'POST', {} as UTSJSONObject, true)
+	return toKeyObject(raw, 'API 密钥状态切换响应解析失败')
+}
+
+export async function deleteShopApiKey(shopId: number | string, keyNumber: number): Promise<any> {
+	return request(shopDetailPath(shopId) + 'api-keys/' + keyNumber.toString() + '/', 'DELETE', {} as UTSJSONObject, true)
+}

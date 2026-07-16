@@ -15,7 +15,7 @@
 							<text class="summary-label">数量</text>
 						</view>
 						<view class="summary-item">
-							<text class="summary-value">¥ {{ totalAmountText }}</text>
+							<text class="summary-value">{{ totalAmountText }} zł</text>
 							<text class="summary-label">{{ totalAmountLabel }}</text>
 						</view>
 					</view>
@@ -87,7 +87,7 @@
 						<input class="row-name" :value="row.name" placeholder="商品名称" @input="handleRowNameInput(index, $event)" />
 						<input class="row-price" type="digit" :value="row.price" placeholder="0.00" @input="handleRowPriceInput(index, $event)" />
 						<input class="row-qty" type="number" :value="row.quantity" placeholder="1" @input="handleRowQuantityInput(index, $event)" />
-						<text class="row-total">¥ {{ rowTotalText(row) }}</text>
+						<text class="row-total">{{ rowTotalText(row) }} zł</text>
 						<view class="row-remove" @click="removeRow(index)">
 							<text class="row-remove-text">删</text>
 						</view>
@@ -272,7 +272,7 @@ function compactTokens(value: string): string[] {
 
 function decimalText(value: string): string {
 	let text = trimToken(value)
-	text = text.split('￥').join('').split('¥').join('').split('元').join('').split(' ').join('')
+	text = text.split('￥').join('').split('¥').join('').split('元').join('').split('zł').join('').split('zl').join('').split(' ').join('')
 	const commaIndex = text.lastIndexOf(',')
 	const dotIndex = text.lastIndexOf('.')
 	if (commaIndex >= 0 && dotIndex >= 0) {
@@ -669,7 +669,7 @@ const aiPromptText = computed((): string => {
 const previewText = computed((): string => {
 	const parsed = parsedDraft(draftText.value)
 	if (stringValue(parsed['valid']) != 'true') return ''
-	return stringValue(parsed['name']) + ' / ' + priceModeText.value + ' ¥ ' + stringValue(parsed['price']) + ' / x ' + stringValue(parsed['quantity'])
+	return stringValue(parsed['name']) + ' / ' + priceModeText.value + ' ' + stringValue(parsed['price']) + ' zł / x ' + stringValue(parsed['quantity'])
 })
 
 const hasAIResultText = computed((): boolean => {

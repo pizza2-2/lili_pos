@@ -1,0 +1,285 @@
+import { request } from '../index.uts'
+
+export type ReturnListQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	status: string | null
+	cashier_id: string | null
+	inventory_restored: string | null
+	date_from: string | null
+	date_to: string | null
+}
+
+export type ReturnItem = {
+	id: number
+	shop: number
+	shop_name: string
+	original_order: number
+	return_number: string
+	original_order_number: string
+	payload: UTSJSONObject
+	cashier_id: string
+	cashier_name: string
+	kasa_number: string
+	sale_time: string
+	return_time: string
+	gross_amount: string
+	tax_amount: string
+	items_count: number
+	reason: string
+	evidence_document_number: string
+	printer_unique_number: string
+	protocol_type: string
+	status: string
+	status_display: string
+	error_message: string
+	inventory_restored: boolean
+	inventory_restore_time: string
+	inventory_restore_error: string
+	created_at: string
+	updated_at: string
+}
+
+export type ReturnListResponse = {
+	results: ReturnItem[]
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type ReturnStatistics = {
+	total_count: number
+	gross_amount: string
+	tax_amount: string
+	restored_count: number
+	pending_count: number
+	processed_count: number
+	failed_count: number
+}
+
+export type ReturnFilterOption = {
+	value: string
+	label: string
+}
+
+export type ReturnFilterDefinition = {
+	key: string
+	param: string
+	label: string
+	control: string
+	multiple: boolean
+	options: ReturnFilterOption[]
+}
+
+export type ReturnFilterOptionsResponse = {
+	resource: string
+	count: number
+	filters: ReturnFilterDefinition[]
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) return ''
+	return '' + value
+}
+
+function intValue(value: any | null): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function boolValue(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function amountText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') return '0.00'
+	return text
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function rawDataObject(raw: any): UTSJSONObject {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) throw new Error('退货接口响应解析失败')
+	const dataObject = parseObject(rawObject['data'])
+	if (dataObject != null) return dataObject!
+	return rawObject!
+}
+
+function buildQuery(data: ReturnListQuery): UTSJSONObject {
+	const query = { page: data.page, page_size: data.page_size } as UTSJSONObject
+	if (data.search != null && data.search != '') query['search'] = data.search
+	if (data.status != null && data.status != '') query['status'] = data.status
+	if (data.cashier_id != null && data.cashier_id != '') query['cashier_id'] = data.cashier_id
+	if (data.inventory_restored != null && data.inventory_restored != '') query['inventory_restored'] = data.inventory_restored
+	if (data.date_from != null && data.date_from != '') query['date_from'] = data.date_from
+	if (data.date_to != null && data.date_to != '') query['date_to'] = data.date_to
+	return query
+}
+
+function buildReturnItem(rawObject: UTSJSONObject): ReturnItem {
+	const payload = parseObject(rawObject['payload'])
+	return {
+		id: intValue(rawObject['id']),
+		shop: intValue(rawObject['shop']),
+		shop_name: stringValue(rawObject['shop_name']),
+		original_order: intValue(rawObject['original_order']),
+		return_number: stringValue(rawObject['return_number']),
+		original_order_number: stringValue(rawObject['original_order_number']),
+		payload: payload == null ? ({} as UTSJSONObject) : payload!,
+		cashier_id: stringValue(rawObject['cashier_id']),
+		cashier_name: stringValue(rawObject['cashier_name']),
+		kasa_number: stringValue(rawObject['kasa_number']),
+		sale_time: stringValue(rawObject['sale_time']),
+		return_time: stringValue(rawObject['return_time']),
+		gross_amount: amountText(rawObject['gross_amount']),
+		tax_amount: amountText(rawObject['tax_amount']),
+		items_count: intValue(rawObject['items_count']),
+		reason: stringValue(rawObject['reason']),
+		evidence_document_number: stringValue(rawObject['evidence_document_number']),
+		printer_unique_number: stringValue(rawObject['printer_unique_number']),
+		protocol_type: stringValue(rawObject['protocol_type']),
+		status: stringValue(rawObject['status']),
+		status_display: stringValue(rawObject['status_display']),
+		error_message: stringValue(rawObject['error_message']),
+		inventory_restored: boolValue(rawObject['inventory_restored']),
+		inventory_restore_time: stringValue(rawObject['inventory_restore_time']),
+		inventory_restore_error: stringValue(rawObject['inventory_restore_error']),
+		created_at: stringValue(rawObject['created_at']),
+		updated_at: stringValue(rawObject['updated_at']),
+	} as ReturnItem
+}
+
+function buildItems(value: any | null): ReturnItem[] {
+	const rawArray = parseObjectArray(value)
+	const result: ReturnItem[] = []
+	for (let index = 0; index < rawArray.length; index += 1) result.push(buildReturnItem(rawArray[index]))
+	return result
+}
+
+function buildListResponse(raw: any, query: ReturnListQuery): ReturnListResponse {
+	const rawObject = rawDataObject(raw)
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) paginationObject = parseObject(rawPagination)
+	const results = buildItems(rawObject['results'])
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total_count'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject!['total'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject!['count'])
+	if (totalCount <= 0) totalCount = results.length
+	let currentPage = intValue(rawObject['current_page'])
+	if (currentPage <= 0) currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0 && paginationObject != null) currentPage = intValue(paginationObject!['page'])
+	if (currentPage <= 0) currentPage = query.page
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0 && paginationObject != null) pageSize = intValue(paginationObject!['page_size'])
+	if (pageSize <= 0) pageSize = query.page_size
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject!['total_pages'])
+	if (totalPages <= 0 && pageSize > 0) totalPages = Math.ceil(totalCount / pageSize)
+	if (totalPages <= 0) totalPages = 1
+	return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as ReturnListResponse
+}
+
+function buildStatistics(raw: any): ReturnStatistics {
+	const rawObject = rawDataObject(raw)
+	const statusDistribution = parseObject(rawObject['status_distribution'])
+	return {
+		total_count: intValue(rawObject['total_count']),
+		gross_amount: amountText(rawObject['gross_amount']),
+		tax_amount: amountText(rawObject['tax_amount']),
+		restored_count: intValue(rawObject['inventory_restored_count']),
+		pending_count: intValue(rawObject['inventory_pending_count']),
+		processed_count: statusDistribution == null ? 0 : intValue(statusDistribution!['已处理']),
+		failed_count: statusDistribution == null ? 0 : intValue(statusDistribution!['处理失败']),
+	} as ReturnStatistics
+}
+
+function buildFilterOptionsResponse(raw: any): ReturnFilterOptionsResponse {
+	const rawObject = rawDataObject(raw)
+	let filters: ReturnFilterDefinition[] = []
+	const rawFilters = rawObject['filters']
+	if (rawFilters != null) {
+		const filterObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawFilters))
+		if (filterObjects != null) {
+			const nextFilters: ReturnFilterDefinition[] = []
+			for (let filterIndex = 0; filterIndex < filterObjects.length; filterIndex += 1) {
+				const filterObject = filterObjects[filterIndex]
+				let options: ReturnFilterOption[] = []
+				const rawOptions = filterObject['options']
+				if (rawOptions != null) {
+					const optionObjects = JSON.parseArray<UTSJSONObject>(JSON.stringify(rawOptions))
+					if (optionObjects != null) {
+						const nextOptions: ReturnFilterOption[] = []
+						for (let optionIndex = 0; optionIndex < optionObjects.length; optionIndex += 1) {
+							const optionObject = optionObjects[optionIndex]
+							nextOptions.push({
+								value: stringValue(optionObject['value']),
+								label: stringValue(optionObject['label']),
+							} as ReturnFilterOption)
+						}
+						options = nextOptions
+					}
+				}
+				nextFilters.push({
+					key: stringValue(filterObject['key']),
+					param: stringValue(filterObject['param']),
+					label: stringValue(filterObject['label']),
+					control: stringValue(filterObject['control']),
+					multiple: stringValue(filterObject['multiple']) == 'true',
+					options: options,
+				} as ReturnFilterDefinition)
+			}
+			filters = nextFilters
+		}
+	}
+	return {
+		resource: stringValue(rawObject['resource']),
+		count: intValue(rawObject['count']),
+		filters: filters,
+	} as ReturnFilterOptionsResponse
+}
+
+function detailPath(id: number | string): string {
+	return '/api/orders/returns/' + stringValue(id) + '/'
+}
+
+export async function getReturnList(data: ReturnListQuery): Promise<ReturnListResponse> {
+	const raw = await request('/api/orders/returns/', 'GET', buildQuery(data), true)
+	return buildListResponse(raw, data)
+}
+
+export async function getReturnDetail(id: number | string): Promise<ReturnItem> {
+	const raw = await request(detailPath(id), 'GET', {} as UTSJSONObject, true)
+	return buildReturnItem(rawDataObject(raw))
+}
+
+export async function getReturnFilterOptions(): Promise<ReturnFilterOptionsResponse> {
+	const raw = await request('/api/orders/returns/filter-options/', 'GET', {} as UTSJSONObject, true)
+	return buildFilterOptionsResponse(raw)
+}
+
+export async function getReturnStatistics(data: ReturnListQuery): Promise<ReturnStatistics> {
+	const raw = await request('/api/orders/returns/statistics/', 'GET', buildQuery(data), true)
+	return buildStatistics(raw)
+}

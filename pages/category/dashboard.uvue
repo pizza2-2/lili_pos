@@ -1,0 +1,1239 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="分类经营仪表盘"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="pageError != '' && !isLoading" class="state-card state-card-error">
+					<text class="state-title">数据加载失败</text>
+					<text class="state-desc">{{ pageError }}</text>
+					<button class="state-btn" @click="loadAll">
+						<text class="state-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在获取健康评分与洞察...</text>
+				</view>
+
+				<view v-else>
+					<view class="date-row">
+						<text class="date-text">数据日期 {{ snapshotDate == '' ? '-' : snapshotDate }}</text>
+						<text v-if="healthSummaryData.unscored_count > 0" class="date-note">未评分 {{ healthSummaryData.unscored_count.toString() }} 个</text>
+					</view>
+					<view v-if="dataStaleText != ''" class="stale-row">
+						<text class="stale-text">⚠ {{ dataStaleText }}</text>
+					</view>
+
+					<!-- 健康总览四宫格：点击过滤下方排名 -->
+					<view class="summary-grid">
+						<view :class="summaryCellClass('all')" @click="setBandFilter('all')">
+							<text class="summary-label">已评分</text>
+							<text class="summary-value">{{ healthSummaryData.total_scored.toString() }}</text>
+						</view>
+						<view :class="summaryCellClass('good')" @click="setBandFilter('good')">
+							<text class="summary-label">健康</text>
+							<text class="summary-value summary-value-good">{{ healthSummaryData.healthy_count.toString() }}</text>
+						</view>
+						<view :class="summaryCellClass('warn')" @click="setBandFilter('warn')">
+							<text class="summary-label">需关注</text>
+							<text class="summary-value summary-value-warn">{{ healthSummaryData.warning_count.toString() }}</text>
+						</view>
+						<view :class="summaryCellClass('risk')" @click="setBandFilter('risk')">
+							<text class="summary-label">风险</text>
+							<text class="summary-value summary-value-risk">{{ healthSummaryData.risk_count.toString() }}</text>
+						</view>
+					</view>
+
+					<!-- 分析工具入口 -->
+					<view class="tools-row">
+						<view class="tools-cell" @click="goComparison">
+							<text class="tools-cell-title">分类对比</text>
+							<text class="tools-cell-desc">2-5 个分类横向对比</text>
+						</view>
+						<view class="tools-cell" @click="goPeriodReport">
+							<text class="tools-cell-title">周期报告</text>
+							<text class="tools-cell-desc">月度 / 季度经营汇总</text>
+						</view>
+					</view>
+
+					<!-- 存量问题清单：同父分类同类型 ≥3 条合并为聚合卡，按影响金额排序 -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">问题清单</text>
+								<text class="card-title">共 {{ insightSourceCount.toString() }} 个问题 · 归并为 {{ insightItems.length.toString() }} 行</text>
+							</view>
+							<view class="mini-action" @click="loadInsights">
+								<text class="mini-action-text">{{ insightsLoading ? '加载中' : '刷新' }}</text>
+							</view>
+						</view>
+						<text v-if="insightsError != ''" class="error-text">{{ insightsError }}</text>
+						<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
+							<text class="empty-text">暂无待处理问题，运营状态良好</text>
+						</view>
+						<view v-for="(item, idx) in visibleInsights()" :key="'insight-' + idx.toString()" class="insight-row">
+							<!-- 聚合卡 -->
+							<view v-if="isGroup(item)">
+								<view class="insight-head">
+									<view :class="severityDotClass(item)"></view>
+									<text class="insight-title">{{ groupTitle(item) }}</text>
+								</view>
+								<text class="insight-meta">{{ groupMeta(item) }}</text>
+								<text v-for="(line, sIdx) in groupSampleLines(item)" :key="'sample-' + sIdx.toString()" class="insight-suggestion">{{ line }}</text>
+								<view class="insight-actions">
+									<view class="insight-btn insight-btn-primary" @click="goGroupAnalytics(item)">
+										<text class="insight-btn-primary-text">查看父分类</text>
+									</view>
+									<view class="insight-btn" @click="confirmHandleGroup(item)">
+										<text class="insight-btn-text">批量已处理</text>
+									</view>
+								</view>
+							</view>
+							<!-- 单条 -->
+							<view v-else>
+								<view class="insight-head">
+									<view :class="severityDotClass(item)"></view>
+									<text class="insight-title">{{ insightTitle(item) }}</text>
+								</view>
+								<text class="insight-meta">{{ insightMeta(item) }}</text>
+								<text v-if="insightSuggestion(item) != ''" class="insight-suggestion">{{ insightSuggestion(item) }}</text>
+								<view class="insight-actions">
+									<view class="insight-btn insight-btn-primary" @click="goInsightAction(item)">
+										<text class="insight-btn-primary-text">{{ insightActionLabel(item) }}</text>
+									</view>
+									<view class="insight-btn" @click="markInsight(item, 'handle')">
+										<text class="insight-btn-text">已处理</text>
+									</view>
+									<view class="insight-btn" @click="confirmDismissInsight(item)">
+										<text class="insight-btn-text">忽略</text>
+									</view>
+									<view class="insight-btn" @click="confirmSnoozeInsight(item)">
+										<text class="insight-btn-text">30天不提醒</text>
+									</view>
+								</view>
+							</view>
+						</view>
+						<view v-if="insightItems.length > 3" class="expand-row" @click="toggleInsightsExpanded">
+							<text class="expand-text">{{ insightsExpanded ? '收起' : '查看全部 ' + insightItems.length.toString() + ' 行' }}</text>
+						</view>
+					</view>
+
+					<!-- 健康评分排名 -->
+					<view class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">健康评分排名</text>
+								<text class="card-title">{{ bandFilterTitle }}</text>
+							</view>
+							<view class="mini-action" @click="loadHealthScores">
+								<text class="mini-action-text">{{ healthLoading ? '加载中' : '刷新' }}</text>
+							</view>
+						</view>
+						<text v-if="healthError != ''" class="error-text">{{ healthError }}</text>
+						<view v-if="filteredHealthItems().length == 0 && !healthLoading" class="empty-state">
+							<text class="empty-text">当前分组暂无分类</text>
+						</view>
+						<view
+							v-for="(item, index) in visibleHealthItems()"
+							:key="'rank-' + item.id.toString()"
+							class="rank-row"
+							@click="goAnalytics(item.id, item.name)"
+						>
+							<view class="rank-index-wrap">
+								<text class="rank-index-text">{{ (index + 1).toString() }}</text>
+							</view>
+							<view class="rank-main">
+								<view class="rank-title-row">
+									<text class="rank-name">{{ item.full_name == '' ? item.name : item.full_name }}</text>
+									<view v-if="item.lifecycle_stage_label != ''" class="lifecycle-tag">
+										<text class="lifecycle-tag-text">{{ item.lifecycle_stage_label }}</text>
+									</view>
+								</view>
+								<text class="rank-meta">{{ rankMetaText(item) }}</text>
+							</view>
+							<lili-score-badge :score="item.health_score"></lili-score-badge>
+							<text class="row-chevron">›</text>
+						</view>
+						<view v-if="canShowMoreRank()" class="expand-row" @click="showMoreRank">
+							<text class="expand-text">展开更多</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<view v-if="isOperating" class="operate-mask">
+			<view class="operate-card">
+				<text class="operate-text">处理中...</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import { getCategoryHealthScores, getCategoryInsightsGrouped, snoozeCategoryInsights, updateCategoryInsightStatus, CategoryHealthScoreItem, CategoryHealthSummary } from '@/pkg/api/modules/category'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const isLoading = ref(false)
+const isOperating = ref(false)
+const hasLoadedOnce = ref(false)
+const pageError = ref('')
+
+const healthLoading = ref(false)
+const healthError = ref('')
+const healthItems = ref<CategoryHealthScoreItem[]>([] as CategoryHealthScoreItem[])
+const healthSummary = ref<CategoryHealthSummary | null>(null)
+const snapshotDate = ref('')
+const bandFilter = ref('all')
+const rankRenderLimit = ref(30)
+
+const insightsLoading = ref(false)
+const insightsError = ref('')
+const insightItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const insightsExpanded = ref(false)
+const insightSourceCount = ref(0)
+
+// ── 解析辅助 ────────────────────────────────────────────────────
+
+function parseErrorMessage(error: any): string {
+	let message = '数据加载失败'
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') {
+						message = parsedMessage
+					}
+				}
+			}
+			if (message == '数据加载失败') {
+				message = errorText
+			}
+		}
+	}
+	return message
+}
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	if (text == '') {
+		return fallback
+	}
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function booleanValue(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1' || text == 'yes'
+}
+
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return {} as UTSJSONObject
+	}
+	if (!text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed == null) {
+			return {} as UTSJSONObject
+		}
+		return parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '') {
+		return [] as UTSJSONObject[]
+	}
+	if (!text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return [] as UTSJSONObject[]
+		}
+		return parsed
+	} catch (error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+// ── 健康评分 ────────────────────────────────────────────────────
+
+const healthSummaryData = computed((): CategoryHealthSummary => {
+	const summary = healthSummary.value
+	if (summary == null) {
+		return {
+			total_scored: 0,
+			healthy_count: 0,
+			warning_count: 0,
+			risk_count: 0,
+			unscored_count: 0,
+		} as CategoryHealthSummary
+	}
+	return summary as CategoryHealthSummary
+})
+
+function scoreBand(scoreText: string): string {
+	if (scoreText == '') {
+		return 'none'
+	}
+	const parsed = parseFloat(scoreText)
+	if (isNaN(parsed)) {
+		return 'none'
+	}
+	if (parsed >= 80) return 'good'
+	if (parsed >= 60) return 'warn'
+	return 'risk'
+}
+
+function setBandFilter(band: string): void {
+	bandFilter.value = band
+	rankRenderLimit.value = 30
+}
+
+function summaryCellClass(band: string): string {
+	let className = 'summary-cell'
+	if (bandFilter.value == band) {
+		className = className + ' summary-cell-active'
+	}
+	return className
+}
+
+const bandFilterTitle = computed((): string => {
+	if (bandFilter.value == 'good') return '健康分类'
+	if (bandFilter.value == 'warn') return '需关注分类'
+	if (bandFilter.value == 'risk') return '风险分类'
+	return '低分优先'
+})
+
+// 快照应更新到昨天；滞后超过 1 天时提示店主数据可能失真
+const dataStaleText = computed((): string => {
+	if (snapshotDate.value == '') {
+		return ''
+	}
+	const parts = snapshotDate.value.split('-')
+	if (parts.length != 3) {
+		return ''
+	}
+	const snapTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime()
+	const now = new Date()
+	const yesterdayTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime()
+	if (snapTime < yesterdayTime) {
+		const lagDays = Math.round((yesterdayTime - snapTime) / 86400000)
+		return '快照滞后 ' + lagDays.toString() + ' 天，趋势与评分可能不准'
+	}
+	return ''
+})
+
+function filteredHealthItems(): CategoryHealthScoreItem[] {
+	if (bandFilter.value == 'all') {
+		return healthItems.value
+	}
+	const result: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < healthItems.value.length; index += 1) {
+		const item = healthItems.value[index]
+		if (scoreBand(item.health_score) == bandFilter.value) {
+			result.push(item)
+		}
+	}
+	return result
+}
+
+function visibleHealthItems(): CategoryHealthScoreItem[] {
+	const filtered = filteredHealthItems()
+	if (filtered.length <= rankRenderLimit.value) {
+		return filtered
+	}
+	const result: CategoryHealthScoreItem[] = []
+	for (let index = 0; index < rankRenderLimit.value; index += 1) {
+		result.push(filtered[index])
+	}
+	return result
+}
+
+function canShowMoreRank(): boolean {
+	return filteredHealthItems().length > rankRenderLimit.value
+}
+
+function showMoreRank(): void {
+	rankRenderLimit.value = rankRenderLimit.value + 30
+}
+
+function rankMetaText(item: CategoryHealthScoreItem): string {
+	let text = '日销 ' + (item.sales_amount == '' ? '0.00' : item.sales_amount) + ' zł'
+	text = text + ' · 商品 ' + item.product_count.toString()
+	if (item.stock_warning_count > 0) {
+		text = text + ' · 预警 ' + item.stock_warning_count.toString()
+	}
+	return text
+}
+
+async function loadHealthScores(): Promise<void> {
+	if (healthLoading.value) {
+		return
+	}
+	healthLoading.value = true
+	healthError.value = ''
+	try {
+		const response = await getCategoryHealthScores(500, null)
+		healthItems.value = response.items
+		healthSummary.value = response.summary
+		snapshotDate.value = response.snapshot_date
+	} catch (error) {
+		healthError.value = parseErrorMessage(error)
+	} finally {
+		healthLoading.value = false
+	}
+}
+
+// ── 洞察 ────────────────────────────────────────────────────────
+
+function insightId(item: UTSJSONObject): number {
+	return intValue(item['id'])
+}
+
+function insightTitle(item: UTSJSONObject): string {
+	return stringValue(item['title'], stringValue(item['insight_type_label'], '经营洞察'))
+}
+
+function insightSuggestion(item: UTSJSONObject): string {
+	return stringValue(item['suggestion'])
+}
+
+function insightIsRead(item: UTSJSONObject): boolean {
+	return booleanValue(item['is_read'])
+}
+
+function insightAction(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['action'])
+}
+
+function insightActionLabel(item: UTSJSONObject): string {
+	return stringValue(insightAction(item)['label'], '查看分析')
+}
+
+function insightCategory(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['category'])
+}
+
+function insightMeta(item: UTSJSONObject): string {
+	const category = insightCategory(item)
+	const name = stringValue(category['full_name'], stringValue(category['name'], '未知分类'))
+	const severityLabel = stringValue(item['severity_label'])
+	let text = name
+	if (severityLabel != '') {
+		text = text + ' · ' + severityLabel
+	}
+	const impactText = stringValue(item['impact_amount'])
+	if (impactText != '' && impactText != '0.00') {
+		text = text + ' · 影响约 ' + impactText + ' zł'
+	}
+	const duration = intValue(item['duration_days'])
+	if (duration > 1) {
+		text = text + ' · 持续 ' + duration.toString() + ' 天'
+	}
+	return text
+}
+
+// ── 聚合卡辅助 ──────────────────────────────────────────────────
+
+function isGroup(item: UTSJSONObject): boolean {
+	return stringValue(item['kind']) == 'group'
+}
+
+function groupParent(item: UTSJSONObject): UTSJSONObject {
+	return objectValue(item['parent_category'])
+}
+
+function groupTitle(item: UTSJSONObject): string {
+	const parent = groupParent(item)
+	const parentName = stringValue(parent['name'], '未知分类')
+	const typeLabel = stringValue(item['insight_type_label'], '问题')
+	return parentName + '：' + intValue(item['count']).toString() + ' 个子分类' + typeLabel
+}
+
+function groupMeta(item: UTSJSONObject): string {
+	let text = '合计影响约 ' + stringValue(item['impact_amount'], '0') + ' zł'
+	const duration = intValue(item['max_duration_days'])
+	if (duration > 1) {
+		text = text + ' · 最长持续 ' + duration.toString() + ' 天'
+	}
+	return text
+}
+
+function groupSampleLines(item: UTSJSONObject): string[] {
+	const lines: string[] = []
+	const samples = objectArrayValue(item['sample'])
+	for (let i = 0; i < samples.length; i += 1) {
+		const sample = samples[i]
+		lines.push('· ' + stringValue(sample['title']) + '（' + stringValue(sample['impact_amount'], '0') + ' zł）')
+	}
+	return lines
+}
+
+function groupInsightIds(item: UTSJSONObject): number[] {
+	const ids: number[] = []
+	const raw = item.getArray('insight_ids')
+	if (raw == null) {
+		return ids
+	}
+	for (let i = 0; i < raw.length; i += 1) {
+		const id = intValue(raw[i])
+		if (id > 0) {
+			ids.push(id)
+		}
+	}
+	return ids
+}
+
+function severityDotClass(item: UTSJSONObject): string {
+	const severity = stringValue(item['severity'])
+	if (severity == 'high') return 'severity-dot severity-dot-high'
+	if (severity == 'medium') return 'severity-dot severity-dot-medium'
+	return 'severity-dot severity-dot-low'
+}
+
+function visibleInsights(): UTSJSONObject[] {
+	if (insightsExpanded.value || insightItems.value.length <= 3) {
+		return insightItems.value
+	}
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < 3; index += 1) {
+		result.push(insightItems.value[index])
+	}
+	return result
+}
+
+function toggleInsightsExpanded(): void {
+	insightsExpanded.value = !insightsExpanded.value
+}
+
+// 曝光即已读：清单已经展示给用户，静默批量标记，失败下次打开再补
+function autoMarkListRead(items: UTSJSONObject[]): void {
+	const ids: number[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		if (isGroup(item)) {
+			const groupIds = groupInsightIds(item)
+			for (let g = 0; g < groupIds.length; g += 1) {
+				ids.push(groupIds[g])
+			}
+		} else {
+			const id = insightId(item)
+			if (id > 0) {
+				ids.push(id)
+			}
+		}
+	}
+	if (ids.length == 0) {
+		return
+	}
+	updateCategoryInsightStatus(ids, 'read').catch((_err) => {})
+}
+
+async function loadInsights(): Promise<void> {
+	if (insightsLoading.value) {
+		return
+	}
+	insightsLoading.value = true
+	insightsError.value = ''
+	try {
+		// 分组清单：同父分类同类型问题合并为聚合卡，按影响金额排序
+		const response = await getCategoryInsightsGrouped('problem', '', 100)
+		insightItems.value = objectArrayValue(response['items'])
+		insightSourceCount.value = intValue(response['source_count'], insightItems.value.length)
+		autoMarkListRead(insightItems.value)
+	} catch (error) {
+		insightsError.value = parseErrorMessage(error)
+	} finally {
+		insightsLoading.value = false
+	}
+}
+
+async function executeMarkInsight(item: UTSJSONObject, action: string): Promise<void> {
+	const id = insightId(item)
+	if (id <= 0) {
+		return
+	}
+	try {
+		isOperating.value = true
+		const response = await updateCategoryInsightStatus([id], action)
+		await loadInsights()
+		// 忽略学习：同一问题被忽略第 2 次时服务端自动静默 30 天，告知用户
+		if (action == 'dismiss' && intValue(response['auto_muted_count']) > 0) {
+			uni.showToast({ title: '已连续忽略，该问题静默 30 天', icon: 'none' })
+		}
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function markInsight(item: UTSJSONObject, action: string): void {
+	executeMarkInsight(item, action)
+}
+
+function confirmDismissInsight(item: UTSJSONObject): void {
+	uni.showModal({
+		title: '忽略洞察',
+		content: '忽略后此条洞察不再出现在列表中，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				executeMarkInsight(item, 'dismiss')
+			}
+		},
+	})
+}
+
+async function executeSnoozeInsight(item: UTSJSONObject): Promise<void> {
+	const id = insightId(item)
+	if (id <= 0) {
+		return
+	}
+	try {
+		isOperating.value = true
+		await snoozeCategoryInsights([id], 30)
+		await loadInsights()
+		uni.showToast({ title: '已静默 30 天', icon: 'none' })
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function confirmSnoozeInsight(item: UTSJSONObject): void {
+	uni.showModal({
+		title: '30 天不提醒',
+		content: '该分类的此类问题在 30 天内不再生成洞察，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				executeSnoozeInsight(item)
+			}
+		},
+	})
+}
+
+async function executeHandleGroup(item: UTSJSONObject): Promise<void> {
+	const ids = groupInsightIds(item)
+	if (ids.length == 0) {
+		return
+	}
+	try {
+		isOperating.value = true
+		await updateCategoryInsightStatus(ids, 'handle')
+		await loadInsights()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function confirmHandleGroup(item: UTSJSONObject): void {
+	const count = intValue(item['count'])
+	uni.showModal({
+		title: '批量已处理',
+		content: '将该组 ' + count.toString() + ' 条洞察全部标记为已处理，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				executeHandleGroup(item)
+			}
+		},
+	})
+}
+
+function goGroupAnalytics(item: UTSJSONObject): void {
+	const parent = groupParent(item)
+	const id = intValue(parent['id'])
+	if (id <= 0) {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/category/analytics?id=' + id.toString() + '&name=' + encodeURIComponent(stringValue(parent['name'], '分类')),
+	})
+}
+
+// ── 导航 ────────────────────────────────────────────────────────
+
+function goAnalytics(id: number, name: string): void {
+	uni.navigateTo({
+		url: '/pages/category/analytics?id=' + id.toString() + '&name=' + encodeURIComponent(name),
+	})
+}
+
+function goComparison(): void {
+	uni.navigateTo({
+		url: '/pages/category/comparison',
+	})
+}
+
+function goPeriodReport(): void {
+	uni.navigateTo({
+		url: '/pages/category/period-report',
+	})
+}
+
+function goInsightAnalytics(item: UTSJSONObject): void {
+	const category = insightCategory(item)
+	const id = intValue(category['id'])
+	if (id <= 0) {
+		return
+	}
+	goAnalytics(id, stringValue(category['name']))
+}
+
+// 洞察跳转：后端 action 为 product_list 时带语义筛选跳商品页，其余跳分类分析页
+function goInsightAction(item: UTSJSONObject): void {
+	const action = insightAction(item)
+	if (stringValue(action['type']) != 'product_list') {
+		goInsightAnalytics(item)
+		return
+	}
+	const params = objectValue(action['params'])
+	const payload = {} as UTSJSONObject
+	const categoryId = intValue(params['category'])
+	if (categoryId > 0) {
+		payload['category_id'] = categoryId.toString()
+		payload['category_name'] = stringValue(insightCategory(item)['name'])
+	}
+	const semanticParams = ['stock_warning', 'no_sales', 'cost_missing', 'cost_inversion']
+	for (let index = 0; index < semanticParams.length; index += 1) {
+		const key = semanticParams[index]
+		if (stringValue(params[key]) == 'true') {
+			payload[key] = 'true'
+		}
+	}
+	payload['label'] = insightTitle(item)
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+// ── 生命周期 ────────────────────────────────────────────────────
+
+async function loadAll(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		await loadHealthScores()
+		await loadInsights()
+		if (healthError.value != '' && healthItems.value.length == 0) {
+			pageError.value = healthError.value
+		}
+		hasLoadedOnce.value = true
+	} finally {
+		isLoading.value = false
+	}
+}
+
+onLoad(() => {
+	loadAll()
+})
+
+onShow(() => {
+	if (hasLoadedOnce.value) {
+		loadInsights()
+	}
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	background-color: #F4F6F8;
+}
+
+.page-content {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 60px;
+	background-color: #F4F6F8;
+}
+
+.state-card {
+	background-color: #FFFFFF;
+	border-radius: 18px;
+	padding: 18px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.state-card-error {
+	border-color: #FECACA;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	font-size: 14px;
+	line-height: 21px;
+	color: #64748B;
+	margin-top: 8px;
+}
+
+.state-btn {
+	height: 40px;
+	margin-top: 14px;
+	background-color: #0F766E;
+	border-radius: 12px;
+	border-width: 0px;
+}
+
+.state-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.date-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 2px;
+	padding-right: 2px;
+	padding-bottom: 8px;
+}
+
+.date-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.date-note {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.stale-row {
+	padding-left: 2px;
+	padding-bottom: 8px;
+}
+
+.stale-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #D97706;
+	font-weight: bold;
+}
+
+.summary-grid {
+	flex-direction: row;
+	margin-bottom: 10px;
+}
+
+.summary-cell {
+	flex: 1;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	align-items: center;
+	margin-right: 8px;
+}
+
+.summary-cell-active {
+	border-color: #0F766E;
+	background-color: #F0FDFA;
+}
+
+.summary-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.summary-value {
+	margin-top: 4px;
+	font-size: 20px;
+	line-height: 26px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.summary-value-good {
+	color: #16A34A;
+}
+
+.summary-value-warn {
+	color: #D97706;
+}
+
+.summary-value-risk {
+	color: #DC2626;
+}
+
+.tools-row {
+	flex-direction: row;
+	margin-bottom: 10px;
+}
+
+.tools-cell {
+	flex: 1;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 10px;
+	margin-right: 8px;
+}
+
+.tools-cell-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.tools-cell-desc {
+	margin-top: 2px;
+	font-size: 11px;
+	line-height: 15px;
+	color: #64748B;
+}
+
+.card {
+	background-color: #FFFFFF;
+	border-radius: 14px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	padding: 11px;
+	margin-bottom: 10px;
+}
+
+.card-head {
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.card-title-wrap {
+	flex: 1;
+	padding-right: 10px;
+}
+
+.card-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.card-title {
+	margin-top: 3px;
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.error-text {
+	margin-top: 8px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #DC2626;
+}
+
+.empty-state {
+	padding-top: 16px;
+	padding-bottom: 16px;
+	align-items: center;
+}
+
+.empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.insight-row {
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.insight-head {
+	flex-direction: row;
+	align-items: center;
+}
+
+.severity-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-right: 8px;
+}
+
+.severity-dot-high {
+	background-color: #DC2626;
+}
+
+.severity-dot-medium {
+	background-color: #F59E0B;
+}
+
+.severity-dot-low {
+	background-color: #22C55E;
+}
+
+.insight-title {
+	flex: 1;
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.insight-meta {
+	margin-top: 3px;
+	padding-left: 16px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.insight-suggestion {
+	margin-top: 4px;
+	padding-left: 16px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #0369A1;
+}
+
+.insight-actions {
+	margin-top: 8px;
+	padding-left: 16px;
+	flex-direction: row;
+}
+
+.insight-btn {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-radius: 8px;
+	background-color: #F1F5F9;
+	margin-right: 8px;
+}
+
+.insight-btn-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.insight-btn-primary {
+	background-color: #0F766E;
+}
+
+.insight-btn-primary-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.expand-row {
+	margin-top: 8px;
+	align-items: center;
+	padding-top: 8px;
+}
+
+.expand-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #0F766E;
+	font-weight: bold;
+}
+
+.rank-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.rank-index-wrap {
+	width: 26px;
+	align-items: center;
+}
+
+.rank-index-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+	font-weight: bold;
+}
+
+.rank-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.rank-title-row {
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.rank-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.lifecycle-tag {
+	margin-left: 6px;
+	padding-left: 6px;
+	padding-right: 6px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+	border-radius: 999px;
+	background-color: #E0F2FE;
+}
+
+.lifecycle-tag-text {
+	font-size: 11px;
+	line-height: 15px;
+	color: #0369A1;
+}
+
+.rank-meta {
+	margin-top: 3px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.row-chevron {
+	font-size: 18px;
+	line-height: 24px;
+	color: #94A3B8;
+	margin-left: 6px;
+}
+
+.operate-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.35);
+	align-items: center;
+	justify-content: center;
+}
+
+.operate-card {
+	padding: 18px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+}
+
+.operate-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+</style>

@@ -192,6 +192,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { autoGeneratePurchasePrices, deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
@@ -212,7 +213,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const pageNetTotalAmount = ref('0.00')
 const filterOptionsLoading = ref(false)
 const filterOptionsError = ref('')
@@ -575,7 +576,7 @@ function purchaseToListItem(item: PurchaseItem): UTSJSONObject {
 		importStatusMessage: purchaseImportMessage(importStatus),
 		title: numberText,
 		subtitle: '日期：' + stringValue(item.purchase_date, '-'),
-		amountText: '¥ ' + stringValue(item.total_amount, '0.00'),
+		amountText: stringValue(item.total_amount, '0.00') + ' zł',
 		supplierText: stringValue(item.supplier_name, '-'),
 		quantityText: item.received_quantity.toString() + '/' + item.total_quantity.toString(),
 		progressText: stringValue(item.receive_progress, '0') + '%',
@@ -815,7 +816,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '采购单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页不含税', value: '¥ ' + pageNetTotalAmount.value } as UTSJSONObject,
+		{ key: 'amount', label: '本页不含税', value: pageNetTotalAmount.value + ' zł' } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

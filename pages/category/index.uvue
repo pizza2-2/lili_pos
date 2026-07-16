@@ -1,157 +1,287 @@
 <template>
 	<view class="page">
 		<lili-universal-filter
-			title="分类"
-			searchPlaceholder="输入分类名称"
+			:title="pageTitle"
+			searchPlaceholder="搜索分类名称 / 编码"
 			:searchValue="keyword"
-			:filterVisible="filterVisible"
 			:showBack="true"
+			:interceptBack="true"
 			:showSearch="true"
-			:showFilter="true"
+			:showFilter="false"
 			:showHome="true"
-			:filterActive="hasActiveFilter"
-			filterText="重置"
 			homePath="/pages/tabbar/settings"
+			@back="handleNavBack"
 			@searchInput="handleSearchInput($event)"
 			@searchConfirm="handleSearchConfirm($event)"
 			@searchClear="handleSearchClear()"
-			@update:filterVisible="handleFilterVisibleChange($event)"
-		>
-			<template #filter-panel>
-				<view class="filter-panel">
-					<view class="filter-actions">
-						<view class="filter-btn filter-btn-light" @click="handleFilterReset">
-							<text class="filter-btn-light-text">重置</text>
+		></lili-universal-filter>
+
+		<!-- 树加载失败 -->
+		<view v-if="pageError != '' && !isTreeLoading" class="page-content">
+			<view class="state-card state-card-error">
+				<text class="state-title">分类加载失败</text>
+				<text class="state-desc">{{ pageError }}</text>
+				<button class="state-btn" @click="reloadPage">
+					<text class="state-btn-text">重新加载</text>
+				</button>
+			</view>
+		</view>
+
+		<!-- 首次加载 -->
+		<view v-else-if="isTreeLoading && !hasLoadedOnce" class="page-content">
+			<view class="state-card">
+				<text class="state-title">加载中</text>
+				<text class="state-desc">正在获取分类数据...</text>
+			</view>
+		</view>
+
+		<view v-else class="page-body">
+
+			<!-- ── 搜索态：全局平铺结果 ── -->
+			<view v-if="isSearching" class="page-body">
+				<view class="summary-row">
+					<text class="summary-text">{{ resultSummaryText }}</text>
+				</view>
+				<list-view v-if="searchRows.length > 0" class="main-list">
+					<list-item v-for="(row, index) in searchRows" :key="'sr-' + row.id" class="list-item-wrap">
+						<view :class="groupCellClass(index, searchRows.length)">
+							<view class="plain-row" @click="handleSearchRowTap(row)">
+								<view class="row-main">
+									<view class="row-title-line">
+										<text class="row-name">{{ row.name }}</text>
+										<text v-if="row.code != ''" class="row-code">{{ row.code }}</text>
+										<view v-if="!row.is_active" class="badge-off">
+											<text class="badge-off-text">停用</text>
+										</view>
+									</view>
+									<text class="row-meta">{{ row.pathStr }}</text>
+								</view>
+								<text class="row-chevron">›</text>
+							</view>
+							<view v-if="index < searchRows.length - 1" class="grp-sep"></view>
 						</view>
-						<view class="filter-btn filter-btn-primary" @click="applyFilters">
-							<text class="filter-btn-primary-text">应用</text>
+					</list-item>
+				</list-view>
+				<view v-else class="empty-state">
+					<text class="empty-title">未找到相关分类</text>
+					<text class="empty-desc">试试其他名称或编码关键词</text>
+				</view>
+			</view>
+
+			<!-- ── 常规态：钻取树 ── -->
+			<view v-else id="level-zone" class="page-body">
+
+				<!-- 紧凑顶栏：面包屑 + 当前层操作，仅占一行 -->
+				<view class="top-bar">
+					<view class="breadcrumb-row">
+						<view
+							v-for="seg in crumbSegs"
+							:key="'crumb-' + seg.index"
+							class="breadcrumb-item"
+							@click="handleCrumbTap(seg)"
+						>
+							<text :class="seg.index == crumbSegs.length - 1 ? 'breadcrumb-current' : 'breadcrumb-link'">{{ seg.name }}</text>
+							<text v-if="seg.index < crumbSegs.length - 1" class="breadcrumb-sep">›</text>
+						</view>
+						<view v-if="!isRootLevel && !currentIsActive" class="badge-off">
+							<text class="badge-off-text">停用</text>
 						</view>
 					</view>
+					<view v-if="!isRootLevel" class="txt-btn" @click="openCurrentActionSheet">
+						<text class="txt-btn-text">操作</text>
+					</view>
+					<view class="txt-btn" @click="goToReport">
+						<text class="txt-btn-text">报表</text>
+					</view>
+				</view>
 
-					<scroll-view scroll-y="true" class="filter-scroll">
-						<view class="filter-group">
-							<text class="filter-group-title">分类层级</text>
-							<view class="filter-options">
-								<view
-									v-for="option in levelFilterOptions"
-									:key="'level-' + option.value"
-									:class="selectedLevel == option.value ? 'filter-option filter-option-active' : 'filter-option'"
-									@click="toggleLevelFilter(option.value)"
-								>
-									<text :class="selectedLevel == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text'">{{ option.text }}</text>
+				<!-- 最近访问（仅根层） -->
+				<view v-if="isRootLevel && recents.length > 0" class="recents-block">
+					<text class="section-label">最近访问</text>
+					<view class="recents-row">
+						<view
+							v-for="item in recents"
+							:key="'recent-' + item.id"
+							class="recent-chip"
+							@click="handleRecentTap(item)"
+						>
+							<text class="recent-chip-text">{{ item.name }}</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 子分类列表 -->
+				<view v-if="!currentIsLeaf" class="page-body">
+					<list-view
+						v-if="childrenList.length > 0"
+						class="main-list"
+						:scroll-into-view="scrollIntoViewId"
+						:refresher-enabled="true"
+						:refresher-triggered="refresherTriggered"
+						@refresherrefresh="handleRefresherRefresh"
+					>
+						<list-item
+							v-for="(item, index) in childrenList"
+							:key="'cat-' + item.id"
+							:id="'cat-' + item.id"
+							class="list-item-wrap"
+						>
+							<view :class="groupCellClass(index, childrenList.length)">
+								<view class="swipe-wrap">
+									<!-- 左滑露出的操作按钮层 -->
+									<view class="swipe-actions">
+										<view class="swipe-btn swipe-btn-edit" @click="onSwipeEdit(item)">
+											<text class="swipe-btn-text">编辑</text>
+										</view>
+										<view class="swipe-btn swipe-btn-move" @click="onSwipeMove(item)">
+											<text class="swipe-btn-text">移动</text>
+										</view>
+										<view class="swipe-btn swipe-btn-del" @click="onSwipeDelete(item)">
+											<text class="swipe-btn-text">删除</text>
+										</view>
+									</view>
+									<!-- 可滑动的行面：拖拽时由手势代码直改样式 -->
+									<view
+										:id="'face-' + item.id"
+										:class="rowFaceClass(item)"
+										:style="rowFaceStyle(item)"
+										@click="rowTap(item)"
+										@longpress="onRowLongPress(item)"
+										@touchstart="onRowTouchStart($event as UniTouchEvent, item)"
+										@touchmove="onRowTouchMove($event as UniTouchEvent, item)"
+										@touchend="onRowTouchEnd(item)"
+										@touchcancel="onRowTouchEnd(item)"
+									>
+										<view v-if="selectMode" :class="isCatSelected(item) ? 'cat-check cat-check-active' : 'cat-check'">
+											<text class="cat-check-text">{{ isCatSelected(item) ? '✓' : '' }}</text>
+										</view>
+										<view class="row-main">
+											<text class="row-name">{{ item.name }}</text>
+											<text class="row-meta">{{ childMetaText(item) }}</text>
+										</view>
+										<view v-if="item.is_active" class="badge-on">
+											<text class="badge-on-text">启用</text>
+										</view>
+										<view v-else class="badge-off">
+											<text class="badge-off-text">停用</text>
+										</view>
+										<text v-if="!selectMode && !childIsLeaf(item)" class="row-chevron">›</text>
+										<view v-if="!selectMode" class="row-op" @click.stop="openRowActionSheet(item)">
+											<text class="row-op-text">⋯</text>
+										</view>
+									</view>
 								</view>
+								<view v-if="index < childrenList.length - 1" class="grp-sep"></view>
+							</view>
+						</list-item>
+					</list-view>
+					<view v-else class="empty-state">
+						<text class="empty-title">{{ isRootLevel ? '暂无分类' : '暂无子分类' }}</text>
+						<text class="empty-desc">点击右下角 + 新增</text>
+					</view>
+				</view>
+
+				<!-- 叶子分类：商品统计 + 分析报表（商品管理跳全功能商品页） -->
+				<view v-else class="page-body">
+					<scroll-view class="leaf-scroll">
+						<view class="leaf-card">
+							<view class="leaf-card-head">
+								<text class="leaf-card-title">商品统计</text>
+							</view>
+							<text v-if="workbenchError != ''" class="error-text">{{ workbenchError }}</text>
+							<view class="metric-grid">
+								<lili-metric-card label="商品数" :value="statText('product_count')"></lili-metric-card>
+								<lili-metric-card label="库存数" :value="statText('stock_quantity')"></lili-metric-card>
+								<lili-metric-card label="7日销售" :value="sales7Text" :delta="delta7Text"></lili-metric-card>
+								<lili-metric-card label="30日毛利" :value="statText('gross_profit', '0.00')"></lili-metric-card>
+							</view>
+							<view class="issue-row">
+								<text class="issue-text">异常 {{ issueText('issue_count') }}</text>
+								<text class="issue-dot">库存预警 {{ issueText('stock_warning_count') }}</text>
+								<text class="issue-dot">停用 {{ issueText('inactive_product_count') }}</text>
+								<text class="issue-dot">未绑收银 {{ issueText('missing_kasa_category_count') }}</text>
 							</view>
 						</view>
-
-						<view class="filter-group">
-							<text class="filter-group-title">节点状态</text>
-							<view class="filter-options">
-								<view
-									v-for="option in statusFilterOptions"
-									:key="'status-' + option.value"
-									:class="selectedStatus == option.value ? 'filter-option filter-option-active' : 'filter-option'"
-									@click="toggleStatusFilter(option.value)"
-								>
-									<text :class="selectedStatus == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text'">{{ option.text }}</text>
-								</view>
+						<view class="leaf-card">
+							<view class="leaf-card-head">
+								<text class="leaf-card-title">近14天销售趋势</text>
+							</view>
+							<text v-if="trendError != ''" class="error-text">{{ trendError }}</text>
+							<lili-trend-bars v-if="trendValues.length > 0" :values="trendValues" :labels="trendLabels" :height="56" unit="zł"></lili-trend-bars>
+							<view v-else class="leaf-empty">
+								<text class="leaf-empty-text">暂无趋势数据</text>
 							</view>
 						</view>
-
-						<view class="filter-group">
-							<text class="filter-group-title">排序方式</text>
-							<view class="filter-options">
-								<view
-									v-for="option in orderingFilterOptions"
-									:key="'ordering-' + option.value"
-									:class="selectedOrdering == option.value ? 'filter-option filter-option-active' : 'filter-option'"
-									@click="toggleOrderingFilter(option.value)"
-								>
-									<text :class="selectedOrdering == option.value ? 'filter-option-text filter-option-text-active' : 'filter-option-text'">{{ option.text }}</text>
-								</view>
+						<view class="leaf-actions">
+							<view class="leaf-btn leaf-btn-primary" @click="openCurrentProductsManagement">
+								<text class="leaf-btn-primary-text">管理商品</text>
+							</view>
+							<view class="leaf-btn" @click="goToReport">
+								<text class="leaf-btn-text">查看完整报表</text>
 							</view>
 						</view>
 					</scroll-view>
 				</view>
-			</template>
-		</lili-universal-filter>
 
-		<!-- #ifdef APP -->
-		<scroll-view style="flex:1" class="page-scroll">
-		<!-- #endif -->
-			<view class="page-content">
-				<view v-if="pageError != '' && !isLoading" class="state-card state-card-error">
-					<text class="state-title">分类加载失败</text>
-					<text class="state-desc">{{ pageError }}</text>
-					<button class="state-btn" @click="loadRootCategories">
-						<text class="state-btn-text">重新加载</text>
-					</button>
+			</view>
+		</view>
+
+		<!-- ── 多选批量操作栏 ── -->
+		<view v-if="selectMode && !isSearching" class="batch-bar">
+			<view class="batch-link-btn" @click="exitSelectMode">
+				<text class="batch-cancel-text">取消</text>
+			</view>
+			<view class="batch-link-btn" @click="toggleSelectAll">
+				<text class="batch-link-text">全选</text>
+			</view>
+			<text class="batch-count-text">已选 {{ selectedCatIds.length.toString() }} 项</text>
+			<view class="batch-btn batch-btn-move" @click="openMovePickerForSelected">
+				<text class="batch-btn-text">移动</text>
+			</view>
+			<view class="batch-btn batch-btn-del" @click="confirmBatchDelete">
+				<text class="batch-btn-text">删除</text>
+			</view>
+		</view>
+
+		<!-- ── 移动到…选择器 ── -->
+		<view v-if="movePickerVisible" class="sheet-mask" @click="closeMovePicker"></view>
+		<view v-if="movePickerVisible" class="sheet-panel">
+			<view class="sheet-handle"></view>
+			<view class="sheet-header">
+				<view v-if="movePickerPathIds.length > 0" class="sheet-header-side" @click="movePickerBack">
+					<text class="sheet-link-text">‹ 上一级</text>
 				</view>
-
-				<view v-else-if="isLoading && rootCategories.length == 0" class="state-card">
-					<text class="state-title">加载中</text>
-					<text class="state-desc">正在获取根分类及已展开分支...</text>
+				<view v-else class="sheet-header-side" @click="closeMovePicker">
+					<text class="sheet-cancel-text">取消</text>
 				</view>
-
-				<view v-else-if="rootCategories.length == 0" class="state-card">
-					<text class="state-title">暂无分类数据</text>
-					<text class="state-desc">可以调整筛选条件，或直接新增一个根分类。</text>
+				<text class="sheet-title">{{ movePickerTitle }}</text>
+				<view class="sheet-header-side"></view>
+			</view>
+			<text class="sheet-pos-text">当前位置：{{ movePickerPosText }}</text>
+			<scroll-view class="sheet-list">
+				<view v-if="movePickerRows.length == 0" class="sheet-empty">
+					<text class="sheet-empty-text">此层级下暂无可选分类</text>
 				</view>
-
-				<view v-else class="tree-list">
-					<view v-for="root in rootCategories" :key="'root-' + root.id" class="tree-section">
-						<view class="tree-node tree-node-level1">
-							<view class="tree-main" @click="openActionSheet(root)">
-								<text class="tree-title">{{ root.name }}</text>
-							</view>
-							<view v-if="canExpand(root)" class="tree-toggle-wrap" @click="toggleNode(root)">
-								<text class="tree-toggle">{{ isExpanded(root.id) ? '收起' : '展开' }}</text>
-							</view>
-						</view>
-
-						<view v-if="isExpanded(root.id)" class="tree-children tree-children-level2">
-							<view v-if="isNodeLoading(root.id)" class="child-state">
-								<text class="child-state-text">二级分类加载中...</text>
-							</view>
-							<view v-else-if="getChildren(root.id).length == 0" class="child-state">
-								<text class="child-state-text">暂无二级分类</text>
-							</view>
-							<view v-else>
-								<view v-for="second in getChildren(root.id)" :key="'second-' + second.id" class="tree-child-wrap">
-									<view class="tree-node tree-node-level2">
-										<view class="tree-main" @click="openActionSheet(second)">
-											<text class="tree-title">{{ second.name }}</text>
-										</view>
-										<view v-if="canExpand(second)" class="tree-toggle-wrap" @click="toggleNode(second)">
-											<text class="tree-toggle">{{ isExpanded(second.id) ? '收起' : '展开' }}</text>
-										</view>
-									</view>
-
-									<view v-if="isExpanded(second.id)" class="tree-children tree-children-level3">
-										<view v-if="isNodeLoading(second.id)" class="child-state">
-											<text class="child-state-text">三级分类加载中...</text>
-										</view>
-										<view v-else-if="getChildren(second.id).length == 0" class="child-state">
-											<text class="child-state-text">暂无三级分类</text>
-										</view>
-										<view v-else>
-											<view v-for="third in getChildren(second.id)" :key="'third-' + third.id" class="tree-node tree-node-level3">
-												<view class="tree-main" @click="openActionSheet(third)">
-													<text class="tree-title">{{ third.name }}</text>
-												</view>
-											</view>
-										</view>
-									</view>
-								</view>
-							</view>
-						</view>
-					</view>
+				<view
+					v-for="row in movePickerRows"
+					:key="'mp-' + row.id"
+					class="sheet-row"
+					@click="movePickerDrill(row)"
+				>
+					<text class="sheet-row-name">{{ row.name }}</text>
+					<text class="sheet-row-count">{{ pickerRowCountLabel(row) }}</text>
+					<text v-if="pickerRowDrillable(row)" class="row-chevron">›</text>
+				</view>
+			</scroll-view>
+			<view class="sheet-footer">
+				<text v-if="!moveValid" class="sheet-invalid-text">{{ moveInvalidHint }}</text>
+				<view :class="moveValid ? 'sheet-confirm-btn' : 'sheet-confirm-btn sheet-confirm-btn-disabled'" @click="confirmMove">
+					<text :class="moveValid ? 'sheet-confirm-text' : 'sheet-confirm-text sheet-confirm-text-disabled'">{{ moveConfirmLabel }}</text>
 				</view>
 			</view>
-		<!-- #ifdef APP -->
-		</scroll-view>
-		<!-- #endif -->
+		</view>
 
-		<view class="fab" @click="handleCreateRoot">
+		<view v-if="showFab" class="fab" @click="handleFabClick">
 			<text class="fab-text">+</text>
 		</view>
 
@@ -164,82 +294,126 @@
 </template>
 
 <script setup lang="uts">
-import { computed, onUnmounted } from 'vue'
+import { computed, ref, nextTick, onUnmounted } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { deleteCategory, getCategoryChildren, getCategoryRoots, CategoryItem, CategoryRootsQuery } from '@/pkg/api/modules/category'
+import { deleteCategory, getCategoryTrend, getCategoryWorkbench, moveCategory, CategoryTreeNode } from '@/pkg/api/modules/category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
-
-type FilterOption = {
-	value: string
-	text: string
-}
-
-type ChildGroup = {
-	parentId: number
-	items: CategoryItem[]
-}
+import { categoryTreeStore } from '@/store/categoryTree'
 
 const categoryListRefreshStorageKey = 'refresh:pages:category:index'
 const categoryListRefreshPayloadStorageKey = 'refresh:pages:category:index:payload'
-const keyword = ref('')
-const filterVisible = ref(false)
-const isLoading = ref(false)
-const isOperating = ref(false)
+const recentsStorageKey = 'recent:pages:category:visits'
+
+type CrumbSeg = {
+	id: number
+	name: string
+	index: number
+}
+
+type SearchRow = {
+	id: number
+	name: string
+	code: string
+	pathStr: string
+	is_active: boolean
+}
+
+type RecentItem = {
+	id: number
+	name: string
+}
+
+// ── 状态 ────────────────────────────────────────────────────────
+
+const isTreeLoading = ref(false)
+const hasLoadedOnce = ref(false)
 const pageError = ref('')
-const rootCategories = ref<CategoryItem[]>([])
-const childGroups = ref<ChildGroup[]>([])
-const expandedNodeIds = ref<string[]>([])
-const loadingNodeIds = ref<string[]>([])
-const loadedNodeIds = ref<string[]>([])
-const selectedLevel = ref('')
-const selectedStatus = ref('')
-const selectedOrdering = ref('name')
-const searchTimer = ref(0)
+const isOperating = ref(false)
 
-const levelFilterOptions = ref<FilterOption[]>([
-	{ value: '', text: '全部层级' } as FilterOption,
-	{ value: '1', text: '一级分类' } as FilterOption,
-	{ value: '2', text: '二级分类' } as FilterOption,
-	{ value: '3', text: '三级分类' } as FilterOption,
-])
+// 钻取位置：id 链（空数组 = 根层）
+const pathIds = ref<number[]>([] as number[])
+const crumbSegs = ref<CrumbSeg[]>([] as CrumbSeg[])
+const currentId = ref(0)
+const currentName = ref('')
+const currentLevel = ref(-1)
+const currentIsActive = ref(true)
+const currentIsLeaf = ref(false)
+const currentHealthScore = ref('')
+const childrenList = ref<CategoryTreeNode[]>([] as CategoryTreeNode[])
 
-const statusFilterOptions = ref<FilterOption[]>([
-	{ value: '', text: '全部状态' } as FilterOption,
-	{ value: 'branch', text: '分支节点' } as FilterOption,
-	{ value: 'leaf', text: '叶子节点' } as FilterOption,
-])
+const keyword = ref('')
+const searchRows = ref<SearchRow[]>([] as SearchRow[])
+const highlightId = ref(0)
+const highlightTimer = ref(0)
+const scrollIntoViewId = ref('')
+const recents = ref<RecentItem[]>([] as RecentItem[])
+const refresherTriggered = ref(false)
+const pendingDeepLinkId = ref(0)
 
-const orderingFilterOptions = ref<FilterOption[]>([
-	{ value: 'name', text: '按名称' } as FilterOption,
-	{ value: 'level', text: '按层级' } as FilterOption,
-	{ value: 'id', text: '按编号' } as FilterOption,
-])
+// 多选与左滑菜单（拖拽过程直改元素样式，只有停靠结果 swipeOpenId 参与响应式渲染）
+const selectMode = ref(false)
+const selectedCatIds = ref<number[]>([] as number[])
+const swipeOpenId = ref(0)
+
+// 移动选择器
+const movePickerVisible = ref(false)
+const moveIds = ref<number[]>([] as number[])
+const movePickerPathIds = ref<number[]>([] as number[])
+const moveMaxHeight = ref(1)
+// 业务规则「商品只能挂第三级」：子树带商品时目标容器深度必须等于当前层级（-1 = 不限制）
+const moveRequiredDepth = ref(-1)
+
+// 左滑手势几何常量与过程量（过程量不参与渲染，无需响应式）
+const swipeActionsWidth = 186
+const swipeOpenThreshold = -74
+let dragStartX = 0
+let dragStartY = 0
+let dragBase = 0
+let dragCandidateId = 0
+let dragHorizontal = false
+let dragMoved = false
+let dragLiveActive = false
+let dragLastX = 0
+let suppressRowTap = false
+
+// 叶子层统计（workbench + 趋势，进入叶子分类时拉取）
+const workbenchError = ref('')
+const workbenchStats = ref<UTSJSONObject>({} as UTSJSONObject)
+const workbenchIssues = ref<UTSJSONObject>({} as UTSJSONObject)
+const trendError = ref('')
+const trendValues = ref<number[]>([] as number[])
+const trendLabels = ref<string[]>([] as string[])
+const sales7Text = ref('-')
+const delta7Text = ref('')
+
+// ── 基础解析辅助 ────────────────────────────────────────────────
 
 function parseErrorMessage(error: any): string {
-	let message = '分类列表加载失败'
+	let message = '分类数据加载失败'
 	if (error != null) {
 		const errorText = JSON.stringify(error)
 		if (errorText != null && errorText != '') {
-			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
-			if (parsedError != null) {
-				const rawMessage = parsedError['message']
-				if (rawMessage != null) {
-					const parsedMessage = rawMessage as string
-					if (parsedMessage != '') {
-						message = parsedMessage
+			if (errorText.startsWith('{')) {
+				try {
+					const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+					if (parsedError != null) {
+						const rawMessage = parsedError['message']
+						if (rawMessage != null) {
+							const parsedMessage = '' + rawMessage
+							if (parsedMessage != '') {
+								message = parsedMessage
+							}
+						}
 					}
+				} catch (e) {
 				}
 			}
-			if (message == '分类列表加载失败') {
+			if (message == '分类数据加载失败') {
 				message = errorText
 			}
 		}
 	}
 	return message
-}
-
-function nodeIdText(id: number): string {
-	return id.toString()
 }
 
 function stringValue(value: any | null, fallback: string = ''): string {
@@ -265,392 +439,695 @@ function intValue(value: any | null, fallback: number = 0): number {
 	return parsed
 }
 
-function booleanValue(value: any | null, fallback: boolean = false): boolean {
+function floatValue(value: any | null, fallback: number = 0): number {
 	if (value == null) {
 		return fallback
 	}
-	const text = ('' + value).toLowerCase()
-	return text == 'true' || text == '1' || text == 'yes'
-}
-
-function parseStoredObject(value: any | null): UTSJSONObject | null {
-	if (value == null) {
-		return null
-	}
 	const text = '' + value
 	if (text == '') {
-		return null
+		return fallback
 	}
-	return JSON.parseObject<UTSJSONObject>(text)
-}
-
-function containsNodeId(list: string[], id: number): boolean {
-	return list.includes(nodeIdText(id))
-}
-
-function removeNodeId(list: string[], id: number): string[] {
-	const targetId = nodeIdText(id)
-	const nextIds: string[] = []
-	for (let index = 0; index < list.length; index += 1) {
-		if (list[index] != targetId) {
-			nextIds.push(list[index])
-		}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return fallback
 	}
-	return nextIds
+	return parsed
 }
 
-function clearTreeCache(): void {
-	childGroups.value = [] as ChildGroup[]
-	loadingNodeIds.value = [] as string[]
-	loadedNodeIds.value = [] as string[]
-}
-
-function findChildGroupIndex(parentId: number): number {
-	for (let index = 0; index < childGroups.value.length; index += 1) {
-		if (childGroups.value[index].parentId == parentId) {
-			return index
-		}
+function objectValue(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
 	}
-	return -1
-}
-
-function getChildren(parentId: number): CategoryItem[] {
-	const groupIndex = findChildGroupIndex(parentId)
-	if (groupIndex < 0) {
-		return [] as CategoryItem[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
 	}
-	return childGroups.value[groupIndex].items
-}
-
-function setChildren(parentId: number, items: CategoryItem[]): void {
-	const nextItems: CategoryItem[] = []
-	for (let index = 0; index < items.length; index += 1) {
-		const item = items[index]
-		if (item.level <= 3) {
-			nextItems.push(item)
-		}
-	}
-
-	const groupIndex = findChildGroupIndex(parentId)
-	if (groupIndex >= 0) {
-		childGroups.value[groupIndex].items = nextItems
-		return
-	}
-
-	childGroups.value.push({
-		parentId: parentId,
-		items: nextItems,
-	} as ChildGroup)
-}
-
-function isExpanded(id: number): boolean {
-	return containsNodeId(expandedNodeIds.value, id)
-}
-
-function isNodeLoading(id: number): boolean {
-	return containsNodeId(loadingNodeIds.value, id)
-}
-
-function isNodeLoaded(id: number): boolean {
-	return containsNodeId(loadedNodeIds.value, id)
-}
-
-function canExpand(item: CategoryItem): boolean {
-	if (item.level >= 2) {
-		return false
-	}
-	if (item.is_leaf) {
-		return false
-	}
-	return item.children_count > 0 || !item.is_leaf
-}
-
-function clearLegacyExpandedState(): void {
 	try {
-		uni.removeStorageSync('pages:category:index:expanded')
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed == null) {
+			return {} as UTSJSONObject
+		}
+		return parsed
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
+}
+
+// ── 展示辅助 ────────────────────────────────────────────────────
+
+function childIsLeaf(item: CategoryTreeNode): boolean {
+	return categoryTreeStore.isLeaf(item.id)
+}
+
+// 行副文案：N 个子类 · M 商品 · X 分（健康分并入行内，不再独立徽章）
+function childMetaText(item: CategoryTreeNode): string {
+	const parts: string[] = [] as string[]
+	const childCount = categoryTreeStore.childrenCountOf(item.id)
+	if (childCount > 0) {
+		parts.push(childCount.toString() + ' 个子类')
+	}
+	parts.push(item.products_count.toString() + ' 商品')
+	if (item.health_score != '') {
+		parts.push(item.health_score + ' 分')
+	}
+	return parts.join(' · ')
+}
+
+// 成组卡片：首行/末行圆角，模拟模板的整卡列表（行仍是独立 list-item 以保住复用）
+function groupCellClass(index: number, total: number): string {
+	let className = 'grp-cell'
+	if (index == 0) {
+		className = className + ' grp-first'
+	}
+	if (index >= total - 1) {
+		className = className + ' grp-last'
+	}
+	return className
+}
+
+function statText(key: string, fallback: string = '0'): string {
+	return stringValue(workbenchStats.value[key], fallback)
+}
+
+function issueText(key: string, fallback: string = '0'): string {
+	return stringValue(workbenchIssues.value[key], fallback)
+}
+
+// ── 计算属性 ────────────────────────────────────────────────────
+
+const isRootLevel = computed((): boolean => {
+	return pathIds.value.length == 0
+})
+
+const isSearching = computed((): boolean => {
+	return keyword.value.trim() != ''
+})
+
+const pageTitle = computed((): string => {
+	return isRootLevel.value ? '分类' : currentName.value
+})
+
+const resultSummaryText = computed((): string => {
+	const count = searchRows.value.length
+	return '共找到 ' + count.toString() + (count >= 50 ? '+' : '') + ' 个匹配分类'
+})
+
+const showFab = computed((): boolean => {
+	if (isSearching.value || selectMode.value || movePickerVisible.value) {
+		return false
+	}
+	if (isRootLevel.value) {
+		return true
+	}
+	return currentLevel.value < categoryTreeStore.maxLevel
+})
+
+
+// ── 最近访问 ────────────────────────────────────────────────────
+
+function loadRecentsFromStorage(): void {
+	try {
+		const raw = uni.getStorageSync(recentsStorageKey)
+		if (raw == null) {
+			return
+		}
+		const text = '' + raw
+		if (!text.startsWith('[')) {
+			return
+		}
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		if (parsed == null) {
+			return
+		}
+		const items: RecentItem[] = [] as RecentItem[]
+		for (let index = 0; index < parsed.length && index < 6; index += 1) {
+			const id = intValue(parsed[index]['id'])
+			const name = stringValue(parsed[index]['name'])
+			if (id > 0 && name != '') {
+				items.push({ id: id, name: name } as RecentItem)
+			}
+		}
+		recents.value = items
 	} catch (error) {
 	}
 }
 
-function buildRootsQuery(): CategoryRootsQuery {
-	return {
-		search: keyword.value == '' ? null : keyword.value,
-		level: selectedLevel.value == '' ? null : selectedLevel.value,
-		status: selectedStatus.value == '' ? null : selectedStatus.value,
-		ordering: selectedOrdering.value == '' ? null : selectedOrdering.value,
-	} as CategoryRootsQuery
-}
-
-async function ensureChildrenLoaded(item: CategoryItem): Promise<boolean> {
-	if (!canExpand(item)) {
-		return false
-	}
-	if (isNodeLoaded(item.id)) {
-		return true
-	}
-	if (isNodeLoading(item.id)) {
-		return false
-	}
-
-	if (!containsNodeId(loadingNodeIds.value, item.id)) {
-		loadingNodeIds.value.push(nodeIdText(item.id))
-	}
+function saveRecentsToStorage(): void {
 	try {
-		const children = await getCategoryChildren(item.id, keyword.value == '' ? null : keyword.value)
-		setChildren(item.id, children)
-		if (!containsNodeId(loadedNodeIds.value, item.id)) {
-			loadedNodeIds.value.push(nodeIdText(item.id))
-		}
-		return true
+		uni.setStorageSync(recentsStorageKey, JSON.stringify(recents.value))
 	} catch (error) {
-		showErrorToast(parseErrorMessage(error))
-		return false
-	} finally {
-		loadingNodeIds.value = removeNodeId(loadingNodeIds.value, item.id)
 	}
 }
 
-async function restoreExpandedBranches(): Promise<void> {
-	for (let index = 0; index < rootCategories.value.length; index += 1) {
-		const root = rootCategories.value[index]
-		if (!isExpanded(root.id)) {
-			continue
-		}
-		const loadedRootChildren = await ensureChildrenLoaded(root)
-		if (!loadedRootChildren) {
-			expandedNodeIds.value = removeNodeId(expandedNodeIds.value, root.id)
-			continue
-		}
-		const secondLevelChildren = getChildren(root.id)
-		for (let childIndex = 0; childIndex < secondLevelChildren.length; childIndex += 1) {
-			const second = secondLevelChildren[childIndex]
-			if (!isExpanded(second.id)) {
-				continue
-			}
-			const loadedSecondChildren = await ensureChildrenLoaded(second)
-			if (!loadedSecondChildren) {
-				expandedNodeIds.value = removeNodeId(expandedNodeIds.value, second.id)
-			}
+function visit(id: number, name: string): void {
+	const next: RecentItem[] = [{ id: id, name: name } as RecentItem]
+	for (let index = 0; index < recents.value.length; index += 1) {
+		if (recents.value[index].id != id && next.length < 6) {
+			next.push(recents.value[index])
 		}
 	}
+	recents.value = next
+	saveRecentsToStorage()
 }
 
-async function loadRootCategories(): Promise<void> {
-	if (isLoading.value) {
+function removeRecent(id: number): void {
+	const next: RecentItem[] = [] as RecentItem[]
+	for (let index = 0; index < recents.value.length; index += 1) {
+		if (recents.value[index].id != id) {
+			next.push(recents.value[index])
+		}
+	}
+	recents.value = next
+	saveRecentsToStorage()
+}
+
+// ── 叶子层统计（workbench + 趋势） ──────────────────────────────
+
+function resetLeafStats(): void {
+	workbenchError.value = ''
+	workbenchStats.value = {} as UTSJSONObject
+	workbenchIssues.value = {} as UTSJSONObject
+	trendError.value = ''
+	trendValues.value = [] as number[]
+	trendLabels.value = [] as string[]
+	sales7Text.value = '-'
+	delta7Text.value = ''
+}
+
+async function loadWorkbench(id: number): Promise<void> {
+	if (id <= 0) {
 		return
 	}
+	workbenchError.value = ''
+	try {
+		const response = await getCategoryWorkbench(id)
+		if (currentId.value != id) {
+			return
+		}
+		const payload = response.data
+		workbenchStats.value = objectValue(payload['stats'])
+		workbenchIssues.value = objectValue(payload['issues'])
+	} catch (error) {
+		if (currentId.value == id) {
+			workbenchError.value = parseErrorMessage(error)
+		}
+	}
+}
 
-	isLoading.value = true
+async function loadTrend(id: number): Promise<void> {
+	if (id <= 0) {
+		return
+	}
+	trendError.value = ''
+	try {
+		// 取 14 天：后 7 天为当前周期，前 7 天用于环比
+		const response = await getCategoryTrend(id, 14, true, null, 0)
+		if (currentId.value != id) {
+			return
+		}
+		const points = response.trend
+		const values: number[] = [] as number[]
+		const labels: string[] = [] as string[]
+		for (let index = 0; index < points.length; index += 1) {
+			values.push(floatValue(points[index].sales_amount))
+			const dateText = points[index].date
+			labels.push(dateText.length >= 10 ? dateText.substring(5) : dateText)
+		}
+		trendValues.value = values
+		trendLabels.value = labels
+
+		let last7 = 0
+		let prev7 = 0
+		const total = values.length
+		for (let index = 0; index < total; index += 1) {
+			if (index >= total - 7) {
+				last7 += values[index]
+			} else {
+				prev7 += values[index]
+			}
+		}
+		sales7Text.value = last7.toFixed(2) + ' zł'
+		if (prev7 > 0) {
+			const rate = (last7 - prev7) / prev7 * 100
+			if (rate > 0) {
+				delta7Text.value = '+' + rate.toFixed(1) + '%'
+			} else if (rate < 0) {
+				delta7Text.value = rate.toFixed(1) + '%'
+			} else {
+				delta7Text.value = '0.0%'
+			}
+		} else {
+			delta7Text.value = ''
+		}
+	} catch (error) {
+		if (currentId.value == id) {
+			trendError.value = parseErrorMessage(error)
+		}
+	}
+}
+
+// ── 钻取核心 ────────────────────────────────────────────────────
+
+function playLevelAnim(direction: string): void {
+	if (direction != 'push' && direction != 'pop') {
+		return
+	}
+	const element = uni.getElementById('level-zone')
+	if (element == null) {
+		return
+	}
+	const fromX = direction == 'push' ? '48px' : '-48px'
+	try {
+		element.animate([
+			{ transform: 'translateX(' + fromX + ')', opacity: 0.35 } as UTSJSONObject,
+			{ transform: 'translateX(0px)', opacity: 1 } as UTSJSONObject,
+		] as UTSJSONObject[], { duration: 260, easing: 'ease-out' } as UTSJSONObject)
+	} catch (error) {
+	}
+}
+
+// 应用钻取路径：一切派生状态（面包屑/当前节点/子列表/按需数据）都从这里出
+function applyPath(ids: number[], direction: string): void {
+	// 手势与多选状态复位
+	swipeOpenId.value = 0
+	selectMode.value = false
+	selectedCatIds.value = [] as number[]
+
+	// 逐段校验路径（树刷新后节点可能已被删除/移动，父子关系断裂处直接截断）
+	const validIds: number[] = [] as number[]
+	const segs: CrumbSeg[] = [{ id: 0, name: '全部', index: 0 } as CrumbSeg]
+	for (let index = 0; index < ids.length; index += 1) {
+		const node = categoryTreeStore.nodeOf(ids[index])
+		if (node == null) {
+			break
+		}
+		const expectedParentId = validIds.length == 0 ? 0 : validIds[validIds.length - 1]
+		if (node.parent_id != expectedParentId) {
+			break
+		}
+		validIds.push(node.id)
+		segs.push({ id: node.id, name: node.name, index: validIds.length } as CrumbSeg)
+	}
+	pathIds.value = validIds
+	crumbSegs.value = segs
+
+	// 高亮与滚动定位复位
+	highlightId.value = 0
+	scrollIntoViewId.value = ''
+
+	if (validIds.length == 0) {
+		currentId.value = 0
+		currentName.value = ''
+		currentLevel.value = -1
+		currentIsActive.value = true
+		currentIsLeaf.value = false
+		currentHealthScore.value = ''
+		childrenList.value = categoryTreeStore.childrenOf(0)
+		resetLeafStats()
+	} else {
+		const current = categoryTreeStore.nodeOf(validIds[validIds.length - 1])
+		if (current != null) {
+			currentId.value = current.id
+			currentName.value = current.name
+			currentLevel.value = current.level
+			currentIsActive.value = current.is_active
+			currentHealthScore.value = current.health_score
+			currentIsLeaf.value = categoryTreeStore.isLeaf(current.id)
+			childrenList.value = categoryTreeStore.childrenOf(current.id)
+			resetLeafStats()
+			if (currentIsLeaf.value) {
+				loadWorkbench(current.id)
+				loadTrend(current.id)
+			}
+		}
+	}
+
+	if (direction == 'push' || direction == 'pop') {
+		nextTick(() => {
+			playLevelAnim(direction)
+		})
+	}
+}
+
+async function ensureTree(force: boolean): Promise<void> {
+	isTreeLoading.value = true
 	pageError.value = ''
-	clearTreeCache()
-
 	try {
-		const roots = await getCategoryRoots(buildRootsQuery())
-		const nextRoots: CategoryItem[] = []
-		for (let index = 0; index < roots.length; index += 1) {
-			const item = roots[index]
-			if (item.level <= 3) {
-				nextRoots.push(item)
-			}
-		}
-		rootCategories.value = nextRoots
-		await restoreExpandedBranches()
+		await categoryTreeStore.load(force)
+		hasLoadedOnce.value = true
 	} catch (error) {
-		rootCategories.value = [] as CategoryItem[]
 		pageError.value = parseErrorMessage(error)
 	} finally {
-		isLoading.value = false
+		isTreeLoading.value = false
 	}
 }
 
-function closeFilterDrawer(): void {
-	filterVisible.value = false
+function reloadPage(): void {
+	ensureTree(true).then(() => {
+		if (pageError.value == '') {
+			applyPath(pathIds.value, '')
+		}
+	})
 }
 
-function handleFilterVisibleChange(value: any): void {
-	filterVisible.value = value as boolean
+// ── 导航与搜索交互 ──────────────────────────────────────────────
+
+function drillInto(item: CategoryTreeNode): void {
+	visit(item.id, item.name)
+	const nextIds: number[] = [] as number[]
+	for (let index = 0; index < pathIds.value.length; index += 1) {
+		nextIds.push(pathIds.value[index])
+	}
+	nextIds.push(item.id)
+	applyPath(nextIds, 'push')
 }
 
-function toggleLevelFilter(value: string): void {
-	selectedLevel.value = selectedLevel.value == value ? '' : value
+function handleCrumbTap(seg: CrumbSeg): void {
+	if (seg.index >= crumbSegs.value.length - 1) {
+		return
+	}
+	applyPath(pathIds.value.slice(0, seg.index), 'pop')
 }
 
-function toggleStatusFilter(value: string): void {
-	selectedStatus.value = selectedStatus.value == value ? '' : value
+function clearHighlightLater(): void {
+	if (highlightTimer.value > 0) {
+		clearTimeout(highlightTimer.value)
+	}
+	highlightTimer.value = setTimeout(() => {
+		highlightId.value = 0
+		scrollIntoViewId.value = ''
+	}, 1800)
 }
 
-function toggleOrderingFilter(value: string): void {
-	selectedOrdering.value = value
-}
-
-function applyFilters(): void {
-	closeFilterDrawer()
-	loadRootCategories()
-}
-
-function handleFilterReset(): void {
+// 传送：跳到目标分类所在层级；分支节点直接进入，叶子节点定位到父层并高亮
+function teleportTo(id: number): boolean {
+	const node = categoryTreeStore.nodeOf(id)
+	if (node == null) {
+		return false
+	}
+	visit(node.id, node.name)
 	keyword.value = ''
-	selectedLevel.value = ''
-	selectedStatus.value = ''
-	selectedOrdering.value = 'name'
-	closeFilterDrawer()
-	loadRootCategories()
+	searchRows.value = [] as SearchRow[]
+	const ancestors = categoryTreeStore.ancestorsOf(id)
+	const ancestorIds: number[] = [] as number[]
+	for (let index = 0; index < ancestors.length; index += 1) {
+		ancestorIds.push(ancestors[index].id)
+	}
+	if (!categoryTreeStore.isLeaf(id)) {
+		ancestorIds.push(id)
+		applyPath(ancestorIds, 'push')
+	} else {
+		applyPath(ancestorIds, 'push')
+		highlightId.value = id
+		nextTick(() => {
+			scrollIntoViewId.value = 'cat-' + id
+		})
+		clearHighlightLater()
+	}
+	return true
 }
 
-function startSearchReload(): void {
-	if (searchTimer.value > 0) {
-		clearTimeout(searchTimer.value)
+function runSearch(): void {
+	const needle = keyword.value.trim()
+	if (needle == '') {
+		searchRows.value = [] as SearchRow[]
+		return
 	}
-	searchTimer.value = setTimeout(() => {
-		loadRootCategories()
-	}, 400)
+	const matched = categoryTreeStore.search(needle, 50)
+	const rows: SearchRow[] = [] as SearchRow[]
+	for (let index = 0; index < matched.length; index += 1) {
+		const node = matched[index]
+		rows.push({
+			id: node.id,
+			name: node.name,
+			code: node.code,
+			pathStr: categoryTreeStore.pathTextOf(node.id),
+			is_active: node.is_active,
+		} as SearchRow)
+	}
+	searchRows.value = rows
 }
 
 function handleSearchInput(value: any): void {
 	keyword.value = value as string
-	startSearchReload()
+	runSearch()
 }
 
 function handleSearchConfirm(value: any | null = null): void {
 	if (value != null) {
 		keyword.value = value as string
 	}
-	if (searchTimer.value > 0) {
-		clearTimeout(searchTimer.value)
-		searchTimer.value = 0
-	}
-	loadRootCategories()
+	runSearch()
 }
 
 function handleSearchClear(): void {
 	keyword.value = ''
-	if (searchTimer.value > 0) {
-		clearTimeout(searchTimer.value)
-		searchTimer.value = 0
+	searchRows.value = [] as SearchRow[]
+}
+
+function handleSearchRowTap(row: SearchRow): void {
+	teleportTo(row.id)
+}
+
+function handleRecentTap(item: RecentItem): void {
+	if (!teleportTo(item.id)) {
+		removeRecent(item.id)
+		uni.showToast({ title: '该分类已不存在', icon: 'none', duration: 3000 })
 	}
-	loadRootCategories()
 }
 
-function pruneExpandedIdsAfterCollapse(parentId: number): void {
-	const directChildren = getChildren(parentId)
-	for (let index = 0; index < directChildren.length; index += 1) {
-		const child = directChildren[index]
-		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, child.id)
+// ── 多选模式 ────────────────────────────────────────────────────
+
+function closeSwipe(): void {
+	swipeOpenId.value = 0
+}
+
+function isCatSelected(item: CategoryTreeNode): boolean {
+	return selectedCatIds.value.includes(item.id)
+}
+
+function toggleCatSelection(item: CategoryTreeNode): void {
+	if (selectedCatIds.value.includes(item.id)) {
+		const next: number[] = [] as number[]
+		for (let index = 0; index < selectedCatIds.value.length; index += 1) {
+			if (selectedCatIds.value[index] != item.id) next.push(selectedCatIds.value[index])
+		}
+		selectedCatIds.value = next
+		return
+	}
+	selectedCatIds.value.push(item.id)
+}
+
+function toggleSelectAll(): void {
+	if (selectedCatIds.value.length == childrenList.value.length) {
+		selectedCatIds.value = [] as number[]
+	} else {
+		const all: number[] = [] as number[]
+		for (let index = 0; index < childrenList.value.length; index += 1) {
+			all.push(childrenList.value[index].id)
+		}
+		selectedCatIds.value = all
 	}
 }
 
-function canAddChild(item: CategoryItem): boolean {
-	return item.level < 2
+function exitSelectMode(): void {
+	selectMode.value = false
+	selectedCatIds.value = [] as number[]
 }
 
-function hasPendingQueryState(): boolean {
-	return keyword.value != '' || selectedLevel.value != '' || selectedStatus.value != '' || selectedOrdering.value != 'name'
-}
+// ── 移动选择器（本地树钻取 + 三层限制校验） ──────────────────────
 
-function patchCategoryItem(target: CategoryItem, payload: UTSJSONObject): void {
-	target.name = stringValue(payload['name'], target.name)
-	target.code = stringValue(payload['code'], target.code)
-	target.level = intValue(payload['level'], target.level)
-	target.parent_id = intValue(payload['parent_id'], target.parent_id)
-	target.sort_order = intValue(payload['sort_order'], target.sort_order)
-	target.tax_rate = stringValue(payload['tax_rate'], target.tax_rate)
-	target.kasa_category_id = intValue(payload['kasa_category_id'], target.kasa_category_id)
-	target.products_count = intValue(payload['products_count'], target.products_count)
-	target.children_count = intValue(payload['children_count'], target.children_count)
-	target.is_active = booleanValue(payload['is_active'], target.is_active)
-	target.is_leaf = booleanValue(payload['is_leaf'], target.is_leaf)
-	target.full_name = stringValue(payload['full_name'], target.full_name)
-	target.path = stringValue(payload['path'], target.path)
-	target.created_at = stringValue(payload['created_at'], target.created_at)
-	target.updated_at = stringValue(payload['updated_at'], target.updated_at)
-}
+const movePickerRows = computed((): CategoryTreeNode[] => {
+	const parentId = movePickerPathIds.value.length == 0 ? 0 : movePickerPathIds.value[movePickerPathIds.value.length - 1]
+	const rows = categoryTreeStore.childrenOf(parentId)
+	const result: CategoryTreeNode[] = [] as CategoryTreeNode[]
+	for (let index = 0; index < rows.length; index += 1) {
+		// 被移动节点自身不可选（其子树只能经由自身进入，因此天然一并排除）
+		if (!moveIds.value.includes(rows[index].id)) {
+			result.push(rows[index])
+		}
+	}
+	return result
+})
 
-function patchCategoryNode(payload: UTSJSONObject): boolean {
-	const targetId = intValue(payload['id'], 0)
-	if (targetId <= 0) {
+const movePickerTitle = computed((): string => {
+	return '移动 ' + moveIds.value.length.toString() + ' 个分类到…'
+})
+
+const movePickerPosText = computed((): string => {
+	if (movePickerPathIds.value.length == 0) {
+		return '顶级分类'
+	}
+	const names: string[] = [] as string[]
+	for (let index = 0; index < movePickerPathIds.value.length; index += 1) {
+		const node = categoryTreeStore.nodeOf(movePickerPathIds.value[index])
+		if (node != null) {
+			names.push(node.name)
+		}
+	}
+	return names.join(' › ')
+})
+
+const moveTargetName = computed((): string => {
+	if (movePickerPathIds.value.length == 0) {
+		return '顶级分类'
+	}
+	const node = categoryTreeStore.nodeOf(movePickerPathIds.value[movePickerPathIds.value.length - 1])
+	return node == null ? '顶级分类' : node.name
+})
+
+// 校验一：目标容器层级 + 被移子树最大高度 不得超过总层数上限（maxLevel=2 即三级）
+// 校验二：子树挂有商品时只能平级移动，保证商品始终留在第三级分类
+const moveValid = computed((): boolean => {
+	if (movePickerPathIds.value.length + moveMaxHeight.value > categoryTreeStore.maxLevel + 1) {
 		return false
 	}
-	for (let index = 0; index < rootCategories.value.length; index += 1) {
-		const item = rootCategories.value[index]
-		if (item.id != targetId) {
-			continue
-		}
-		patchCategoryItem(item, payload)
-		return true
+	if (moveRequiredDepth.value >= 0 && movePickerPathIds.value.length != moveRequiredDepth.value) {
+		return false
 	}
-	for (let groupIndex = 0; groupIndex < childGroups.value.length; groupIndex += 1) {
-		const items = childGroups.value[groupIndex].items
-		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
-			const item = items[itemIndex]
-			if (item.id != targetId) {
-				continue
-			}
-			patchCategoryItem(item, payload)
-			return true
-		}
+	return true
+})
+
+const moveInvalidHint = computed((): string => {
+	if (movePickerPathIds.value.length + moveMaxHeight.value > categoryTreeStore.maxLevel + 1) {
+		return '超出三层限制，不能移动到此层级'
 	}
-	return false
+	if (moveRequiredDepth.value >= 0 && movePickerPathIds.value.length != moveRequiredDepth.value) {
+		return '分类下挂有商品，只能在同层级间移动（商品必须保持在第三级分类）'
+	}
+	return ''
+})
+
+const moveConfirmLabel = computed((): string => {
+	return '移动到「' + moveTargetName.value + '」'
+})
+
+function pickerRowDrillable(row: CategoryTreeNode): boolean {
+	return categoryTreeStore.childrenCountOf(row.id) > 0 && movePickerPathIds.value.length < categoryTreeStore.maxLevel
 }
 
-async function consumeRefreshState(): Promise<void> {
-	let payload: UTSJSONObject | null = null
-	try {
-		payload = parseStoredObject(uni.getStorageSync(categoryListRefreshPayloadStorageKey))
-		uni.removeStorageSync(categoryListRefreshPayloadStorageKey)
-		uni.removeStorageSync(categoryListRefreshStorageKey)
-	} catch (error) {
-		payload = null
+function pickerRowCountLabel(row: CategoryTreeNode): string {
+	const childCount = categoryTreeStore.childrenCountOf(row.id)
+	if (childCount > 0) {
+		return '子分类 ' + childCount.toString()
 	}
+	return '商品 ' + row.products_count.toString()
+}
 
-	if (payload == null) {
-		let legacyRefresh = ''
+function openMovePicker(ids: number[]): void {
+	if (ids.length == 0) {
+		uni.showToast({ title: '请先选择分类', icon: 'none', duration: 3000 })
+		return
+	}
+	const snapshot: number[] = [] as number[]
+	let maxHeight = 1
+	let requiredDepth = -1
+	for (let index = 0; index < ids.length; index += 1) {
+		snapshot.push(ids[index])
+		const height = categoryTreeStore.subtreeHeightOf(ids[index])
+		if (height > maxHeight) {
+			maxHeight = height
+		}
+		// 子树带商品 → 只能平级移动（多选项都是同层级，取到一个即可）
+		const node = categoryTreeStore.nodeOf(ids[index])
+		if (requiredDepth < 0 && node != null && node.products_count > 0) {
+			requiredDepth = node.level
+		}
+	}
+	moveIds.value = snapshot
+	moveMaxHeight.value = maxHeight
+	moveRequiredDepth.value = requiredDepth
+	movePickerPathIds.value = [] as number[]
+	movePickerVisible.value = true
+	closeSwipe()
+}
+
+function closeMovePicker(): void {
+	movePickerVisible.value = false
+}
+
+function movePickerDrill(row: CategoryTreeNode): void {
+	if (!pickerRowDrillable(row)) {
+		return
+	}
+	const next: number[] = [] as number[]
+	for (let index = 0; index < movePickerPathIds.value.length; index += 1) {
+		next.push(movePickerPathIds.value[index])
+	}
+	next.push(row.id)
+	movePickerPathIds.value = next
+}
+
+function movePickerBack(): void {
+	movePickerPathIds.value = movePickerPathIds.value.slice(0, movePickerPathIds.value.length - 1)
+}
+
+async function executeMove(): Promise<void> {
+	const ids: number[] = [] as number[]
+	for (let index = 0; index < moveIds.value.length; index += 1) {
+		ids.push(moveIds.value[index])
+	}
+	const targetParentId = movePickerPathIds.value.length == 0 ? 0 : movePickerPathIds.value[movePickerPathIds.value.length - 1]
+	isOperating.value = true
+	let successCount = 0
+	let failureCount = 0
+	let firstError = ''
+	for (let index = 0; index < ids.length; index += 1) {
 		try {
-			legacyRefresh = stringValue(uni.getStorageSync(categoryListRefreshStorageKey))
-			uni.removeStorageSync(categoryListRefreshStorageKey)
+			await moveCategory(ids[index], targetParentId == 0 ? null : targetParentId)
+			successCount += 1
 		} catch (error) {
-			legacyRefresh = ''
+			failureCount += 1
+			if (firstError == '') {
+				firstError = parseErrorMessage(error)
+			}
 		}
-		if (legacyRefresh == '1') {
-			await loadRootCategories()
-		}
-		return
 	}
+	isOperating.value = false
+	movePickerVisible.value = false
+	exitSelectMode()
+	if (failureCount > 0) {
+		showErrorToast('移动成功' + successCount.toString() + '，失败' + failureCount.toString() + '：' + firstError)
+	} else {
+		uni.showToast({ title: '已移动 ' + successCount.toString() + ' 个分类', icon: 'success' })
+	}
+	try {
+		await categoryTreeStore.load(true)
+	} catch (error) {
+	}
+	applyPath(pathIds.value, '')
+}
 
-	const action = stringValue(payload['action'])
-	if (action == '') {
+function confirmMove(): void {
+	if (!moveValid.value || isOperating.value) {
 		return
 	}
-	if (action != 'edit') {
-		await loadRootCategories()
-		return
-	}
-	if (hasPendingQueryState()) {
-		await loadRootCategories()
-		return
-	}
+	executeMove()
+}
 
-	const previousParentId = stringValue(payload['previous_parent_id'])
-	const currentParentId = stringValue(payload['current_parent_id'])
-	if (previousParentId != currentParentId) {
-		await loadRootCategories()
-		return
-	}
-
-	const patched = patchCategoryNode(payload)
-	if (!patched) {
-		await loadRootCategories()
+async function handleRefresherRefresh(): Promise<void> {
+	refresherTriggered.value = true
+	try {
+		await categoryTreeStore.load(true)
+		applyPath(pathIds.value, '')
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		refresherTriggered.value = false
 	}
 }
 
-function goToEdit(item: CategoryItem): void {
+// ── 分类操作（编辑/新增走 from.uvue，删除就地执行） ───────────────
+
+function goToEdit(id: number): void {
 	uni.navigateTo({
-		url: '/pages/category/from?id=' + item.id + '&mode=edit',
+		url: '/pages/category/from?id=' + id.toString() + '&mode=edit',
 	})
 }
 
-function goToAddChild(item: CategoryItem): void {
+function goToAddChild(id: number, name: string): void {
 	uni.navigateTo({
-		url: '/pages/category/from?parent_id=' + item.id + '&parent_name=' + encodeURIComponent(item.name) + '&mode=add',
+		url: '/pages/category/from?parent_id=' + id.toString() + '&parent_name=' + encodeURIComponent(name) + '&mode=add',
 	})
 }
 
@@ -660,24 +1137,82 @@ function handleCreateRoot(): void {
 	})
 }
 
-function removeExpandedIdDeep(id: number): void {
-	expandedNodeIds.value = removeNodeId(expandedNodeIds.value, id)
-	const children = getChildren(id)
-	for (let index = 0; index < children.length; index += 1) {
-		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, children[index].id)
+function handleFabClick(): void {
+	if (isRootLevel.value) {
+		handleCreateRoot()
+		return
 	}
+	goToAddChild(currentId.value, currentName.value)
 }
 
-async function executeDelete(item: CategoryItem): Promise<void> {
+function openProductsManagementFor(id: number, name: string): void {
+	// 商品页预筛选通过 storage 交接；父级分类传整棵子树（含自身），子树 id 由本地树直接算出
+	if (id <= 0) {
+		return
+	}
+	const subtreeIds = categoryTreeStore.subtreeIdsOf(id, true)
+	const idTexts: string[] = [] as string[]
+	for (let index = 0; index < subtreeIds.length; index += 1) {
+		idTexts.push(subtreeIds[index].toString())
+	}
+	const payload = {
+		category_ids: idTexts.join(','),
+		category_name: name,
+	} as UTSJSONObject
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+function openCurrentProductsManagement(): void {
+	openProductsManagementFor(currentId.value, currentName.value)
+}
+
+// 报表入口：根层进经营仪表盘，分类层进该分类的分析报表
+function goToReport(): void {
+	if (isRootLevel.value) {
+		uni.navigateTo({
+			url: '/pages/category/dashboard',
+			fail: (_) => {
+				uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+			},
+		})
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/category/analytics?id=' + currentId.value.toString() + '&name=' + encodeURIComponent(currentName.value),
+		fail: (_) => {
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+async function executeDelete(id: number, isCurrent: boolean): Promise<void> {
 	try {
 		isOperating.value = true
-		await deleteCategory(item.id)
-		removeExpandedIdDeep(item.id)
+		await deleteCategory(id)
 		uni.showToast({
 			title: takeLatestResponseMessage('删除成功'),
 			icon: 'success',
 		})
-		loadRootCategories()
+		removeRecent(id)
+		await categoryTreeStore.load(true)
+		if (isCurrent) {
+			applyPath(pathIds.value.slice(0, pathIds.value.length - 1), 'pop')
+		} else {
+			applyPath(pathIds.value, '')
+		}
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error))
 	} finally {
@@ -685,26 +1220,40 @@ async function executeDelete(item: CategoryItem): Promise<void> {
 	}
 }
 
-function confirmDelete(item: CategoryItem): void {
+function confirmDelete(id: number, name: string, isCurrent: boolean): void {
+	// 本地预拦截：子树商品数 > 0 时后端会拒绝，提前提示省一次请求
+	const node = categoryTreeStore.nodeOf(id)
+	if (node != null && node.products_count > 0) {
+		uni.showToast({
+			title: '「' + name + '」及下级还有 ' + node.products_count.toString() + ' 个商品，请先迁移商品',
+			icon: 'none', duration: 3500,
+		})
+		return
+	}
+	const subtreeCount = categoryTreeStore.subtreeIdsOf(id, true).length
+	const suffix = subtreeCount > 1 ? '（含 ' + (subtreeCount - 1).toString() + ' 个下级分类）' : ''
 	uni.showModal({
 		title: '确认删除',
-		content: '确定删除分类「' + item.name + '」吗？此操作不可恢复。',
-		confirmColor: '#DC2626',
+		content: '确定删除分类「' + name + '」' + suffix + '吗？此操作不可恢复。',
+		confirmColor: '#E5484D',
 		success: (res) => {
 			if (!res.confirm) {
 				return
 			}
-			executeDelete(item)
+			executeDelete(id, isCurrent)
 		},
 	})
 }
 
-function openActionSheet(item: CategoryItem): void {
+function openActionSheetFor(id: number, name: string, level: number, isCurrent: boolean): void {
+	const canAddChild = level < categoryTreeStore.maxLevel
 	const itemList: string[] = [] as string[]
 	itemList.push('编辑分类')
-	if (canAddChild(item)) {
+	if (canAddChild) {
 		itemList.push('新增子分类')
 	}
+	itemList.push('移动分类')
+	itemList.push('管理商品')
 	itemList.push('删除分类')
 
 	uni.showActionSheet({
@@ -712,57 +1261,372 @@ function openActionSheet(item: CategoryItem): void {
 		success: (res) => {
 			const tapIndex = res.tapIndex
 			if (tapIndex == 0) {
-				goToEdit(item)
+				goToEdit(id)
 				return
 			}
-			if (canAddChild(item) && tapIndex == 1) {
-				goToAddChild(item)
+			let cursor = 1
+			if (canAddChild) {
+				if (tapIndex == 1) {
+					goToAddChild(id, name)
+					return
+				}
+				cursor = 2
+			}
+			if (tapIndex == cursor) {
+				openMovePicker([id])
 				return
 			}
-			confirmDelete(item)
+			if (tapIndex == cursor + 1) {
+				openProductsManagementFor(id, name)
+				return
+			}
+			confirmDelete(id, name, isCurrent)
 		},
 	})
 }
 
-async function toggleNode(item: CategoryItem): Promise<void> {
-	if (!canExpand(item)) {
-		openActionSheet(item)
+function openRowActionSheet(item: CategoryTreeNode): void {
+	openActionSheetFor(item.id, item.name, item.level, false)
+}
+
+function openCurrentActionSheet(): void {
+	if (currentId.value <= 0) {
 		return
 	}
+	openActionSheetFor(currentId.value, currentName.value, currentLevel.value, true)
+}
 
-	if (isExpanded(item.id)) {
-		expandedNodeIds.value = removeNodeId(expandedNodeIds.value, item.id)
-		if (item.level == 1) {
-			pruneExpandedIdsAfterCollapse(item.id)
+
+// ── 行手势：左滑菜单 / 长按多选 / 点击 ───────────────────────────
+
+function rowFaceClass(item: CategoryTreeNode): string {
+	let className = 'row-face'
+	if (highlightId.value == item.id) {
+		className = className + ' row-face-highlight'
+	}
+	return className
+}
+
+// 只描述"停靠"状态；拖拽过程由 touch handler 直改元素样式，不经过响应式
+function rowFaceStyle(item: CategoryTreeNode): string {
+	const translateX = swipeOpenId.value == item.id ? 0 - swipeActionsWidth : 0
+	return 'transform:translateX(' + translateX.toString() + 'px);transition-property:transform;transition-duration:240ms;'
+}
+
+function onRowTouchStart(event: UniTouchEvent, item: CategoryTreeNode): void {
+	suppressRowTap = false
+	if (selectMode.value || movePickerVisible.value) {
+		return
+	}
+	if (event.touches.length == 0) {
+		return
+	}
+	dragStartX = event.touches[0].clientX
+	dragStartY = event.touches[0].clientY
+	dragBase = swipeOpenId.value == item.id ? 0 - swipeActionsWidth : 0
+	dragCandidateId = item.id
+	dragHorizontal = false
+	dragMoved = false
+	dragLiveActive = false
+	dragLastX = dragBase
+}
+
+function onRowTouchMove(event: UniTouchEvent, item: CategoryTreeNode): void {
+	if (selectMode.value || dragCandidateId != item.id) {
+		return
+	}
+	if (event.touches.length == 0) {
+		return
+	}
+	const deltaX = event.touches[0].clientX - dragStartX
+	const deltaY = event.touches[0].clientY - dragStartY
+	if (!dragMoved) {
+		if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) {
+			return
 		}
+		dragMoved = true
+		// 方向锁：横向意图才接管为左滑，纵向交给列表滚动
+		dragHorizontal = Math.abs(deltaX) > Math.abs(deltaY)
+	}
+	if (!dragHorizontal) {
 		return
 	}
-
-	const loaded = await ensureChildrenLoaded(item)
-	if (!loaded) {
-		return
+	let next = dragBase + deltaX
+	if (next > 0) {
+		next = 0
 	}
-	if (!containsNodeId(expandedNodeIds.value, item.id)) {
-		expandedNodeIds.value.push(nodeIdText(item.id))
+	if (next < 0 - swipeActionsWidth) {
+		next = 0 - swipeActionsWidth
+	}
+	dragLastX = next
+	// 直改元素样式绕开响应式：touchmove 频率高，走 vdom 会整列表重渲染导致掉帧
+	const element = uni.getElementById('face-' + item.id.toString())
+	if (element != null) {
+		if (!dragLiveActive) {
+			dragLiveActive = true
+			element.style.setProperty('transition-duration', '0ms')
+		}
+		element.style.setProperty('transform', 'translateX(' + next.toString() + 'px)')
 	}
 }
 
-const hasActiveFilter = computed((): boolean => {
-	return selectedLevel.value != '' || selectedStatus.value != '' || selectedOrdering.value != 'name'
-})
+function onRowTouchEnd(item: CategoryTreeNode): void {
+	if (dragCandidateId != item.id) {
+		return
+	}
+	dragCandidateId = 0
+	if (dragHorizontal && dragLiveActive) {
+		suppressRowTap = true
+		const shouldOpen = dragLastX < swipeOpenThreshold
+		const settleX = shouldOpen ? 0 - swipeActionsWidth : 0
+		// 恢复过渡并命令式归位：若停靠状态未变化不会触发重渲染，必须手动落位
+		const element = uni.getElementById('face-' + item.id.toString())
+		if (element != null) {
+			element.style.setProperty('transition-duration', '240ms')
+			element.style.setProperty('transform', 'translateX(' + settleX.toString() + 'px)')
+		}
+		swipeOpenId.value = shouldOpen ? item.id : 0
+	} else if (dragMoved) {
+		// 发生过位移（如纵向滚动）时防止误触点击
+		suppressRowTap = true
+	}
+	dragHorizontal = false
+	dragMoved = false
+	dragLiveActive = false
+}
 
-onLoad(() => {
-	clearLegacyExpandedState()
-	loadRootCategories()
+function rowTap(item: CategoryTreeNode): void {
+	if (suppressRowTap) {
+		suppressRowTap = false
+		return
+	}
+	if (selectMode.value) {
+		toggleCatSelection(item)
+		return
+	}
+	if (swipeOpenId.value != 0) {
+		closeSwipe()
+		return
+	}
+	drillInto(item)
+}
+
+function onRowLongPress(item: CategoryTreeNode): void {
+	if (selectMode.value || movePickerVisible.value || dragMoved) {
+		return
+	}
+	closeSwipe()
+	suppressRowTap = true
+	selectMode.value = true
+	selectedCatIds.value = [item.id]
+	uni.showToast({ title: '已进入多选模式', icon: 'none', duration: 2000 })
+}
+
+function onSwipeEdit(item: CategoryTreeNode): void {
+	closeSwipe()
+	goToEdit(item.id)
+}
+
+function onSwipeMove(item: CategoryTreeNode): void {
+	closeSwipe()
+	openMovePicker([item.id])
+}
+
+function onSwipeDelete(item: CategoryTreeNode): void {
+	closeSwipe()
+	confirmDelete(item.id, item.name, false)
+}
+
+// ── 批量操作（分类多选） ─────────────────────────────────────────
+
+function openMovePickerForSelected(): void {
+	if (selectedCatIds.value.length == 0) {
+		uni.showToast({ title: '请先选择分类', icon: 'none', duration: 3000 })
+		return
+	}
+	const snapshot: number[] = [] as number[]
+	for (let index = 0; index < selectedCatIds.value.length; index += 1) {
+		snapshot.push(selectedCatIds.value[index])
+	}
+	openMovePicker(snapshot)
+}
+
+async function executeBatchDelete(): Promise<void> {
+	const ids: number[] = [] as number[]
+	for (let index = 0; index < selectedCatIds.value.length; index += 1) {
+		ids.push(selectedCatIds.value[index])
+	}
+	isOperating.value = true
+	let successCount = 0
+	let failureCount = 0
+	let firstError = ''
+	for (let index = 0; index < ids.length; index += 1) {
+		try {
+			await deleteCategory(ids[index])
+			removeRecent(ids[index])
+			successCount += 1
+		} catch (error) {
+			failureCount += 1
+			if (firstError == '') {
+				firstError = parseErrorMessage(error)
+			}
+		}
+	}
+	isOperating.value = false
+	exitSelectMode()
+	if (failureCount > 0) {
+		showErrorToast('删除成功' + successCount.toString() + '，失败' + failureCount.toString() + '：' + firstError)
+	} else {
+		uni.showToast({ title: '已删除 ' + successCount.toString() + ' 个分类', icon: 'success' })
+	}
+	try {
+		await categoryTreeStore.load(true)
+	} catch (error) {
+	}
+	applyPath(pathIds.value, '')
+}
+
+function confirmBatchDelete(): void {
+	if (selectedCatIds.value.length == 0) {
+		uni.showToast({ title: '请先选择分类', icon: 'none', duration: 3000 })
+		return
+	}
+	// 本地预拦截：任一选中分类的子树内有商品即阻止
+	for (let index = 0; index < selectedCatIds.value.length; index += 1) {
+		const node = categoryTreeStore.nodeOf(selectedCatIds.value[index])
+		if (node != null && node.products_count > 0) {
+			uni.showToast({
+				title: '「' + node.name + '」及下级还有 ' + node.products_count.toString() + ' 个商品，请先迁移商品',
+				icon: 'none', duration: 3500,
+			})
+			return
+		}
+	}
+	let totalCount = 0
+	for (let index = 0; index < selectedCatIds.value.length; index += 1) {
+		totalCount += categoryTreeStore.subtreeIdsOf(selectedCatIds.value[index], true).length
+	}
+	uni.showModal({
+		title: '确认删除',
+		content: '将删除 ' + totalCount.toString() + ' 个分类（含全部子分类），该操作不可恢复。',
+		confirmColor: '#E5484D',
+		success: (res) => {
+			if (res.confirm) {
+				executeBatchDelete()
+			}
+		},
+	})
+}
+
+// ── 返回处理 ────────────────────────────────────────────────────
+
+// 返回优先级：移动选择器 → 搜索态 → 多选模式 → 已展开的滑动菜单 → 上一层级 → 离开页面
+function handleInternalBack(): boolean {
+	if (movePickerVisible.value) {
+		closeMovePicker()
+		return true
+	}
+	if (keyword.value != '') {
+		handleSearchClear()
+		return true
+	}
+	if (selectMode.value) {
+		exitSelectMode()
+		return true
+	}
+	if (swipeOpenId.value != 0) {
+		closeSwipe()
+		return true
+	}
+	if (pathIds.value.length > 0) {
+		applyPath(pathIds.value.slice(0, pathIds.value.length - 1), 'pop')
+		return true
+	}
+	return false
+}
+
+function handleNavBack(): void {
+	if (handleInternalBack()) {
+		return
+	}
+	uni.navigateBack({
+		delta: 1,
+		fail: (_) => {
+			uni.reLaunch({ url: '/pages/tabbar/settings' })
+		},
+	})
+}
+
+
+// ── 生命周期 ────────────────────────────────────────────────────
+
+function clearRefreshSignals(): void {
+	try {
+		uni.removeStorageSync(categoryListRefreshPayloadStorageKey)
+		uni.removeStorageSync(categoryListRefreshStorageKey)
+	} catch (error) {
+	}
+}
+
+onLoad((event: OnLoadOptions) => {
+	loadRecentsFromStorage()
+	const idValue = event['id']
+	pendingDeepLinkId.value = idValue == null ? 0 : intValue(idValue)
+	ensureTree(false).then(() => {
+		if (pageError.value != '') {
+			return
+		}
+		// ?id= 深链直达：由本地树重建祖先路径
+		if (pendingDeepLinkId.value > 0) {
+			const targetId = pendingDeepLinkId.value
+			pendingDeepLinkId.value = 0
+			const node = categoryTreeStore.nodeOf(targetId)
+			if (node != null) {
+				const ancestors = categoryTreeStore.ancestorsOf(targetId)
+				const ids: number[] = [] as number[]
+				for (let index = 0; index < ancestors.length; index += 1) {
+					ids.push(ancestors[index].id)
+				}
+				ids.push(targetId)
+				applyPath(ids, '')
+				return
+			}
+		}
+		applyPath([] as number[], '')
+	})
 })
 
 onShow(() => {
-	consumeRefreshState()
+	if (!hasLoadedOnce.value) {
+		return
+	}
+	// 仅当编辑页写入刷新信号时才重拉整树：无信号说明数据没变，
+	// 每次返回都整树重载会造成明显卡顿（页内增删改移已各自显式刷新）
+	let needReload = false
+	try {
+		const signal = uni.getStorageSync(categoryListRefreshStorageKey)
+		if (signal != null && '' + signal != '') {
+			needReload = true
+		}
+	} catch (error) {
+	}
+	if (!needReload) {
+		return
+	}
+	clearRefreshSignals()
+	categoryTreeStore.load(true).then(() => {
+		applyPath(pathIds.value, '')
+	}).catch((_) => {
+	})
+})
+
+onBackPress((_options : OnBackPressOptions) : boolean | null => {
+	return handleInternalBack()
 })
 
 onUnmounted(() => {
-	if (searchTimer.value > 0) {
-		clearTimeout(searchTimer.value)
+	if (highlightTimer.value > 0) {
+		clearTimeout(highlightTimer.value)
 	}
 })
 </script>
@@ -770,110 +1634,15 @@ onUnmounted(() => {
 <style>
 .page {
 	flex: 1;
-	background-color: #F4F6F8;
+	background-color: #F2F2F7;
 }
 
-.page-scroll {
-	background-color: #F4F6F8;
+.page-body {
+	flex: 1;
 }
 
 .page-content {
-	padding-left: 16px;
-	padding-right: 16px;
-	padding-top: 12px;
-	padding-bottom: 100px;
-	background-color: #F4F6F8;
-}
-
-.filter-panel {
 	padding: 16px;
-	background-color: #FFFFFF;
-}
-
-.filter-actions {
-	flex-direction: row;
-}
-
-.filter-btn {
-	height: 40px;
-	border-radius: 12px;
-	padding-left: 16px;
-	padding-right: 16px;
-	margin-right: 10px;
-	align-items: center;
-	justify-content: center;
-}
-
-.filter-btn-light {
-	background-color: #E2E8F0;
-}
-
-.filter-btn-primary {
-	background-color: #0F766E;
-}
-
-.filter-btn-light-text {
-	font-size: 14px;
-	line-height: 20px;
-	color: #334155;
-	font-weight: bold;
-}
-
-.filter-btn-primary-text {
-	font-size: 14px;
-	line-height: 20px;
-	color: #FFFFFF;
-	font-weight: bold;
-}
-
-.filter-scroll {
-	max-height: 360px;
-	margin-top: 14px;
-}
-
-.filter-group {
-	margin-top: 14px;
-}
-
-.filter-group-title {
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.filter-options {
-	flex-direction: row;
-	flex-wrap: wrap;
-	margin-top: 10px;
-}
-
-.filter-option {
-	padding-left: 12px;
-	padding-right: 12px;
-	padding-top: 8px;
-	padding-bottom: 8px;
-	border-radius: 999px;
-	background-color: #F1F5F9;
-	margin-right: 10px;
-	margin-bottom: 10px;
-}
-
-.filter-option-active {
-	background-color: #CCFBF1;
-}
-
-.filter-option-text {
-	font-size: 13px;
-	line-height: 18px;
-	color: #475569;
-}
-
-.filter-option-text-active {
-	font-size: 13px;
-	line-height: 18px;
-	color: #115E59;
-	font-weight: bold;
 }
 
 .state-card {
@@ -906,7 +1675,7 @@ onUnmounted(() => {
 .state-btn {
 	height: 40px;
 	margin-top: 14px;
-	background-color: #0F766E;
+	background-color: #3A63C9;
 	border-radius: 12px;
 	border-width: 0px;
 }
@@ -918,131 +1687,1045 @@ onUnmounted(() => {
 	font-weight: bold;
 }
 
-.tree-list {
-	padding-bottom: 10px;
+/* ── 紧凑顶栏（面包屑 + 操作） ── */
+
+.top-bar {
+	flex-direction: row;
+	align-items: center;
+	padding-left: 16px;
+	padding-right: 10px;
 }
 
-.tree-section {
-	margin-bottom: 12px;
+.breadcrumb-row {
+	flex: 1;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
 }
 
-.tree-node {
+.breadcrumb-item {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+
+.breadcrumb-link {
+	font-size: 13px;
+	line-height: 18px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.breadcrumb-current {
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.breadcrumb-sep {
+	margin-left: 5px;
+	margin-right: 5px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+/* ── 压缩上下文条 ── */
+
+.ctx-strip {
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-top: 10px;
+	margin-bottom: 4px;
+	background-color: #FFFFFF;
+	border-radius: 16px;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	padding-left: 16px;
+	padding-right: 16px;
+}
+
+.ctx-line1 {
 	flex-direction: row;
 	align-items: center;
 	justify-content: space-between;
-	border-radius: 18px;
-	padding: 14px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E2E8F0;
 }
 
-.tree-node-level1 {
+.ctx-title-wrap {
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+	padding-right: 8px;
+}
+
+.ctx-name {
+	font-size: 17px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+	margin-right: 6px;
+}
+
+.ctx-name-inactive {
+	color: #94A3B8;
+}
+
+.ctx-actions {
+	flex-direction: row;
+	align-items: center;
+}
+
+.ctx-line2 {
+	margin-top: 8px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.ctx-metrics {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.ctx-toggle {
+	font-size: 12px;
+	line-height: 17px;
+	color: #3A63C9;
+	font-weight: bold;
+	padding-left: 10px;
+}
+
+.ctx-detail {
+	margin-top: 4px;
+}
+
+.metric-grid {
+	margin-top: 6px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.issue-row {
+	margin-top: 10px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.issue-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #E5484D;
+}
+
+.issue-dot {
+	margin-left: 12px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.mini-action {
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #F1F5F9;
+	margin-left: 8px;
+}
+
+.mini-action-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
+}
+
+.mini-action-primary {
+	background-color: #3A63C9;
+}
+
+.mini-action-primary-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.error-text {
+	margin-top: 6px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #E5484D;
+}
+
+.error-text-pad {
+	margin-left: 14px;
+	margin-right: 14px;
+}
+
+/* ── 最近访问 ── */
+
+.recents-block {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 10px;
+}
+
+.recents-row {
+	margin-top: 6px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.recent-chip {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+	border-radius: 999px;
 	background-color: #FFFFFF;
+	margin-right: 8px;
+	margin-bottom: 8px;
 }
 
-.tree-node-level2 {
-	background-color: #FCFFFD;
+.recent-chip-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #3A63C9;
+	font-weight: bold;
 }
 
-.tree-node-level3 {
-	background-color: #FFFDF8;
+/* ── 列表区 ── */
+
+.summary-row {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 10px;
+	padding-bottom: 4px;
 }
 
-.tree-main {
+.summary-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.list-head {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 10px;
+	padding-bottom: 4px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.list-head-main {
+	flex-direction: row;
+	align-items: center;
+}
+
+.section-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.list-head-count {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+	margin-left: 8px;
+}
+
+.main-list {
 	flex: 1;
 }
 
-.tree-title {
+.list-item-wrap {
+	padding-left: 16px;
+	padding-right: 16px;
+}
+
+.row-card {
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #EEF1F5;
+	padding: 11px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.row-card-highlight {
+	background-color: #FBF3D9;
+	border-color: #FDE68A;
+}
+
+.row-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.row-title-line {
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.row-name {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0A0A0C;
+	font-weight: bold;
+}
+
+.row-name-inactive {
+	color: #94A3B8;
+}
+
+.row-code {
+	margin-left: 6px;
+	font-size: 11px;
+	line-height: 15px;
+	color: #94A3B8;
+}
+
+.row-meta {
+	margin-top: 3px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.row-chevron {
+	font-size: 17px;
+	line-height: 23px;
+	color: rgba(60, 60, 67, 0.3);
+	margin-left: 6px;
+}
+
+.row-op {
+	margin-left: 4px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+
+.row-op-text {
+	font-size: 17px;
+	line-height: 21px;
+	color: rgba(60, 60, 67, 0.4);
+	font-weight: bold;
+}
+
+.inactive-tag {
+	margin-left: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+}
+
+.inactive-tag-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.empty-state {
+	margin-top: 30px;
+	align-items: center;
+}
+
+.empty-title {
 	font-size: 15px;
+	line-height: 21px;
+	color: #64748B;
+}
+
+.empty-desc {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.list-footer {
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 20px;
+}
+
+.list-footer-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+/* ── 商品列表 ── */
+
+.product-batchbar {
+	margin-left: 12px;
+	margin-right: 12px;
+	margin-bottom: 4px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px;
+	border-radius: 10px;
+	background-color: rgba(58, 99, 201, 0.08);
+}
+
+.product-batch-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.product-batch-btn {
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 10px;
+	background-color: #3A63C9;
+}
+
+.product-batch-btn-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.product-row-selected {
+	background-color: rgba(58, 99, 201, 0.08);
+	border-color: rgba(58, 99, 201, 0.35);
+}
+
+.product-row-muted {
+	opacity: 0.6;
+}
+
+.product-check {
+	width: 22px;
+	height: 22px;
+	border-radius: 6px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5F5;
+	margin-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.product-check-active {
+	background-color: #3A63C9;
+	border-color: #3A63C9;
+}
+
+.product-check-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.product-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+}
+
+.product-row-side {
+	align-items: flex-end;
+}
+
+.product-price {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.product-status {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+/* ── 左滑菜单行 ── */
+
+.swipe-wrap {
+	position: relative;
+	overflow: hidden;
+}
+
+.swipe-actions {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	flex-direction: row;
+}
+
+.swipe-btn {
+	width: 62px;
+	align-items: center;
+	justify-content: center;
+}
+
+.swipe-btn-edit {
+	background-color: #3A63C9;
+}
+
+.swipe-btn-move {
+	background-color: #E8890C;
+}
+
+.swipe-btn-del {
+	background-color: #E5484D;
+}
+
+.swipe-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.row-face {
+	background-color: #FFFFFF;
+	padding-top: 12px;
+	padding-bottom: 12px;
+	padding-left: 16px;
+	padding-right: 16px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.row-face-highlight {
+	background-color: #FBF3D9;
+}
+
+.cat-check {
+	width: 22px;
+	height: 22px;
+	border-radius: 11px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #CBD5F5;
+	margin-right: 10px;
+	align-items: center;
+	justify-content: center;
+}
+
+.cat-check-active {
+	background-color: #3A63C9;
+	border-color: #3A63C9;
+}
+
+.cat-check-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+/* ── 批量操作栏 ── */
+
+.batch-bar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 60;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 12px;
+	padding-bottom: 28px;
+	background-color: #FFFFFF;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: #E2E8F0;
+}
+
+.batch-link-btn {
+	padding-top: 6px;
+	padding-bottom: 6px;
+	padding-right: 12px;
+}
+
+.batch-link-text {
+	font-size: 15px;
+	line-height: 21px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.batch-count-text {
+	flex: 1;
+	text-align: center;
+	font-size: 13px;
+	line-height: 18px;
+	color: #64748B;
+}
+
+.batch-btn {
+	padding-left: 18px;
+	padding-right: 18px;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-radius: 999px;
+	margin-left: 10px;
+}
+
+.batch-btn-move {
+	background-color: #3A63C9;
+}
+
+.batch-btn-del {
+	background-color: #E5484D;
+}
+
+.batch-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+/* ── 移动选择器 ── */
+
+.sheet-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.38);
+	z-index: 95;
+}
+
+.sheet-panel {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 96;
+	background-color: #F2F2F7;
+	border-top-left-radius: 22px;
+	border-top-right-radius: 22px;
+	padding-top: 10px;
+	padding-bottom: 30px;
+}
+
+.sheet-handle {
+	width: 42px;
+	height: 4px;
+	border-radius: 2px;
+	background-color: #D5DCE5;
+	align-self: center;
+}
+
+.sheet-header {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 10px;
+}
+
+.sheet-header-side {
+	width: 70px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+
+.sheet-link-text {
+	font-size: 15px;
+	line-height: 21px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.sheet-cancel-text {
+	font-size: 15px;
+	line-height: 21px;
+	color: #64748B;
+}
+
+.sheet-title {
+	font-size: 16px;
 	line-height: 22px;
 	color: #0F172A;
 	font-weight: bold;
 }
 
-.tree-toggle-wrap {
-	margin-left: 12px;
-	padding-left: 12px;
-	padding-right: 12px;
-	padding-top: 8px;
-	padding-bottom: 8px;
-	border-radius: 999px;
-	background-color: #ECFEFF;
+.sheet-pos-text {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+	text-align: center;
 }
 
-.tree-toggle {
-	font-size: 12px;
-	line-height: 18px;
-	color: #155E75;
+.sheet-list {
+	height: 300px;
+	margin-top: 10px;
+}
+
+.sheet-row {
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-bottom: 6px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #EEF1F5;
+	padding: 13px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.sheet-row-name {
+	flex: 1;
+	font-size: 15px;
+	line-height: 21px;
+	color: #0F172A;
 	font-weight: bold;
 }
 
-.tree-children {
-	margin-left: 14px;
-	padding-left: 12px;
-	margin-top: 10px;
-	border-left-width: 2px;
-	border-left-style: solid;
-}
-
-.tree-children-level2 {
-	border-left-color: #99F6E4;
-}
-
-.tree-children-level3 {
-	border-left-color: #FDE68A;
-}
-
-.tree-child-wrap {
-	margin-bottom: 10px;
-}
-
-.child-state {
-	padding-top: 8px;
-	padding-bottom: 8px;
-}
-
-.child-state-text {
+.sheet-row-count {
 	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+	margin-right: 6px;
+}
+
+.sheet-empty {
+	padding-top: 40px;
+	align-items: center;
+}
+
+.sheet-empty-text {
+	font-size: 13px;
 	line-height: 18px;
+	color: #94A3B8;
+}
+
+.sheet-footer {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 10px;
+}
+
+.sheet-invalid-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #E5484D;
+	text-align: center;
+	margin-bottom: 8px;
+}
+
+.sheet-confirm-btn {
+	height: 46px;
+	border-radius: 14px;
+	background-color: #3A63C9;
+	align-items: center;
+	justify-content: center;
+}
+
+.sheet-confirm-btn-disabled {
+	background-color: #E2E8F0;
+}
+
+.sheet-confirm-text {
+	font-size: 16px;
+	line-height: 22px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.sheet-confirm-text-disabled {
+	color: #94A3B8;
+}
+
+/* ── 叶子层统计视图 ── */
+
+.leaf-scroll {
+	flex: 1;
+}
+
+.leaf-card {
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-top: 10px;
+	background-color: #FFFFFF;
+	border-radius: 16px;
+	padding: 14px 16px;
+}
+
+.leaf-card-head {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 4px;
+}
+
+.leaf-card-title {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0A0A0C;
+	font-weight: bold;
+}
+
+.leaf-empty {
+	padding-top: 20px;
+	padding-bottom: 20px;
+	align-items: center;
+}
+
+.leaf-empty-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #94A3B8;
+}
+
+.leaf-actions {
+	flex-direction: row;
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-top: 12px;
+	margin-bottom: 24px;
+}
+
+.leaf-btn {
+	flex: 1;
+	height: 46px;
+	border-radius: 14px;
+	background-color: #FFFFFF;
+	align-items: center;
+	justify-content: center;
+	margin-right: 10px;
+}
+
+.leaf-btn-primary {
+	background-color: #3A63C9;
+}
+
+.leaf-btn-text {
+	font-size: 15px;
+	line-height: 21px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.leaf-btn-primary-text {
+	font-size: 15px;
+	line-height: 21px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.batch-cancel-text {
+	font-size: 15px;
+	line-height: 21px;
 	color: #64748B;
 }
 
+/* ── 悬浮与遮罩 ── */
+
 .fab {
-	position: fixed;
+	position: absolute;
 	right: 20px;
-	bottom: 28px;
-	width: 56px;
-	height: 56px;
-	border-radius: 28px;
-	background-color: #0F766E;
+	bottom: 40px;
+	width: 54px;
+	height: 54px;
+	border-radius: 27px;
+	background-color: #3A63C9;
 	align-items: center;
 	justify-content: center;
 }
 
 .fab-text {
 	font-size: 30px;
-	line-height: 36px;
+	line-height: 34px;
 	color: #FFFFFF;
+}
+
+/* ── 页头（模板样式） ── */
+
+.hd-block {
+	padding-left: 16px;
+	padding-right: 16px;
+	padding-top: 6px;
+}
+
+.hd-title-row {
+	flex-direction: row;
+	align-items: center;
+}
+
+.hd-title-wrap {
+	flex: 1;
+	flex-direction: row;
+	align-items: center;
+}
+
+.hd-title {
+	font-size: 26px;
+	line-height: 34px;
+	font-weight: bold;
+	color: #0A0A0C;
+	margin-right: 8px;
+}
+
+.txt-btn {
+	padding-top: 6px;
+	padding-bottom: 6px;
+	padding-left: 12px;
+	padding-right: 2px;
+}
+
+.txt-btn-text {
+	font-size: 16px;
+	line-height: 22px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+.hd-sub-row {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 4px;
+	flex-wrap: wrap;
+}
+
+.hd-sub {
+	font-size: 13px;
+	line-height: 18px;
+	color: rgba(60, 60, 67, 0.55);
+	margin-right: 2px;
+}
+
+.hd-pill {
+	margin-left: 8px;
+	padding-left: 10px;
+	padding-right: 10px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: rgba(58, 99, 201, 0.1);
+}
+
+.hd-pill-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #3A63C9;
+	font-weight: bold;
+}
+
+/* ── 成组卡片列表（模板样式） ── */
+
+.grp-cell {
+	background-color: #FFFFFF;
+	overflow: hidden;
+}
+
+.grp-first {
+	margin-top: 4px;
+	border-top-left-radius: 16px;
+	border-top-right-radius: 16px;
+}
+
+.grp-last {
+	border-bottom-left-radius: 16px;
+	border-bottom-right-radius: 16px;
+	margin-bottom: 16px;
+}
+
+.grp-sep {
+	height: 1px;
+	margin-left: 16px;
+	background-color: rgba(60, 60, 67, 0.08);
+}
+
+.plain-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 11px;
+	padding-bottom: 11px;
+	padding-left: 16px;
+	padding-right: 16px;
+	background-color: #FFFFFF;
+}
+
+/* ── 启用/停用徽章（模板样式） ── */
+
+.badge-on {
+	margin-left: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: rgba(30, 150, 80, 0.1);
+}
+
+.badge-on-text {
+	font-size: 11px;
+	line-height: 15px;
+	color: #1E8A50;
+	font-weight: bold;
+}
+
+.badge-off {
+	margin-left: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	background-color: rgba(120, 120, 128, 0.14);
+}
+
+.badge-off-text {
+	font-size: 11px;
+	line-height: 15px;
+	color: #8E8E93;
 	font-weight: bold;
 }
 
 .operate-mask {
-	position: fixed;
-	left: 0px;
-	right: 0px;
-	top: 0px;
-	bottom: 0px;
-	background-color: rgba(0, 0, 0, 0.25);
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 99;
+	background-color: rgba(15, 23, 42, 0.35);
 	align-items: center;
 	justify-content: center;
 }
 
 .operate-card {
-	padding-left: 20px;
-	padding-right: 20px;
-	padding-top: 14px;
-	padding-bottom: 14px;
+	padding: 18px;
 	border-radius: 14px;
 	background-color: #FFFFFF;
 }
@@ -1051,6 +2734,5 @@ onUnmounted(() => {
 	font-size: 14px;
 	line-height: 20px;
 	color: #0F172A;
-	font-weight: bold;
 }
 </style>

@@ -82,7 +82,9 @@
 <script setup lang="uts">
 import { computed, watch } from 'vue'
 import { PrintTemplateItem, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
+// #ifdef APP-ANDROID
 import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 
@@ -208,6 +210,8 @@ function resolvePrintDataValue(data: UTSJSONObject, source: string, fallback: st
 	if (source == 'kod') return firstPrintDataValue(data, ['kod', 'category_kasa_kod'])
 	if (source == 'quantity' || source == 'purchase_quantity') return firstPrintDataValue(data, ['quantity', 'purchase_quantity'])
 	if (source == 'received_quantity') return printDataValue(data, 'received_quantity')
+	// 变体属性组合：无变体时返回空串（不回退占位文本，避免打出示例文字）
+	if (source == 'specification') return firstPrintDataValue(data, ['specification', 'variant_text', 'attributes'])
 	const directValue = printDataValue(data, source)
 	return directValue == '' ? fallback : directValue
 }
@@ -242,6 +246,7 @@ function printLabelForSource(source: UTSJSONObject, index: number): string {
 	if (elementSource == 'sku' || elementSource == 'kod') return 'KOD'
 	if (elementSource == 'quantity' || elementSource == 'purchase_quantity') return '采购数量'
 	if (elementSource == 'received_quantity') return '已收货数量'
+	if (elementSource == 'specification') return '属性'
 	return '字段 ' + (index + 1).toString()
 }
 
@@ -270,7 +275,7 @@ function buildPrintPreviewFields(): PrintPreviewField[] {
 	for (let index = 0; index < item.elements.length; index += 1) {
 		const source = item.elements[index]
 		const type = stringValue(source['type'])
-		if (type == 'hline' || type == 'vline' || type == 'rect') continue
+		if (type == 'hline' || type == 'vline' || type == 'rect' || type == 'dline') continue
 		const key = printFieldKey(source, index)
 		if (hasPreviewField(result, key)) continue
 		const elementSource = stringValue(source['source'])
@@ -468,14 +473,24 @@ function printCopiesValue(): number {
 }
 
 function connectedPrinterAddress(): string {
+	// #ifdef APP-ANDROID
 	return getPreferredPrinterAddress()
+	// #endif
+	// #ifndef APP-ANDROID
+	return ''
+	// #endif
 }
 
 function goPrinterSettings() {
+	// #ifdef APP-ANDROID
 	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({ url: '/pages/printer-settings/index' })
 	}, 450)
+	// #endif
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版不支持标签打印', icon: 'none', duration: 3500 })
+	// #endif
 }
 
 function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
@@ -495,6 +510,7 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		barcodeType: stringValue(source['barcodeType'], 'EAN13'),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
+		direction: stringValue(source['direction'], 'down'),
 		isBold: isBold,
 		fontWeight: isBold ? 'bold' : 'normal',
 		textAlign: stringValue(source['textAlign'], stringValue(source['text_align'], 'left')),
@@ -552,6 +568,7 @@ async function confirmPrint() {
 	let responseMessage = ''
 	uni.showLoading({ title: '打印中', mask: true })
 	try {
+		// #ifdef APP-ANDROID
 		const response = await printLabelBitmapAsync({
 			address: address,
 			paperWidthMm: numberValue(item.paper_width_mm, 30),
@@ -564,6 +581,7 @@ async function confirmPrint() {
 		} as UTSJSONObject)
 		responseSuccess = response.success
 		responseMessage = response.message
+		// #endif
 	} finally {
 		printing.value = false
 		uni.hideLoading()

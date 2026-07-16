@@ -348,6 +348,8 @@ export function adjustInventoryCheck(id: string): Promise<any> {
 	return request('/api/inventory/checks/' + stringValue(id) + '/adjust/', 'POST', {} as UTSJSONObject, true)
 }
 
-export function completeInventoryCheck(id: string): Promise<any> {
-	return request('/api/inventory/checks/' + stringValue(id) + '/complete/', 'POST', {} as UTSJSONObject, true)
+export function completeInventoryCheck(id: string, zeroUnchecked: boolean = false): Promise<any> {
+	const payload = {} as UTSJSONObject
+	if (zeroUnchecked) payload['zero_unchecked'] = true
+	return request('/api/inventory/checks/' + stringValue(id) + '/complete/', 'POST', payload, true)
 }

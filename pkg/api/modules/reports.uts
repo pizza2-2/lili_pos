@@ -10,6 +10,29 @@ export type ReportOverview = {
 	expense_amount: string
 	arrears_amount: string
 	net_cashflow: string
+	gross_profit: string
+	gross_margin: string
+	cost_missing_amount: string
+	return_amount: string
+	return_count: number
+	net_sales_amount: string
+}
+
+export type ReportPrevious = {
+	date_from: string
+	date_to: string
+	sales_amount: string
+	order_count: number
+	average_order_value: string
+	gross_profit: string
+	return_amount: string
+	net_sales_amount: string
+}
+
+export type ReportHourlyItem = {
+	hour: number
+	amount: string
+	order_count: number
 }
 
 export type ReportTrendItem = {
@@ -54,11 +77,15 @@ export type ReportRankItem = {
 	type: string
 	product_image: string
 	product_media_files: UTSJSONObject[]
+	gross_profit: string
+	gross_margin: string
 }
 
 export type DashboardReport = {
 	overview: ReportOverview
+	previous: ReportPrevious
 	sales_trend: ReportTrendItem[]
+	hourly_trend: ReportHourlyItem[]
 	payment_methods: ReportPaymentMethod[]
 	order_status: UTSJSONObject
 	top_products: ReportRankItem[]
@@ -165,7 +192,40 @@ function buildOverview(raw: UTSJSONObject): ReportOverview {
 		expense_amount: stringValue(raw['expense_amount']),
 		arrears_amount: stringValue(raw['arrears_amount']),
 		net_cashflow: stringValue(raw['net_cashflow']),
+		gross_profit: stringValue(raw['gross_profit']),
+		gross_margin: stringValue(raw['gross_margin']),
+		cost_missing_amount: stringValue(raw['cost_missing_amount']),
+		return_amount: stringValue(raw['return_amount']),
+		return_count: intValue(raw['return_count']),
+		net_sales_amount: stringValue(raw['net_sales_amount']),
 	} as ReportOverview
+}
+
+function buildPrevious(raw: UTSJSONObject): ReportPrevious {
+	return {
+		date_from: stringValue(raw['date_from']),
+		date_to: stringValue(raw['date_to']),
+		sales_amount: stringValue(raw['sales_amount']),
+		order_count: intValue(raw['order_count']),
+		average_order_value: stringValue(raw['average_order_value']),
+		gross_profit: stringValue(raw['gross_profit']),
+		return_amount: stringValue(raw['return_amount']),
+		net_sales_amount: stringValue(raw['net_sales_amount']),
+	} as ReportPrevious
+}
+
+function buildHourlyItems(value: any | null): ReportHourlyItem[] {
+	const rows = arrayValue(value)
+	const result: ReportHourlyItem[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			hour: intValue(row['hour']),
+			amount: stringValue(row['amount']),
+			order_count: intValue(row['order_count']),
+		} as ReportHourlyItem)
+	}
+	return result
 }
 
 function buildTrendItems(value: any | null): ReportTrendItem[] {
@@ -241,6 +301,8 @@ function buildRankItems(value: any | null): ReportRankItem[] {
 			type: stringValue(row['type']),
 			product_image: normalizeServerUrl(stringValue(row['product_image'])),
 			product_media_files: buildRankMediaFiles(row['product_media_files']),
+			gross_profit: stringValue(row['gross_profit']),
+			gross_margin: stringValue(row['gross_margin']),
 		} as ReportRankItem)
 	}
 	return result
@@ -273,7 +335,9 @@ export function buildDashboardReport(raw: any): DashboardReport {
 	const rawObject = rawDataObject(raw)
 	return {
 		overview: buildOverview(objectValue(rawObject['overview'])),
+		previous: buildPrevious(objectValue(rawObject['previous'])),
 		sales_trend: buildTrendItems(rawObject['sales_trend']),
+		hourly_trend: buildHourlyItems(rawObject['hourly_trend']),
 		payment_methods: buildPaymentMethods(rawObject['payment_methods']),
 		order_status: objectValue(rawObject['order_status']),
 		top_products: buildRankItems(rawObject['top_products']),

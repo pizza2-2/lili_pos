@@ -184,8 +184,10 @@
 import { computed } from 'vue'
 import { getSupplierExcelImportTaskStatus, precheckSupplierExcelImport, PurchaseImportResponse, startSupplierExcelImportTask } from '@/pkg/api/modules/purchases.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
+// #ifdef APP-ANDROID
 import { parseExcelFile, pickExcelFile } from '@/uni_modules/lili-excel-picker'
 import { type ExcelParseResult, type ExcelPickerResult } from '@/uni_modules/lili-excel-picker/utssdk/interface.uts'
+// #endif
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
@@ -1321,6 +1323,7 @@ function clearImportState() {
 
 async function runPreview() {
 	if (!hasFile.value || running.value) return
+	// #ifdef APP-ANDROID
 	running.value = true
 	console.log('Excel上传: 开始解析', filePath.value)
 	uni.showLoading({ title: '读取中...', mask: true })
@@ -1343,9 +1346,14 @@ async function runPreview() {
 		uni.hideLoading()
 		running.value = false
 	}
+	// #endif
 }
 
 function chooseExcelFile() {
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版暂不支持Excel导入，请在App中操作', icon: 'none', duration: 3500 })
+	// #endif
+	// #ifdef APP-ANDROID
 	console.log('Excel上传: 点击选择区域')
 	if (running.value || choosingFile.value) {
 		console.log('Excel上传: 当前正在处理，忽略点击')
@@ -1368,6 +1376,7 @@ function chooseExcelFile() {
 		clearImportState()
 		runPreview()
 	})
+	// #endif
 }
 
 async function runPrecheck() {

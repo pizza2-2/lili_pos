@@ -111,6 +111,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import {
 	attributeTypesPath,
 	attributeValuesPath,
@@ -134,7 +135,7 @@ const items = ref<UTSJSONObject[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const statusFilter = ref<string | null>(null)
 const discountTypeFilter = ref<string | null>(null)
 const selectedStatus = ref<string | null>(null)
@@ -304,6 +305,7 @@ function resourceBasePath(): string {
 	if (resource.value == 'attribute-type') return attributeTypesPath()
 	if (resource.value == 'attribute-value') return attributeValuesPath()
 	if (resource.value == 'barcode-sequence') return barcodeSequencesPath()
+	if (resource.value == 'expenditure-type') return '/api/expenses/expenditure-types/'
 	return productDiscountsPath()
 }
 
@@ -314,6 +316,7 @@ function resourceTitle(): string {
 		return '属性值'
 	}
 	if (resource.value == 'barcode-sequence') return '条形码序列'
+	if (resource.value == 'expenditure-type') return '支出类型'
 	return '商品折扣'
 }
 
@@ -426,6 +429,17 @@ function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 			min_number: getStringField(item, 'min_number', '-'),
 			max_number: getStringField(item, 'max_number', '-'),
 			description: getStringField(item, 'description', '-'),
+		} as UTSJSONObject
+	}
+	if (resource.value == 'expenditure-type') {
+		return {
+			id: getStringField(item, 'id'),
+			rawId: getStringField(item, 'id'),
+			name: getStringField(item, 'name', '未命名类型'),
+			subtitle: getStringField(item, 'description', '暂无说明'),
+			meta: getBoolField(item, 'is_active') ? '启用' : '停用',
+			status_text: getBoolField(item, 'is_active') ? '启用' : '停用',
+			updated: formatDateText(getStringField(item, 'updated_at')),
 		} as UTSJSONObject
 	}
 	return {
@@ -660,6 +674,12 @@ const fieldConfig = computed((): UTSJSONObject[] => {
 			{ key: 'min_number', label: '最小' } as UTSJSONObject,
 			{ key: 'max_number', label: '最大' } as UTSJSONObject,
 			{ key: 'description', label: '说明' } as UTSJSONObject,
+		]
+	}
+	if (resource.value == 'expenditure-type') {
+		return [
+			{ key: 'status_text', label: '状态' } as UTSJSONObject,
+			{ key: 'updated', label: '更新' } as UTSJSONObject,
 		]
 	}
 	return [

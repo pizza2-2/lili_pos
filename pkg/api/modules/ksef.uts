@@ -152,6 +152,21 @@ export type KsefAutoSyncStatus = {
 	last_failed_message: string
 }
 
+// 月度统计（金额字段已格式化为两位小数字符串）
+export type KsefMonthlySummary = {
+	month_label: string
+	month_start: string
+	month_end: string
+	total_invoice_count: number
+	total_gross_amount: string
+	total_amount_due: string
+	paid_invoice_count: number
+	paid_amount_total: string
+	unpaid_invoice_count: number
+	unpaid_amount_due_total: string
+	payment_completion_rate: string
+}
+
 export type KsefFilterOption = {
 	value: string
 	label: string
@@ -557,6 +572,27 @@ function buildKsefFilterOptionsResponse(raw: any): KsefFilterOptionsResponse {
 	} as KsefFilterOptionsResponse
 }
 
+function buildMonthlySummary(raw: any): KsefMonthlySummary {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) {
+		throw new Error('KSeF 月度统计解析失败')
+	}
+	return {
+		month_label: stringValue(rawObject!['month_label']),
+		month_start: stringValue(rawObject!['month_start']),
+		month_end: stringValue(rawObject!['month_end']),
+		total_invoice_count: intValue(rawObject!['total_invoice_count']),
+		total_gross_amount: floatValue(rawObject!['total_gross_amount']).toFixed(2),
+		total_amount_due: floatValue(rawObject!['total_amount_due']).toFixed(2),
+		paid_invoice_count: intValue(rawObject!['paid_invoice_count']),
+		paid_amount_total: floatValue(rawObject!['paid_amount_total']).toFixed(2),
+		unpaid_invoice_count: intValue(rawObject!['unpaid_invoice_count']),
+		unpaid_amount_due_total: floatValue(rawObject!['unpaid_amount_due_total']).toFixed(2),
+		payment_completion_rate: floatValue(rawObject!['payment_completion_rate']).toFixed(2),
+	} as KsefMonthlySummary
+}
+
 function ksefInvoicePath(id: number | string): string {
 	return '/api/procurement/ksef-invoices/' + stringValue(id) + '/'
 }
@@ -660,6 +696,16 @@ export async function linkKsefInvoiceSupplier(id: number | string, supplierId: s
 	return buildInvoiceDetail(raw)
 }
 
+// 月度统计：month 为 YYYY-MM，传 null 表示本月
+export async function getKsefMonthlySummary(month: string | null): Promise<KsefMonthlySummary> {
+	const query = {} as UTSJSONObject
+	if (month != null && month != '') {
+		query['month'] = month
+	}
+	const raw = await request('/api/procurement/ksef-invoices/monthly_summary/', 'GET', query, true)
+	return buildMonthlySummary(raw)
+}
+
 export async function getKsefAutoSyncStatus(): Promise<KsefAutoSyncStatus> {
 	const raw = await request('/api/procurement/ksef-invoices/auto-sync-status/', 'GET', {} as UTSJSONObject, true)
 	return buildAutoSyncStatus(raw)
@@ -667,6 +713,15 @@ export async function getKsefAutoSyncStatus(): Promise<KsefAutoSyncStatus> {
 
 export function enqueueKsefAutoSync(): Promise<any> {
 	return request('/api/procurement/ksef-invoices/enqueue-auto-sync/', 'POST', {} as UTSJSONObject, true)
+}
+
+// 手动同步指定日期区间的 KSeF 发票元数据（原始 XML 在列表中单张下载）
+export function syncKsefInvoices(dateFrom: string, dateTo: string): Promise<any> {
+	const body = {
+		date_from: dateFrom,
+		date_to: dateTo,
+	} as UTSJSONObject
+	return request('/api/procurement/ksef-invoices/sync/', 'POST', body, true)
 }
 
 export function downloadKsefInvoiceXml(id: number | string): Promise<any> {

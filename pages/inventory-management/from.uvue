@@ -77,6 +77,7 @@
 						<view class="stock-location-wrap">
 							<text class="stock-location">{{ stringValue(stock['location_name'], '未设置库存位置') }}</text>
 							<text class="stock-location-sub">{{ locationTypeText(stock) }}</text>
+							<text v-if="stringValue(stock['variant_text']) != ''" class="stock-variant-text">规格：{{ stringValue(stock['variant_text']) }}</text>
 						</view>
 						<text :class="stockAlertClass(stock)">{{ alertLabel(stringValue(stock['alert_status'])) }}</text>
 					</view>
@@ -106,22 +107,31 @@
 
 				<view class="section-head">
 					<text class="section-title">库存变动记录</text>
-					<text class="section-subtitle">包含订单销售、手动调整、采购入库等库存流水</text>
+					<text class="section-subtitle">按日期分组，销售带售价，点击行可跳转订单</text>
 				</view>
 				<view v-if="movementRecords.length == 0" class="empty-band">
 					<text class="empty-text">暂无库存变动记录</text>
 				</view>
-				<view v-for="record in movementRecords" :key="'movement-' + stringValue(record['id'])" class="movement-row">
-					<view class="movement-row-top">
-						<view class="movement-main">
-							<text class="movement-title">{{ movementTitleText(record) }}</text>
-							<text class="movement-subtitle">{{ movementSubtitleText(record) }}</text>
-						</view>
-						<text :class="movementQuantityClass(record)">{{ movementQuantityText(record) }}</text>
+				<view v-for="group in movementGroups" :key="'mg-' + group.key" class="movement-group">
+					<view class="movement-group-head">
+						<text class="movement-group-title">{{ group.label }}</text>
+						<text class="movement-group-summary">{{ group.summary }}</text>
 					</view>
-					<view class="movement-row-bottom">
-						<text class="movement-meta">{{ movementTimeText(record) }}</text>
-						<text class="movement-meta">{{ movementActorText(record) }}</text>
+					<view v-for="record in group.records" :key="'movement-' + stringValue(record['id'])" class="movement-row" @click="handleMovementTap(record)">
+						<view class="movement-row-top">
+							<view class="movement-main">
+								<text class="movement-title">{{ movementTitleText(record) }}</text>
+								<text class="movement-subtitle">{{ movementSubtitleText(record) }}</text>
+							</view>
+							<view class="movement-side">
+								<text :class="movementQuantityClass(record)">{{ movementQuantityText(record) }}</text>
+								<text v-if="movementAmountText(record) != ''" class="movement-amount">{{ movementAmountText(record) }}</text>
+							</view>
+						</view>
+						<view class="movement-row-bottom">
+							<text class="movement-meta">{{ movementClockText(record) }} · {{ movementActorText(record) }}</text>
+							<text class="movement-meta">{{ movementStockChangeText(record) }}</text>
+						</view>
 					</view>
 				</view>
 			</view>
@@ -626,7 +636,7 @@ function updateSheetLayout() {
 }
 
 const homePath = computed((): string => {
-	if (productId.value != '') return '/pages/tabbar/products'
+	if (productId.value != '') return '/pages/tabbar/settings'
 	return '/pages/inventory-management/index'
 })
 
@@ -1076,7 +1086,11 @@ function movementTitleText(record: UTSJSONObject): string {
 function movementSubtitleText(record: UTSJSONObject): string {
 	const type = stringValue(record['transaction_type'])
 	const orderNumber = stringValue(record['order_number'])
-	if (orderNumber != '') return '订单 ' + orderNumber
+	if (orderNumber != '') {
+		const unitPrice = stringValue(record['sale_unit_price'])
+		if (unitPrice != '') return '订单 ' + orderNumber + ' · 单价 ' + unitPrice
+		return '订单 ' + orderNumber
+	}
 	const notes = stringValue(record['notes'])
 	if (notes != '') return notes
 	const referenceId = stringValue(record['reference_id'])
@@ -1084,7 +1098,7 @@ function movementSubtitleText(record: UTSJSONObject): string {
 	if (referenceId != '' && referenceType != '') return referenceType + ' #' + referenceId
 	if (referenceId != '') return '关联记录 #' + referenceId
 	if (type == 'SALE') return '未关联订单'
-	return '库存 ' + numberText(record['quantity_before']) + ' -> ' + numberText(record['quantity_after'])
+	return '手动操作'
 }
 
 function movementQuantityText(record: UTSJSONObject): string {
@@ -1114,6 +1128,114 @@ function movementActorText(record: UTSJSONObject): string {
 	if (userName != '') return '操作人 ' + userName
 	return '操作人 系统'
 }
+
+// 销售/退货流水关联了 POS 订单时，点击跳转订单详情
+function handleMovementTap(record: UTSJSONObject) {
+	const referenceType = stringValue(record['reference_type'])
+	const referenceId = stringValue(record['reference_id'])
+	if (referenceType != 'pos_order' || referenceId == '') return
+	uni.navigateTo({ url: '/pages/orders/from?id=' + referenceId })
+}
+
+// ── 变动记录按日分组展示 ─────────────────────────────────────────────
+
+function movementRawTime(record: UTSJSONObject): string {
+	const orderTime = stringValue(record['order_time'])
+	if (orderTime != '') return orderTime
+	return stringValue(record['created_at'])
+}
+
+function movementDateKey(record: UTSJSONObject): string {
+	const text = movementRawTime(record)
+	if (text.length >= 10) return text.substring(0, 10)
+	return text == '' ? '未知日期' : text
+}
+
+// 只显示时分（日期已在分组头展示）
+function movementClockText(record: UTSJSONObject): string {
+	const text = dateTimeText(movementRawTime(record))
+	if (text.length >= 16) return text.substring(11, 16)
+	return text
+}
+
+function localDateText(offsetDays: number): string {
+	const now = new Date()
+	const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays)
+	const month = date.getMonth() + 1
+	const day = date.getDate()
+	const monthText = month < 10 ? '0' + month.toString() : month.toString()
+	const dayText = day < 10 ? '0' + day.toString() : day.toString()
+	return date.getFullYear().toString() + '-' + monthText + '-' + dayText
+}
+
+function movementGroupLabel(key: string): string {
+	if (key == localDateText(0)) return '今天 · ' + key
+	if (key == localDateText(-1)) return '昨天 · ' + key
+	return key
+}
+
+// 行右侧金额：销售显示售价合计，采购显示进货成本（无成本权限时后端不下发该字段）
+function movementAmountText(record: UTSJSONObject): string {
+	const type = stringValue(record['transaction_type'])
+	if (type == 'SALE') {
+		const amount = stringValue(record['sale_amount'])
+		if (amount != '') return '售 ' + amount + ' zł'
+		return ''
+	}
+	if (type == 'PURCHASE') {
+		const cost = stringValue(record['total_cost'])
+		if (cost != '' && floatValue(cost) > 0) return '进 ' + moneyText(cost) + ' zł'
+	}
+	return ''
+}
+
+function movementStockChangeText(record: UTSJSONObject): string {
+	return '库存 ' + numberText(record['quantity_before']) + ' → ' + numberText(record['quantity_after'])
+}
+
+type MovementGroup = {
+	key: string
+	label: string
+	summary: string
+	records: UTSJSONObject[]
+}
+
+const movementGroups = computed((): MovementGroup[] => {
+	const groups: MovementGroup[] = []
+	for (let index = 0; index < movementRecords.value.length; index += 1) {
+		const record = movementRecords.value[index]
+		const key = movementDateKey(record)
+		let group: MovementGroup | null = null
+		for (let gi = 0; gi < groups.length; gi += 1) {
+			if (groups[gi].key == key) {
+				group = groups[gi]
+				break
+			}
+		}
+		if (group == null) {
+			group = { key: key, label: movementGroupLabel(key), summary: '', records: [] as UTSJSONObject[] } as MovementGroup
+			groups.push(group!)
+		}
+		group!.records.push(record)
+	}
+
+	// 每组汇总：出/入件数 + 笔数
+	for (let gi = 0; gi < groups.length; gi += 1) {
+		const group = groups[gi]
+		let inQuantity = 0
+		let outQuantity = 0
+		for (let ri = 0; ri < group.records.length; ri += 1) {
+			const quantity = intValue(group.records[ri]['quantity'])
+			if (quantity > 0) inQuantity += quantity
+			if (quantity < 0) outQuantity += quantity
+		}
+		let summary = group.records.length.toString() + ' 笔'
+		if (outQuantity < 0) summary = '出 ' + outQuantity.toString() + ' · ' + summary
+		if (inQuantity > 0) summary = '入 +' + inQuantity.toString() + ' · ' + summary
+		group.summary = summary
+	}
+	return groups
+})
 
 onLoad((query: OnLoadOptions) => {
 	const productValue = query['product']
@@ -1177,6 +1299,7 @@ onLoad((query: OnLoadOptions) => {
 .stock-location-wrap { flex: 1; padding-right: 8px; }
 .stock-location { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; }
 .stock-location-sub { margin-top: 3px; font-size: 12px; line-height: 17px; color: #64748B; }
+.stock-variant-text { margin-top: 3px; font-size: 12px; line-height: 17px; color: #0F766E; }
 .stock-alert { height: 24px; line-height: 24px; padding-left: 8px; padding-right: 8px; border-radius: 12px; background-color: #E8F7EF; color: #047857; font-size: 11px; }
 .stock-alert-warning { background-color: #FFF7ED; color: #B45309; }
 .stock-metrics { flex-direction: row; margin-top: 10px; }
@@ -1217,6 +1340,12 @@ onLoad((query: OnLoadOptions) => {
 .adjust-preview-in { color: #047857; }
 .adjust-preview-out { color: #B42318; }
 .adjust-preview-strong { color: #0F172A; }
+.movement-group { margin-bottom: 12px; }
+.movement-group-head { flex-direction: row; align-items: center; justify-content: space-between; padding-left: 4px; padding-right: 4px; padding-top: 2px; padding-bottom: 6px; }
+.movement-group-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.movement-group-summary { font-size: 11px; line-height: 16px; color: #94A3B8; }
+.movement-side { align-items: flex-end; }
+.movement-amount { margin-top: 2px; font-size: 12px; line-height: 17px; color: #0F172A; font-weight: bold; }
 .movement-row { background-color: #FFFFFF; border-radius: 8px; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 12px; margin-bottom: 8px; }
 .movement-row-top { flex-direction: row; align-items: center; justify-content: space-between; }
 .movement-main { flex: 1; padding-right: 8px; }

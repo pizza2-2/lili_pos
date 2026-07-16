@@ -110,9 +110,12 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { ProductItem, PrintTemplateItem, PrintTemplateListResponse, getProductDetail, getPrintTemplateList, setDefaultPrintTemplate } from '@/pkg/api/modules/products.uts'
+// #ifdef APP-ANDROID
 import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type PrintPreviewField = {
@@ -131,7 +134,7 @@ const templates = ref<PrintTemplateItem[]>([])
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const pageMode = ref('manage')
 const productId = ref('')
 const printProduct = ref<ProductItem | null>(null)
@@ -328,11 +331,11 @@ function isPriceSource(source: string): boolean {
 }
 
 function isGraphicElementType(type: string): boolean {
-	return type == 'hline' || type == 'vline' || type == 'rect'
+	return type == 'hline' || type == 'vline' || type == 'rect' || type == 'dline'
 }
 
 function isSupportedPrintElementType(type: string): boolean {
-	return type == 'text' || type == 'barcode' || isGraphicElementType(type)
+	return type == 'text' || type == 'barcode' || type == 'qrcode' || isGraphicElementType(type)
 }
 
 function isBlankPrintText(value: string): boolean {
@@ -341,7 +344,8 @@ function isBlankPrintText(value: string): boolean {
 }
 
 function isOptionalPrintSource(source: string): boolean {
-	return source == 'name_cn' || source == 'name_en' || source == 'name_other'
+	// specification（变体属性）对无变体商品留空，属可选字段
+	return source == 'name_cn' || source == 'name_en' || source == 'name_other' || source == 'specification'
 }
 
 function isValidMoneyText(value: string): boolean {
@@ -398,6 +402,7 @@ function validateElementLayout(source: UTSJSONObject, index: number, paperWidth:
 		if (lineWidth <= 0) return elementDisplayName(source, index) + ' 线宽必须大于 0'
 		if (type == 'hline' && width < 0.5) return elementDisplayName(source, index) + ' 横线长度过短'
 		if (type == 'vline' && height < 0.5) return elementDisplayName(source, index) + ' 竖线长度过短'
+		if (type == 'dline' && width < 0.5 && height < 0.5) return elementDisplayName(source, index) + ' 斜线长度过短'
 	}
 	return ''
 }
@@ -425,6 +430,8 @@ function printValueForSource(source: string, fallback: string): string {
 	if (source == 'barcode') return productBarcodeText()
 	if (source == 'sku') return productSkuText()
 	if (source == 'kod') return productKodText()
+	// 测试打印用真实商品（无变体维度），属性区域留空
+	if (source == 'specification') return ''
 	return fallback
 }
 
@@ -472,6 +479,7 @@ function printLabelForSource(source: UTSJSONObject, index: number): string {
 	if (elementSource == 'discount_price') return '折扣价'
 	if (elementSource == 'barcode') return '条码'
 	if (elementSource == 'sku' || elementSource == 'kod') return 'KOD'
+	if (elementSource == 'specification') return '属性'
 	return '字段 ' + (index + 1).toString()
 }
 
@@ -500,7 +508,7 @@ function buildPrintPreviewFields(): PrintPreviewField[] {
 	for (let index = 0; index < item.elements.length; index += 1) {
 		const source = item.elements[index]
 		const type = stringValue(source['type'])
-		if (type == 'hline' || type == 'vline' || type == 'rect') continue
+		if (isGraphicElementType(type)) continue
 		const key = printFieldKey(source, index)
 		if (hasPreviewField(result, key)) continue
 		const elementSource = stringValue(source['source'])
@@ -526,7 +534,7 @@ const pageTitle = computed((): string => {
 })
 
 const homePath = computed((): string => {
-	return pageMode.value == 'print' ? '/pages/tabbar/products' : '/pages/tabbar/settings'
+	return '/pages/tabbar/settings'
 })
 
 const selectedTemplateName = computed((): string => {
@@ -705,6 +713,7 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		barcodeType: stringValue(source['barcodeType'], stringValue(source['barcode_type'], 'EAN13')),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
+		direction: stringValue(source['direction'], 'down'),
 		isBold: isBold,
 		fontWeight: isBold ? 'bold' : 'normal',
 		textAlign: stringValue(source['textAlign'], stringValue(source['text_align'], 'left')),
@@ -731,16 +740,26 @@ function printCopiesValue(): number {
 }
 
 function connectedPrinterAddress(): string {
+	// #ifdef APP-ANDROID
 	return getPreferredPrinterAddress()
+	// #endif
+	// #ifndef APP-ANDROID
+	return ''
+	// #endif
 }
 
 function goPrinterSettings() {
+	// #ifdef APP-ANDROID
 	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({
 			url: '/pages/printer-settings/index',
 		})
 	}, 450)
+	// #endif
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版不支持标签打印', icon: 'none', duration: 3500 })
+	// #endif
 }
 
 function promptChoosePrinterAfterPrintFailure(message: string) {
@@ -780,6 +799,7 @@ async function confirmPrintProduct() {
 	let responseMessage = ''
 	uni.showLoading({ title: '打印中', mask: true })
 	try {
+		// #ifdef APP-ANDROID
 		const response = await printLabelBitmapAsync({
 			address: address,
 			paperWidthMm: numberValue(item.paper_width_mm, 30),
@@ -792,6 +812,7 @@ async function confirmPrintProduct() {
 		} as UTSJSONObject)
 		responseSuccess = response.success
 		responseMessage = response.message
+		// #endif
 	} finally {
 		printing.value = false
 		uni.hideLoading()

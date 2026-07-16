@@ -91,6 +91,11 @@ export type PurchaseDetailItem = {
 	product_name: string
 	product_sku: string
 	product_barcode: string
+	variant: number
+	variant_text: string
+	variant_sku: string
+	variant_barcode: string
+	product_category: number
 	product_image: string
 	product_images: string[]
 	product_preview_images: string[]
@@ -148,6 +153,7 @@ export type PurchaseDetailFilterOptionsResponse = {
 export type PurchaseDetailMutationData = {
 	purchase: string
 	product: string
+	variant: string | null
 	quantity: string
 	received_quantity: string | null
 	notes: string | null
@@ -493,6 +499,11 @@ function buildPurchaseDetailItem(rawObject: UTSJSONObject): PurchaseDetailItem {
 		product_name: productName,
 		product_sku: productSku,
 		product_barcode: productBarcode,
+		variant: intValue(rawObject['variant']),
+		variant_text: stringValue(rawObject['variant_text']),
+		variant_sku: stringValue(rawObject['variant_sku']),
+		variant_barcode: stringValue(rawObject['variant_barcode']),
+		product_category: intValue(rawObject['product_category']),
 		product_image: productImages.length > 0 ? productImages[0] : '',
 		product_images: productImages,
 		product_preview_images: productPreviewImages,
@@ -771,6 +782,12 @@ function detailMutationBody(data: PurchaseDetailMutationData): UTSJSONObject {
 		quantity: parseInt(data.quantity),
 		notes: data.notes == null ? '' : data.notes,
 	} as UTSJSONObject
+	// 始终携带 variant：空值显式传 null，保证编辑时能清除变体绑定
+	if (data.variant != null && data.variant != '' && data.variant != '0') {
+		body['variant'] = parseInt(data.variant)
+	} else {
+		body['variant'] = null
+	}
 	if (data.received_quantity != null && data.received_quantity != '') body['received_quantity'] = parseInt(data.received_quantity)
 	return body
 }

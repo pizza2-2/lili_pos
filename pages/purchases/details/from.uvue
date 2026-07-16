@@ -30,6 +30,7 @@
 				</view>
 			</view>
 			<lili-UniversaForm
+				ref="detailFormRef"
 				:mode="formMode"
 				:formSections="formSections"
 				:initialData="initialData"
@@ -70,7 +71,9 @@ import { computed } from 'vue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createPurchaseDetail, getPurchaseDetailItem, PurchaseDetailItem, PurchaseDetailMutationData, updatePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 import { ProductItem, PrintTemplateItem, getProductDetail, getPrintTemplateList } from '@/pkg/api/modules/products.uts'
+// #ifdef APP-ANDROID
 import { getPreferredPrinterAddress, printLabelBitmapAsync } from '@/uni_modules/lili-label-printer/index.uts'
+// #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 type ProductOption = {
@@ -104,6 +107,9 @@ const dirtySignal = ref(0)
 const submitting = ref(false)
 const initialData = ref<UTSJSONObject>({} as UTSJSONObject)
 const currentDetail = ref<PurchaseDetailItem | null>(null)
+const detailFormRef = ref<ComponentPublicInstance | null>(null)
+// 变体选项需要按当前选中的商品过滤
+const currentProductId = ref('')
 const printProduct = ref<ProductItem | null>(null)
 const printProductId = ref('')
 const printPopupVisible = ref(false)
@@ -259,6 +265,45 @@ async function fetchProductOptions(params: UTSJSONObject): Promise<UTSJSONObject
 	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
 }
 
+function variantComboTextFromRow(row: UTSJSONObject): string {
+	const displayItems = parseObjectArray(row['attribute_values_display'])
+	const parts: string[] = []
+	for (let i = 0; i < displayItems.length; i++) {
+		const value = getStringField(displayItems[i], 'value')
+		if (value != '') parts.push(value)
+	}
+	return parts.join(' / ')
+}
+
+async function fetchVariantOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	if (currentProductId.value == '') {
+		return buildSelectResponse([] as ProductOption[], params)
+	}
+	const keyword = getStringField(params, 'keyword')
+	const id = getStringField(params, 'id')
+	const query = {
+		page: intValue(params['page']) <= 0 ? 1 : intValue(params['page']),
+		page_size: intValue(params['pageSize']) <= 0 ? 20 : intValue(params['pageSize']),
+		product: currentProductId.value,
+	} as UTSJSONObject
+	if (keyword != '') {
+		query['search'] = keyword
+	}
+	const raw = await request('/api/products/variants/', 'GET', query, true)
+	const rows = extractRows(raw)
+	const options: ProductOption[] = []
+	for (let i = 0; i < rows.length; i++) {
+		const row = rows[i]
+		const value = getStringField(row, 'id')
+		let text = variantComboTextFromRow(row)
+		if (text == '') text = getStringField(row, 'sku')
+		const barcode = getStringField(row, 'barcode')
+		if (barcode != '') text = text + ' / ' + barcode
+		options.push({ value: value, text: text, image: '', subtitle: getStringField(row, 'sku') } as ProductOption)
+	}
+	return buildSelectResponse(options, { keyword: keyword, id: id } as UTSJSONObject)
+}
+
 function categoryDisplayName(row: UTSJSONObject): string {
 	let text = getStringField(row, 'text')
 	if (text == '') text = getStringField(row, 'label')
@@ -295,6 +340,8 @@ function initialCreateData(): UTSJSONObject {
 		product: '',
 		product_text: '',
 		product_image: '',
+		variant: '',
+		variant_text: '',
 		quantity: '',
 		received_quantity: '0',
 		notes: '',
@@ -306,10 +353,15 @@ function buildInitialDataFromDetail(item: PurchaseDetailItem): UTSJSONObject {
 	if (item.product_barcode != '') productText = productText + ' / ' + item.product_barcode
 	const itemObject = parseObject(item)
 	const productImage = itemObject == null ? '' : productImageFromRow(itemObject!)
+	let variantText = item.variant_text
+	if (variantText == '') variantText = item.variant_sku
+	if (variantText != '' && item.variant_barcode != '') variantText = variantText + ' / ' + item.variant_barcode
 	return {
 		product: item.product.toString(),
 		product_text: productText,
 		product_image: productImage,
+		variant: item.variant > 0 ? item.variant.toString() : '',
+		variant_text: variantText,
 		quantity: item.quantity.toString(),
 		received_quantity: item.received_quantity.toString(),
 		notes: item.notes,
@@ -324,6 +376,7 @@ const formSections = ref<UTSJSONObject[]>([
 		defaultOpen: true,
 		fields: [
 			{ key: 'product', textKey: 'product_text', imageValueKey: 'product_image', label: '商品', type: 'bottomSelect', required: true, title: '选择商品', placeholder: '请选择商品', searchPlaceholder: '扫码或输入商品名/条码', imageKey: 'image', subtitleKey: 'subtitle', showScan: true, autoSelectUnique: true, showAddAction: true, showEditAction: true, addPath: '/pages/products/from', editPath: '/pages/products/from', fetchData: fetchProductOptions } as UTSJSONObject,
+			{ key: 'variant', textKey: 'variant_text', label: '规格变体', type: 'bottomSelect', title: '选择规格变体', placeholder: '无变体可留空', searchPlaceholder: '输入变体SKU/条码', subtitleKey: 'subtitle', showScan: true, showAddAction: false, showEditAction: false, fetchData: fetchVariantOptions } as UTSJSONObject,
 			{ key: 'quantity', label: '采购数量', type: 'number', required: true, placeholder: '请输入采购数量' } as UTSJSONObject,
 			{ key: 'received_quantity', label: '已收货数量', type: 'number', showStepper: false, placeholder: '通常由收货操作更新', showAdd: true, addText: '全部收货', fillFromKey: 'quantity' } as UTSJSONObject,
 			{ key: 'notes', label: '备注', type: 'textarea', placeholder: '请输入备注' } as UTSJSONObject,
@@ -442,6 +495,7 @@ async function loadDetail(idText: string) {
 	try {
 		const detail = await getPurchaseDetailItem(idText)
 		currentDetail.value = detail
+		currentProductId.value = detail.product > 0 ? detail.product.toString() : ''
 		initialData.value = await buildInitialDataWithProductInfo(detail)
 		markLeaveConfirmRequired()
 	} catch (error) {
@@ -571,6 +625,13 @@ const quickPrintCopiesText = computed((): string => {
 	return normalizedPrintCopiesText(purchaseQuantityText())
 })
 
+function purchaseVariantText(): string {
+	const detail = currentDetail.value
+	if (detail == null) return ''
+	if (detail.variant_text != '') return detail.variant_text
+	return detail.variant_sku
+}
+
 const purchasePrintData = computed((): UTSJSONObject => {
 	const data = {} as UTSJSONObject
 	data['name'] = productNameText()
@@ -587,6 +648,7 @@ const purchasePrintData = computed((): UTSJSONObject => {
 	data['quantity'] = purchaseQuantityText()
 	data['purchase_quantity'] = purchaseQuantityText()
 	data['received_quantity'] = receivedQuantityText()
+	data['specification'] = purchaseVariantText()
 	return data
 })
 
@@ -603,6 +665,8 @@ function printValueForSource(source: string, fallback: string): string {
 	if (source == 'kod') return productKodText()
 	if (source == 'quantity' || source == 'purchase_quantity') return purchaseQuantityText()
 	if (source == 'received_quantity') return receivedQuantityText()
+	// 变体属性组合：无变体明细返回空串，标签该区域留空
+	if (source == 'specification') return purchaseVariantText()
 	return fallback
 }
 
@@ -627,6 +691,7 @@ function printLabelForSource(source: UTSJSONObject, index: number): string {
 	if (elementSource == 'discount_price') return '折扣价'
 	if (elementSource == 'barcode') return '条码'
 	if (elementSource == 'sku' || elementSource == 'kod') return 'KOD'
+	if (elementSource == 'specification') return '属性'
 	return '字段 ' + (index + 1).toString()
 }
 
@@ -655,7 +720,7 @@ function buildPrintPreviewFields(): PrintPreviewField[] {
 	for (let index = 0; index < item.elements.length; index += 1) {
 		const source = item.elements[index]
 		const type = getStringField(source, 'type')
-		if (type == 'hline' || type == 'vline' || type == 'rect') continue
+		if (type == 'hline' || type == 'vline' || type == 'rect' || type == 'dline') continue
 		const key = printFieldKey(source, index)
 		if (hasPreviewField(result, key)) continue
 		const elementSource = getStringField(source, 'source')
@@ -691,6 +756,7 @@ function mappedPrintElement(source: UTSJSONObject): UTSJSONObject {
 		barcodeType: getStringField(source, 'barcodeType', 'EAN13'),
 		showText: boolValue(source['showText'], true),
 		lineWidth: numberValue(source['lineWidth'], 1),
+		direction: getStringField(source, 'direction', 'down'),
 		isBold: isBold,
 		fontWeight: isBold ? 'bold' : 'normal',
 		textAlign: getStringField(source, 'textAlign', getStringField(source, 'text_align', 'left')),
@@ -717,14 +783,24 @@ function printCopiesValue(): number {
 }
 
 function connectedPrinterAddress(): string {
+	// #ifdef APP-ANDROID
 	return getPreferredPrinterAddress()
+	// #endif
+	// #ifndef APP-ANDROID
+	return ''
+	// #endif
 }
 
 function goPrinterSettings() {
+	// #ifdef APP-ANDROID
 	uni.showToast({ title: '请先连接打印机', icon: 'none', duration: 3500 })
 	setTimeout(() => {
 		uni.navigateTo({ url: '/pages/printer-settings/index' })
 	}, 450)
+	// #endif
+	// #ifndef APP-ANDROID
+	uni.showToast({ title: '网页版不支持标签打印', icon: 'none', duration: 3500 })
+	// #endif
 }
 
 function closePrintPopup() {
@@ -764,6 +840,7 @@ async function confirmPrintProduct() {
 	let responseMessage = ''
 	uni.showLoading({ title: '打印中', mask: true })
 	try {
+		// #ifdef APP-ANDROID
 		const response = await printLabelBitmapAsync({
 			address: address,
 			paperWidthMm: numberValue(item.paper_width_mm, 30),
@@ -776,6 +853,7 @@ async function confirmPrintProduct() {
 		} as UTSJSONObject)
 		responseSuccess = response.success
 		responseMessage = response.message
+		// #endif
 	} finally {
 		printing.value = false
 		uni.hideLoading()
@@ -876,6 +954,7 @@ function buildPayload(data: UTSJSONObject): PurchaseDetailMutationData {
 	return {
 		purchase: purchaseId.value,
 		product: getStringField(data, 'product'),
+		variant: getStringField(data, 'variant') == '' ? null : getStringField(data, 'variant'),
 		quantity: getStringField(data, 'quantity'),
 		received_quantity: getStringField(data, 'received_quantity') == '' ? null : getStringField(data, 'received_quantity'),
 		notes: getStringField(data, 'notes') == '' ? null : getStringField(data, 'notes'),
@@ -934,6 +1013,12 @@ function handleFieldChange(payload: UTSJSONObject) {
 	const key = getStringField(payload, 'key')
 	if (key != 'product') return
 	const productIdText = getStringField(payload, 'value')
+	if (productIdText != currentProductId.value) {
+		currentProductId.value = productIdText
+		// 商品变了，已选变体随之失效
+		detailFormRef.value?.$callMethod('setFieldValue', 'variant', '')
+		detailFormRef.value?.$callMethod('setFieldValue', 'variant_text', '')
+	}
 	loadProductInfo(productIdText)
 }
 function handleInputAdd(payload: UTSJSONObject) {

@@ -1,0 +1,111 @@
+<template>
+	<view :class="badgeClass">
+		<text :class="textClass">{{ displayText }}</text>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+const props = defineProps({
+	// 健康评分，后端返回字符串，空串表示未评分
+	score: {
+		type: String,
+		default: '',
+	},
+	suffix: {
+		type: String,
+		default: '分',
+	},
+})
+
+const scoreNumber = computed((): number => {
+	if (props.score == '') {
+		return -1
+	}
+	const parsed = parseFloat(props.score)
+	if (isNaN(parsed)) {
+		return -1
+	}
+	return parsed
+})
+
+// 分档：>=80 健康 / 60-79 需关注 / <60 风险 / 无数据
+const levelName = computed((): string => {
+	const value = scoreNumber.value
+	if (value < 0) {
+		return 'none'
+	}
+	if (value >= 80) {
+		return 'good'
+	}
+	if (value >= 60) {
+		return 'warn'
+	}
+	return 'risk'
+})
+
+const badgeClass = computed((): string => {
+	return 'score-badge score-badge-' + levelName.value
+})
+
+const textClass = computed((): string => {
+	return 'score-badge-text score-badge-text-' + levelName.value
+})
+
+const displayText = computed((): string => {
+	if (scoreNumber.value < 0) {
+		return '未评分'
+	}
+	return Math.round(scoreNumber.value).toString() + props.suffix
+})
+</script>
+
+<style>
+.score-badge {
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+	border-radius: 999px;
+	align-self: flex-start;
+}
+
+.score-badge-good {
+	background-color: #DCFCE7;
+}
+
+.score-badge-warn {
+	background-color: #FEF3C7;
+}
+
+.score-badge-risk {
+	background-color: #FEE2E2;
+}
+
+.score-badge-none {
+	background-color: #F1F5F9;
+}
+
+.score-badge-text {
+	font-size: 12px;
+	line-height: 16px;
+	font-weight: bold;
+}
+
+.score-badge-text-good {
+	color: #166534;
+}
+
+.score-badge-text-warn {
+	color: #92400E;
+}
+
+.score-badge-text-risk {
+	color: #B91C1C;
+}
+
+.score-badge-text-none {
+	color: #94A3B8;
+}
+</style>

@@ -151,6 +151,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteTransaction, getTransactionFilterOptions, getTransactionList, getTransactionStatistics, TransactionFilterDefinition, TransactionFilterOption, TransactionFilterOptionsResponse, TransactionItem, TransactionListResponse, TransactionMediaFile, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
@@ -172,7 +173,7 @@ const errorMessage = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(getListPageSize())
 const summary = ref<TransactionSummary | null>(null)
 const statistics = ref<TransactionStatisticsResponse | null>(null)
 const filterOptionsLoading = ref(false)
@@ -574,7 +575,7 @@ function transactionToListItem(item: TransactionItem): UTSJSONObject {
 		id: item.id.toString(),
 		title: title,
 		transactionDateText: '日期：' + formatDateText(item.transaction_date),
-		amountText: '¥ ' + item.amount,
+		amountText: item.amount + ' zł',
 		transactionTypeText: typeText,
 		filesText: filesText,
 		noteText: getDisplayText(item.note),
@@ -901,9 +902,9 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total-count', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
 		{ key: 'purchase-count', label: '采购次数', value: transactionCountText.value } as UTSJSONObject,
-		{ key: 'purchase-amount', label: '采购金额', value: '¥ ' + purchaseAmountText.value } as UTSJSONObject,
-		{ key: 'arrears-amount', label: '欠款金额', value: '¥ ' + arrearsAmountText.value } as UTSJSONObject,
-		{ key: 'payment-amount', label: '还款金额', value: '¥ ' + getStatisticsText('paymentAmount', '0.00') } as UTSJSONObject,
+		{ key: 'purchase-amount', label: '采购金额', value: purchaseAmountText.value + ' zł' } as UTSJSONObject,
+		{ key: 'arrears-amount', label: '欠款金额', value: arrearsAmountText.value + ' zł' } as UTSJSONObject,
+		{ key: 'payment-amount', label: '还款金额', value: getStatisticsText('paymentAmount', '0.00') + ' zł' } as UTSJSONObject,
 	]
 })
 

@@ -1,0 +1,101 @@
+<template>
+	<view class="ratio-wrap">
+		<view class="ratio-head">
+			<text class="ratio-label">{{ label }}</text>
+			<text class="ratio-value">{{ valueText }}</text>
+		</view>
+		<view class="ratio-track">
+			<view :class="barClass" :style="barStyle"></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+const props = defineProps({
+	label: {
+		type: String,
+		default: '',
+	},
+	// 0-1 之间的比例
+	ratio: {
+		type: Number,
+		default: 0,
+	},
+	// 右侧展示文本，为空时自动显示百分比
+	valueLabel: {
+		type: String,
+		default: '',
+	},
+	// 比例过高时是否标红（如集中度 >= 0.7）
+	warnThreshold: {
+		type: Number,
+		default: 1.01,
+	},
+})
+
+const clampedRatio = computed((): number => {
+	if (props.ratio < 0) return 0
+	if (props.ratio > 1) return 1
+	return props.ratio
+})
+
+const valueText = computed((): string => {
+	if (props.valueLabel != '') {
+		return props.valueLabel
+	}
+	return (clampedRatio.value * 100).toFixed(1) + '%'
+})
+
+const barStyle = computed((): string => {
+	const percent = Math.round(clampedRatio.value * 100)
+	return 'width:' + percent.toString() + '%'
+})
+
+const barClass = computed((): string => {
+	return props.ratio >= props.warnThreshold ? 'ratio-bar ratio-bar-warn' : 'ratio-bar'
+})
+</script>
+
+<style>
+.ratio-wrap {
+	margin-top: 8px;
+}
+
+.ratio-head {
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.ratio-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.ratio-value {
+	font-size: 12px;
+	line-height: 16px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.ratio-track {
+	margin-top: 4px;
+	height: 8px;
+	border-radius: 4px;
+	background-color: #F1F5F9;
+}
+
+.ratio-bar {
+	height: 8px;
+	border-radius: 4px;
+	background-color: #14B8A6;
+}
+
+.ratio-bar-warn {
+	background-color: #F59E0B;
+}
+</style>
