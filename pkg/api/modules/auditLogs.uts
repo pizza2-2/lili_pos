@@ -1,0 +1,261 @@
+import { request } from '../index.uts'
+
+// POS 敏感操作审计日志（只读）
+
+export type AuditLogQuery = {
+	search: string | null
+	page: number
+	page_size: number
+	event_type: string | null
+	cashier_id: string | null
+	date_from: string | null
+	date_to: string | null
+}
+
+export type AuditLogItem = {
+	id: number
+	shop: number
+	shop_name: string
+	client_event_id: string
+	event_type: string
+	event_type_display: string
+	cashier_id: string
+	cashier_name: string
+	kasa_number: string
+	device_id: string
+	amount: string
+	related_order_number: string
+	payload: UTSJSONObject
+	happened_at: string
+	created_at: string
+}
+
+export type AuditLogListResponse = {
+	results: AuditLogItem[]
+	total_count: number
+	total_pages: number
+	current_page: number
+	page_size: number
+}
+
+export type AuditEventTypeStat = {
+	event_type: string
+	label: string
+	count: number
+	amount: string
+}
+
+export type AuditCashierStat = {
+	cashier_id: string
+	cashier_name: string
+	total_count: number
+	total_amount: string
+	events: AuditEventTypeStat[]
+}
+
+export type AuditStatistics = {
+	total_count: number
+	by_event_type: AuditEventTypeStat[]
+	by_cashier: AuditCashierStat[]
+}
+
+export type AuditFilterOption = {
+	value: string
+	label: string
+}
+
+// 事件类型固定清单（与后端 PosAuditEvent.EventType 对应）
+export const AUDIT_EVENT_TYPES: AuditFilterOption[] = [
+	{ value: 'cart_clear', label: '清空购物车' } as AuditFilterOption,
+	{ value: 'cart_item_remove', label: '删除购物车商品' } as AuditFilterOption,
+	{ value: 'price_change', label: '收银改价' } as AuditFilterOption,
+	{ value: 'discount_price_change', label: '修改折扣价' } as AuditFilterOption,
+	{ value: 'order_discount', label: '整单折扣' } as AuditFilterOption,
+	{ value: 'hold_order_delete', label: '删除挂单' } as AuditFilterOption,
+	{ value: 'return_create', label: '退货' } as AuditFilterOption,
+	{ value: 'receipt_cancel', label: '取消小票' } as AuditFilterOption,
+]
+
+export function auditEventLabel(eventType: string): string {
+	for (let index = 0; index < AUDIT_EVENT_TYPES.length; index += 1) {
+		if (AUDIT_EVENT_TYPES[index].value == eventType) return AUDIT_EVENT_TYPES[index].label
+	}
+	return eventType
+}
+
+function stringValue(value: any | null): string {
+	if (value == null) return ''
+	return '' + value
+}
+
+function intValue(value: any | null): number {
+	const parsed = parseInt(stringValue(value))
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+function amountText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') return '0.00'
+	return text
+}
+
+function parseObject(value: any | null): UTSJSONObject | null {
+	if (value == null) return null
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return null
+	return JSON.parseObject<UTSJSONObject>(text)
+}
+
+function parseObjectArray(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '') return [] as UTSJSONObject[]
+	const parsed = JSON.parseArray<UTSJSONObject>(text)
+	if (parsed == null) return [] as UTSJSONObject[]
+	return parsed!
+}
+
+function rawDataObject(raw: any): UTSJSONObject {
+	const rawObject = parseObject(raw)
+	if (rawObject == null) throw new Error('操作日志接口响应解析失败')
+	const dataObject = parseObject(rawObject['data'])
+	if (dataObject != null) return dataObject!
+	return rawObject!
+}
+
+function buildQuery(data: AuditLogQuery): UTSJSONObject {
+	const query = { page: data.page, page_size: data.page_size } as UTSJSONObject
+	if (data.search != null && data.search != '') query['search'] = data.search
+	if (data.event_type != null && data.event_type != '') query['event_type'] = data.event_type
+	if (data.cashier_id != null && data.cashier_id != '') query['cashier_id'] = data.cashier_id
+	if (data.date_from != null && data.date_from != '') query['date_from'] = data.date_from
+	if (data.date_to != null && data.date_to != '') query['date_to'] = data.date_to
+	return query
+}
+
+function buildAuditItem(rawObject: UTSJSONObject): AuditLogItem {
+	const payload = parseObject(rawObject['payload'])
+	return {
+		id: intValue(rawObject['id']),
+		shop: intValue(rawObject['shop']),
+		shop_name: stringValue(rawObject['shop_name']),
+		client_event_id: stringValue(rawObject['client_event_id']),
+		event_type: stringValue(rawObject['event_type']),
+		event_type_display: stringValue(rawObject['event_type_display']),
+		cashier_id: stringValue(rawObject['cashier_id']),
+		cashier_name: stringValue(rawObject['cashier_name']),
+		kasa_number: stringValue(rawObject['kasa_number']),
+		device_id: stringValue(rawObject['device_id']),
+		amount: amountText(rawObject['amount']),
+		related_order_number: stringValue(rawObject['related_order_number']),
+		payload: payload == null ? ({} as UTSJSONObject) : payload!,
+		happened_at: stringValue(rawObject['happened_at']),
+		created_at: stringValue(rawObject['created_at']),
+	} as AuditLogItem
+}
+
+function buildItems(value: any | null): AuditLogItem[] {
+	const rawArray = parseObjectArray(value)
+	const result: AuditLogItem[] = []
+	for (let index = 0; index < rawArray.length; index += 1) result.push(buildAuditItem(rawArray[index]))
+	return result
+}
+
+function buildListResponse(raw: any, query: AuditLogQuery): AuditLogListResponse {
+	const rawObject = rawDataObject(raw)
+	let paginationObject: UTSJSONObject | null = null
+	const rawPagination = rawObject['pagination']
+	if (rawPagination != null) paginationObject = parseObject(rawPagination)
+	const results = buildItems(rawObject['results'])
+	let totalCount = intValue(rawObject['count'])
+	if (totalCount <= 0) totalCount = intValue(rawObject['total_count'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject!['total'])
+	if (totalCount <= 0 && paginationObject != null) totalCount = intValue(paginationObject!['count'])
+	if (totalCount <= 0) totalCount = results.length
+	let currentPage = intValue(rawObject['current_page'])
+	if (currentPage <= 0) currentPage = intValue(rawObject['page'])
+	if (currentPage <= 0 && paginationObject != null) currentPage = intValue(paginationObject!['page'])
+	if (currentPage <= 0) currentPage = query.page
+	let pageSize = intValue(rawObject['page_size'])
+	if (pageSize <= 0 && paginationObject != null) pageSize = intValue(paginationObject!['page_size'])
+	if (pageSize <= 0) pageSize = query.page_size
+	let totalPages = intValue(rawObject['total_pages'])
+	if (totalPages <= 0 && paginationObject != null) totalPages = intValue(paginationObject!['total_pages'])
+	if (totalPages <= 0 && pageSize > 0) totalPages = Math.ceil(totalCount / pageSize)
+	if (totalPages <= 0) totalPages = 1
+	return { results: results, total_count: totalCount, total_pages: totalPages, current_page: currentPage, page_size: pageSize } as AuditLogListResponse
+}
+
+// 按固定事件清单解析 { 事件码: {count, amount} } 结构，避免依赖字典键遍历
+function buildEventTypeStats(container: UTSJSONObject | null): AuditEventTypeStat[] {
+	const result: AuditEventTypeStat[] = []
+	if (container == null) return result
+	for (let index = 0; index < AUDIT_EVENT_TYPES.length; index += 1) {
+		const option = AUDIT_EVENT_TYPES[index]
+		const entry = parseObject(container[option.value])
+		if (entry == null) continue
+		result.push({
+			event_type: option.value,
+			label: option.label,
+			count: intValue(entry['count']),
+			amount: amountText(entry['amount']),
+		} as AuditEventTypeStat)
+	}
+	return result
+}
+
+function buildStatistics(raw: any): AuditStatistics {
+	const rawObject = rawDataObject(raw)
+	const byEventType = buildEventTypeStats(parseObject(rawObject['by_event_type']))
+
+	const cashiers: AuditCashierStat[] = []
+	const rawCashiers = parseObjectArray(rawObject['by_cashier'])
+	for (let index = 0; index < rawCashiers.length; index += 1) {
+		const item = rawCashiers[index]
+		cashiers.push({
+			cashier_id: stringValue(item['cashier_id']),
+			cashier_name: stringValue(item['cashier_name']),
+			total_count: intValue(item['total_count']),
+			total_amount: amountText(item['total_amount']),
+			events: buildEventTypeStats(parseObject(item['events'])),
+		} as AuditCashierStat)
+	}
+
+	return {
+		total_count: intValue(rawObject['total_count']),
+		by_event_type: byEventType,
+		by_cashier: cashiers,
+	} as AuditStatistics
+}
+
+export async function getAuditLogList(data: AuditLogQuery): Promise<AuditLogListResponse> {
+	const raw = await request('/api/orders/audit-events/', 'GET', buildQuery(data), true)
+	return buildListResponse(raw, data)
+}
+
+export async function getAuditLogStatistics(data: AuditLogQuery): Promise<AuditStatistics> {
+	const raw = await request('/api/orders/audit-events/statistics/', 'GET', buildQuery(data), true)
+	return buildStatistics(raw)
+}
+
+// 收银员筛选选项：从 filter-options 接口提取 cashier_id 一组
+export async function getAuditCashierOptions(): Promise<AuditFilterOption[]> {
+	const raw = await request('/api/orders/audit-events/filter-options/', 'GET', {} as UTSJSONObject, true)
+	const rawObject = rawDataObject(raw)
+	const result: AuditFilterOption[] = []
+	const rawFilters = parseObjectArray(rawObject['filters'])
+	for (let filterIndex = 0; filterIndex < rawFilters.length; filterIndex += 1) {
+		const filterObject = rawFilters[filterIndex]
+		if (stringValue(filterObject['param']) != 'cashier_id') continue
+		const rawOptions = parseObjectArray(filterObject['options'])
+		for (let optionIndex = 0; optionIndex < rawOptions.length; optionIndex += 1) {
+			const optionObject = rawOptions[optionIndex]
+			result.push({
+				value: stringValue(optionObject['value']),
+				label: stringValue(optionObject['label']),
+			} as AuditFilterOption)
+		}
+	}
+	return result
+}

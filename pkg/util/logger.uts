@@ -51,6 +51,16 @@ function isUploadEnabled(): boolean {
 	}
 }
 
+/** 当前身份标识（店铺/用户），供调试会话上传等复用；未注入或异常时返回空串 */
+export function getLoggerIdentity(): string {
+	if (identityProvider == null) return ''
+	try {
+		return identityProvider!()
+	} catch (e) {
+		return ''
+	}
+}
+
 /** 把任意错误对象转成可读字符串，供各调用点使用 */
 export function stringifyError(err: any | null): string {
 	if (err == null) return 'null'

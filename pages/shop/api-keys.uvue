@@ -15,6 +15,14 @@
 				<view v-if="plainKey != ''" class="card plain-card">
 					<text class="plain-title">请立即保存密钥明文（仅本次显示）</text>
 					<text class="plain-key">{{ plainKey }}</text>
+					<!-- #ifdef APP -->
+					<view v-if="qrSrc != ''" class="qr-box">
+						<view class="qr-wrap">
+							<image class="qr-image" :src="qrSrc" mode="aspectFit"></image>
+						</view>
+						<text class="qr-hint">收银机上打开：设置 → 同步 → 「扫码连接」，用扫码枪扫描此二维码即可完成连接</text>
+					</view>
+					<!-- #endif -->
 					<view class="plain-actions">
 						<view class="mini-btn" @click="copyPlainKey"><text class="mini-btn-text">复制</text></view>
 						<view class="mini-btn mini-btn-light" @click="dismissPlainKey"><text class="mini-btn-light-text">我已保存</text></view>
@@ -30,6 +38,7 @@
 						<view class="key-main">
 							<text class="key-title">#{{ keyNumberOf(item).toString() }} {{ keyNameOf(item) }}</text>
 							<text class="key-meta">{{ keyMetaOf(item) }}</text>
+							<text :class="keyStatusClassOf(item)">{{ keyStatusOf(item) }}</text>
 						</view>
 						<view class="key-actions">
 							<view class="mini-btn" @click="confirmRotate(keyNumberOf(item))"><text class="mini-btn-text">重置</text></view>
@@ -75,6 +84,12 @@
 import { computed } from 'vue'
 import { createShopApiKey, deleteShopApiKey, getShopApiKeys, rotateShopApiKey, toggleShopApiKey } from '@/pkg/api/modules/shops'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+// #ifdef APP
+import { createQRCode, type CreateQRCodeOptions } from '@/uni_modules/lime-scan'
+// #endif
+
+// 收银机扫码连接的载荷前缀；载荷只含字母数字与 . - _，扫码枪键盘映射下不会丢字符
+const QR_PREFIX = 'LILIPOS1.'
 
 const shopId = ref(0)
 const shopName = ref('')
@@ -85,6 +100,7 @@ const availableNumbers = ref<number[]>([] as number[])
 const selectedNumber = ref(0)
 const newKeyName = ref('')
 const plainKey = ref('')
+const qrSrc = ref('')
 
 const pageTitle = computed((): string => shopName.value == '' ? 'POS 密钥' : shopName.value + ' · POS 密钥')
 
@@ -131,6 +147,41 @@ function keyMetaOf(item: UTSJSONObject): string {
 	return created == '' ? state : state + ' · ' + created.substring(0, 10)
 }
 
+function minutesSince(text: string): number {
+	// 后端时间格式 YYYY-MM-DD HH:MM:SS（本地时区），解析失败返回 -1
+	const normalized = text.replace('T', ' ')
+	const segments = normalized.split(' ')
+	if (segments.length < 2) return -1
+	const dateParts = segments[0].split('-')
+	const timeParts = segments[1].split(':')
+	if (dateParts.length < 3 || timeParts.length < 2) return -1
+	const year = parseInt(dateParts[0])
+	const month = parseInt(dateParts[1])
+	const day = parseInt(dateParts[2])
+	const hour = parseInt(timeParts[0])
+	const minute = parseInt(timeParts[1])
+	if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute)) return -1
+	const usedTime = new Date(year, month - 1, day, hour, minute).getTime()
+	return (new Date().getTime() - usedTime) / 60000.0
+}
+
+function keyStatusOf(item: UTSJSONObject): string {
+	const lastUsed = stringField(item, 'last_used_at')
+	if (lastUsed == '') return '从未连接'
+	const minutes = minutesSince(lastUsed)
+	if (minutes >= 0 && minutes <= 10) return '在线'
+	const normalized = lastUsed.replace('T', ' ')
+	return normalized.length >= 16 ? '上次使用 ' + normalized.substring(5, 16) : '上次使用 ' + normalized
+}
+
+function keyStatusClassOf(item: UTSJSONObject): string {
+	const lastUsed = stringField(item, 'last_used_at')
+	if (lastUsed == '') return 'key-status key-status-never'
+	const minutes = minutesSince(lastUsed)
+	if (minutes >= 0 && minutes <= 10) return 'key-status key-status-online'
+	return 'key-status'
+}
+
 async function loadKeys() {
 	if (isLoading.value || shopId.value <= 0) return
 	isLoading.value = true
@@ -159,10 +210,24 @@ async function loadKeys() {
 function selectNumber(num: number) { selectedNumber.value = num }
 function onKeyNameInput(event: UniInputEvent) { newKeyName.value = event.detail.value }
 
+function generateQr(key: string) {
+	qrSrc.value = ''
+	// #ifdef APP
+	createQRCode({
+		content: QR_PREFIX + key,
+		width: 400,
+		height: 400,
+		success: (src: string) => { qrSrc.value = src },
+		fail: (err: string) => { console.log('[api-keys] 二维码生成失败', err) }
+	} as CreateQRCodeOptions)
+	// #endif
+}
+
 function showPlainKey(data: UTSJSONObject) {
 	const key = stringField(data, 'api_key')
 	if (key != '') {
 		plainKey.value = key
+		generateQr(key)
 	}
 }
 
@@ -171,7 +236,10 @@ function copyPlainKey() {
 	uni.setClipboardData({ data: plainKey.value, success: () => { uni.showToast({ title: '密钥已复制', icon: 'success' }) } })
 }
 
-function dismissPlainKey() { plainKey.value = '' }
+function dismissPlainKey() {
+	plainKey.value = ''
+	qrSrc.value = ''
+}
 
 async function executeCreate() {
 	if (selectedNumber.value <= 0) {
@@ -267,10 +335,17 @@ onLoad((query: OnLoadOptions) => {
 .plain-title { font-size: 14px; line-height: 20px; color: #92400E; font-weight: bold; }
 .plain-key { font-size: 14px; line-height: 20px; color: #0F172A; margin-top: 8px; }
 .plain-actions { flex-direction: row; margin-top: 10px; }
+.qr-box { align-items: center; margin-top: 12px; }
+.qr-wrap { background-color: #FFFFFF; padding: 10px; border-radius: 10px; border-width: 1px; border-style: solid; border-color: #E2E8F0; }
+.qr-image { width: 220px; height: 220px; }
+.qr-hint { font-size: 12px; line-height: 17px; color: #92400E; margin-top: 8px; text-align: center; }
 .key-row { flex-direction: row; align-items: center; justify-content: space-between; padding-top: 10px; padding-bottom: 10px; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #F1F5F9; }
 .key-main { flex: 1; }
 .key-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
 .key-meta { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 2px; }
+.key-status { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 2px; }
+.key-status-online { color: #16A34A; font-weight: bold; }
+.key-status-never { color: #94A3B8; }
 .key-actions { flex-direction: row; }
 .mini-btn { margin-left: 6px; height: 32px; border-radius: 8px; background-color: #0F172A; padding-left: 10px; padding-right: 10px; align-items: center; justify-content: center; }
 .mini-btn-text { font-size: 12px; color: #FFFFFF; }

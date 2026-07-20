@@ -122,6 +122,20 @@
 		<scroll-view style="flex:1" class="page-scroll">
 		<!-- #endif -->
 			<view class="page-content">
+				<!-- 洞察处置闭环：从洞察跳入时显示来源横幅，处理完可就地销案 -->
+				<view v-if="insightBannerId > 0" class="insight-banner">
+					<view class="insight-banner-main">
+						<text class="insight-banner-label">来自洞察</text>
+						<text class="insight-banner-title">{{ insightBannerTitle }}</text>
+					</view>
+					<view class="insight-banner-btn" @click="handleInsightResolved">
+						<text class="insight-banner-btn-text">标记已处理</text>
+					</view>
+					<view class="insight-banner-close" @click="dismissInsightBanner">
+						<text class="insight-banner-close-text">✕</text>
+					</view>
+				</view>
+
 				<view v-if="errorMessage != '' && !isLoading" class="error-card">
 					<text class="error-title">加载失败</text>
 					<text class="error-desc">{{ errorMessage }}</text>
@@ -279,6 +293,7 @@ import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCod
 import { startVolumeKeyListener, stopVolumeKeyListener, VolumeKeyEvent } from '@/uni_modules/lili-key'
 // #endif
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { updateCategoryInsightStatus } from '@/pkg/api/modules/category'
 
 type ProductSelectOption = {
 	value: string
@@ -1660,6 +1675,39 @@ function consumeProductListRefreshFlag(): boolean {
 	return shouldRefresh
 }
 
+// ── 洞察处置闭环 ────────────────────────────────────────────────
+
+const insightBannerId = ref(0)
+const insightBannerTitle = ref('')
+
+function dismissInsightBanner(): void {
+	insightBannerId.value = 0
+	insightBannerTitle.value = ''
+}
+
+function handleInsightResolved(): void {
+	const id = insightBannerId.value
+	if (id <= 0) {
+		return
+	}
+	uni.showModal({
+		title: '标记已处理',
+		content: '将该条洞察标记为已处理并从待办中移除，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				updateCategoryInsightStatus([id], 'handle')
+					.then((_response): void => {
+						uni.showToast({ title: '已标记为已处理', icon: 'none', duration: 2000 })
+						dismissInsightBanner()
+					})
+					.catch((_err): void => {
+						showErrorToast('标记失败，请稍后重试')
+					})
+			}
+		},
+	})
+}
+
 // 分类页跳转时通过 storage 传入预置分类筛选（switchTab 无法带参数）
 function consumePendingCategoryFilter(): boolean {
 	let payloadText = ''
@@ -1680,6 +1728,16 @@ function consumePendingCategoryFilter(): boolean {
 	}
 	let applied = false
 	let toastText = ''
+
+	// 洞察上下文：显示来源横幅，支持处理完就地标记已处理
+	const insightIdText = stringValue(payload['insight_id'])
+	const parsedInsightId = parseInt(insightIdText)
+	if (insightIdText != '' && !isNaN(parsedInsightId) && parsedInsightId > 0) {
+		insightBannerId.value = parsedInsightId
+		insightBannerTitle.value = stringValue(payload['insight_title'], '经营洞察')
+	} else {
+		dismissInsightBanner()
+	}
 
 	// category_ids 支持逗号分隔多个 id（父级分类会传全部后代分类）
 	let idsText = stringValue(payload['category_ids'])
@@ -2261,5 +2319,56 @@ onUnload(() => {
 	line-height: 20px;
 	color: #FFFFFF;
 	font-weight: bold;
+}
+.insight-banner {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 10px;
+	padding: 10px 12px;
+	background-color: #EFF6FF;
+	border-radius: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #BFDBFE;
+}
+
+.insight-banner-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.insight-banner-label {
+	font-size: 10px;
+	line-height: 14px;
+	color: #64748B;
+}
+
+.insight-banner-title {
+	margin-top: 2px;
+	font-size: 13px;
+	line-height: 18px;
+	color: #1D4ED8;
+	font-weight: bold;
+}
+
+.insight-banner-btn {
+	padding: 7px 12px;
+	background-color: #1D4ED8;
+	border-radius: 8px;
+}
+
+.insight-banner-btn-text {
+	font-size: 12px;
+	color: #FFFFFF;
+}
+
+.insight-banner-close {
+	margin-left: 8px;
+	padding: 6px 8px;
+}
+
+.insight-banner-close-text {
+	font-size: 13px;
+	color: #64748B;
 }
 </style>

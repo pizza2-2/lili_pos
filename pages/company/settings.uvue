@@ -92,6 +92,43 @@
 					<text class="card-hint">收银端商品名称（同步与小票）的取值来源；所选来源为空时自动回退到分类英文名、Kasa 分类英文名。保存后收银端会在下次同步时自动刷新全部名称。</text>
 				</view>
 
+				<view class="card">
+					<text class="card-title">分类洞察</text>
+					<view class="field-row">
+						<text class="field-label">无销售天数</text>
+						<input class="field-input" type="number" :value="insightNoSalesDays" placeholder="1-90" @input="onInsightDaysInput" />
+					</view>
+					<text class="card-hint">分类连续无销售达到该天数后，才生成「无销售 / 持续无销售」洞察报告；设为 1 表示当天无销售即报。保存后从下一次洞察生成起生效。</text>
+				</view>
+
+				<view class="card">
+					<text class="card-title">营业日历</text>
+					<text class="field-label">每周闭店日</text>
+					<view class="backend-options weekday-options">
+						<view
+							v-for="(label, index) in weekdayLabels"
+							:key="'weekday-' + index.toString()"
+							:class="isClosedWeekday(index) ? 'backend-chip backend-chip-active' : 'backend-chip'"
+							@click="toggleClosedWeekday(index)"
+						>
+							<text :class="isClosedWeekday(index) ? 'backend-chip-text backend-chip-text-active' : 'backend-chip-text'">{{ label }}</text>
+						</view>
+					</view>
+					<view class="field-row">
+						<text class="field-label">假日日期</text>
+						<input class="field-input" :value="holidayInput" placeholder="如 2026-12-25" @input="onHolidayInput" />
+						<view class="holiday-add-btn" @click="addHoliday">
+							<text class="holiday-add-text">添加</text>
+						</view>
+					</view>
+					<view v-if="holidayDates.length > 0" class="holiday-list">
+						<view v-for="item in holidayDates" :key="'holiday-' + item" class="holiday-chip" @click="removeHoliday(item)">
+							<text class="holiday-chip-text">{{ item }} ✕</text>
+						</view>
+					</view>
+					<text class="card-hint">闭店日（周日禁售、法定假日）销售归零属正常：系统不会产生销售类误报，也不把闭店日计入连续无销售天数和对比基线。点假日标签可移除。</text>
+				</view>
+
 				<view class="save-btn" @click="handleSave">
 					<text class="save-btn-text">保存设置</text>
 				</view>
@@ -124,6 +161,12 @@ const hasTranslationKey = ref(false)
 const translationBackends = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const posNameSource = ref('category')
 const posNameSources = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const insightNoSalesDays = ref('1')
+// 营业日历：闭店星期用字符串键（'0'=周一 … '6'=周日），规避 UTS 数字装箱的集合查找陷阱
+const weekdayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const closedWeekdays = ref<string[]>([] as string[])
+const holidayDates = ref<string[]>([] as string[])
+const holidayInput = ref('')
 
 function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
 	const value = obj[key]
@@ -169,6 +212,84 @@ function onTranslationKeyInput(event: UniInputEvent) { translationApiKey.value =
 function onTranslationToggle(event: UniSwitchChangeEvent) { translationEnabled.value = event.detail.value }
 function selectBackend(value: string) { translationBackend.value = value }
 function selectPosNameSource(value: string) { posNameSource.value = value }
+function onInsightDaysInput(event: UniInputEvent) { insightNoSalesDays.value = event.detail.value }
+function onHolidayInput(event: UniInputEvent) { holidayInput.value = event.detail.value }
+
+function isClosedWeekday(index: number): boolean {
+	return closedWeekdays.value.includes(index.toString())
+}
+
+function toggleClosedWeekday(index: number): void {
+	const key = index.toString()
+	const next: string[] = []
+	let removed = false
+	for (let i = 0; i < closedWeekdays.value.length; i += 1) {
+		const item = closedWeekdays.value[i]
+		if (item == key) {
+			removed = true
+			continue
+		}
+		next.push(item)
+	}
+	if (!removed) {
+		next.push(key)
+	}
+	next.sort()
+	closedWeekdays.value = next
+}
+
+function addHoliday(): void {
+	const text = holidayInput.value.trim()
+	const pattern = /^\d{4}-\d{2}-\d{2}$/
+	if (!pattern.test(text)) {
+		uni.showToast({ title: '日期格式应为 YYYY-MM-DD', icon: 'none', duration: 3000 })
+		return
+	}
+	if (holidayDates.value.includes(text)) {
+		holidayInput.value = ''
+		return
+	}
+	const next = holidayDates.value.slice(0)
+	next.push(text)
+	next.sort()
+	holidayDates.value = next
+	holidayInput.value = ''
+}
+
+function removeHoliday(item: string): void {
+	const next: string[] = []
+	for (let i = 0; i < holidayDates.value.length; i += 1) {
+		if (holidayDates.value[i] != item) {
+			next.push(holidayDates.value[i])
+		}
+	}
+	holidayDates.value = next
+}
+
+function toStringList(value: any | null): string[] {
+	const result: string[] = []
+	if (value == null) return result
+	const text = JSON.stringify(value)
+	if (text == null || !text.startsWith('[')) return result
+	try {
+		const parsed = JSON.parseArray<any>(text)
+		if (parsed == null) return result
+		for (let i = 0; i < parsed.length; i += 1) {
+			const item = parsed[i]
+			if (item == null) continue
+			// 数字元素可能以 6.0 形式返回，parseInt 归一
+			let itemText = '' + item
+			if (itemText.endsWith('.0')) {
+				itemText = itemText.substring(0, itemText.length - 2)
+			}
+			if (itemText != '') {
+				result.push(itemText)
+			}
+		}
+	} catch (_error) {
+	}
+	return result
+}
 
 async function loadSettings() {
 	loadError.value = ''
@@ -187,6 +308,11 @@ async function loadSettings() {
 		translationBackends.value = toObjectArray(data['translation_backends'])
 		posNameSource.value = stringField(data, 'pos_name_source', 'category')
 		posNameSources.value = toObjectArray(data['pos_name_sources'])
+		// 数字字段可能以 3.0 形式返回，parseInt 归一为整数展示
+		const rawInsightDays = parseInt(stringField(data, 'insight_no_sales_days', '1'))
+		insightNoSalesDays.value = isNaN(rawInsightDays) ? '1' : rawInsightDays.toString()
+		closedWeekdays.value = toStringList(data['closed_weekdays'])
+		holidayDates.value = toStringList(data['holiday_dates'])
 	} catch (error) {
 		loadError.value = parseErrorMessage(error, '公司设置加载失败')
 	}
@@ -196,6 +322,11 @@ async function executeSave() {
 	if (submitting.value) return
 	if (companyName.value.trim() == '') {
 		uni.showToast({ title: '公司名称不能为空', icon: 'none', duration: 3500 })
+		return
+	}
+	const insightDays = parseInt(insightNoSalesDays.value.trim())
+	if (isNaN(insightDays) || insightDays < 1 || insightDays > 90) {
+		uni.showToast({ title: '无销售天数需为 1-90 的整数', icon: 'none', duration: 3500 })
 		return
 	}
 	submitting.value = true
@@ -210,7 +341,18 @@ async function executeSave() {
 			translation_enabled: translationEnabled.value,
 			translation_backend: translationBackend.value,
 			pos_name_source: posNameSource.value,
+			insight_no_sales_days: insightDays,
 		} as UTSJSONObject
+		// 营业日历：闭店星期传数字数组，假日传 ISO 日期字符串数组
+		const weekdayNumbers: number[] = []
+		for (let i = 0; i < closedWeekdays.value.length; i += 1) {
+			const parsed = parseInt(closedWeekdays.value[i])
+			if (!isNaN(parsed) && parsed >= 0 && parsed <= 6) {
+				weekdayNumbers.push(parsed)
+			}
+		}
+		body['closed_weekdays'] = weekdayNumbers
+		body['holiday_dates'] = holidayDates.value
 		// 凭据字段：留空表示保持不变，只有输入了新值才提交
 		if (ministryToken.value.trim() != '') {
 			body['ministry_of_finance_token'] = ministryToken.value.trim()
@@ -251,6 +393,12 @@ onLoad(() => { loadSettings() })
 .field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
 .field-static { flex: 1; font-size: 14px; line-height: 20px; color: #0F172A; }
 .backend-options { flex: 1; flex-direction: row; flex-wrap: wrap; }
+.weekday-options { margin-top: 8px; }
+.holiday-add-btn { margin-left: 8px; padding-left: 14px; padding-right: 14px; padding-top: 9px; padding-bottom: 9px; background-color: #0F172A; border-radius: 8px; }
+.holiday-add-text { font-size: 13px; color: #FFFFFF; }
+.holiday-list { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.holiday-chip { padding-left: 10px; padding-right: 10px; padding-top: 5px; padding-bottom: 5px; margin-right: 8px; margin-bottom: 6px; background-color: #FEF3C7; border-radius: 8px; }
+.holiday-chip-text { font-size: 12px; color: #92400E; }
 .backend-chip { min-height: 32px; border-radius: 8px; padding-left: 12px; padding-right: 12px; padding-top: 5px; padding-bottom: 5px; margin-right: 8px; background-color: #F9FAFB; border-width: 1px; border-style: solid; border-color: #E5E7EB; }
 .backend-chip-active { background-color: #E0F2FE; border-color: #0284C7; }
 .backend-chip-text { font-size: 13px; color: #4B5563; }

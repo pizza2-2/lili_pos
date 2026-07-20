@@ -1,0 +1,633 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="POS 操作日志"
+			searchPlaceholder="收银员、单号、收银台"
+			:searchValue="keyword"
+			:filterVisible="filterVisible"
+			:showBack="true"
+			:showSearch="true"
+			:showFilter="true"
+			:filterActive="hasActiveFilter"
+			filterText="筛选"
+			:showHome="true"
+			homePath="/pages/tabbar/settings"
+			@searchInput="handleSearchInput"
+			@searchConfirm="handleSearchConfirm"
+			@searchClear="handleSearchClear"
+			@update:filterVisible="handleFilterVisibleChange"
+			@filter-open="handleFilterOpen"
+		>
+			<template #filter-panel>
+				<view class="audit-filter-panel">
+					<view class="audit-filter-groups">
+						<view class="audit-filter-group">
+							<text class="audit-filter-title">日期范围</text>
+							<view class="audit-filter-options">
+								<view
+									v-for="option in datePresetOptions"
+									:key="'date-' + option.key"
+									:class="datePresetValue == option.key ? 'audit-filter-option audit-filter-option-active' : 'audit-filter-option'"
+									@click="selectDatePreset(option.key)"
+								>
+									<text :class="datePresetValue == option.key ? 'audit-filter-option-text audit-filter-option-text-active' : 'audit-filter-option-text'">{{ option.text }}</text>
+								</view>
+							</view>
+						</view>
+						<view class="audit-filter-group">
+							<text class="audit-filter-title">事件类型</text>
+							<view class="audit-filter-options">
+								<view
+									v-for="option in eventTypeOptions"
+									:key="'event-' + option.value"
+									:class="selectedEventType == option.value ? 'audit-filter-option audit-filter-option-active' : 'audit-filter-option'"
+									@click="toggleEventType(option.value)"
+								>
+									<text :class="selectedEventType == option.value ? 'audit-filter-option-text audit-filter-option-text-active' : 'audit-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+						<view class="audit-filter-group">
+							<text class="audit-filter-title">收银员</text>
+							<view v-if="cashierOptionsLoading" class="audit-filter-state audit-filter-state-small">
+								<text class="audit-filter-state-text">收银员选项加载中...</text>
+							</view>
+							<view v-else class="audit-filter-options">
+								<view
+									v-for="option in cashierOptions"
+									:key="'cashier-' + option.value"
+									:class="selectedCashierId == option.value ? 'audit-filter-option audit-filter-option-active' : 'audit-filter-option'"
+									@click="toggleCashier(option.value)"
+								>
+									<text :class="selectedCashierId == option.value ? 'audit-filter-option-text audit-filter-option-text-active' : 'audit-filter-option-text'">{{ option.label }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view class="audit-filter-actions">
+						<view class="audit-filter-btn audit-filter-btn-light" @click="handleFilterReset">
+							<text class="audit-filter-btn-light-text">重置</text>
+						</view>
+						<view class="audit-filter-btn audit-filter-btn-primary" @click="applySelectedFilters">
+							<text class="audit-filter-btn-primary-text">应用</text>
+						</view>
+					</view>
+				</view>
+			</template>
+		</lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view v-if="errorMessage != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ errorMessage }}</text>
+					<view class="retry-btn" @click="loadAuditLogs"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<!-- 收银员排行：防串通核心视图 -->
+				<view v-if="cashierRanking.length > 0" class="ranking-card">
+					<view class="ranking-header">
+						<text class="ranking-title">收银员敏感操作排行（{{ datePresetLabelText }}）</text>
+					</view>
+					<view v-for="(row, rankIndex) in cashierRanking" :key="'rank-' + row.cashier_id" class="ranking-row">
+						<view class="ranking-row-top">
+							<text class="ranking-name">{{ (rankIndex + 1).toString() + '. ' + cashierStatName(row) }}</text>
+							<text class="ranking-count">{{ row.total_count.toString() + ' 次 / ' + row.total_amount + ' zł' }}</text>
+						</view>
+						<text class="ranking-breakdown">{{ cashierBreakdownText(row) }}</text>
+					</view>
+				</view>
+
+				<lili-UniversalList
+					:items="listItems"
+					keyField="id"
+					titleField="title"
+					subtitleField="subtitle"
+					metaField="amountText"
+					tagField="tags"
+					:fields="fieldConfig"
+					:loading="isLoading"
+					loadingText="正在加载操作日志"
+					:keepContentOnLoading="true"
+					inlineLoadingText="操作日志刷新中..."
+					:emptyText="emptyText"
+					emptyIcon="◎"
+					:showMenu="true"
+					:menuActions="menuActions"
+					:showChevron="false"
+					:showPagination="true"
+					:currentPage="currentPage"
+					:totalPages="totalPages"
+					:totalCount="totalCount"
+					summaryTitle="操作汇总"
+					:summaryItems="summaryItems"
+					:summaryCollapsedByDefault="false"
+					:showFloatingAdd="false"
+					@item-click="handleItemClick"
+					@menu="handleMenu"
+					@page-change="handlePageChange"
+				/>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { getListPageSize } from '@/pkg/util/settings.uts'
+import {
+	AUDIT_EVENT_TYPES,
+	AuditCashierStat,
+	AuditFilterOption,
+	AuditLogItem,
+	AuditLogListResponse,
+	AuditLogQuery,
+	AuditStatistics,
+	getAuditCashierOptions,
+	getAuditLogList,
+	getAuditLogStatistics,
+} from '@/pkg/api/modules/auditLogs.uts'
+
+type DatePresetOption = {
+	key: string
+	text: string
+}
+
+const keyword = ref('')
+const filterVisible = ref(false)
+const logs = ref<AuditLogItem[]>([])
+const isLoading = ref(false)
+const reloadAfterLoading = ref(false)
+const errorMessage = ref('')
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const pageSize = ref(getListPageSize())
+const selectedEventType = ref('')
+const selectedCashierId = ref('')
+const cashierOptions = ref<AuditFilterOption[]>([])
+const cashierOptionsLoading = ref(false)
+const cashierOptionsLoaded = ref(false)
+const datePresetValue = ref('week')
+const datePresetOptions = ref<DatePresetOption[]>([
+	{ key: 'all', text: '全部' } as DatePresetOption,
+	{ key: 'today', text: '今天' } as DatePresetOption,
+	{ key: 'week', text: '本周' } as DatePresetOption,
+	{ key: 'month', text: '本月' } as DatePresetOption,
+])
+const statistics = ref<AuditStatistics>({
+	total_count: 0,
+	by_event_type: [],
+	by_cashier: [],
+} as AuditStatistics)
+
+const eventTypeOptions = ref<AuditFilterOption[]>(AUDIT_EVENT_TYPES)
+
+const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'cashierText', label: '收银员:' } as UTSJSONObject,
+	{ key: 'detailText', label: '明细:' } as UTSJSONObject,
+	{ key: 'orderText', label: '单号:' } as UTSJSONObject,
+])
+
+const menuActions = ref<UTSJSONObject[]>([
+	{ key: 'detail', text: '详情' } as UTSJSONObject,
+	{ key: 'copy', text: '复制单号' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	if (text == '') return fallback
+	return text
+}
+
+function parseErrorMessage(error: any, fallback: string): string {
+	let message = fallback
+	if (error != null) {
+		const errorText = JSON.stringify(error)
+		if (errorText != null && errorText != '') {
+			const parsedError = JSON.parseObject<UTSJSONObject>(errorText)
+			if (parsedError != null) {
+				const rawMessage = parsedError['message']
+				if (rawMessage != null) {
+					const parsedMessage = rawMessage as string
+					if (parsedMessage != '') message = parsedMessage
+				}
+			}
+			if (message == fallback) message = errorText
+		}
+	}
+	return message
+}
+
+function copyText(text: string, successTitle: string, emptyTitle: string) {
+	if (text == '' || text == '-') {
+		uni.showToast({ title: emptyTitle, icon: 'none', duration: 3500 })
+		return
+	}
+	uni.setClipboardData({ data: text, success: () => { uni.showToast({ title: successTitle, icon: 'success' }) } })
+}
+
+function pad2(value: number): string {
+	return value < 10 ? '0' + value.toString() : value.toString()
+}
+
+function dateValue(date: Date): string {
+	return date.getFullYear().toString() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate())
+}
+
+function addDays(date: Date, days: number): Date {
+	return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+function todayDate(): Date {
+	const now = new Date()
+	return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function datePresetLabel(): string {
+	if (datePresetValue.value == 'week') return '本周'
+	if (datePresetValue.value == 'month') return '本月'
+	if (datePresetValue.value == 'all') return '全部'
+	return '今天'
+}
+
+function dateRangeFrom(): string | null {
+	if (datePresetValue.value == 'all') return null
+	const today = todayDate()
+	if (datePresetValue.value == 'week') {
+		const weekday = today.getDay()
+		const diff = weekday == 0 ? 6 : weekday - 1
+		return dateValue(addDays(today, 0 - diff))
+	}
+	if (datePresetValue.value == 'month') return dateValue(new Date(today.getFullYear(), today.getMonth(), 1))
+	return dateValue(today)
+}
+
+function dateRangeTo(): string | null {
+	if (datePresetValue.value == 'all') return null
+	return dateValue(todayDate())
+}
+
+function selectDatePreset(value: string) {
+	datePresetValue.value = value
+}
+
+function toggleEventType(value: string) {
+	selectedEventType.value = selectedEventType.value == value ? '' : value
+}
+
+function toggleCashier(value: string) {
+	selectedCashierId.value = selectedCashierId.value == value ? '' : value
+}
+
+function buildQuery(page: number): AuditLogQuery {
+	return {
+		search: keyword.value == '' ? null : keyword.value,
+		page: page,
+		page_size: pageSize.value,
+		event_type: selectedEventType.value == '' ? null : selectedEventType.value,
+		cashier_id: selectedCashierId.value == '' ? null : selectedCashierId.value,
+		date_from: dateRangeFrom(),
+		date_to: dateRangeTo(),
+	} as AuditLogQuery
+}
+
+function applyResponse(response: AuditLogListResponse) {
+	logs.value = response.results
+	currentPage.value = response.current_page
+	totalPages.value = response.total_pages
+	totalCount.value = response.total_count
+	pageSize.value = response.page_size
+}
+
+async function loadStatistics() {
+	try {
+		statistics.value = await getAuditLogStatistics(buildQuery(1))
+	} catch (error) {
+	}
+}
+
+async function loadAuditLogs() {
+	if (isLoading.value) {
+		reloadAfterLoading.value = true
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const response = await getAuditLogList(buildQuery(currentPage.value))
+		applyResponse(response)
+		await loadStatistics()
+	} catch (error) {
+		logs.value = []
+		currentPage.value = 1
+		totalPages.value = 1
+		totalCount.value = 0
+		errorMessage.value = parseErrorMessage(error, '操作日志加载失败')
+	} finally {
+		isLoading.value = false
+		if (reloadAfterLoading.value) {
+			reloadAfterLoading.value = false
+			loadAuditLogs()
+		}
+	}
+}
+
+// ISO 时间简化为 "YYYY-MM-DD HH:MM"
+function formatDateTime(raw: string): string {
+	if (raw == '') return '-'
+	const text = raw.replace('T', ' ')
+	if (text.length >= 16) return text.substring(0, 16)
+	return text
+}
+
+function cashierDisplay(item: AuditLogItem): string {
+	const name = stringValue(item.cashier_name)
+	const base = name != '' ? name : stringValue(item.cashier_id, '-')
+	return base + ' / 台' + stringValue(item.kasa_number, '-')
+}
+
+// 事件明细一行摘要（列表展示）
+function payloadSummary(item: AuditLogItem): string {
+	const payload = item.payload
+	const eventType = item.event_type
+	if (eventType == 'cart_clear') {
+		const items = payload['items']
+		let count = 0
+		if (items != null) {
+			const parsed = JSON.parseArray<UTSJSONObject>(JSON.stringify(items))
+			if (parsed != null) count = parsed.length
+		}
+		return '清空 ' + count.toString() + ' 项商品，合计 ' + stringValue(payload['total'], item.amount)
+	}
+	if (eventType == 'cart_item_remove') {
+		const mode = stringValue(payload['mode'])
+		const name = stringValue(payload['name'], '-')
+		if (mode == 'quantity_decrease') {
+			return name + ' 数量 ' + stringValue(payload['old_quantity']) + ' → ' + stringValue(payload['new_quantity'])
+		}
+		return '删除 ' + name + ' ×' + stringValue(payload['removed_quantity'], '1')
+	}
+	if (eventType == 'price_change') {
+		return stringValue(payload['name'], '-') + ' 价格 ' + stringValue(payload['old_price']) + ' → ' + stringValue(payload['new_price'])
+	}
+	if (eventType == 'discount_price_change') {
+		const percent = stringValue(payload['percent'])
+		const base = stringValue(payload['name'], '-') + ' 折扣价 ' + stringValue(payload['old_price']) + ' → ' + stringValue(payload['discount_price'])
+		return percent != '' ? base + '（' + percent + '%）' : base
+	}
+	if (eventType == 'order_discount') {
+		return '折扣 ' + stringValue(payload['discount']) + '，折前 ' + stringValue(payload['subtotal'])
+	}
+	if (eventType == 'hold_order_delete') {
+		if (stringValue(payload['mode']) == 'clear_all') {
+			return '清空全部挂单，共 ' + stringValue(payload['orders_count'], '0') + ' 单'
+		}
+		return '挂单 ' + stringValue(payload['order_number'], '-') + '，金额 ' + stringValue(payload['total_amount'], item.amount)
+	}
+	if (eventType == 'return_create') {
+		return '原单 ' + stringValue(payload['original_order_number'], '-') + '，退款 ' + stringValue(payload['total_amount'], item.amount)
+	}
+	if (eventType == 'receipt_cancel') {
+		const ok = stringValue(payload['success'])
+		return '重置打印机（取消交易），结果：' + (ok == 'true' ? '成功' : '失败')
+	}
+	return '-'
+}
+
+// 详情弹窗内容（多行）
+function payloadDetailText(item: AuditLogItem): string {
+	const lines: string[] = []
+	lines.push('事件：' + item.event_type_display)
+	lines.push('收银员：' + cashierDisplay(item))
+	lines.push('时间：' + formatDateTime(item.happened_at))
+	if (item.amount != '0.00') lines.push('涉及金额：' + item.amount + ' zł')
+	if (item.related_order_number != '') lines.push('关联单号：' + item.related_order_number)
+	lines.push('明细：' + payloadSummary(item))
+
+	// 清空购物车附商品清单（最多 6 行）
+	if (item.event_type == 'cart_clear') {
+		const items = item.payload['items']
+		if (items != null) {
+			const parsed = JSON.parseArray<UTSJSONObject>(JSON.stringify(items))
+			if (parsed != null) {
+				const limit = parsed.length > 6 ? 6 : parsed.length
+				for (let index = 0; index < limit; index += 1) {
+					const row = parsed[index]
+					lines.push('· ' + stringValue(row['name'], '-') + ' ×' + stringValue(row['quantity'], '1') + ' = ' + stringValue(row['line_total'], '-'))
+				}
+				if (parsed.length > 6) lines.push('· ... 共 ' + parsed.length.toString() + ' 项')
+			}
+		}
+	}
+	if (item.event_type == 'return_create') {
+		const reason = stringValue(item.payload['reason'])
+		if (reason != '') lines.push('原因：' + reason)
+	}
+	return lines.join('\n')
+}
+
+function findLog(id: string): AuditLogItem | null {
+	for (let index = 0; index < logs.value.length; index += 1) {
+		if (logs.value[index].id.toString() == id) return logs.value[index]
+	}
+	return null
+}
+
+function openDetail(id: string) {
+	const item = findLog(id)
+	if (item == null) return
+	uni.showModal({
+		title: item.event_type_display,
+		content: payloadDetailText(item!),
+		showCancel: false,
+		confirmText: '关闭',
+	})
+}
+
+function logToListItem(item: AuditLogItem): UTSJSONObject {
+	const amount = item.amount != '0.00' ? item.amount + ' zł' : '-'
+	return {
+		id: item.id.toString(),
+		rawId: item.id.toString(),
+		orderNumber: item.related_order_number,
+		title: item.event_type_display,
+		subtitle: '时间：' + formatDateTime(item.happened_at),
+		amountText: amount,
+		cashierText: cashierDisplay(item),
+		detailText: payloadSummary(item),
+		orderText: stringValue(item.related_order_number, '-'),
+		tags: [item.event_type_display] as string[],
+	} as UTSJSONObject
+}
+
+function reloadFirstPage() {
+	currentPage.value = 1
+	loadAuditLogs()
+}
+
+function handleSearchInput(value: string) { keyword.value = value }
+function handleSearchConfirm(value: string) { keyword.value = value; reloadFirstPage() }
+function handleSearchClear() { keyword.value = ''; reloadFirstPage() }
+
+function handleFilterVisibleChange(value: boolean) { filterVisible.value = value }
+
+async function loadCashierOptions() {
+	if (cashierOptionsLoaded.value || cashierOptionsLoading.value) return
+	cashierOptionsLoading.value = true
+	try {
+		cashierOptions.value = await getAuditCashierOptions()
+		cashierOptionsLoaded.value = true
+	} catch (error) {
+	} finally {
+		cashierOptionsLoading.value = false
+	}
+}
+
+function handleFilterOpen() {
+	loadCashierOptions()
+}
+
+function handleFilterReset() {
+	selectedEventType.value = ''
+	selectedCashierId.value = ''
+	datePresetValue.value = 'week'
+	filterVisible.value = false
+	reloadFirstPage()
+}
+
+function applySelectedFilters() {
+	filterVisible.value = false
+	reloadFirstPage()
+}
+
+function handlePageChange(payload: UTSJSONObject) {
+	const pageValue = payload['page']
+	if (pageValue == null) return
+	const nextPage = parseInt('' + pageValue)
+	if (isNaN(nextPage) || nextPage <= 0 || nextPage == currentPage.value) return
+	currentPage.value = nextPage
+	loadAuditLogs()
+}
+
+function handleItemClick(payload: UTSJSONObject) {
+	openDetail(stringValue(payload['rawId'], stringValue(payload['id'])))
+}
+
+function handleMenu(payload: UTSJSONObject) {
+	const action = payload['action']
+	const item = payload['item']
+	if (action == null || item == null) return
+	const actionKey = stringValue((action as UTSJSONObject)['key'])
+	const itemObject = item as UTSJSONObject
+	if (actionKey == 'detail') {
+		openDetail(stringValue(itemObject['rawId']))
+		return
+	}
+	if (actionKey == 'copy') {
+		copyText(stringValue(itemObject['orderNumber']), '单号已复制', '该事件无关联单号')
+	}
+}
+
+function cashierStatName(row: AuditCashierStat): string {
+	if (row.cashier_name != '') return row.cashier_name
+	if (row.cashier_id != '') return '收银员 ' + row.cashier_id
+	return '未知收银员'
+}
+
+function cashierBreakdownText(row: AuditCashierStat): string {
+	const parts: string[] = []
+	for (let index = 0; index < row.events.length; index += 1) {
+		const entry = row.events[index]
+		parts.push(entry.label + '×' + entry.count.toString())
+	}
+	if (parts.length == 0) return '-'
+	return parts.join('　')
+}
+
+const listItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < logs.value.length; index += 1) result.push(logToListItem(logs.value[index]))
+	return result
+})
+
+const emptyText = computed((): string => {
+	if (isLoading.value) return '正在加载'
+	return datePresetLabel() + '暂无敏感操作记录'
+})
+
+const hasActiveFilter = computed((): boolean => {
+	return selectedEventType.value != '' || selectedCashierId.value != '' || datePresetValue.value != 'week'
+})
+
+const datePresetLabelText = computed((): string => {
+	return datePresetLabel()
+})
+
+// 排行取前 5 名
+const cashierRanking = computed((): AuditCashierStat[] => {
+	const source = statistics.value.by_cashier
+	const limit = source.length > 5 ? 5 : source.length
+	const result: AuditCashierStat[] = []
+	for (let index = 0; index < limit; index += 1) result.push(source[index])
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = [
+		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
+		{ key: 'total', label: '操作次数', value: statistics.value.total_count.toString() } as UTSJSONObject,
+	]
+	for (let index = 0; index < statistics.value.by_event_type.length; index += 1) {
+		const entry = statistics.value.by_event_type[index]
+		let valueText = entry.count.toString() + ' 次'
+		if (entry.amount != '0.00') valueText = valueText + ' / ' + entry.amount + ' zł'
+		result.push({ key: 'event-' + entry.event_type, label: entry.label, value: valueText } as UTSJSONObject)
+	}
+	return result
+})
+
+onLoad(() => { loadAuditLogs() })
+</script>
+
+<style>
+.page { flex: 1; background-color: #F6F7FB; }
+.page-scroll { flex: 1; background-color: #F6F7FB; }
+.page-content { padding-top: 6px; padding-right: 6px; padding-bottom: 96px; padding-left: 6px; }
+.audit-filter-panel { position: relative; padding-top: 2px; padding-bottom: 52px; background-color: #FFFFFF; }
+.audit-filter-state { height: 58px; border-radius: 8px; background-color: #F8FAFC; align-items: center; justify-content: center; }
+.audit-filter-state-small { height: 58px; }
+.audit-filter-state-text { font-size: 12px; line-height: 17px; color: #64748B; }
+.audit-filter-groups { margin-bottom: 6px; }
+.audit-filter-group { padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px; border-radius: 8px; background-color: #FFFFFF; border-width: 1px; border-style: solid; border-color: #E5EAF1; margin-bottom: 6px; }
+.audit-filter-title { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.audit-filter-options { flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+.audit-filter-option { min-width: 58px; height: 30px; padding-left: 10px; padding-right: 10px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; align-items: center; justify-content: center; margin-right: 6px; margin-bottom: 6px; }
+.audit-filter-option-active { background-color: #0F172A; border-color: #0F172A; }
+.audit-filter-option-text { font-size: 12px; line-height: 17px; color: #334155; }
+.audit-filter-option-text-active { color: #FFFFFF; font-weight: bold; }
+.audit-filter-actions { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding-top: 6px; padding-left: 2px; padding-right: 2px; padding-bottom: 4px; border-top-width: 1px; border-top-style: solid; border-top-color: rgba(226, 232, 240, 0.78); background-color: #FFFFFF; }
+.audit-filter-btn { flex: 1; height: 38px; border-radius: 8px; align-items: center; justify-content: center; }
+.audit-filter-btn-light { background-color: #F3F6FA; border-width: 1px; border-style: solid; border-color: #E2E8F0; margin-right: 8px; }
+.audit-filter-btn-primary { background-color: #0F172A; }
+.audit-filter-btn-light-text { font-size: 13px; line-height: 18px; color: #475569; }
+.audit-filter-btn-primary-text { font-size: 13px; line-height: 18px; color: #FFFFFF; }
+.ranking-card { background-color: #FFFFFF; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-width: 1px; border-style: solid; border-color: #E5EAF1; }
+.ranking-header { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.ranking-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; }
+.ranking-row { padding-top: 8px; padding-bottom: 8px; border-top-width: 1px; border-top-style: solid; border-top-color: #F1F5F9; }
+.ranking-row-top { flex-direction: row; justify-content: space-between; align-items: center; }
+.ranking-name { font-size: 13px; line-height: 18px; color: #0F172A; font-weight: bold; }
+.ranking-count { font-size: 13px; line-height: 18px; color: #B42318; font-weight: bold; }
+.ranking-breakdown { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 4px; }
+.error-card { background-color: #FFFFFF; border-radius: 8px; padding: 18px; margin-bottom: 10px; border-width: 1px; border-style: solid; border-color: #FECACA; align-items: center; }
+.error-title { font-size: 18px; line-height: 24px; color: #B42318; font-weight: bold; }
+.error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
+.retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
+.retry-btn-text { font-size: 14px; color: #FFFFFF; }
+</style>

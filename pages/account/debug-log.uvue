@@ -1,0 +1,321 @@
+<template>
+	<view class="page">
+		<lili-universal-filter title="诊断日志" :showBack="true" :showSearch="false" backgroundColor="#EEF2F7" />
+
+		<view class="page-body">
+			<view class="status-card">
+				<view class="status-row">
+					<text class="status-label">状态</text>
+					<text class="status-value" :class="statusClass">{{ statusText }}</text>
+				</view>
+				<view class="status-row">
+					<text class="status-label">已收集大小</text>
+					<text class="status-value">{{ sizeText }}</text>
+				</view>
+				<view class="status-row">
+					<text class="status-label">收集时长</text>
+					<text class="status-value">{{ durationText }}</text>
+				</view>
+				<text v-if="showPendingHint" class="pending-hint">有未上传的日志（可能来自上次运行）</text>
+				<text class="hint">开启后应用的全部控制台输出会保存到本地文件；关闭应用自动停止收集，日志需手动点击上传。</text>
+			</view>
+
+			<view class="btn-row">
+				<button v-if="!isActive" class="btn btn-primary" @tap="onStart">开始收集</button>
+				<button v-else class="btn btn-warn" @tap="onStop">停止收集</button>
+				<button class="btn" :disabled="isUploading" @tap="onUpload">{{ isUploading ? '上传中…' : '上传' }}</button>
+				<button class="btn btn-ghost" @tap="onDiscard">丢弃</button>
+			</view>
+
+			<view class="log-box">
+				<scroll-view class="log-scroll" direction="vertical" :scroll-top="logScrollTop">
+					<text v-if="logText == ''" class="log-empty">暂无日志内容</text>
+					<text v-else class="log-text">{{ logText }}</text>
+				</scroll-view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed } from 'vue'
+import {
+	startDebugSession,
+	stopDebugSession,
+	getDebugSessionStatus,
+	readDebugSessionTail,
+	uploadDebugSession,
+	discardDebugSession
+} from '@/pkg/util/debugSession.uts'
+import type { DebugSessionStatus } from '@/pkg/util/debugSession.uts'
+
+const TAIL_CHARS = 8000
+const REFRESH_MS = 3000
+
+const isActive = ref<boolean>(false)
+const isUploading = ref<boolean>(false)
+const startedAt = ref<number>(0)
+const sizeBytes = ref<number>(0)
+const hasPending = ref<boolean>(false)
+const logText = ref<string>('')
+const logScrollTop = ref<number>(0)
+// 时长每秒走字用
+const nowTick = ref<number>(Date.now())
+
+let refreshTimerId = -1
+let tickTimerId = -1
+
+function refreshStatus(): void {
+	const st: DebugSessionStatus = getDebugSessionStatus()
+	isActive.value = st.active
+	isUploading.value = st.uploading
+	startedAt.value = st.startedAt
+	sizeBytes.value = st.sizeBytes
+	hasPending.value = st.hasPending
+}
+
+function refreshLog(): void {
+	logText.value = readDebugSessionTail(TAIL_CHARS)
+	// 拉到底显示最新内容
+	logScrollTop.value = 999999
+}
+
+const statusText = computed<string>(() => {
+	if (isActive.value) return '收集中'
+	if (hasPending.value) return '待上传'
+	return '未开启'
+})
+
+const statusClass = computed<string>(() => {
+	if (isActive.value) return 'status-running'
+	if (hasPending.value) return 'status-pending'
+	return 'status-idle'
+})
+
+const showPendingHint = computed<boolean>(() => {
+	return hasPending.value && !isActive.value
+})
+
+const sizeText = computed<string>(() => {
+	const bytes = sizeBytes.value
+	if (bytes <= 0) return '0 KB'
+	if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+	return Math.max(1, Math.round(bytes / 1024)).toString() + ' KB'
+})
+
+const durationText = computed<string>(() => {
+	// 仅收集中实时走字；停止后时长失去意义，显示 --
+	if (startedAt.value <= 0 || !isActive.value) return '--'
+	let seconds = Math.floor((nowTick.value - startedAt.value) / 1000)
+	if (seconds < 0) seconds = 0
+	const m = Math.floor(seconds / 60)
+	const s = seconds % 60
+	return m.toString() + 'm ' + s.toString() + 's'
+})
+
+function onStart(): void {
+	startDebugSession()
+	refreshStatus()
+	refreshLog()
+	uni.showToast({ title: '已开始收集日志', icon: 'none' })
+}
+
+function onStop(): void {
+	stopDebugSession()
+	refreshStatus()
+	uni.showToast({ title: '已停止收集', icon: 'none' })
+}
+
+function onUpload(): void {
+	if (isUploading.value) return
+	const st = getDebugSessionStatus()
+	if (!st.active && !st.hasPending) {
+		uni.showToast({ title: '暂无已收集日志', icon: 'none' })
+		return
+	}
+	isUploading.value = true
+	uploadDebugSession().then((ok: boolean) => {
+		refreshStatus()
+		refreshLog()
+		if (ok) {
+			uni.showToast({ title: '日志已上传', icon: 'none' })
+		} else {
+			uni.showToast({ title: '上传失败，请稍后重试', icon: 'none' })
+		}
+	}).catch((_e: any | null) => {
+		refreshStatus()
+		uni.showToast({ title: '上传失败，请稍后重试', icon: 'none' })
+	})
+}
+
+function onDiscard(): void {
+	uni.showModal({
+		title: '丢弃已收集的日志？',
+		success: (res) => {
+			if (res.confirm) {
+				discardDebugSession()
+				refreshStatus()
+				refreshLog()
+				uni.showToast({ title: '已丢弃', icon: 'none' })
+			}
+		}
+	})
+}
+
+function startTimers(): void {
+	if (refreshTimerId < 0) {
+		refreshTimerId = setInterval(() => {
+			refreshStatus()
+			refreshLog()
+		}, REFRESH_MS)
+	}
+	if (tickTimerId < 0) {
+		tickTimerId = setInterval(() => {
+			nowTick.value = Date.now()
+		}, 1000)
+	}
+}
+
+function stopTimers(): void {
+	if (refreshTimerId >= 0) {
+		clearInterval(refreshTimerId)
+		refreshTimerId = -1
+	}
+	if (tickTimerId >= 0) {
+		clearInterval(tickTimerId)
+		tickTimerId = -1
+	}
+}
+
+onShow(() => {
+	refreshStatus()
+	refreshLog()
+	startTimers()
+})
+
+onHide(() => {
+	stopTimers()
+})
+
+onUnload(() => {
+	stopTimers()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #eef2f7;
+}
+
+.page-body {
+	flex: 1;
+	padding: 12px;
+}
+
+.status-card {
+	background-color: #ffffff;
+	border-radius: 10px;
+	padding: 12px 14px;
+}
+
+.status-row {
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	height: 30px;
+}
+
+.status-label {
+	font-size: 14px;
+	color: #666666;
+}
+
+.status-value {
+	font-size: 14px;
+	color: #333333;
+	font-weight: bold;
+}
+
+.status-running {
+	color: #16a34a;
+}
+
+.status-pending {
+	color: #d97706;
+}
+
+.status-idle {
+	color: #999999;
+}
+
+.pending-hint {
+	margin-top: 6px;
+	font-size: 12px;
+	color: #d97706;
+}
+
+.hint {
+	margin-top: 6px;
+	font-size: 12px;
+	color: #999999;
+	line-height: 18px;
+}
+
+.btn-row {
+	flex-direction: row;
+	margin-top: 12px;
+}
+
+.btn {
+	flex: 1;
+	height: 40px;
+	line-height: 40px;
+	font-size: 14px;
+	border-radius: 8px;
+	margin-right: 8px;
+	background-color: #e8eaef;
+	color: #333333;
+	text-align: center;
+}
+
+.btn-primary {
+	background-color: #0e746e;
+	color: #ffffff;
+}
+
+.btn-warn {
+	background-color: #d97706;
+	color: #ffffff;
+}
+
+.btn-ghost {
+	margin-right: 0;
+	background-color: #f0f1f4;
+	color: #666666;
+}
+
+.log-box {
+	flex: 1;
+	margin-top: 12px;
+	background-color: #1e1e1e;
+	border-radius: 10px;
+	padding: 8px;
+}
+
+.log-scroll {
+	flex: 1;
+}
+
+.log-text {
+	font-size: 11px;
+	color: #d4d4d4;
+	line-height: 16px;
+}
+
+.log-empty {
+	font-size: 13px;
+	color: #808080;
+	padding: 12px;
+}
+</style>

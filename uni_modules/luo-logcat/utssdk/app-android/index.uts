@@ -1,0 +1,71 @@
+import BufferedReader from "java.io.BufferedReader"
+import InputStreamReader from "java.io.InputStreamReader"
+import StringBuilder from "java.lang.StringBuilder"
+import SimpleDateFormat from "java.text.SimpleDateFormat"
+import Date from "java.util.Date"
+import Locale from "java.util.Locale"
+import Runtime from "java.lang.Runtime"
+import Thread from "java.lang.Thread"
+import Handler from "android.os.Handler"
+import Looper from "android.os.Looper"
+import arrayOf from "kotlin.arrayOf"
+
+/**
+ * 读取本进程的 logcat 输出（无 READ_LOGS 权限时系统只返回本应用日志，正合需求）。
+ * console.log 在 Android 上最终写入 logcat，因此可零侵入捕获全部控制台输出。
+ */
+
+// 单次拉取上限，防止系统缓冲异常大时撑爆内存
+const MAX_DUMP_CHARS = 2 * 1024 * 1024
+
+/** 当前时间转 logcat -t 接受的格式（MM-dd HH:mm:ss.SSS，本地时区） */
+export function currentLogcatTime(): string {
+	const fmt = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+	return fmt.format(new Date())
+}
+
+function doDump(sinceTime: string): string {
+	try {
+		// 数组形式传参，时间串含空格也无需担心 shell 拆分
+		const cmd = sinceTime.length > 0
+			? arrayOf("logcat", "-d", "-v", "threadtime", "-t", sinceTime)
+			: arrayOf("logcat", "-d", "-v", "threadtime")
+		const process = Runtime.getRuntime().exec(cmd)
+		const reader = new BufferedReader(new InputStreamReader(process.getInputStream()))
+		const sb = new StringBuilder()
+		try {
+			while (true) {
+				const line = reader.readLine()
+				if (line == null) break
+				if (sb.length + line.length + 1 > MAX_DUMP_CHARS) break
+				sb.append(line)
+				sb.append("\n")
+			}
+		} finally {
+			try {
+				reader.close()
+			} catch (e: Throwable) {
+				// ignore
+			}
+		}
+		return sb.toString()
+	} catch (e: Throwable) {
+		return ""
+	}
+}
+
+/**
+ * 异步拉取自 sinceTime（currentLogcatTime 格式）以来的日志；
+ * sinceTime 传空串则拉取整个系统缓冲。失败 resolve 空串，不 reject。
+ */
+export function dumpLogcatSince(sinceTime: string): Promise<string> {
+	return new Promise<string>((resolve, _reject) => {
+		const handler = new Handler(Looper.getMainLooper())
+		new Thread(() => {
+			const text = doDump(sinceTime)
+			handler.post(() => {
+				resolve(text)
+			})
+		}).start()
+	})
+}

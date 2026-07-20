@@ -4,6 +4,7 @@
 	import { routerPermission,removeRouterPermission } from '@/pkg/router/permission'	//路由拦截
 	import { initLogger, logError, stringifyError, setLogUploadEnabledProvider } from '@/pkg/util/logger.uts'	//远程日志
 	import { isAutoCheckUpdateEnabled, isLogUploadEnabled } from '@/pkg/util/settings.uts'	//应用设置
+	import { baseUrl } from '@/pkg/api/index.uts'	//服务器地址（启动日志用）
 	import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'	//应用升级检查
 	
 	// #ifdef APP-ANDROID
@@ -17,6 +18,7 @@
 	export default {
 		onLaunch: function () {
 			console.log('App Launch')
+			console.log('API base URL:', baseUrl)
 			
 			// #ifdef APP-ANDROID
 			registerOSPermission()  	//全局注册监听系统权限申请

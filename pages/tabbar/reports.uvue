@@ -121,9 +121,7 @@
 			<view class="section surface-animate">
 				<view class="section-header">
 					<text class="section-title">最佳分类</text>
-					<view class="section-action" @click="openCategoryDashboard">
-						<text class="section-action-text">经营仪表盘</text>
-					</view>
+					<text class="section-meta">按销售额</text>
 				</view>
 				<view v-if="topCategories.length == 0" class="empty-row">
 					<text class="empty-text">暂无分类排行</text>
@@ -141,6 +139,60 @@
 						<view class="rank-bar-track">
 							<view class="rank-bar rank-bar-category" :style="'width:' + rankWidth(item.amount, maxCategoryAmount) + '%'"></view>
 						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 分类健康：四档计数 + 低分优先 Top5（自问题清单页迁入，报表即排名的家） -->
+			<view class="section surface-animate">
+				<view class="section-header">
+					<text class="section-title">分类健康</text>
+					<view class="section-action" @click="openCategoryDashboard">
+						<text class="section-action-text">问题清单</text>
+					</view>
+				</view>
+				<view v-if="healthTotalScored == 0" class="empty-row">
+					<text class="empty-text">暂无健康评分数据</text>
+				</view>
+				<view v-else>
+					<view class="health-grid">
+						<view class="health-cell">
+							<text class="health-label">已评分</text>
+							<text class="health-value">{{ healthTotalScored.toString() }}</text>
+						</view>
+						<view class="health-cell">
+							<text class="health-label">健康</text>
+							<text class="health-value health-value-good">{{ healthGoodCount.toString() }}</text>
+						</view>
+						<view class="health-cell">
+							<text class="health-label">需关注</text>
+							<text class="health-value health-value-warn">{{ healthWarnCount.toString() }}</text>
+						</view>
+						<view class="health-cell">
+							<text class="health-label">风险</text>
+							<text class="health-value health-value-risk">{{ healthRiskCount.toString() }}</text>
+						</view>
+					</view>
+					<view
+						v-for="item in worstHealthItems"
+						:key="'health-' + item.id.toString()"
+						class="health-row"
+						@click="goHealthAnalytics(item)"
+					>
+						<view class="health-row-main">
+							<text class="health-row-name">{{ item.full_name == '' ? item.name : item.full_name }}</text>
+							<text class="health-row-meta">{{ healthRowMeta(item) }}</text>
+						</view>
+						<lili-score-badge :score="item.health_score"></lili-score-badge>
+						<text class="health-chevron">›</text>
+					</view>
+				</view>
+				<view class="health-tools-row">
+					<view class="health-tool" @click="openCategoryComparison">
+						<text class="health-tool-text">分类对比</text>
+					</view>
+					<view class="health-tool" @click="openCategoryPeriodReport">
+						<text class="health-tool-text">周期报告</text>
 					</view>
 				</view>
 			</view>
@@ -255,8 +307,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { DashboardReport, ReportAlert, ReportHourlyItem, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportPrevious, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
-import { getCategoryDailyBrief } from '@/pkg/api/modules/category'
-import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'
+import { getCategoryDailyBrief, getCategoryHealthScores, CategoryHealthScoreItem } from '@/pkg/api/modules/category'
 import { resolveReportStartPeriod, setReportLastPeriod } from '@/pkg/util/settings.uts'
 
 type PeriodOption = {
@@ -301,6 +352,11 @@ const previous = ref<ReportPrevious>({
 } as ReportPrevious)
 const hourlyTrend = ref<ReportHourlyItem[]>([] as ReportHourlyItem[])
 const categoryLagText = ref('')
+const healthTotalScored = ref(0)
+const healthGoodCount = ref(0)
+const healthWarnCount = ref(0)
+const healthRiskCount = ref(0)
+const worstHealthItems = ref<CategoryHealthScoreItem[]>([] as CategoryHealthScoreItem[])
 const salesTrend = ref<ReportTrendItem[]>([] as ReportTrendItem[])
 const paymentMethods = ref<ReportPaymentMethod[]>([] as ReportPaymentMethod[])
 const topProducts = ref<ReportRankItem[]>([] as ReportRankItem[])
@@ -558,6 +614,44 @@ async function loadCategoryLag() {
 	}
 }
 
+// 分类健康摘要：低分优先 Top5 + 四档计数；无权限或失败时静默隐藏区块
+async function loadCategoryHealth() {
+	try {
+		const response = await getCategoryHealthScores(5, null)
+		healthTotalScored.value = response.summary.total_scored
+		healthGoodCount.value = response.summary.healthy_count
+		healthWarnCount.value = response.summary.warning_count
+		healthRiskCount.value = response.summary.risk_count
+		worstHealthItems.value = response.items
+	} catch (error) {
+		healthTotalScored.value = 0
+		worstHealthItems.value = [] as CategoryHealthScoreItem[]
+	}
+}
+
+function healthRowMeta(item: CategoryHealthScoreItem): string {
+	let text = '日销 ' + (item.sales_amount == '' ? '0.00' : item.sales_amount) + ' zł'
+	if (item.stock_warning_count > 0) {
+		text = text + ' · 预警 ' + item.stock_warning_count.toString()
+	}
+	if (item.lifecycle_stage_label != '') {
+		text = text + ' · ' + item.lifecycle_stage_label
+	}
+	return text
+}
+
+function goHealthAnalytics(item: CategoryHealthScoreItem): void {
+	uni.navigateTo({ url: '/pages/category/analytics?id=' + item.id.toString() + '&name=' + encodeURIComponent(item.name) })
+}
+
+function openCategoryComparison(): void {
+	uni.navigateTo({ url: '/pages/category/comparison' })
+}
+
+function openCategoryPeriodReport(): void {
+	uni.navigateTo({ url: '/pages/category/period-report' })
+}
+
 function parseErrorMessage(error: any): string {
 	if (error == null) {
 		return '报表加载失败'
@@ -618,17 +712,7 @@ function goCategoryAnalytics(item: ReportRankItem) {
 onLoad(() => {
 	loadReport()
 	loadCategoryLag()
-})
-
-onReady(() => {
-	// 启动时静默检查更新；有新版本时插件自行弹窗，已最新/失败仅记录日志
-	try {
-		checkUpdate().catch((err: any | null) => {
-			console.log('[Reports] checkUpdate:', err)
-		})
-	} catch (e) {
-		console.log('[Reports] checkUpdate error:', e)
-	}
+	loadCategoryHealth()
 })
 
 onShow(() => {
@@ -1189,5 +1273,104 @@ onShow(() => {
 	font-size: 13px;
 	font-weight: 600;
 	color: #FFFFFF;
+}
+.health-grid {
+	flex-direction: row;
+	margin-top: 4px;
+	margin-bottom: 6px;
+}
+
+.health-cell {
+	flex: 1;
+	align-items: center;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	margin-right: 8px;
+	background-color: #F8FAFC;
+	border-radius: 10px;
+}
+
+.health-label {
+	font-size: 11px;
+	line-height: 15px;
+	color: #64748B;
+}
+
+.health-value {
+	margin-top: 3px;
+	font-size: 18px;
+	line-height: 24px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.health-value-good {
+	color: #16A34A;
+}
+
+.health-value-warn {
+	color: #D97706;
+}
+
+.health-value-risk {
+	color: #DC2626;
+}
+
+.health-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 9px;
+	padding-bottom: 9px;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+	border-bottom-color: #F1F5F9;
+}
+
+.health-row-main {
+	flex: 1;
+	padding-right: 8px;
+}
+
+.health-row-name {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.health-row-meta {
+	margin-top: 3px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.health-chevron {
+	font-size: 18px;
+	line-height: 24px;
+	color: #94A3B8;
+	margin-left: 6px;
+}
+
+.health-tools-row {
+	flex-direction: row;
+	margin-top: 10px;
+}
+
+.health-tool {
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 7px;
+	padding-bottom: 7px;
+	margin-right: 8px;
+	background-color: #F1F5F9;
+	border-radius: 10px;
+}
+
+.health-tool-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+	font-weight: bold;
 }
 </style>

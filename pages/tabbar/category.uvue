@@ -25,15 +25,30 @@
 				</view>
 
 				<view v-else>
+					<!-- 今日实时：店主打开 App 最想看的数字（POS 每 5 分钟同步，近似实时）；旧服务端无此字段时整卡隐藏 -->
+					<view v-if="todayAvailable" class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">今日实时</text>
+								<text v-if="todayClosedText != ''" class="closed-badge-text">{{ todayClosedText }}</text>
+							</view>
+							<view class="mini-action" @click="reload">
+								<text class="mini-action-text">{{ isLoading ? '加载中' : '刷新' }}</text>
+							</view>
+						</view>
+						<view class="hero-wrap">
+							<text class="hero-label">今日销售额</text>
+							<text class="hero-value">{{ todaySalesText }}</text>
+							<text v-if="todayMetaText != ''" class="hero-delta">{{ todayMetaText }}</text>
+						</view>
+					</view>
+
 					<!-- 昨日日报 -->
 					<view class="card">
 						<view class="card-head">
 							<view class="card-title-wrap">
 								<text class="card-label">昨日日报</text>
-								<text class="card-title">{{ briefDateText }}</text>
-							</view>
-							<view class="mini-action" @click="reload">
-								<text class="mini-action-text">{{ isLoading ? '加载中' : '刷新' }}</text>
+								<text class="card-title">{{ briefDateText }}{{ yesterdayClosedText }}</text>
 							</view>
 						</view>
 						<view v-if="lagText != ''" class="stale-row">
@@ -52,6 +67,7 @@
 								<view class="metric-cell">
 									<text class="metric-label">毛利</text>
 									<text class="metric-value">{{ profitText }}</text>
+									<text v-if="coverageText != ''" class="metric-note">{{ coverageText }}</text>
 								</view>
 								<view class="metric-cell">
 									<text class="metric-label">销售数量</text>
@@ -62,6 +78,7 @@
 									<text class="metric-value">{{ warningText }}</text>
 								</view>
 							</view>
+							<text v-if="returnsText != ''" class="unmatched-text">{{ returnsText }}</text>
 							<text v-if="unmatchedText != ''" class="unmatched-text">{{ unmatchedText }}</text>
 						</view>
 					</view>
@@ -77,35 +94,25 @@
 						<view v-if="topInsights.length == 0" class="empty-state">
 							<text class="empty-text">今天没有新问题，存量清单在经营仪表盘查看</text>
 						</view>
-						<view v-for="item in topInsights" :key="'insight-' + insightId(item).toString()" class="insight-row">
-							<view class="insight-head">
-								<view :class="severityDotClass(item)"></view>
-								<text class="insight-title">{{ insightTitle(item) }}</text>
-							</view>
-							<text class="insight-meta">{{ insightMeta(item) }}</text>
-							<text v-if="insightSuggestion(item) != ''" class="insight-suggestion">{{ insightSuggestion(item) }}</text>
-							<view class="insight-actions">
-								<view class="insight-btn insight-btn-primary" @click="goInsightAnalytics(item)">
-									<text class="insight-btn-primary-text">查看分析</text>
-								</view>
-								<view class="insight-btn" @click="markInsightHandled(item)">
-									<text class="insight-btn-text">已处理</text>
-								</view>
-								<view class="insight-btn" @click="confirmDismissInsight(item)">
-									<text class="insight-btn-text">忽略</text>
-								</view>
-							</view>
-						</view>
+						<lili-insight-card
+							v-for="item in topInsights"
+							:key="'insight-' + insightId(item).toString()"
+							:insight="item"
+							:compact="true"
+							@view="goInsightAction(item)"
+							@handle="markInsightHandled(item)"
+							@dismiss="confirmDismissInsight(item)"
+						></lili-insight-card>
 						<view class="expand-row" @click="goDashboard">
-							<text class="expand-text">查看存量问题清单 ›</text>
+							<text class="expand-text">查看全部问题 ›</text>
 						</view>
 					</view>
 
 					<!-- 快捷入口 -->
 					<view class="tools-row">
 						<view class="tools-cell" @click="goDashboard">
-							<text class="tools-cell-title">经营仪表盘</text>
-							<text class="tools-cell-desc">健康评分与洞察</text>
+							<text class="tools-cell-title">问题清单</text>
+							<text class="tools-cell-desc">存量问题与处置</text>
 						</view>
 						<view class="tools-cell" @click="goTools">
 							<text class="tools-cell-title">治理工具</text>
@@ -151,8 +158,15 @@ const profitText = ref('-')
 const quantityText = ref('-')
 const warningText = ref('-')
 const unmatchedText = ref('')
+const returnsText = ref('')
+const coverageText = ref('')
 const deltaText = ref('')
 const deltaClass = ref('hero-delta')
+const todaySalesText = ref('-')
+const todayMetaText = ref('')
+const todayClosedText = ref('')
+const todayAvailable = ref(false)
+const yesterdayClosedText = ref('')
 const highOpenCount = ref(0)
 const unreadCount = ref(0)
 const newTodayCount = ref(0)
@@ -199,6 +213,14 @@ function floatValue(value: any | null, fallback: number = 0): number {
 		return fallback
 	}
 	return parsed
+}
+
+function booleanFlag(value: any | null): boolean {
+	if (value == null) {
+		return false
+	}
+	const text = ('' + value).toLowerCase()
+	return text == 'true' || text == '1'
 }
 
 function objectValue(value: any | null): UTSJSONObject {
@@ -258,36 +280,6 @@ function insightCategory(item: UTSJSONObject): UTSJSONObject {
 	return objectValue(item['category'])
 }
 
-function insightMeta(item: UTSJSONObject): string {
-	const category = insightCategory(item)
-	let text = stringValue(category['full_name'], stringValue(category['name'], '-'))
-	const severityLabel = stringValue(item['severity_label'])
-	if (severityLabel != '') {
-		text = text + ' · ' + severityLabel
-	}
-	// 影响金额：所有问题统一折钱排序，是要点入选的依据
-	const impact = floatValue(item['impact_amount'])
-	if (impact > 0) {
-		text = text + ' · 影响约 ' + stringValue(item['impact_amount']) + ' zł'
-	}
-	const duration = intValue(item['duration_days'])
-	if (duration > 1) {
-		text = text + ' · 持续 ' + duration.toString() + ' 天'
-	}
-	return text
-}
-
-function insightSuggestion(item: UTSJSONObject): string {
-	return stringValue(item['suggestion'])
-}
-
-function severityDotClass(item: UTSJSONObject): string {
-	const severity = stringValue(item['severity'])
-	if (severity == 'high') return 'severity-dot severity-dot-high'
-	if (severity == 'medium') return 'severity-dot severity-dot-medium'
-	return 'severity-dot severity-dot-low'
-}
-
 // ── 角标 ────────────────────────────────────────────────────────
 
 function syncTabBadge(): void {
@@ -344,8 +336,42 @@ function applyBrief(brief: UTSJSONObject): void {
 	quantityText.value = stringValue(totals['sales_quantity'], '0')
 	warningText.value = stringValue(totals['stock_warning_count'], '0')
 
+	// 成本覆盖率：毛利数字的可信度徽章，全覆盖时不打扰
+	const coverage = floatValue(brief['cost_coverage_ratio'], -1)
+	if (coverage >= 0 && coverage < 0.95) {
+		coverageText.value = '基于 ' + (coverage * 100).toFixed(0) + '% 有成本销售'
+	} else {
+		coverageText.value = ''
+	}
+
+	// 退货冲减提示：让店主知道销售额是净流量口径
+	const returnsAmount = floatValue(totals['returns_amount'])
+	returnsText.value = returnsAmount > 0 ? '当日退货 ' + stringValue(totals['returns_amount']) + ' zł（已从销售额扣减）' : ''
+
+	// 未归类销售：归到分类但缺商品档案 + 完全无法归类的黑洞，合并提示
 	const unmatched = floatValue(totals['unmatched_sales_amount'])
-	unmatchedText.value = unmatched > 0 ? '未归类销售额 ' + stringValue(totals['unmatched_sales_amount']) + ' zł（条码/分类映射待治理）' : ''
+	let unmatchedLine = unmatched > 0 ? '未归类销售额 ' + stringValue(totals['unmatched_sales_amount']) + ' zł（条码/分类映射待治理）' : ''
+	const unclassified = floatValue(brief['unclassified_sales_amount'])
+	if (unclassified > 0) {
+		const blackholeLine = '完全未归类 ' + stringValue(brief['unclassified_sales_amount']) + ' zł'
+		unmatchedLine = unmatchedLine == '' ? blackholeLine + '（条码/分类映射待治理）' : unmatchedLine + '；' + blackholeLine
+	}
+	unmatchedText.value = unmatchedLine
+
+	// 昨日闭店：销售归零属正常，标注说明避免误读
+	yesterdayClosedText.value = booleanFlag(brief['is_closed_day']) ? '（闭店日）' : ''
+
+	// 今日实时块（旧服务端响应无 today 字段时隐藏整卡，避免显示误导性的 0）
+	const today = objectValue(brief['today'])
+	todayAvailable.value = stringValue(today['sales_amount']) != ''
+	todaySalesText.value = stringValue(today['sales_amount'], '0.00') + ' zł'
+	let todayMeta = '已同步 ' + intValue(today['order_count']).toString() + ' 单'
+	const todayReturns = floatValue(today['returns_amount'])
+	if (todayReturns > 0) {
+		todayMeta = todayMeta + ' · 退货 ' + stringValue(today['returns_amount']) + ' zł'
+	}
+	todayMetaText.value = todayMeta
+	todayClosedText.value = booleanFlag(today['is_closed_day']) ? '今日为闭店日' : ''
 
 	const prevTotals = objectValue(brief['prev_totals'])
 	const current = floatValue(totals['sales_amount'])
@@ -453,6 +479,48 @@ function goInsightAnalytics(item: UTSJSONObject): void {
 	}
 	uni.navigateTo({
 		url: '/pages/category/analytics?id=' + id.toString() + '&name=' + encodeURIComponent(stringValue(category['name'])),
+	})
+}
+
+// 洞察跳转：action 为 product_list 时带语义筛选跳商品页（含洞察上下文，商品页可一键标记已处理），
+// 其余跳分类分析页。与问题清单页的跳转协议保持一致。
+function goInsightAction(item: UTSJSONObject): void {
+	const action = objectValue(item['action'])
+	if (stringValue(action['type']) != 'product_list') {
+		goInsightAnalytics(item)
+		return
+	}
+	const params = objectValue(action['params'])
+	const payload = {} as UTSJSONObject
+	const categoryId = intValue(params['category'])
+	if (categoryId > 0) {
+		payload['category_id'] = categoryId.toString()
+		payload['category_name'] = stringValue(insightCategory(item)['name'])
+	}
+	const semanticParams = ['stock_warning', 'no_sales', 'cost_missing', 'cost_inversion']
+	for (let index = 0; index < semanticParams.length; index += 1) {
+		const key = semanticParams[index]
+		if (stringValue(params[key]) == 'true') {
+			payload[key] = 'true'
+		}
+	}
+	payload['label'] = insightTitle(item)
+	// 处置闭环：商品页据此显示来源横幅 + 「标记已处理」按钮
+	payload['insight_id'] = insightId(item).toString()
+	payload['insight_title'] = insightTitle(item)
+	try {
+		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
+	} catch (error) {
+	}
+	uni.navigateTo({
+		url: '/pages/tabbar/products',
+		fail: (_) => {
+			try {
+				uni.removeStorageSync('pending:pages:products:category-filter')
+			} catch (error) {
+			}
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
 	})
 }
 
@@ -653,83 +721,19 @@ onShow(() => {
 	color: #94A3B8;
 }
 
-.insight-row {
-	margin-top: 12px;
-	padding-top: 12px;
-	border-top-width: 1px;
-	border-top-color: #F1F5F9;
+.metric-note {
+	margin-top: 2px;
+	font-size: 9px;
+	line-height: 13px;
+	color: #B45309;
+	text-align: center;
 }
 
-.insight-head {
-	flex-direction: row;
-	align-items: center;
-}
-
-.severity-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 4px;
-	margin-right: 8px;
-}
-
-.severity-dot-high {
-	background-color: #DC2626;
-}
-
-.severity-dot-medium {
-	background-color: #F59E0B;
-}
-
-.severity-dot-low {
-	background-color: #10B981;
-}
-
-.insight-title {
-	flex: 1;
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.insight-meta {
-	margin-top: 4px;
+.closed-badge-text {
+	margin-top: 2px;
 	font-size: 11px;
-	line-height: 16px;
-	color: #94A3B8;
-}
-
-.insight-suggestion {
-	margin-top: 6px;
-	font-size: 12px;
-	line-height: 18px;
-	color: #475569;
-}
-
-.insight-actions {
-	margin-top: 10px;
-	flex-direction: row;
-}
-
-.insight-btn {
-	padding: 6px 14px;
-	margin-right: 8px;
-	background-color: #F1F5F9;
-	border-radius: 8px;
-}
-
-.insight-btn-text {
-	font-size: 12px;
-	color: #334155;
-}
-
-.insight-btn-primary {
-	background-color: #0F172A;
-}
-
-.insight-btn-primary-text {
-	font-size: 12px;
-	color: #FFFFFF;
+	line-height: 15px;
+	color: #B45309;
 }
 
 .expand-row {

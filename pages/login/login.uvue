@@ -45,9 +45,11 @@
 <script setup>
 	import { accountLogin, getProfile, ProfileResponse } from '@/pkg/api/modules/login'
 	import { clearAuthState, setAuthToken, setAuthUserInfo } from '@/store/auth'
+	import { getDevLoginUsername, getDevLoginPassword } from '@/pkg/util/devCredentials.uts'
 
-	const username = ref('733063605')
-	const password = ref('Luochaowei88')
+	// 开发环境自动填入测试账号（方便测试）；发行包为空，由用户手动输入
+	const username = ref(getDevLoginUsername())
+	const password = ref(getDevLoginPassword())
 	const showPassword = ref(false)
 	const isSubmitting = ref(false)
 

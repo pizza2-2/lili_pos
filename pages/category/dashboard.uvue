@@ -1,7 +1,7 @@
 <template>
 	<view class="page">
 		<lili-universal-filter
-			title="分类经营仪表盘"
+			title="问题清单"
 			:showBack="true"
 			:showSearch="false"
 			:showFilter="false"
@@ -23,50 +23,10 @@
 
 				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
 					<text class="state-title">加载中</text>
-					<text class="state-desc">正在获取健康评分与洞察...</text>
+					<text class="state-desc">正在获取问题清单...</text>
 				</view>
 
 				<view v-else>
-					<view class="date-row">
-						<text class="date-text">数据日期 {{ snapshotDate == '' ? '-' : snapshotDate }}</text>
-						<text v-if="healthSummaryData.unscored_count > 0" class="date-note">未评分 {{ healthSummaryData.unscored_count.toString() }} 个</text>
-					</view>
-					<view v-if="dataStaleText != ''" class="stale-row">
-						<text class="stale-text">⚠ {{ dataStaleText }}</text>
-					</view>
-
-					<!-- 健康总览四宫格：点击过滤下方排名 -->
-					<view class="summary-grid">
-						<view :class="summaryCellClass('all')" @click="setBandFilter('all')">
-							<text class="summary-label">已评分</text>
-							<text class="summary-value">{{ healthSummaryData.total_scored.toString() }}</text>
-						</view>
-						<view :class="summaryCellClass('good')" @click="setBandFilter('good')">
-							<text class="summary-label">健康</text>
-							<text class="summary-value summary-value-good">{{ healthSummaryData.healthy_count.toString() }}</text>
-						</view>
-						<view :class="summaryCellClass('warn')" @click="setBandFilter('warn')">
-							<text class="summary-label">需关注</text>
-							<text class="summary-value summary-value-warn">{{ healthSummaryData.warning_count.toString() }}</text>
-						</view>
-						<view :class="summaryCellClass('risk')" @click="setBandFilter('risk')">
-							<text class="summary-label">风险</text>
-							<text class="summary-value summary-value-risk">{{ healthSummaryData.risk_count.toString() }}</text>
-						</view>
-					</view>
-
-					<!-- 分析工具入口 -->
-					<view class="tools-row">
-						<view class="tools-cell" @click="goComparison">
-							<text class="tools-cell-title">分类对比</text>
-							<text class="tools-cell-desc">2-5 个分类横向对比</text>
-						</view>
-						<view class="tools-cell" @click="goPeriodReport">
-							<text class="tools-cell-title">周期报告</text>
-							<text class="tools-cell-desc">月度 / 季度经营汇总</text>
-						</view>
-					</view>
-
 					<!-- 存量问题清单：同父分类同类型 ≥3 条合并为聚合卡，按影响金额排序 -->
 					<view class="card">
 						<view class="card-head">
@@ -82,92 +42,61 @@
 						<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
 							<text class="empty-text">暂无待处理问题，运营状态良好</text>
 						</view>
-						<view v-for="(item, idx) in visibleInsights()" :key="'insight-' + idx.toString()" class="insight-row">
-							<!-- 聚合卡 -->
-							<view v-if="isGroup(item)">
+						<view v-for="(item, idx) in visibleInsights()" :key="'insight-' + idx.toString()">
+							<!-- 聚合卡：默认收拢样例，展开后逐条渲染成员明细（可单独查看/处置） -->
+							<view v-if="isGroup(item)" class="insight-row">
 								<view class="insight-head">
 									<view :class="severityDotClass(item)"></view>
 									<text class="insight-title">{{ groupTitle(item) }}</text>
 								</view>
 								<text class="insight-meta">{{ groupMeta(item) }}</text>
-								<text v-for="(line, sIdx) in groupSampleLines(item)" :key="'sample-' + sIdx.toString()" class="insight-suggestion">{{ line }}</text>
+								<view v-if="!isGroupExpanded(item)">
+									<text v-for="(line, sIdx) in groupSampleLines(item)" :key="'sample-' + sIdx.toString()" class="insight-suggestion">{{ line }}</text>
+								</view>
 								<view class="insight-actions">
-									<view class="insight-btn insight-btn-primary" @click="goGroupAnalytics(item)">
-										<text class="insight-btn-primary-text">查看父分类</text>
+									<view class="insight-btn insight-btn-primary" @click="toggleGroupExpanded(item)">
+										<text class="insight-btn-primary-text">{{ groupExpandLabel(item) }}</text>
+									</view>
+									<view class="insight-btn" @click="goGroupAnalytics(item)">
+										<text class="insight-btn-text">查看父分类</text>
 									</view>
 									<view class="insight-btn" @click="confirmHandleGroup(item)">
 										<text class="insight-btn-text">批量已处理</text>
 									</view>
 								</view>
-							</view>
-							<!-- 单条 -->
-							<view v-else>
-								<view class="insight-head">
-									<view :class="severityDotClass(item)"></view>
-									<text class="insight-title">{{ insightTitle(item) }}</text>
-								</view>
-								<text class="insight-meta">{{ insightMeta(item) }}</text>
-								<text v-if="insightSuggestion(item) != ''" class="insight-suggestion">{{ insightSuggestion(item) }}</text>
-								<view class="insight-actions">
-									<view class="insight-btn insight-btn-primary" @click="goInsightAction(item)">
-										<text class="insight-btn-primary-text">{{ insightActionLabel(item) }}</text>
-									</view>
-									<view class="insight-btn" @click="markInsight(item, 'handle')">
-										<text class="insight-btn-text">已处理</text>
-									</view>
-									<view class="insight-btn" @click="confirmDismissInsight(item)">
-										<text class="insight-btn-text">忽略</text>
-									</view>
-									<view class="insight-btn" @click="confirmSnoozeInsight(item)">
-										<text class="insight-btn-text">30天不提醒</text>
-									</view>
+								<view v-if="isGroupExpanded(item)" class="group-members">
+									<lili-insight-card
+										v-for="member in groupMembers(item)"
+										:key="'member-' + memberKey(member)"
+										:insight="member"
+										:showSnooze="true"
+										@view="goInsightAction(member)"
+										@handle="markInsight(member, 'handle')"
+										@dismiss="confirmDismissInsight(member)"
+										@snooze="confirmSnoozeInsight(member)"
+									></lili-insight-card>
+									<text v-if="groupOverflowText(item) != ''" class="group-overflow-text">{{ groupOverflowText(item) }}</text>
 								</view>
 							</view>
+							<!-- 单条：统一洞察卡（含影响金额/判定依据/证据文案） -->
+							<lili-insight-card
+								v-else
+								:insight="item"
+								:showSnooze="true"
+								@view="goInsightAction(item)"
+								@handle="markInsight(item, 'handle')"
+								@dismiss="confirmDismissInsight(item)"
+								@snooze="confirmSnoozeInsight(item)"
+							></lili-insight-card>
 						</view>
 						<view v-if="insightItems.length > 3" class="expand-row" @click="toggleInsightsExpanded">
 							<text class="expand-text">{{ insightsExpanded ? '收起' : '查看全部 ' + insightItems.length.toString() + ' 行' }}</text>
 						</view>
 					</view>
 
-					<!-- 健康评分排名 -->
-					<view class="card">
-						<view class="card-head">
-							<view class="card-title-wrap">
-								<text class="card-label">健康评分排名</text>
-								<text class="card-title">{{ bandFilterTitle }}</text>
-							</view>
-							<view class="mini-action" @click="loadHealthScores">
-								<text class="mini-action-text">{{ healthLoading ? '加载中' : '刷新' }}</text>
-							</view>
-						</view>
-						<text v-if="healthError != ''" class="error-text">{{ healthError }}</text>
-						<view v-if="filteredHealthItems().length == 0 && !healthLoading" class="empty-state">
-							<text class="empty-text">当前分组暂无分类</text>
-						</view>
-						<view
-							v-for="(item, index) in visibleHealthItems()"
-							:key="'rank-' + item.id.toString()"
-							class="rank-row"
-							@click="goAnalytics(item.id, item.name)"
-						>
-							<view class="rank-index-wrap">
-								<text class="rank-index-text">{{ (index + 1).toString() }}</text>
-							</view>
-							<view class="rank-main">
-								<view class="rank-title-row">
-									<text class="rank-name">{{ item.full_name == '' ? item.name : item.full_name }}</text>
-									<view v-if="item.lifecycle_stage_label != ''" class="lifecycle-tag">
-										<text class="lifecycle-tag-text">{{ item.lifecycle_stage_label }}</text>
-									</view>
-								</view>
-								<text class="rank-meta">{{ rankMetaText(item) }}</text>
-							</view>
-							<lili-score-badge :score="item.health_score"></lili-score-badge>
-							<text class="row-chevron">›</text>
-						</view>
-						<view v-if="canShowMoreRank()" class="expand-row" @click="showMoreRank">
-							<text class="expand-text">展开更多</text>
-						</view>
+					<!-- 健康评分排名已迁至「报表」tab 的分类健康区块，本页专注问题处置 -->
+					<view class="hint-row">
+						<text class="hint-text">健康评分排名请到「报表」查看；本页只保留待处置的问题。</text>
 					</view>
 				</view>
 			</view>
@@ -184,22 +113,14 @@
 </template>
 
 <script setup lang="uts">
-import { computed, ref } from 'vue'
-import { getCategoryHealthScores, getCategoryInsightsGrouped, snoozeCategoryInsights, updateCategoryInsightStatus, CategoryHealthScoreItem, CategoryHealthSummary } from '@/pkg/api/modules/category'
+import { ref } from 'vue'
+import { getCategoryInsightsGrouped, snoozeCategoryInsights, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const isLoading = ref(false)
 const isOperating = ref(false)
 const hasLoadedOnce = ref(false)
 const pageError = ref('')
-
-const healthLoading = ref(false)
-const healthError = ref('')
-const healthItems = ref<CategoryHealthScoreItem[]>([] as CategoryHealthScoreItem[])
-const healthSummary = ref<CategoryHealthSummary | null>(null)
-const snapshotDate = ref('')
-const bandFilter = ref('all')
-const rankRenderLimit = ref(30)
 
 const insightsLoading = ref(false)
 const insightsError = ref('')
@@ -255,11 +176,6 @@ function intValue(value: any | null, fallback: number = 0): number {
 	return parsed
 }
 
-function booleanValue(value: any | null): boolean {
-	const text = stringValue(value).toLowerCase()
-	return text == 'true' || text == '1' || text == 'yes'
-}
-
 function objectValue(value: any | null): UTSJSONObject {
 	if (value == null) {
 		return {} as UTSJSONObject
@@ -304,135 +220,6 @@ function objectArrayValue(value: any | null): UTSJSONObject[] {
 	}
 }
 
-// ── 健康评分 ────────────────────────────────────────────────────
-
-const healthSummaryData = computed((): CategoryHealthSummary => {
-	const summary = healthSummary.value
-	if (summary == null) {
-		return {
-			total_scored: 0,
-			healthy_count: 0,
-			warning_count: 0,
-			risk_count: 0,
-			unscored_count: 0,
-		} as CategoryHealthSummary
-	}
-	return summary as CategoryHealthSummary
-})
-
-function scoreBand(scoreText: string): string {
-	if (scoreText == '') {
-		return 'none'
-	}
-	const parsed = parseFloat(scoreText)
-	if (isNaN(parsed)) {
-		return 'none'
-	}
-	if (parsed >= 80) return 'good'
-	if (parsed >= 60) return 'warn'
-	return 'risk'
-}
-
-function setBandFilter(band: string): void {
-	bandFilter.value = band
-	rankRenderLimit.value = 30
-}
-
-function summaryCellClass(band: string): string {
-	let className = 'summary-cell'
-	if (bandFilter.value == band) {
-		className = className + ' summary-cell-active'
-	}
-	return className
-}
-
-const bandFilterTitle = computed((): string => {
-	if (bandFilter.value == 'good') return '健康分类'
-	if (bandFilter.value == 'warn') return '需关注分类'
-	if (bandFilter.value == 'risk') return '风险分类'
-	return '低分优先'
-})
-
-// 快照应更新到昨天；滞后超过 1 天时提示店主数据可能失真
-const dataStaleText = computed((): string => {
-	if (snapshotDate.value == '') {
-		return ''
-	}
-	const parts = snapshotDate.value.split('-')
-	if (parts.length != 3) {
-		return ''
-	}
-	const snapTime = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime()
-	const now = new Date()
-	const yesterdayTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime()
-	if (snapTime < yesterdayTime) {
-		const lagDays = Math.round((yesterdayTime - snapTime) / 86400000)
-		return '快照滞后 ' + lagDays.toString() + ' 天，趋势与评分可能不准'
-	}
-	return ''
-})
-
-function filteredHealthItems(): CategoryHealthScoreItem[] {
-	if (bandFilter.value == 'all') {
-		return healthItems.value
-	}
-	const result: CategoryHealthScoreItem[] = []
-	for (let index = 0; index < healthItems.value.length; index += 1) {
-		const item = healthItems.value[index]
-		if (scoreBand(item.health_score) == bandFilter.value) {
-			result.push(item)
-		}
-	}
-	return result
-}
-
-function visibleHealthItems(): CategoryHealthScoreItem[] {
-	const filtered = filteredHealthItems()
-	if (filtered.length <= rankRenderLimit.value) {
-		return filtered
-	}
-	const result: CategoryHealthScoreItem[] = []
-	for (let index = 0; index < rankRenderLimit.value; index += 1) {
-		result.push(filtered[index])
-	}
-	return result
-}
-
-function canShowMoreRank(): boolean {
-	return filteredHealthItems().length > rankRenderLimit.value
-}
-
-function showMoreRank(): void {
-	rankRenderLimit.value = rankRenderLimit.value + 30
-}
-
-function rankMetaText(item: CategoryHealthScoreItem): string {
-	let text = '日销 ' + (item.sales_amount == '' ? '0.00' : item.sales_amount) + ' zł'
-	text = text + ' · 商品 ' + item.product_count.toString()
-	if (item.stock_warning_count > 0) {
-		text = text + ' · 预警 ' + item.stock_warning_count.toString()
-	}
-	return text
-}
-
-async function loadHealthScores(): Promise<void> {
-	if (healthLoading.value) {
-		return
-	}
-	healthLoading.value = true
-	healthError.value = ''
-	try {
-		const response = await getCategoryHealthScores(500, null)
-		healthItems.value = response.items
-		healthSummary.value = response.summary
-		snapshotDate.value = response.snapshot_date
-	} catch (error) {
-		healthError.value = parseErrorMessage(error)
-	} finally {
-		healthLoading.value = false
-	}
-}
-
 // ── 洞察 ────────────────────────────────────────────────────────
 
 function insightId(item: UTSJSONObject): number {
@@ -443,43 +230,12 @@ function insightTitle(item: UTSJSONObject): string {
 	return stringValue(item['title'], stringValue(item['insight_type_label'], '经营洞察'))
 }
 
-function insightSuggestion(item: UTSJSONObject): string {
-	return stringValue(item['suggestion'])
-}
-
-function insightIsRead(item: UTSJSONObject): boolean {
-	return booleanValue(item['is_read'])
-}
-
 function insightAction(item: UTSJSONObject): UTSJSONObject {
 	return objectValue(item['action'])
 }
 
-function insightActionLabel(item: UTSJSONObject): string {
-	return stringValue(insightAction(item)['label'], '查看分析')
-}
-
 function insightCategory(item: UTSJSONObject): UTSJSONObject {
 	return objectValue(item['category'])
-}
-
-function insightMeta(item: UTSJSONObject): string {
-	const category = insightCategory(item)
-	const name = stringValue(category['full_name'], stringValue(category['name'], '未知分类'))
-	const severityLabel = stringValue(item['severity_label'])
-	let text = name
-	if (severityLabel != '') {
-		text = text + ' · ' + severityLabel
-	}
-	const impactText = stringValue(item['impact_amount'])
-	if (impactText != '' && impactText != '0.00') {
-		text = text + ' · 影响约 ' + impactText + ' zł'
-	}
-	const duration = intValue(item['duration_days'])
-	if (duration > 1) {
-		text = text + ' · 持续 ' + duration.toString() + ' 天'
-	}
-	return text
 }
 
 // ── 聚合卡辅助 ──────────────────────────────────────────────────
@@ -516,6 +272,62 @@ function groupSampleLines(item: UTSJSONObject): string[] {
 		lines.push('· ' + stringValue(sample['title']) + '（' + stringValue(sample['impact_amount'], '0') + ' zł）')
 	}
 	return lines
+}
+
+// ── 聚合卡展开 ──────────────────────────────────────────────────
+
+// 展开状态用 "父分类id:类型" 字符串键记录（刷新后仍保持展开）
+const expandedGroupKeys = ref<string[]>([] as string[])
+
+function groupKey(item: UTSJSONObject): string {
+	const parent = groupParent(item)
+	return intValue(parent['id']).toString() + ':' + stringValue(item['insight_type'])
+}
+
+function isGroupExpanded(item: UTSJSONObject): boolean {
+	return expandedGroupKeys.value.includes(groupKey(item))
+}
+
+function toggleGroupExpanded(item: UTSJSONObject): void {
+	const key = groupKey(item)
+	const next: string[] = []
+	let removed = false
+	for (let index = 0; index < expandedGroupKeys.value.length; index += 1) {
+		const existing = expandedGroupKeys.value[index]
+		if (existing == key) {
+			removed = true
+			continue
+		}
+		next.push(existing)
+	}
+	if (!removed) {
+		next.push(key)
+	}
+	expandedGroupKeys.value = next
+}
+
+function groupExpandLabel(item: UTSJSONObject): string {
+	if (isGroupExpanded(item)) {
+		return '收起明细'
+	}
+	return '展开 ' + intValue(item['count']).toString() + ' 条明细'
+}
+
+function groupMembers(item: UTSJSONObject): UTSJSONObject[] {
+	return objectArrayValue(item['items'])
+}
+
+function memberKey(member: UTSJSONObject): string {
+	return intValue(member['id']).toString()
+}
+
+function groupOverflowText(item: UTSJSONObject): string {
+	const total = intValue(item['count'])
+	const embedded = intValue(item['embedded_count'], groupMembers(item).length)
+	if (total > embedded && embedded > 0) {
+		return '仅展示影响最大的前 ' + embedded.toString() + ' 条，其余请进入父分类查看'
+	}
+	return ''
 }
 
 function groupInsightIds(item: UTSJSONObject): number[] {
@@ -710,18 +522,6 @@ function goAnalytics(id: number, name: string): void {
 	})
 }
 
-function goComparison(): void {
-	uni.navigateTo({
-		url: '/pages/category/comparison',
-	})
-}
-
-function goPeriodReport(): void {
-	uni.navigateTo({
-		url: '/pages/category/period-report',
-	})
-}
-
 function goInsightAnalytics(item: UTSJSONObject): void {
 	const category = insightCategory(item)
 	const id = intValue(category['id'])
@@ -753,6 +553,9 @@ function goInsightAction(item: UTSJSONObject): void {
 		}
 	}
 	payload['label'] = insightTitle(item)
+	// 处置闭环：商品页据此显示来源横幅 + 「标记已处理」按钮
+	payload['insight_id'] = insightId(item).toString()
+	payload['insight_title'] = insightTitle(item)
 	try {
 		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
 	} catch (error) {
@@ -778,10 +581,9 @@ async function loadAll(): Promise<void> {
 	isLoading.value = true
 	pageError.value = ''
 	try {
-		await loadHealthScores()
 		await loadInsights()
-		if (healthError.value != '' && healthItems.value.length == 0) {
-			pageError.value = healthError.value
+		if (insightsError.value != '' && insightItems.value.length == 0) {
+			pageError.value = insightsError.value
 		}
 		hasLoadedOnce.value = true
 	} finally {
@@ -860,116 +662,15 @@ onShow(() => {
 	font-weight: bold;
 }
 
-.date-row {
-	flex-direction: row;
+.hint-row {
+	padding: 10px 4px;
 	align-items: center;
-	justify-content: space-between;
-	padding-left: 2px;
-	padding-right: 2px;
-	padding-bottom: 8px;
 }
 
-.date-text {
+.hint-text {
 	font-size: 12px;
-	line-height: 16px;
-	color: #64748B;
-}
-
-.date-note {
-	font-size: 12px;
-	line-height: 16px;
+	line-height: 17px;
 	color: #94A3B8;
-}
-
-.stale-row {
-	padding-left: 2px;
-	padding-bottom: 8px;
-}
-
-.stale-text {
-	font-size: 12px;
-	line-height: 16px;
-	color: #D97706;
-	font-weight: bold;
-}
-
-.summary-grid {
-	flex-direction: row;
-	margin-bottom: 10px;
-}
-
-.summary-cell {
-	flex: 1;
-	background-color: #FFFFFF;
-	border-radius: 12px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E2E8F0;
-	padding-top: 9px;
-	padding-bottom: 9px;
-	align-items: center;
-	margin-right: 8px;
-}
-
-.summary-cell-active {
-	border-color: #0F766E;
-	background-color: #F0FDFA;
-}
-
-.summary-label {
-	font-size: 12px;
-	line-height: 16px;
-	color: #64748B;
-}
-
-.summary-value {
-	margin-top: 4px;
-	font-size: 20px;
-	line-height: 26px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.summary-value-good {
-	color: #16A34A;
-}
-
-.summary-value-warn {
-	color: #D97706;
-}
-
-.summary-value-risk {
-	color: #DC2626;
-}
-
-.tools-row {
-	flex-direction: row;
-	margin-bottom: 10px;
-}
-
-.tools-cell {
-	flex: 1;
-	background-color: #FFFFFF;
-	border-radius: 12px;
-	border-width: 1px;
-	border-style: solid;
-	border-color: #E2E8F0;
-	padding: 10px;
-	margin-right: 8px;
-}
-
-.tools-cell-title {
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.tools-cell-desc {
-	margin-top: 2px;
-	font-size: 11px;
-	line-height: 15px;
-	color: #64748B;
 }
 
 .card {
@@ -1137,81 +838,26 @@ onShow(() => {
 	padding-top: 8px;
 }
 
+.group-members {
+	margin-top: 6px;
+	padding-left: 10px;
+	border-left-width: 2px;
+	border-left-style: solid;
+	border-left-color: #E2E8F0;
+}
+
+.group-overflow-text {
+	margin-top: 8px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
 .expand-text {
 	font-size: 13px;
 	line-height: 18px;
 	color: #0F766E;
 	font-weight: bold;
-}
-
-.rank-row {
-	flex-direction: row;
-	align-items: center;
-	padding-top: 9px;
-	padding-bottom: 9px;
-	border-bottom-width: 1px;
-	border-bottom-style: solid;
-	border-bottom-color: #F1F5F9;
-}
-
-.rank-index-wrap {
-	width: 26px;
-	align-items: center;
-}
-
-.rank-index-text {
-	font-size: 13px;
-	line-height: 18px;
-	color: #94A3B8;
-	font-weight: bold;
-}
-
-.rank-main {
-	flex: 1;
-	padding-right: 8px;
-}
-
-.rank-title-row {
-	flex-direction: row;
-	align-items: center;
-	flex-wrap: wrap;
-}
-
-.rank-name {
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.lifecycle-tag {
-	margin-left: 6px;
-	padding-left: 6px;
-	padding-right: 6px;
-	padding-top: 2px;
-	padding-bottom: 2px;
-	border-radius: 999px;
-	background-color: #E0F2FE;
-}
-
-.lifecycle-tag-text {
-	font-size: 11px;
-	line-height: 15px;
-	color: #0369A1;
-}
-
-.rank-meta {
-	margin-top: 3px;
-	font-size: 12px;
-	line-height: 16px;
-	color: #64748B;
-}
-
-.row-chevron {
-	font-size: 18px;
-	line-height: 24px;
-	color: #94A3B8;
-	margin-left: 6px;
 }
 
 .operate-mask {

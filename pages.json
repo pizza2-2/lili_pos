@@ -92,6 +92,13 @@
 			}
 		},
 		{
+			"path": "pages/audit-logs/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": "POS 操作日志"
+			}
+		},
+		{
 			"path": "pages/transactions/index",
 			"style": {
 				"navigationStyle":"custom",
@@ -487,6 +494,13 @@
 		},
 		{
 			"path": "pages/account/app-settings",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/account/debug-log",
 			"style": {
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""

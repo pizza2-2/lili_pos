@@ -1,0 +1,264 @@
+import { baseUrl } from '@/pkg/api/index.uts'
+import { getLoggerIdentity } from '@/pkg/util/logger.uts'
+import { currentLogcatTime, dumpLogcatSince } from '@/uni_modules/luo-logcat'
+
+/**
+ * 调试日志会话：用户手动开启后，定时把本进程 logcat（含全部 console 输出）
+ * 增量搬运到本地会话文件；App 关闭即停止收集（开关只在内存）。
+ * 已收集未上传的文件跨重启保留——崩溃后重启补传正是本功能最有价值的场景。
+ * 上传/丢弃均由用户手动触发。与 logger.uts 的常驻错误上报相互独立。
+ *
+ * 与 POS 项目 utils/debugSession.uts 同源，改动请两边同步。
+ */
+
+export type DebugSessionStatus = {
+	active: boolean
+	startedAt: number      // 毫秒时间戳；0 表示无会话
+	sizeBytes: number      // 已收集的近似字节数
+	hasPending: boolean    // 有已收集未上传的文件（含崩溃/重启残留）
+	uploading: boolean
+}
+
+type SessionMeta = {
+	startedAt: number
+	size: number
+}
+
+const META_KEY = 'debug_session_meta_v1'
+const FILE_NAME = 'debug_session.log'
+const MAX_SESSION_CHARS = 5 * 1024 * 1024   // 会话文件上限
+const TRIM_KEEP_CHARS = 4 * 1024 * 1024     // 超限后保留的尾部大小
+const PULL_INTERVAL_MS = 30000
+const FIRST_PULL_DELAY_MS = 2000
+
+let sessionActive = false
+let sessionStartedAt = 0
+let sessionSize = 0
+let lastPullTime = ''
+let pullTimerId = -1
+let firstPullTimerId = -1
+let uploading = false
+let pulling = false
+
+function sessionFilePath(): string {
+	return `${uni.env.USER_DATA_PATH}${FILE_NAME}`
+}
+
+function loadMeta(): SessionMeta | null {
+	const raw = uni.getStorageSync(META_KEY)
+	if (typeof raw == 'string' && (raw as string).length > 0) {
+		try {
+			return JSON.parse<SessionMeta>(raw as string)
+		} catch (e) {
+			return null
+		}
+	}
+	return null
+}
+
+function saveMeta(): void {
+	const meta: SessionMeta = { startedAt: sessionStartedAt, size: sessionSize }
+	try {
+		uni.setStorageSync(META_KEY, JSON.stringify(meta))
+	} catch (e) {
+		// 存储失败不影响收集
+	}
+}
+
+function clearMeta(): void {
+	try {
+		uni.removeStorageSync(META_KEY)
+	} catch (e) {
+		// ignore
+	}
+}
+
+function deleteSessionFile(): void {
+	try {
+		uni.getFileSystemManager().unlinkSync(sessionFilePath())
+	} catch (e) {
+		// 文件不存在时会抛错，忽略
+	}
+}
+
+function readSessionFile(): string {
+	try {
+		const data = uni.getFileSystemManager().readFileSync(sessionFilePath(), 'utf-8')
+		if (typeof data == 'string') return data as string
+		return ''
+	} catch (e) {
+		return ''
+	}
+}
+
+function appendToSessionFile(text: string): void {
+	const fs = uni.getFileSystemManager()
+	try {
+		fs.appendFileSync(sessionFilePath(), text, 'utf-8')
+	} catch (e) {
+		// 追加失败（文件不存在等）时退回整写
+		try {
+			fs.writeFileSync(sessionFilePath(), text, 'utf-8')
+		} catch (e2) {
+			return
+		}
+	}
+	sessionSize += text.length
+	// 超限保尾部：低频操作，整读整写可接受
+	if (sessionSize > MAX_SESSION_CHARS) {
+		const full = readSessionFile()
+		const tail = full.length > TRIM_KEEP_CHARS ? full.substring(full.length - TRIM_KEEP_CHARS) : full
+		try {
+			fs.writeFileSync(sessionFilePath(), tail, 'utf-8')
+			sessionSize = tail.length
+		} catch (e) {
+			// 裁剪失败保持原状，下轮再试
+		}
+	}
+	saveMeta()
+}
+
+function pullOnce(finalPull: boolean = false): void {
+	if (!sessionActive && !finalPull) return
+	if (pulling) return
+	pulling = true
+	// 先取时间再拉取：宁可下轮少量重复，不丢拉取期间产生的行
+	const nextSince = currentLogcatTime()
+	const since = lastPullTime
+	dumpLogcatSince(since).then((text: string) => {
+		pulling = false
+		// 收尾拉取（finalPull）在 stop 之后仍要落盘，不受 active 状态影响
+		if (!sessionActive && !finalPull) return
+		lastPullTime = nextSince
+		if (text.length > 0) {
+			appendToSessionFile(text)
+		}
+	}).catch((_e: any | null) => {
+		pulling = false
+	})
+}
+
+function stopTimers(): void {
+	if (pullTimerId >= 0) {
+		clearInterval(pullTimerId)
+		pullTimerId = -1
+	}
+	if (firstPullTimerId >= 0) {
+		clearTimeout(firstPullTimerId)
+		firstPullTimerId = -1
+	}
+}
+
+/** 开启收集：清掉旧会话文件从零开始。已开启时调用无副作用。 */
+export function startDebugSession(): void {
+	if (sessionActive) return
+	deleteSessionFile()
+	sessionActive = true
+	sessionStartedAt = Date.now()
+	sessionSize = 0
+	lastPullTime = currentLogcatTime()
+	saveMeta()
+	firstPullTimerId = setTimeout(() => {
+		pullOnce()
+	}, FIRST_PULL_DELAY_MS)
+	pullTimerId = setInterval(() => {
+		pullOnce()
+	}, PULL_INTERVAL_MS)
+}
+
+/** 停止收集：做最后一次收尾拉取（异步落盘），文件保留待上传/丢弃。 */
+export function stopDebugSession(): void {
+	if (!sessionActive) return
+	stopTimers()
+	sessionActive = false
+	pullOnce(true)
+}
+
+export function getDebugSessionStatus(): DebugSessionStatus {
+	if (!sessionActive && sessionStartedAt == 0) {
+		// 冷启动：检查上次运行的残留（崩溃/退出前未上传）
+		const meta = loadMeta()
+		if (meta != null) {
+			sessionStartedAt = (meta as SessionMeta).startedAt
+			sessionSize = (meta as SessionMeta).size
+		}
+	}
+	return {
+		active: sessionActive,
+		startedAt: sessionStartedAt,
+		sizeBytes: sessionSize,
+		hasPending: !sessionActive && sessionStartedAt > 0 && sessionSize > 0,
+		uploading: uploading
+	} as DebugSessionStatus
+}
+
+/** 查看组件用：读会话文件尾部 maxChars 字符。 */
+export function readDebugSessionTail(maxChars: number): string {
+	const full = readSessionFile()
+	if (full.length <= maxChars) return full
+	return full.substring(full.length - maxChars)
+}
+
+/** 丢弃已收集内容（删文件清状态）。收集中调用会先停止。 */
+export function discardDebugSession(): void {
+	if (sessionActive) {
+		stopTimers()
+		sessionActive = false
+	}
+	deleteSessionFile()
+	clearMeta()
+	sessionStartedAt = 0
+	sessionSize = 0
+}
+
+/** 上传当前已收集内容；进行中的会话先停止。成功后清空本地文件。 */
+export function uploadDebugSession(): Promise<boolean> {
+	return new Promise<boolean>((resolve, _reject) => {
+		if (uploading) {
+			resolve(false)
+			return
+		}
+		if (sessionActive) {
+			stopDebugSession()
+		}
+		// 冷启动直接进上传的场景：先从 meta 恢复残留会话状态
+		getDebugSessionStatus()
+		if (sessionSize == 0) {
+			resolve(false)
+			return
+		}
+		uploading = true
+		const systemInfo = uni.getSystemInfoSync()
+		// 停止后可能仍有一次收尾拉取在途，延迟 1s 再上传
+		setTimeout(() => {
+			uni.uploadFile({
+				url: `${baseUrl}/api/app/logs/debug-report/`,
+				filePath: sessionFilePath(),
+				name: 'file',
+				formData: {
+					appid: systemInfo.appId,
+					app_version: systemInfo.appVersion,
+					platform: systemInfo.platform,
+					identity: getLoggerIdentity(),
+					device_id: systemInfo.deviceId,
+					device_model: systemInfo.deviceModel,
+					started_at: sessionStartedAt.toString()
+				},
+				timeout: 60000,
+				success: (res) => {
+					uploading = false
+					if (res.statusCode >= 200 && res.statusCode < 300) {
+						discardDebugSession()
+						resolve(true)
+					} else {
+						resolve(false)
+					}
+				},
+				fail: (_err) => {
+					uploading = false
+					resolve(false)
+				}
+			})
+		}, 1000)
+	})
+}

@@ -66,6 +66,11 @@
 						<switch :checked="logUploadEnabled" @change="onLogUploadChange" />
 					</view>
 					<text class="card-hint">默认关闭。开启后本次运行期间收集并上报 App 错误信息用于排查问题（不含业务数据）；关闭 App 后自动恢复关闭。</text>
+					<view class="field-row field-row-link" @click="openDebugLog">
+						<text class="field-label field-label-wide">诊断日志收集</text>
+						<text class="field-arrow">›</text>
+					</view>
+					<text class="card-hint">手动开启后记录全部控制台输出，复现问题后手动上传给开发者；关闭 App 自动停止。</text>
 				</view>
 			</view>
 		<!-- #ifdef APP -->
@@ -150,6 +155,10 @@ function onLogUploadChange(event: UniSwitchChangeEvent) {
 	logUploadEnabled.value = event.detail.value
 	setLogUploadEnabled(event.detail.value)
 }
+
+function openDebugLog() {
+	uni.navigateTo({ url: '/pages/account/debug-log' })
+}
 </script>
 
 <style>
@@ -167,4 +176,6 @@ function onLogUploadChange(event: UniSwitchChangeEvent) {
 .chip-active { background-color: #E0F2FE; border-color: #0284C7; }
 .chip-text { font-size: 13px; color: #4B5563; }
 .chip-text-active { color: #075985; font-weight: bold; }
+.field-row-link { justify-content: space-between; }
+.field-arrow { font-size: 18px; color: #94A3B8; }
 </style>

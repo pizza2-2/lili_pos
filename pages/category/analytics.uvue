@@ -186,25 +186,15 @@
 								</view>
 							</view>
 							<text v-if="insightsError != ''" class="error-text">{{ insightsError }}</text>
-							<view v-for="item in insightItems" :key="'insight-' + stringField(item, 'id')" class="insight-row">
-								<view class="insight-head">
-									<view :class="severityDotClass(item)"></view>
-									<text class="insight-title">{{ stringField(item, 'title', '经营洞察') }}</text>
-								</view>
-								<text class="insight-meta">{{ insightMeta(item) }}</text>
-								<text v-if="stringField(item, 'suggestion') != ''" class="insight-suggestion">{{ stringField(item, 'suggestion') }}</text>
-								<view class="insight-actions">
-									<view v-if="insightJumpLabel(item) != ''" class="insight-btn insight-btn-primary" @click="goInsightProducts(item)">
-										<text class="insight-btn-primary-text">{{ insightJumpLabel(item) }}</text>
-									</view>
-									<view v-if="!booleanField(item, 'is_read')" class="insight-btn" @click="markInsight(item, 'read')">
-										<text class="insight-btn-text">已读</text>
-									</view>
-									<view class="insight-btn" @click="markInsight(item, 'dismiss')">
-										<text class="insight-btn-text">忽略</text>
-									</view>
-								</view>
-							</view>
+							<lili-insight-card
+								v-for="item in insightItems"
+								:key="'insight-' + stringField(item, 'id')"
+								:insight="item"
+								:showView="insightJumpLabel(item) != ''"
+								@view="goInsightProducts(item)"
+								@handle="markInsight(item, 'handle')"
+								@dismiss="markInsight(item, 'dismiss')"
+							></lili-insight-card>
 							<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
 								<text class="empty-text">该分类暂无待处理洞察</text>
 							</view>
@@ -409,11 +399,6 @@ function stringField(item: UTSJSONObject, key: string, fallback: string = ''): s
 	return stringValue(item[key], fallback)
 }
 
-function booleanField(item: UTSJSONObject, key: string): boolean {
-	const text = stringValue(item[key]).toLowerCase()
-	return text == 'true' || text == '1'
-}
-
 function moneyText(value: string): string {
 	return value == '' ? '0.00 zł' : value + ' zł'
 }
@@ -533,21 +518,24 @@ function issueValueClass(countText: string): string {
 
 // ── 洞察 ────────────────────────────────────────────────────────
 
-function severityDotClass(item: UTSJSONObject): string {
-	const severity = stringField(item, 'severity')
-	if (severity == 'high') return 'severity-dot severity-dot-high'
-	if (severity == 'medium') return 'severity-dot severity-dot-medium'
-	return 'severity-dot severity-dot-low'
-}
-
-function insightMeta(item: UTSJSONObject): string {
-	const severityLabel = stringField(item, 'severity_label')
-	const dateText = stringField(item, 'snapshot_date')
-	let text = severityLabel
-	if (dateText != '') {
-		text = text == '' ? dateText : text + ' · ' + dateText
+// 曝光即已读：与工作台/问题清单同一策略，静默标记、失败不打扰
+function autoMarkInsightsRead(items: UTSJSONObject[]): void {
+	const ids: number[] = []
+	for (let index = 0; index < items.length; index += 1) {
+		const item = items[index]
+		const isRead = item['is_read']
+		if (typeof isRead == 'boolean' && (isRead as boolean) == true) {
+			continue
+		}
+		const id = intValue(item['id'])
+		if (id > 0) {
+			ids.push(id)
+		}
 	}
-	return text
+	if (ids.length == 0) {
+		return
+	}
+	updateCategoryInsightStatus(ids, 'read').catch((_err) => {})
 }
 
 async function loadInsights(): Promise<void> {
@@ -565,6 +553,7 @@ async function loadInsights(): Promise<void> {
 			limit: 20,
 		} as CategoryInsightsQuery)
 		insightItems.value = objectArrayValue(response['items'])
+		autoMarkInsightsRead(insightItems.value)
 	} catch (error) {
 		insightsError.value = parseErrorMessage(error)
 	} finally {
@@ -619,6 +608,9 @@ function goInsightProducts(item: UTSJSONObject): void {
 		}
 	}
 	payload['label'] = stringField(item, 'title', '洞察商品')
+	// 处置闭环：商品页据此显示来源横幅 + 「标记已处理」按钮
+	payload['insight_id'] = stringField(item, 'id')
+	payload['insight_title'] = stringField(item, 'title', '洞察商品')
 	try {
 		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
 	} catch (error) {
@@ -1165,95 +1157,6 @@ onLoad((event: OnLoadOptions) => {
 	font-size: 12px;
 	line-height: 16px;
 	color: #334155;
-	font-weight: bold;
-}
-
-.insight-row {
-	padding-top: 9px;
-	padding-bottom: 9px;
-	border-bottom-width: 1px;
-	border-bottom-style: solid;
-	border-bottom-color: #F1F5F9;
-}
-
-.insight-head {
-	flex-direction: row;
-	align-items: center;
-}
-
-.severity-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 4px;
-	margin-right: 8px;
-}
-
-.severity-dot-high {
-	background-color: #DC2626;
-}
-
-.severity-dot-medium {
-	background-color: #F59E0B;
-}
-
-.severity-dot-low {
-	background-color: #22C55E;
-}
-
-.insight-title {
-	flex: 1;
-	font-size: 14px;
-	line-height: 20px;
-	color: #0F172A;
-	font-weight: bold;
-}
-
-.insight-meta {
-	margin-top: 3px;
-	padding-left: 16px;
-	font-size: 12px;
-	line-height: 16px;
-	color: #64748B;
-}
-
-.insight-suggestion {
-	margin-top: 4px;
-	padding-left: 16px;
-	font-size: 12px;
-	line-height: 17px;
-	color: #0369A1;
-}
-
-.insight-actions {
-	margin-top: 8px;
-	padding-left: 16px;
-	flex-direction: row;
-}
-
-.insight-btn {
-	padding-left: 12px;
-	padding-right: 12px;
-	padding-top: 5px;
-	padding-bottom: 5px;
-	border-radius: 8px;
-	background-color: #F1F5F9;
-	margin-right: 8px;
-}
-
-.insight-btn-text {
-	font-size: 12px;
-	line-height: 16px;
-	color: #475569;
-}
-
-.insight-btn-primary {
-	background-color: #0F766E;
-}
-
-.insight-btn-primary-text {
-	font-size: 12px;
-	line-height: 16px;
-	color: #FFFFFF;
 	font-weight: bold;
 }
 

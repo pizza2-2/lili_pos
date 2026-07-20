@@ -1,0 +1,462 @@
+<template>
+	<view class="ic-card">
+		<view class="ic-head">
+			<view :class="dotClass"></view>
+			<text class="ic-title">{{ titleText }}</text>
+			<text v-if="impactText != ''" class="ic-impact">{{ impactText }}</text>
+		</view>
+		<text class="ic-meta">{{ metaText }}</text>
+		<text v-if="breakdownText != ''" class="ic-breakdown">{{ breakdownText }}</text>
+		<text v-if="!compact && detailText != ''" class="ic-detail">{{ detailText }}</text>
+		<view v-if="hasWhy" class="ic-why-toggle" @click="toggleWhy">
+			<text class="ic-why-toggle-text">{{ whyOpen ? '收起详情' : '查看详情与判定依据' }}</text>
+		</view>
+		<view v-if="whyOpen && hasWhy" class="ic-why-box">
+			<!-- 紧凑模式下 detail（含涉及商品点名）收在展开区，展开即可看到具体信息 -->
+			<text v-if="compact && detailText != ''" class="ic-why-detail">{{ detailText }}</text>
+			<text
+				v-for="(line, lineIndex) in evidenceLines"
+				:key="'evidence-' + lineIndex.toString()"
+				class="ic-evidence-line"
+			>{{ line }}</text>
+			<text v-if="whyText != ''" class="ic-why-text">{{ whyText }}</text>
+		</view>
+		<text v-if="suggestionText != ''" class="ic-suggestion">{{ suggestionText }}</text>
+		<view class="ic-actions">
+			<view v-if="showView" class="ic-btn ic-btn-primary" @click="emitView">
+				<text class="ic-btn-primary-text">{{ viewLabel }}</text>
+			</view>
+			<view class="ic-btn" @click="emitHandle">
+				<text class="ic-btn-text">已处理</text>
+			</view>
+			<view class="ic-btn" @click="emitDismiss">
+				<text class="ic-btn-text">忽略</text>
+			</view>
+			<view v-if="showSnooze" class="ic-btn" @click="emitSnooze">
+				<text class="ic-btn-text">30天不提醒</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import type { PropType } from 'vue'
+
+const props = defineProps({
+	// 后端 build_insight_rows 序列化的单条洞察行，原样传入
+	insight: {
+		type: Object as PropType<UTSJSONObject>,
+		default: (): UTSJSONObject => ({} as UTSJSONObject),
+	},
+	// 紧凑模式：不展示 detail 长文案（工作台要点用）
+	compact: {
+		type: Boolean,
+		default: false,
+	},
+	// 是否展示「30天不提醒」按钮（问题清单用）
+	showSnooze: {
+		type: Boolean,
+		default: false,
+	},
+	// 是否展示主跳转按钮（分析页对非商品跳转的洞察隐藏——本页就是目标页）
+	showView: {
+		type: Boolean,
+		default: true,
+	},
+})
+
+const emit = defineEmits(['view', 'handle', 'dismiss', 'snooze'])
+
+const whyOpen = ref(false)
+
+// ── 解析辅助（组件内自足，防御式取值） ─────────────────────────
+
+function str(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function num(value: any | null, fallback: number = 0): number {
+	if (value == null) {
+		return fallback
+	}
+	const parsed = parseFloat('' + value)
+	if (isNaN(parsed)) {
+		return fallback
+	}
+	return parsed
+}
+
+function obj(value: any | null): UTSJSONObject {
+	if (value == null) {
+		return {} as UTSJSONObject
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return {} as UTSJSONObject
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		return parsed == null ? ({} as UTSJSONObject) : (parsed as UTSJSONObject)
+	} catch (_error) {
+		return {} as UTSJSONObject
+	}
+}
+
+function arrVal(value: any | null): UTSJSONObject[] {
+	if (value == null) {
+		return [] as UTSJSONObject[]
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) {
+		return [] as UTSJSONObject[]
+	}
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		return parsed == null ? ([] as UTSJSONObject[]) : parsed
+	} catch (_error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function percentText(value: any | null): string {
+	const parsed = num(value, -1)
+	if (parsed < 0) {
+		return ''
+	}
+	return (parsed * 100).toFixed(1) + '%'
+}
+
+// ── 展示字段 ────────────────────────────────────────────────────
+
+const titleText = computed((): string => {
+	return str(props.insight['title'], '未命名洞察')
+})
+
+const impactText = computed((): string => {
+	const impact = num(props.insight['impact_amount'])
+	if (impact <= 0) {
+		return ''
+	}
+	return '≈' + str(props.insight['impact_amount']) + ' zł'
+})
+
+const metaText = computed((): string => {
+	const category = obj(props.insight['category'])
+	let text = str(category['full_name'], str(category['name'], '-'))
+	const severityLabel = str(props.insight['severity_label'])
+	if (severityLabel != '') {
+		text = text + ' · ' + severityLabel
+	}
+	const duration = num(props.insight['duration_days'])
+	if (duration > 1) {
+		text = text + ' · 持续 ' + duration.toFixed(0) + ' 天'
+	}
+	return text
+})
+
+const detailText = computed((): string => {
+	return str(props.insight['detail'])
+})
+
+const suggestionText = computed((): string => {
+	return str(props.insight['suggestion'])
+})
+
+// 判定依据：把 metric_snapshot 里的算法输入摊开给用户看，建立数字信任
+const whyText = computed((): string => {
+	const metric = obj(props.insight['metric_snapshot'])
+	const parts: string[] = []
+	const sales = str(metric['sales_amount'])
+	if (sales != '') {
+		parts.push('当日销售 ' + sales + ' zł')
+	}
+	const baselineSales = str(metric['baseline_sales'])
+	if (baselineSales != '') {
+		const basis = str(metric['baseline_basis'])
+		const basisLabel = basis == 'weekday' ? '近4周同星期均值' : '近7日均值'
+		parts.push(basisLabel + ' ' + baselineSales + ' zł')
+	}
+	const noSalesDays = num(metric['no_sales_days'], -1)
+	if (noSalesDays > 0) {
+		parts.push('已连续 ' + noSalesDays.toFixed(0) + ' 个营业日无销售')
+	}
+	const marginNow = percentText(metric['gross_margin'])
+	if (marginNow != '') {
+		parts.push('当日毛利率 ' + marginNow)
+	}
+	const marginBase = percentText(metric['baseline_margin'])
+	if (marginBase != '') {
+		parts.push('近28天基线毛利率 ' + marginBase)
+	}
+	const turnover = num(metric['turnover_days'], -1)
+	if (turnover > 0) {
+		parts.push('按近期销速约需 ' + turnover.toFixed(0) + ' 天售完')
+	}
+	const inventoryValue = str(metric['inventory_value'])
+	if (inventoryValue != '' && inventoryValue != '0.00') {
+		parts.push('库存金额 ' + inventoryValue + ' zł')
+	}
+	const unmatched = str(metric['unmatched_sales_amount'])
+	if (unmatched != '') {
+		parts.push('未匹配销售 ' + unmatched + ' zł')
+	}
+	const costMissing = str(metric['cost_missing_sales_amount'])
+	if (costMissing != '') {
+		parts.push('缺成本销售 ' + costMissing + ' zł')
+	}
+	if (parts.length == 0) {
+		return ''
+	}
+	return parts.join(' · ')
+})
+
+// 缺货分布（多店公司）：哪个店缺、缺几个——关键信息不折叠，直接可见
+const breakdownText = computed((): string => {
+	const metric = obj(props.insight['metric_snapshot'])
+	const rows = arrVal(metric['shop_breakdown'])
+	if (rows.length == 0) {
+		return ''
+	}
+	const parts: string[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		const shop = str(row['shop'])
+		const count = num(row['stock_warning_count'], 0)
+		if (shop != '' && count > 0) {
+			parts.push(shop + ' ' + count.toFixed(0) + ' 个')
+		}
+	}
+	if (parts.length == 0) {
+		return ''
+	}
+	return '缺货分布：' + parts.join(' · ')
+})
+
+// 证据商品明细行：名称｜店铺｜库存状态/占压/售价成本，按洞察类型自适应可用字段
+const evidenceLines = computed((): string[] => {
+	const metric = obj(props.insight['metric_snapshot'])
+	const rows = arrVal(metric['evidence'])
+	const lines: string[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		let line = str(row['name'], '未命名商品')
+		const shop = str(row['shop'])
+		if (shop != '') {
+			line = line + '｜' + shop
+		}
+		const alertLabel = str(row['alert_label'])
+		const quantityValue = num(row['quantity'], -1)
+		if (alertLabel != '') {
+			line = line + '｜' + alertLabel + (quantityValue >= 0 ? '，剩 ' + quantityValue.toFixed(0) + ' 件' : '')
+		}
+		const stockValue = str(row['stock_value'])
+		if (stockValue != '') {
+			line = line + '｜占压 ' + stockValue + ' zł'
+		}
+		const salesPrice = str(row['sales_price'])
+		const unitCost = str(row['unit_cost'])
+		if (salesPrice != '' && unitCost != '') {
+			line = line + '｜售 ' + salesPrice + ' / 本 ' + unitCost
+		}
+		if (alertLabel == '' && stockValue == '' && salesPrice == '') {
+			const totalSales = str(row['total_sales_amount'])
+			if (totalSales != '') {
+				line = line + '｜累计销售 ' + totalSales + ' zł'
+			}
+		}
+		lines.push('· ' + line)
+	}
+	return lines
+})
+
+// 展开区是否有内容：判定依据、证据明细，或紧凑模式下被收起的 detail
+const hasWhy = computed((): boolean => {
+	if (whyText.value != '' || evidenceLines.value.length > 0) {
+		return true
+	}
+	return props.compact && detailText.value != ''
+})
+
+const dotClass = computed((): string => {
+	const severity = str(props.insight['severity'])
+	if (severity == 'high') return 'ic-dot ic-dot-high'
+	if (severity == 'medium') return 'ic-dot ic-dot-medium'
+	return 'ic-dot ic-dot-low'
+})
+
+const viewLabel = computed((): string => {
+	const action = obj(props.insight['action'])
+	return str(action['label'], '查看分析')
+})
+
+// ── 交互 ────────────────────────────────────────────────────────
+
+function toggleWhy(): void {
+	whyOpen.value = !whyOpen.value
+}
+
+function emitView(): void {
+	emit('view')
+}
+
+function emitHandle(): void {
+	emit('handle')
+}
+
+function emitDismiss(): void {
+	emit('dismiss')
+}
+
+function emitSnooze(): void {
+	emit('snooze')
+}
+</script>
+
+<style>
+.ic-card {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top-width: 1px;
+	border-top-color: #F1F5F9;
+}
+
+.ic-head {
+	flex-direction: row;
+	align-items: center;
+}
+
+.ic-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-right: 8px;
+}
+
+.ic-dot-high {
+	background-color: #DC2626;
+}
+
+.ic-dot-medium {
+	background-color: #F59E0B;
+}
+
+.ic-dot-low {
+	background-color: #10B981;
+}
+
+.ic-title {
+	flex: 1;
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.ic-impact {
+	margin-left: 8px;
+	font-size: 13px;
+	line-height: 19px;
+	color: #B45309;
+	font-weight: bold;
+}
+
+.ic-meta {
+	margin-top: 4px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.ic-detail {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #334155;
+}
+
+.ic-why-toggle {
+	margin-top: 6px;
+	align-self: flex-start;
+}
+
+.ic-why-toggle-text {
+	font-size: 11px;
+	line-height: 16px;
+	color: #2563EB;
+}
+
+.ic-why-box {
+	margin-top: 6px;
+	padding: 8px 10px;
+	background-color: #F8FAFC;
+	border-radius: 8px;
+}
+
+.ic-breakdown {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #B45309;
+	font-weight: bold;
+}
+
+.ic-why-detail {
+	margin-bottom: 6px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #334155;
+}
+
+.ic-evidence-line {
+	margin-bottom: 3px;
+	font-size: 11px;
+	line-height: 17px;
+	color: #334155;
+}
+
+.ic-why-text {
+	font-size: 11px;
+	line-height: 17px;
+	color: #475569;
+}
+
+.ic-suggestion {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.ic-actions {
+	margin-top: 10px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.ic-btn {
+	padding: 6px 14px;
+	margin-right: 8px;
+	margin-bottom: 6px;
+	background-color: #F1F5F9;
+	border-radius: 8px;
+}
+
+.ic-btn-text {
+	font-size: 12px;
+	color: #334155;
+}
+
+.ic-btn-primary {
+	background-color: #0F172A;
+}
+
+.ic-btn-primary-text {
+	font-size: 12px;
+	color: #FFFFFF;
+}
+</style>
