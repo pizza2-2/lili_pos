@@ -4,7 +4,7 @@ import { authState, redirectToLogin } from '@/store/auth'
 // HBuilderX「运行」= development → devBaseUrl；「发行」打包 = production → prodBaseUrl
 // 真机调试想直连正式服务器时，改 devBaseUrl 的值即可（只改这一处）
 const prodBaseUrl = 'http://api.lili-pos.top'		// 正式服务器（域名，换服务器只需改 DNS）
-const devBaseUrl = 'http://192.168.43.173:8000'		// 本地开发机（IP 变了改这里）
+const devBaseUrl = 'http://192.168.1.106:8000'		// 本地开发机（IP 变了改这里）
 export const baseUrl: string = process.env.NODE_ENV == 'production' ? prodBaseUrl : devBaseUrl
 export const timeOut: number = 10000							//网络请求超时时间
 const loginApiUrl = '/api/accounts/auth/login/'

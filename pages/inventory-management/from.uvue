@@ -331,6 +331,7 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { adjustInventoryStock, createInventoryStockForProduct, getInventoryLocations, getInventoryStockDetail, getInventoryStocks, getInventoryTransactions, InventoryListQuery, InventoryStockCreateForProductData, StockAdjustmentData } from '@/pkg/api/modules/inventory'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type SelectOption = {
 	value: string
@@ -1179,12 +1180,12 @@ function movementAmountText(record: UTSJSONObject): string {
 	const type = stringValue(record['transaction_type'])
 	if (type == 'SALE') {
 		const amount = stringValue(record['sale_amount'])
-		if (amount != '') return '售 ' + amount + ' zł'
+		if (amount != '') return '售 ' + formatMoney(amount)
 		return ''
 	}
 	if (type == 'PURCHASE') {
 		const cost = stringValue(record['total_cost'])
-		if (cost != '' && floatValue(cost) > 0) return '进 ' + moneyText(cost) + ' zł'
+		if (cost != '' && floatValue(cost) > 0) return '进 ' + formatMoney(moneyText(cost))
 	}
 	return ''
 }

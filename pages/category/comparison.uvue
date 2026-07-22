@@ -72,10 +72,10 @@
 							</view>
 						</view>
 						<view class="metric-grid">
-							<lili-metric-card label="销售额" :value="stringField(item, 'sales_amount', '0.00') + ' zł'"></lili-metric-card>
-							<lili-metric-card label="毛利" :value="stringField(item, 'gross_profit', '0.00') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="销售额" :value="moneyText(stringField(item, 'sales_amount', '0.00'))"></lili-metric-card>
+							<lili-metric-card label="毛利" :value="moneyText(stringField(item, 'gross_profit', '0.00'))"></lili-metric-card>
 							<lili-metric-card label="毛利率" :value="percentText(stringField(item, 'gross_margin'))"></lili-metric-card>
-							<lili-metric-card label="库存值" :value="stringField(item, 'inventory_value', '0.00') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="库存值" :value="moneyText(stringField(item, 'inventory_value', '0.00'))"></lili-metric-card>
 						</view>
 						<view class="result-meta-row">
 							<text class="result-meta">商品 {{ stringField(item, 'product_count', '0') }} · 启用 {{ stringField(item, 'active_product_count', '0') }} · 预警 {{ stringField(item, 'stock_warning_count', '0') }}</text>
@@ -109,7 +109,7 @@
 						</view>
 						<view class="candidate-main">
 							<text class="candidate-name">{{ item.full_name == '' ? item.name : item.full_name }}</text>
-							<text class="candidate-meta">日销 {{ item.sales_amount == '' ? '0.00' : item.sales_amount }} zł · 商品 {{ item.product_count.toString() }}</text>
+							<text class="candidate-meta">日销 {{ moneyText(item.sales_amount) }} · 商品 {{ item.product_count.toString() }}</text>
 						</view>
 						<lili-score-badge :score="item.health_score"></lili-score-badge>
 					</view>
@@ -127,6 +127,12 @@
 <script setup lang="uts">
 import { computed, ref } from 'vue'
 import { getCategoryComparison, getCategoryHealthScores, CategoryHealthScoreItem } from '@/pkg/api/modules/category'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 
 const keyword = ref('')
 const candidatesLoading = ref(false)

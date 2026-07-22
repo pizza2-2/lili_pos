@@ -35,6 +35,7 @@
 							<text :class="governanceCountClass(item)">{{ governanceCountText(item) }}</text>
 						</view>
 					</view>
+					<text v-if="governanceTypeDesc() != ''" class="governance-type-desc">{{ governanceTypeDesc() }}</text>
 					<view v-if="currentGovernanceItems().length > 0" class="governance-preview">
 						<view
 							v-for="item in currentGovernanceItems()"
@@ -43,7 +44,7 @@
 						>
 							<view class="governance-preview-main" @click="handleGovernanceItemTap(item)">
 								<text class="governance-preview-title">{{ governancePreviewTitle(item) }}</text>
-								<text class="governance-preview-desc">{{ governancePreviewDesc(item) }}</text>
+								<text :class="governancePreviewDescClass(item)">{{ governancePreviewDesc(item) }}</text>
 							</view>
 							<view v-if="governanceRowActionLabel() != ''" class="governance-row-action" @click="handleGovernanceRowAction(item)">
 								<text class="governance-row-action-text">{{ governanceRowActionLabel() }}</text>
@@ -184,6 +185,30 @@ function intValue(value: any | null, fallback: number = 0): number {
 	return parsed
 }
 
+// 税率小数（如 0.23）转百分比文案（"23%"），解析失败时原样返回
+function taxRatePercentText(value: any | null): string {
+	const text = stringValue(value)
+	if (text == '') {
+		return '-'
+	}
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return text
+	}
+	const percent = Math.round(parsed * 10000) / 100
+	return percent.toString() + '%'
+}
+
+// 库存数量文案：去掉后端小数串的多余尾零（"-3.000" → "-3"）
+function stockQuantityText(value: any | null): string {
+	const text = stringValue(value, '0')
+	const parsed = parseFloat(text)
+	if (isNaN(parsed)) {
+		return text
+	}
+	return parsed.toString()
+}
+
 function parseObject(value: any | null): UTSJSONObject | null {
 	if (value == null) {
 		return null
@@ -299,6 +324,10 @@ function governancePreviewKey(item: UTSJSONObject): string {
 	if (idText != '') {
 		return selectedGovernanceType.value + '-' + idText
 	}
+	const productIdText = stringValue(item['product_id'])
+	if (productIdText != '') {
+		return selectedGovernanceType.value + '-' + productIdText
+	}
 	return selectedGovernanceType.value + '-' + stringValue(item['name'], 'item')
 }
 
@@ -322,6 +351,12 @@ function governancePreviewDesc(item: UTSJSONObject): string {
 	if (selectedGovernanceType.value == 'duplicate_names') {
 		return '涉及 ' + stringValue(item['count'], '0') + ' 个分类'
 	}
+	if (selectedGovernanceType.value == 'negative_stock') {
+		return stringValue(item['shop'], '-') + ' · 现货 ' + stockQuantityText(item['quantity'])
+	}
+	if (selectedGovernanceType.value == 'product_tax_mismatch') {
+		return '商品 ' + taxRatePercentText(item['product_tax_rate']) + ' ≠ 收银 ' + taxRatePercentText(item['kasa_tax_rate']) + '（' + stringValue(item['kasa_name'], '-') + '）'
+	}
 	const reason = stringValue(item['reason'])
 	if (reason == 'missing_kasa_category') {
 		return '未绑定收银分类'
@@ -338,6 +373,29 @@ function governancePreviewDesc(item: UTSJSONObject): string {
 		return statusText
 	}
 	return '商品 ' + stringValue(item['direct_product_count'], '0') + ' 个'
+}
+
+// 负库存行的现货数量为负时副文案标红
+function governancePreviewDescClass(item: UTSJSONObject): string {
+	if (selectedGovernanceType.value == 'negative_stock') {
+		const quantity = parseFloat(stringValue(item['quantity'], '0'))
+		if (!isNaN(quantity) && quantity < 0) {
+			return 'governance-preview-desc governance-preview-desc-alert'
+		}
+	}
+	return 'governance-preview-desc'
+}
+
+// 新增检查类型的说明文案（其余类型暂无说明，返回空串即不渲染）
+function governanceTypeDesc(): string {
+	const typeValue = selectedGovernanceType.value
+	if (typeValue == 'negative_stock') {
+		return '销售扣减多于入库登记，建议盘点纠正'
+	}
+	if (typeValue == 'product_tax_mismatch') {
+		return '小票 VAT 可能开错（波兰合规风险）'
+	}
+	return ''
 }
 
 async function loadCategoryGovernance(): Promise<void> {
@@ -526,6 +584,7 @@ function governanceRowActionLabel(): string {
 	const typeValue = selectedGovernanceType.value
 	if (typeValue == 'empty_categories') return '停用'
 	if (typeValue == 'duplicate_names') return '合并'
+	if (typeValue == 'negative_stock') return '去盘点'
 	return ''
 }
 
@@ -574,6 +633,14 @@ function handleGovernanceItemTap(item: UTSJSONObject): void {
 	if (isProductGovernanceType(typeValue)) {
 		if (idText != '') {
 			uni.navigateTo({ url: '/pages/products/from?id=' + idText + '&mode=edit' })
+		}
+		return
+	}
+	// 负库存/税率不符：行字段为 product_id，点击跳商品编辑
+	if (typeValue == 'negative_stock' || typeValue == 'product_tax_mismatch') {
+		const productIdText = stringValue(item['product_id'])
+		if (productIdText != '') {
+			uni.navigateTo({ url: '/pages/products/from?id=' + productIdText + '&mode=edit' })
 		}
 		return
 	}
@@ -626,6 +693,10 @@ function handleGovernanceRowAction(item: UTSJSONObject): void {
 	const typeValue = selectedGovernanceType.value
 	if (typeValue == 'duplicate_names') {
 		confirmMergeDuplicateGroup(item)
+		return
+	}
+	if (typeValue == 'negative_stock') {
+		uni.navigateTo({ url: '/pages/inventory-checks/index' })
 		return
 	}
 	if (typeValue == 'empty_categories') {
@@ -861,6 +932,17 @@ onShow(() => {
 	font-size: 12px;
 	line-height: 16px;
 	color: #64748B;
+}
+
+.governance-preview-desc-alert {
+	color: #DC2626;
+}
+
+.governance-type-desc {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
 }
 
 .governance-empty {

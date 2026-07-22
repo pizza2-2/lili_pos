@@ -1,0 +1,238 @@
+<template>
+	<view class="cc-wrap">
+		<view v-if="props.showSelectAll" class="cc-toolbar">
+			<text class="cc-count">已选 {{ selectedCount.toString() }}/{{ totalCount.toString() }}</text>
+			<view class="cc-toolbar-actions">
+				<view :class="allSelected ? 'cc-tool-btn cc-tool-btn-active' : 'cc-tool-btn'" @click="handleSelectAll">
+					<text :class="allSelected ? 'cc-tool-btn-text cc-tool-btn-text-active' : 'cc-tool-btn-text'">{{ allSelected ? '已全选' : '全选' }}</text>
+				</view>
+				<view class="cc-tool-btn" @click="handleClear">
+					<text class="cc-tool-btn-text">清空</text>
+				</view>
+			</view>
+		</view>
+		<view class="cc-chips">
+			<view
+				v-for="(option, optionIndex) in props.options"
+				:key="'chip-' + chipValue(option, optionIndex)"
+				class="cc-chip-cell"
+			>
+				<view
+					:class="isSelected(chipValue(option, optionIndex)) ? 'cc-chip cc-chip-active' : 'cc-chip'"
+					@click="handleToggle(chipValue(option, optionIndex))"
+				>
+					<text
+						:class="isSelected(chipValue(option, optionIndex)) ? 'cc-chip-text cc-chip-text-active' : 'cc-chip-text'"
+					>{{ chipLabel(option, optionIndex) }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import type { PropType } from 'vue'
+
+const props = defineProps({
+	// 选项列表，每项 {value:string,label:string}（下标+as 防御读取）
+	options: {
+		type: Array as PropType<UTSJSONObject[]>,
+		default: (): UTSJSONObject[] => [] as UTSJSONObject[],
+	},
+	// 当前选中的 value 集合。纯受控：组件不直接修改，任何变化经 change 事件发完整新数组
+	values: {
+		type: Array as PropType<string[]>,
+		default: (): string[] => [] as string[],
+	},
+	// 是否显示顶部"已选 N/总数 + 全选/清空"工具条
+	showSelectAll: {
+		type: Boolean,
+		default: true,
+	},
+	disabled: {
+		type: Boolean,
+		default: false,
+	},
+})
+
+const emit = defineEmits(['change'])
+
+function str(value: any | null, fallback: string = ''): string {
+	if (value == null) {
+		return fallback
+	}
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function chipValue(option: UTSJSONObject, index: number): string {
+	return str(option['value'], 'option_' + index)
+}
+
+function chipLabel(option: UTSJSONObject, index: number): string {
+	return str(option['label'], chipValue(option, index))
+}
+
+// 归一化选中集合：统一转字符串去重，选中判断一律 indexOf 字符串比较（防装箱相等性陷阱）
+const selectedKeys = computed((): string[] => {
+	const result: string[] = []
+	for (let index = 0; index < props.values.length; index += 1) {
+		const text = '' + props.values[index]
+		if (text == '') {
+			continue
+		}
+		if (result.indexOf(text) < 0) {
+			result.push(text)
+		}
+	}
+	return result
+})
+
+function isSelected(optionValue: string): boolean {
+	return selectedKeys.value.indexOf(optionValue) >= 0
+}
+
+const totalCount = computed((): number => {
+	return props.options.length
+})
+
+const selectedCount = computed((): number => {
+	let count = 0
+	for (let index = 0; index < props.options.length; index += 1) {
+		if (selectedKeys.value.indexOf(chipValue(props.options[index], index)) >= 0) {
+			count += 1
+		}
+	}
+	return count
+})
+
+const allSelected = computed((): boolean => {
+	return totalCount.value > 0 && selectedCount.value == totalCount.value
+})
+
+function emitChange(next: string[]): void {
+	emit('change', next)
+}
+
+function handleToggle(optionValue: string): void {
+	if (props.disabled) {
+		return
+	}
+	const currentlySelected = selectedKeys.value.indexOf(optionValue) >= 0
+	// 按 options 顺序重建新数组（顺序稳定、天然去重），不修改 props.values
+	const next: string[] = []
+	for (let index = 0; index < props.options.length; index += 1) {
+		const candidate = chipValue(props.options[index], index)
+		if (candidate == optionValue) {
+			if (!currentlySelected) {
+				next.push(candidate)
+			}
+			continue
+		}
+		if (selectedKeys.value.indexOf(candidate) >= 0) {
+			next.push(candidate)
+		}
+	}
+	emitChange(next)
+}
+
+function handleSelectAll(): void {
+	if (props.disabled) {
+		return
+	}
+	if (allSelected.value) {
+		return
+	}
+	const next: string[] = []
+	for (let index = 0; index < props.options.length; index += 1) {
+		const candidate = chipValue(props.options[index], index)
+		if (next.indexOf(candidate) < 0) {
+			next.push(candidate)
+		}
+	}
+	emitChange(next)
+}
+
+function handleClear(): void {
+	if (props.disabled) {
+		return
+	}
+	emitChange([] as string[])
+}
+</script>
+
+<style>
+.cc-wrap {
+	flex-direction: column;
+}
+
+.cc-toolbar {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 6px;
+}
+
+.cc-count {
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.cc-toolbar-actions {
+	flex-direction: row;
+}
+
+.cc-tool-btn {
+	padding: 4px 10px;
+	margin-left: 8px;
+	background-color: #F1F5F9;
+	border-radius: 8px;
+}
+
+.cc-tool-btn-active {
+	background-color: #0F172A;
+}
+
+.cc-tool-btn-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #334155;
+}
+
+.cc-tool-btn-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.cc-chips {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.cc-chip-cell {
+	padding: 3px;
+}
+
+.cc-chip {
+	padding: 6px 14px;
+	background-color: #F1F5F9;
+	border-radius: 8px;
+}
+
+.cc-chip-active {
+	background-color: #0F172A;
+}
+
+.cc-chip-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #334155;
+}
+
+.cc-chip-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+</style>

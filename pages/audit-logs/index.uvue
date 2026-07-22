@@ -94,7 +94,7 @@
 					<view v-for="(row, rankIndex) in cashierRanking" :key="'rank-' + row.cashier_id" class="ranking-row">
 						<view class="ranking-row-top">
 							<text class="ranking-name">{{ (rankIndex + 1).toString() + '. ' + cashierStatName(row) }}</text>
-							<text class="ranking-count">{{ row.total_count.toString() + ' 次 / ' + row.total_amount + ' zł' }}</text>
+							<text class="ranking-count">{{ row.total_count.toString() + ' 次 / ' + moneyText(row.total_amount) }}</text>
 						</view>
 						<text class="ranking-breakdown">{{ cashierBreakdownText(row) }}</text>
 					</view>
@@ -139,6 +139,12 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 import {
 	AUDIT_EVENT_TYPES,
 	AuditCashierStat,
@@ -406,7 +412,7 @@ function payloadDetailText(item: AuditLogItem): string {
 	lines.push('事件：' + item.event_type_display)
 	lines.push('收银员：' + cashierDisplay(item))
 	lines.push('时间：' + formatDateTime(item.happened_at))
-	if (item.amount != '0.00') lines.push('涉及金额：' + item.amount + ' zł')
+	if (item.amount != '0.00') lines.push('涉及金额：' + formatMoney(item.amount))
 	if (item.related_order_number != '') lines.push('关联单号：' + item.related_order_number)
 	lines.push('明细：' + payloadSummary(item))
 
@@ -451,7 +457,7 @@ function openDetail(id: string) {
 }
 
 function logToListItem(item: AuditLogItem): UTSJSONObject {
-	const amount = item.amount != '0.00' ? item.amount + ' zł' : '-'
+	const amount = item.amount != '0.00' ? formatMoney(item.amount) : '-'
 	return {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
@@ -586,7 +592,7 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	for (let index = 0; index < statistics.value.by_event_type.length; index += 1) {
 		const entry = statistics.value.by_event_type[index]
 		let valueText = entry.count.toString() + ' 次'
-		if (entry.amount != '0.00') valueText = valueText + ' / ' + entry.amount + ' zł'
+		if (entry.amount != '0.00') valueText = valueText + ' / ' + formatMoney(entry.amount)
 		result.push({ key: 'event-' + entry.event_type, label: entry.label, value: valueText } as UTSJSONObject)
 	}
 	return result

@@ -123,6 +123,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 import { getOrderFilterOptions, getOrderList, getOrderStatistics, OrderFilterDefinition, OrderFilterOptionsResponse, OrderItem, OrderListQuery, OrderListResponse, OrderSelectedFilter, OrderStatistics } from '@/pkg/api/modules/orders.uts'
 
 type DatePresetOption = {
@@ -411,7 +412,7 @@ function orderToListItem(item: OrderItem): UTSJSONObject {
 		orderNumber: item.order_number,
 		title: stringValue(item.order_number, '订单 #' + item.id.toString()),
 		subtitle: '时间：' + timeText,
-		amountText: stringValue(item.total_amount, '0.00') + ' zł',
+		amountText: formatMoney(stringValue(item.total_amount, '0.00')),
 		shopText: shopText,
 		cashierText: cashierDisplay(item),
 		itemsText: itemCountText,
@@ -533,8 +534,8 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
 		{ key: 'total', label: '订单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'totalAmount', label: '销售额', value: statistics.value.total_amount + ' zł' } as UTSJSONObject,
-		{ key: 'taxAmount', label: '税额', value: statistics.value.tax_amount + ' zł' } as UTSJSONObject,
+		{ key: 'totalAmount', label: '销售额', value: formatMoney(statistics.value.total_amount) } as UTSJSONObject,
+		{ key: 'taxAmount', label: '税额', value: formatMoney(statistics.value.tax_amount) } as UTSJSONObject,
 		{ key: 'processed', label: '已处理', value: statistics.value.processed_count.toString() } as UTSJSONObject,
 		{ key: 'pendingStock', label: '待扣库存', value: statistics.value.inventory_pending_count.toString() } as UTSJSONObject,
 		{ key: 'failed', label: '异常', value: statistics.value.failed_count.toString() } as UTSJSONObject,

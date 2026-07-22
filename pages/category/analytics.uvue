@@ -79,7 +79,12 @@
 							<text v-if="unmatchedText != ''" class="note-text">{{ unmatchedText }}</text>
 						</view>
 						<view class="card">
-							<text class="card-label">销售集中度（累计口径）</text>
+							<view class="card-head">
+								<text class="card-label">销售集中度{{ concentrationBasisText }}</text>
+								<view class="mini-action" @click="goToProductsRanked">
+									<text class="mini-action-text">销量排名</text>
+								</view>
+							</view>
 							<lili-ratio-bar label="Top5 商品销售占比" :ratio="top5Share" :warnThreshold="0.7"></lili-ratio-bar>
 							<text v-if="isConcentrated" class="warn-text">集中度偏高：头部商品缺货会显著影响该分类销售</text>
 							<view v-for="item in topProducts" :key="'top-' + stringField(item, 'id')" class="list-row">
@@ -87,7 +92,7 @@
 									<text class="list-title">{{ stringField(item, 'name', '未命名商品') }}</text>
 									<text class="list-meta">{{ topProductMeta(item) }}</text>
 								</view>
-								<text class="list-value">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+								<text class="list-value">{{ moneyText(stringField(item, 'sales_amount', '0.00')) }}</text>
 							</view>
 							<view v-if="topProducts.length == 0" class="empty-state">
 								<text class="empty-text">期间内暂无商品销售记录</text>
@@ -212,7 +217,7 @@
 									<text class="list-title">{{ stringField(item, 'name', '未命名商品') }}</text>
 									<text class="list-meta">{{ stringField(item, 'reason') }}</text>
 								</view>
-								<text class="list-value">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+								<text class="list-value">{{ moneyText(stringField(item, 'sales_amount', '0.00')) }}</text>
 							</view>
 						</view>
 					</view>
@@ -245,6 +250,7 @@ import { computed, ref } from 'vue'
 import { getCategoryAnalytics, getCategoryInsights, updateCategoryInsightStatus, CategoryInsightsQuery } from '@/pkg/api/modules/category'
 import { getShopList, ShopListQuery } from '@/pkg/api/modules/shops'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type TabOption = {
 	key: string
@@ -400,7 +406,7 @@ function stringField(item: UTSJSONObject, key: string, fallback: string = ''): s
 }
 
 function moneyText(value: string): string {
-	return value == '' ? '0.00 zł' : value + ' zł'
+	return formatMoney(value)
 }
 
 function percentText(value: string): string {
@@ -470,7 +476,7 @@ const unmatchedText = computed((): string => {
 	if (value == '0.00' || value == '') {
 		return ''
 	}
-	return '另有 ' + value + ' zł 销售无法归属到商品（未匹配条码）'
+	return '另有 ' + formatMoney(value) + ' 销售无法归属到商品（未匹配条码）'
 })
 
 const top5Share = computed((): number => {
@@ -482,6 +488,12 @@ const isConcentrated = computed((): boolean => {
 	const concentration = objectValue(sectionObject('sales')['concentration'])
 	const text = stringValue(concentration['is_concentrated']).toLowerCase()
 	return text == 'true' || text == '1'
+})
+
+// 集中度口径标注：商品日销表有数据时后端返回 period（真实周期），否则回退 lifetime（累计）
+const concentrationBasisText = computed((): string => {
+	const concentration = objectValue(sectionObject('sales')['concentration'])
+	return stringValue(concentration['basis']) == 'period' ? '（周期口径）' : '（累计口径）'
 })
 
 const inactiveCountText = computed((): string => {
@@ -767,7 +779,7 @@ function tabTextClass(key: string): string {
 	return activeTab.value == key ? 'tab-text tab-text-active' : 'tab-text'
 }
 
-function goToProducts(): void {
+function openProductsList(ordering: string, orderingLabel: string): void {
 	// 商品管理页已移出 tabbar，可直接 navigateTo（返回键回到分析页）；
 	// 分析范围已含全部后代分类，复用 scope.category_ids 做预置筛选
 	const category = sectionObject('category')
@@ -799,6 +811,11 @@ function goToProducts(): void {
 		category_ids: idsText,
 		category_name: name,
 	} as UTSJSONObject
+	if (ordering != '') {
+		// 商品页据此预置排序（如销量最高），与筛选面板的排序选项联动
+		payload['ordering'] = ordering
+		payload['label'] = name + orderingLabel
+	}
 	try {
 		uni.setStorageSync('pending:pages:products:category-filter', JSON.stringify(payload))
 	} catch (error) {
@@ -814,6 +831,15 @@ function goToProducts(): void {
 			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
 		},
 	})
+}
+
+function goToProducts(): void {
+	openProductsList('', '')
+}
+
+// 集中度卡「销量排名」：进入商品页并预置按销量降序
+function goToProductsRanked(): void {
+	openProductsList('-total_sales_quantity', ' · 销量排名')
 }
 
 function goToComparison(): void {

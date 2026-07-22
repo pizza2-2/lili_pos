@@ -116,7 +116,7 @@
 					</view>
 					<view class="field-row">
 						<text class="field-label">假日日期</text>
-						<input class="field-input" :value="holidayInput" placeholder="如 2026-12-25" @input="onHolidayInput" />
+						<input class="field-input" :value="holidayInput" placeholder="如 2026-12-25，可逗号分隔多个" @input="onHolidayInput" />
 						<view class="holiday-add-btn" @click="addHoliday">
 							<text class="holiday-add-text">添加</text>
 						</view>
@@ -239,21 +239,41 @@ function toggleClosedWeekday(index: number): void {
 }
 
 function addHoliday(): void {
-	const text = holidayInput.value.trim()
+	const raw = holidayInput.value.trim()
+	if (raw == '') return
+	// 支持一次输入多个日期：中英文逗号、顿号、分号、空格分隔
+	let normalized = raw
+	const separators = ['，', '、', ';', '；', ' ', '\t', '\n']
+	for (let i = 0; i < separators.length; i += 1) {
+		normalized = normalized.split(separators[i]).join(',')
+	}
+	const parts = normalized.split(',')
 	const pattern = /^\d{4}-\d{2}-\d{2}$/
-	if (!pattern.test(text)) {
-		uni.showToast({ title: '日期格式应为 YYYY-MM-DD', icon: 'none', duration: 3000 })
-		return
-	}
-	if (holidayDates.value.includes(text)) {
-		holidayInput.value = ''
-		return
-	}
+	const invalid: string[] = []
 	const next = holidayDates.value.slice(0)
-	next.push(text)
-	next.sort()
-	holidayDates.value = next
-	holidayInput.value = ''
+	let added = 0
+	for (let i = 0; i < parts.length; i += 1) {
+		const text = parts[i].trim()
+		if (text == '') continue
+		if (!pattern.test(text)) {
+			invalid.push(text)
+			continue
+		}
+		if (next.includes(text)) continue
+		next.push(text)
+		added += 1
+	}
+	if (added > 0) {
+		next.sort()
+		holidayDates.value = next
+	}
+	if (invalid.length > 0) {
+		// 无效片段留在输入框中供修正，有效的已入列表
+		holidayInput.value = invalid.join(',')
+		uni.showToast({ title: '格式应为 YYYY-MM-DD，未添加：' + invalid.join('、'), icon: 'none', duration: 3000 })
+	} else {
+		holidayInput.value = ''
+	}
 }
 
 function removeHoliday(item: string): void {

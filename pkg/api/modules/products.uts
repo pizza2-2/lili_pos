@@ -5,6 +5,8 @@ export type ProductListQuery = {
 	page: number
 	page_size: number
 	ordering: string
+	// 销量统计窗口：''=累计全部 / 'year'=近一年 / 'month'=近30天（影响销量排序与销量口径）
+	sales_window: string
 	filters: ProductSelectedFilter[]
 }
 
@@ -293,6 +295,9 @@ function buildListQuery(data: ProductListQuery): UTSJSONObject {
 	}
 	if (data.ordering != '') {
 		query['ordering'] = data.ordering
+	}
+	if (data.sales_window != '') {
+		query['sales_window'] = data.sales_window
 	}
 
 	for (let filterIndex = 0; filterIndex < data.filters.length; filterIndex += 1) {
@@ -1547,4 +1552,33 @@ export function updatePrintTemplate(id: string, data: PrintTemplateMutationData)
 
 export function setDefaultPrintTemplate(id: string): Promise<any> {
 	return request('/api/products/print-templates/' + id + '/set-default/', 'POST', {} as UTSJSONObject, true)
+}
+
+// 商品关键字段变更记录：返回原始响应对象，由页面自行解析列表；顶层数组响应兜底包一层 results
+export async function getProductChangeLogs(productId: number): Promise<UTSJSONObject> {
+	const raw = await request(
+		productDetailPath(productId) + 'change-logs/',
+		'GET',
+		{} as UTSJSONObject,
+		false
+	)
+	const text = JSON.stringify(raw)
+	if (text == null || text == '') {
+		return {} as UTSJSONObject
+	}
+	try {
+		if (text.startsWith('[')) {
+			const parsedArray = JSON.parseArray<UTSJSONObject>(text)
+			const wrapper = {} as UTSJSONObject
+			wrapper['results'] = parsedArray == null ? [] as UTSJSONObject[] : parsedArray as UTSJSONObject[]
+			return wrapper
+		}
+		if (!text.startsWith('{')) {
+			return {} as UTSJSONObject
+		}
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		return parsed == null ? {} as UTSJSONObject : parsed as UTSJSONObject
+	} catch (error) {
+		return {} as UTSJSONObject
+	}
 }

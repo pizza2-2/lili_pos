@@ -1034,16 +1034,6 @@ export async function getCategoryInsightsGrouped(kind: string = 'problem', sever
 	return buildObjectResponse(raw, '分组洞察响应解析失败')
 }
 
-// 静默洞察：选中洞察的 (分类, 类型) 在 days 天内不再提醒
-export async function snoozeCategoryInsights(ids: number[], days: number = 30): Promise<UTSJSONObject> {
-	const body = {
-		ids: ids,
-		days: days,
-	} as UTSJSONObject
-	const raw = await request(categoryBasePath + 'insights/snooze/', 'POST', body, true)
-	return buildObjectResponse(raw, '洞察静默响应解析失败')
-}
-
 export async function previewCategoryRuleSync(id: number | string, field: string, newValue: any | null, includeDescendants: boolean = false): Promise<UTSJSONObject> {
 	const body = {
 		field: field,

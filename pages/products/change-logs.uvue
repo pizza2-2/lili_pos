@@ -1,0 +1,297 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="变更记录"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<text v-if="productName != ''" class="product-hint">商品：{{ productName }}</text>
+
+				<view v-if="pageError != '' && !isLoading" class="state-card">
+					<text class="state-title">加载失败</text>
+					<text class="state-desc">{{ pageError }}</text>
+					<view class="state-btn" @click="loadLogs">
+						<text class="state-btn-text">重新加载</text>
+					</view>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在获取变更记录...</text>
+				</view>
+
+				<view v-else-if="logs.length == 0" class="state-card">
+					<text class="state-title">暂无变更记录</text>
+					<text class="state-desc">仅记录价格/状态/分类等关键字段</text>
+				</view>
+
+				<view v-else class="log-card">
+					<view
+						v-for="(log, index) in logs"
+						:key="'log-' + index.toString()"
+						:class="index == 0 ? 'log-row log-row-first' : 'log-row'"
+					>
+						<text class="log-field">{{ log.fieldLabel }}</text>
+						<view class="log-value-line">
+							<text class="log-old">{{ log.oldValue }}</text>
+							<text class="log-arrow">→</text>
+							<text class="log-new">{{ log.newValue }}</text>
+						</view>
+						<text class="log-meta">{{ log.meta }}</text>
+					</view>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { ref } from 'vue'
+import { getProductChangeLogs } from '@/pkg/api/modules/products.uts'
+
+type ChangeLogRow = {
+	fieldLabel: string
+	oldValue: string
+	newValue: string
+	meta: string
+}
+
+const isLoading = ref(false)
+const hasLoadedOnce = ref(false)
+const pageError = ref('')
+const productId = ref(0)
+const productName = ref('')
+const logs = ref<ChangeLogRow[]>([] as ChangeLogRow[])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) return fallback
+	const parsed = parseInt('' + value)
+	return isNaN(parsed) ? fallback : parsed
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) return [] as UTSJSONObject[]
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		return parsed == null ? ([] as UTSJSONObject[]) : parsed
+	} catch (_error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function parseErrorMessage(error: any): string {
+	if (error == null) return '加载失败'
+	const text = '' + error
+	if (text == '' || text == '[object Object]') return '加载失败'
+	return text.startsWith('Error: ') ? text.substring(7) : text
+}
+
+// 变更值展示：空值统一显示为"（空）"
+function displayValue(value: any | null): string {
+	const text = stringValue(value)
+	return text == '' ? '（空）' : text
+}
+
+// created_at 截到分钟并把 'T' 换成空格：2026-07-21T10:30:00 -> 2026-07-21 10:30
+function formatLogTime(value: any | null): string {
+	let text = stringValue(value)
+	if (text == '') return ''
+	text = text.replace('T', ' ')
+	if (text.length > 16) {
+		text = text.substring(0, 16)
+	}
+	return text
+}
+
+function buildLogRow(raw: UTSJSONObject): ChangeLogRow {
+	let operator = stringValue(raw['operator_name'])
+	if (operator == '') operator = stringValue(raw['operator'])
+	if (operator == '') operator = stringValue(raw['changed_by_name'])
+	if (operator == '') operator = '未知操作人'
+	const timeText = formatLogTime(raw['created_at'])
+	let meta = operator
+	if (timeText != '') {
+		meta = meta + ' · ' + timeText
+	}
+	return {
+		fieldLabel: stringValue(raw['field_label'], stringValue(raw['field'], '未知字段')),
+		oldValue: displayValue(raw['old_value']),
+		newValue: displayValue(raw['new_value']),
+		meta: meta,
+	} as ChangeLogRow
+}
+
+async function loadLogs(): Promise<void> {
+	if (isLoading.value) return
+	if (productId.value <= 0) {
+		pageError.value = '缺少商品ID'
+		return
+	}
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		const data = await getProductChangeLogs(productId.value)
+		let rawLogs = objectArrayValue(data['results'])
+		if (rawLogs.length == 0) {
+			rawLogs = objectArrayValue(data['logs'])
+		}
+		const parsed: ChangeLogRow[] = []
+		for (let index = 0; index < rawLogs.length; index += 1) {
+			parsed.push(buildLogRow(rawLogs[index]))
+		}
+		logs.value = parsed
+		hasLoadedOnce.value = true
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+onLoad((event: OnLoadOptions) => {
+	productId.value = intValue(event['id'])
+	const nameValue = event['name']
+	if (nameValue != null) {
+		let decoded = ''
+		try {
+			decoded = stringValue(decodeURIComponent(nameValue as string))
+		} catch (_error) {
+			decoded = stringValue(nameValue)
+		}
+		productName.value = decoded
+	}
+	loadLogs()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F4F6F8;
+}
+
+.page-scroll {
+	flex: 1;
+}
+
+.page-content {
+	padding: 12px 12px 24px 12px;
+}
+
+.product-hint {
+	margin-bottom: 8px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #64748B;
+}
+
+.state-card {
+	margin-top: 60px;
+	padding: 24px 16px;
+	align-items: center;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	margin-top: 8px;
+	font-size: 12px;
+	line-height: 18px;
+	color: #64748B;
+	text-align: center;
+}
+
+.state-btn {
+	margin-top: 16px;
+	padding: 8px 24px;
+	background-color: #0F172A;
+	border-radius: 8px;
+}
+
+.state-btn-text {
+	font-size: 13px;
+	color: #FFFFFF;
+}
+
+.log-card {
+	padding: 14px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.log-row {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top-width: 1px;
+	border-top-color: #F1F5F9;
+}
+
+.log-row-first {
+	margin-top: 0;
+	padding-top: 0;
+	border-top-width: 0;
+}
+
+.log-field {
+	font-size: 14px;
+	line-height: 20px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.log-value-line {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	margin-top: 4px;
+}
+
+.log-old {
+	font-size: 13px;
+	line-height: 19px;
+	color: #94A3B8;
+	text-decoration-line: line-through;
+}
+
+.log-arrow {
+	margin-left: 6px;
+	margin-right: 6px;
+	font-size: 13px;
+	line-height: 19px;
+	color: #94A3B8;
+}
+
+.log-new {
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+}
+
+.log-meta {
+	margin-top: 5px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+</style>

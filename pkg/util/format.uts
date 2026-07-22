@@ -1,0 +1,85 @@
+// 金额显示统一格式化（波兰习惯）
+// 千分位用空格、小数点改逗号、末尾 ' zł'，例如 '12345.67' -> '12 345,67 zł'
+// 仅用于展示层，输入框值/提交值/比较逻辑不要经过这里
+
+// 判断字符串是否全为 0-9 数字（空串返回 false）
+// 注意：不用 charCodeAt——UTS 里它返回 Number? 可空类型，不能直接比较大小
+const DIGIT_CHARS = '0123456789'
+
+function isDigits(s: string): boolean {
+	if (s.length == 0) {
+		return false
+	}
+	for (let i = 0; i < s.length; i++) {
+		if (DIGIT_CHARS.indexOf(s.charAt(i)) < 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// 整数部分从右往左每 3 位插入一个空格，如 '12345' -> '12 345'
+function groupThousands(intPart: string): string {
+	let result = ''
+	let count = 0
+	for (let i = intPart.length - 1; i >= 0; i--) {
+		result = intPart.charAt(i) + result
+		count++
+		if (count % 3 == 0 && i > 0) {
+			result = ' ' + result
+		}
+	}
+	return result
+}
+
+// 同 formatMoney，但不带 ' zł' 后缀（供已有单位标注的场景）
+// 解析失败（空串/非数字）返回 '0,00'
+export function formatAmount(value: string): string {
+	let raw = value.trim()
+	let negative = false
+	if (raw.startsWith('-')) {
+		negative = true
+		raw = raw.substring(1)
+	} else if (raw.startsWith('+')) {
+		raw = raw.substring(1)
+	}
+	if (raw == '') {
+		return '0,00'
+	}
+	const parts = raw.split('.')
+	if (parts.length > 2) {
+		return '0,00'
+	}
+	let intPart = parts[0]
+	let decPart = parts.length == 2 ? parts[1] : ''
+	if (intPart == '' && decPart != '') {
+		// 形如 '.5' 补整数位 0
+		intPart = '0'
+	}
+	if (!isDigits(intPart)) {
+		return '0,00'
+	}
+	if (decPart != '' && !isDigits(decPart)) {
+		return '0,00'
+	}
+	// 保留输入的小数位数，小数点改逗号
+	let text = groupThousands(intPart)
+	if (decPart != '') {
+		text = text + ',' + decPart
+	}
+	if (negative) {
+		text = '-' + text
+	}
+	return text
+}
+
+// 后端金额字符串 -> 波兰格式显示，如 '12345.67' -> '12 345,67 zł'、'-1234.5' -> '-1 234,5 zł'
+// 解析失败（空串/非数字）返回 '0,00 zł'
+export function formatMoney(value: string): string {
+	return formatAmount(value) + ' zł'
+}
+
+// number 入参，先 toFixed(2) 再走同一逻辑
+export function formatMoneyNumber(value: number): string {
+	return formatMoney(value.toFixed(2))
+}

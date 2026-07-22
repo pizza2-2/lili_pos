@@ -32,9 +32,6 @@
 			<view class="ic-btn" @click="emitDismiss">
 				<text class="ic-btn-text">忽略</text>
 			</view>
-			<view v-if="showSnooze" class="ic-btn" @click="emitSnooze">
-				<text class="ic-btn-text">30天不提醒</text>
-			</view>
 		</view>
 	</view>
 </template>
@@ -42,6 +39,7 @@
 <script setup lang="uts">
 import { computed, ref } from 'vue'
 import type { PropType } from 'vue'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 const props = defineProps({
 	// 后端 build_insight_rows 序列化的单条洞察行，原样传入
@@ -54,11 +52,6 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
-	// 是否展示「30天不提醒」按钮（问题清单用）
-	showSnooze: {
-		type: Boolean,
-		default: false,
-	},
 	// 是否展示主跳转按钮（分析页对非商品跳转的洞察隐藏——本页就是目标页）
 	showView: {
 		type: Boolean,
@@ -66,7 +59,7 @@ const props = defineProps({
 	},
 })
 
-const emit = defineEmits(['view', 'handle', 'dismiss', 'snooze'])
+const emit = defineEmits(['view', 'handle', 'dismiss'])
 
 const whyOpen = ref(false)
 
@@ -142,7 +135,7 @@ const impactText = computed((): string => {
 	if (impact <= 0) {
 		return ''
 	}
-	return '≈' + str(props.insight['impact_amount']) + ' zł'
+	return '≈' + formatMoney(str(props.insight['impact_amount']))
 })
 
 const metaText = computed((): string => {
@@ -173,13 +166,13 @@ const whyText = computed((): string => {
 	const parts: string[] = []
 	const sales = str(metric['sales_amount'])
 	if (sales != '') {
-		parts.push('当日销售 ' + sales + ' zł')
+		parts.push('当日销售 ' + formatMoney(sales))
 	}
 	const baselineSales = str(metric['baseline_sales'])
 	if (baselineSales != '') {
 		const basis = str(metric['baseline_basis'])
 		const basisLabel = basis == 'weekday' ? '近4周同星期均值' : '近7日均值'
-		parts.push(basisLabel + ' ' + baselineSales + ' zł')
+		parts.push(basisLabel + ' ' + formatMoney(baselineSales))
 	}
 	const noSalesDays = num(metric['no_sales_days'], -1)
 	if (noSalesDays > 0) {
@@ -199,15 +192,15 @@ const whyText = computed((): string => {
 	}
 	const inventoryValue = str(metric['inventory_value'])
 	if (inventoryValue != '' && inventoryValue != '0.00') {
-		parts.push('库存金额 ' + inventoryValue + ' zł')
+		parts.push('库存金额 ' + formatMoney(inventoryValue))
 	}
 	const unmatched = str(metric['unmatched_sales_amount'])
 	if (unmatched != '') {
-		parts.push('未匹配销售 ' + unmatched + ' zł')
+		parts.push('未匹配销售 ' + formatMoney(unmatched))
 	}
 	const costMissing = str(metric['cost_missing_sales_amount'])
 	if (costMissing != '') {
-		parts.push('缺成本销售 ' + costMissing + ' zł')
+		parts.push('缺成本销售 ' + formatMoney(costMissing))
 	}
 	if (parts.length == 0) {
 		return ''
@@ -256,7 +249,7 @@ const evidenceLines = computed((): string[] => {
 		}
 		const stockValue = str(row['stock_value'])
 		if (stockValue != '') {
-			line = line + '｜占压 ' + stockValue + ' zł'
+			line = line + '｜占压 ' + formatMoney(stockValue)
 		}
 		const salesPrice = str(row['sales_price'])
 		const unitCost = str(row['unit_cost'])
@@ -266,7 +259,7 @@ const evidenceLines = computed((): string[] => {
 		if (alertLabel == '' && stockValue == '' && salesPrice == '') {
 			const totalSales = str(row['total_sales_amount'])
 			if (totalSales != '') {
-				line = line + '｜累计销售 ' + totalSales + ' zł'
+				line = line + '｜累计销售 ' + formatMoney(totalSales)
 			}
 		}
 		lines.push('· ' + line)
@@ -310,10 +303,6 @@ function emitHandle(): void {
 
 function emitDismiss(): void {
 	emit('dismiss')
-}
-
-function emitSnooze(): void {
-	emit('snooze')
 }
 </script>
 

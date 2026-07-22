@@ -198,6 +198,7 @@ import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { autoGeneratePurchasePrices, deletePurchase, getPurchaseFilterOptions, getPurchaseList, PurchaseFilterDefinition, PurchaseFilterOptionsResponse, PurchaseItem, PurchaseListResponse, PurchaseSelectedFilter, runPurchaseAction } from '@/pkg/api/modules/purchases.uts'
 import { getProductPricingFormulaList, ProductPricingFormulaListQuery } from '@/pkg/api/modules/products.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type PurchaseSelectOption = {
 	value: string
@@ -576,7 +577,7 @@ function purchaseToListItem(item: PurchaseItem): UTSJSONObject {
 		importStatusMessage: purchaseImportMessage(importStatus),
 		title: numberText,
 		subtitle: '日期：' + stringValue(item.purchase_date, '-'),
-		amountText: stringValue(item.total_amount, '0.00') + ' zł',
+		amountText: formatMoney(stringValue(item.total_amount, '0.00')),
 		supplierText: stringValue(item.supplier_name, '-'),
 		quantityText: item.received_quantity.toString() + '/' + item.total_quantity.toString(),
 		progressText: stringValue(item.receive_progress, '0') + '%',
@@ -816,7 +817,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '采购单数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页不含税', value: pageNetTotalAmount.value + ' zł' } as UTSJSONObject,
+		{ key: 'amount', label: '本页不含税', value: formatMoney(pageNetTotalAmount.value) } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

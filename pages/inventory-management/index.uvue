@@ -230,6 +230,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request } from '@/pkg/api/index.uts'
 import { getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
@@ -620,9 +621,7 @@ function numberText(value: any | null): string {
 }
 
 function moneyText(value: any | null): string {
-	const text = stringValue(value)
-	if (text == '') return '0.00 zł'
-	return text + ' zł'
+	return formatMoney(stringValue(value))
 }
 
 function imageListFromStock(stock: UTSJSONObject): string[] {

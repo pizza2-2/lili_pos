@@ -15,6 +15,7 @@ import Bitmap from 'android.graphics.Bitmap'
 import Canvas from 'android.graphics.Canvas'
 import Color from 'android.graphics.Color'
 import Paint from 'android.graphics.Paint'
+import Typeface from 'android.graphics.Typeface'
 import UUID from 'java.util.UUID'
 import Charset from 'java.nio.charset.Charset'
 import Thread from 'java.lang.Thread'
@@ -54,6 +55,9 @@ export type LabelBitmapPrintOptions = {
 	chunkSize?: number
 	delayMs?: number
 }
+
+// 标签文字统一字体族,可选 'serif'(衬线)/'sans-serif'(黑体)/'monospace'(等宽)/'sans-serif-condensed'(窄体)
+const labelFontFamily = 'serif'
 
 const sppUuidText = '00001101-0000-1000-8000-00805F9B34FB'
 export const labelPrinterDefaultStorageKey = 'label-print:default-printer'
@@ -829,7 +833,8 @@ function drawBitmapText(canvas: Canvas, paint: Paint, element: UTSJSONObject, do
 	const minFontSize = Math.max(6, labelNumber(element['minFontSize'], labelNumber(element['min_font_size'], Math.max(6, fontSize * 0.55))))
 	paint.setColor(Color.BLACK)
 	paint.setAntiAlias(true)
-	paint.setFakeBoldText(labelBold(element))
+	// 字体须在 fitBitmapText 之前设置,否则按旧字体测宽会导致换行/缩字号不准
+	paint.setTypeface(Typeface.create(labelFontFamily, labelBold(element) ? Typeface.BOLD : Typeface.NORMAL))
 	const textAlign = labelTextAlign(element)
 	const fit = fitBitmapText(content, paint, fontSize, minFontSize, width, height)
 	paint.setTextSize(fit.fontSize.toFloat())
@@ -840,7 +845,6 @@ function drawBitmapText(canvas: Canvas, paint: Paint, element: UTSJSONObject, do
 			canvas.drawText(fit.lines[index], textX.toFloat(), baseline.toFloat(), paint)
 		}
 	}
-	paint.setFakeBoldText(false)
 }
 
 function drawEan13Barcode(canvas: Canvas, paint: Paint, content: string, x: number, y: number, width: number, height: number) {
@@ -885,6 +889,7 @@ function drawBitmapBarcode(canvas: Canvas, paint: Paint, element: UTSJSONObject,
 	}
 	if (showText) {
 		paint.setAntiAlias(true)
+		paint.setTypeface(Typeface.create(labelFontFamily, Typeface.NORMAL))
 		const textSize = (height / 3).toFloat()
 		paint.setTextSize(textSize)
 		canvas.drawText(content, (x + 2).toFloat(), (y + height - 2).toFloat(), paint)

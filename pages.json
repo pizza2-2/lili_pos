@@ -218,6 +218,13 @@
 			}
 		},
 		{
+			"path": "pages/products/change-logs",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
 			"path": "pages/products/price-calculator",
 			"style": {
 				"navigationStyle":"custom",
@@ -312,6 +319,13 @@
 		},
 		{
 			"path": "pages/purchases/index",
+			"style": {
+				"navigationStyle":"custom",
+				"navigationBarTitleText": ""
+			}
+		},
+		{
+			"path": "pages/purchases/replenishment",
 			"style": {
 				"navigationStyle":"custom",
 				"navigationBarTitleText": ""

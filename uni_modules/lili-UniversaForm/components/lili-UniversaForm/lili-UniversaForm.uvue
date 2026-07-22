@@ -130,6 +130,33 @@
 								@change="handleSwitchChange(field, $event)"
 							/>
 
+							<view v-else-if="isMonthChipsField(field)" class="uf-month-chips">
+								<view
+									v-for="monthValue in monthChipValues"
+									:key="'month_' + monthValue"
+									class="uf-month-chip-cell"
+								>
+									<view
+										class="uf-month-chip"
+										:class="isMonthChipSelected(field, monthValue) ? 'uf-month-chip-active' : ''"
+										@click="handleMonthChipToggle(field, monthValue)"
+									>
+										<text
+											class="uf-month-chip-text"
+											:class="isMonthChipSelected(field, monthValue) ? 'uf-month-chip-text-active' : ''"
+										>{{ monthValue }}月</text>
+									</view>
+								</view>
+							</view>
+
+							<liliCheckChips
+								v-else-if="isCheckChipsField(field)"
+								:options="getCheckChipOptions(field)"
+								:values="getCheckChipsSelectedValues(field)"
+								:disabled="isReadonly(field)"
+								@change="handleCheckChipsChange(field, $event)"
+							/>
+
 							<view v-else-if="isBottomSelectField(field)" class="uf-bottom-select-wrap">
 								<liliBottomSelect
 									:value="getStringFieldValue(field)"
@@ -240,6 +267,7 @@ import {
 import liliData from '../../../lili-data/components/lili-data/lili-data.uvue'
 import liliBottomSelect from '../../../lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import liliUpload from '../../../lili-upload/components/lili-upload/lili-upload.uvue'
+import liliCheckChips from '@/components/lili-check-chips/lili-check-chips.uvue'
 
 type FetchDataFn = (params: UTSJSONObject) => Promise<UTSJSONObject>
 type ValidatorFn = (value: any, formData: UTSJSONObject, mode: string) => string
@@ -445,6 +473,14 @@ function isSwitchField(field: UTSJSONObject) : boolean {
 	return getFieldType(field) == 'switch'
 }
 
+function isMonthChipsField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'monthChips'
+}
+
+function isCheckChipsField(field: UTSJSONObject) : boolean {
+	return getFieldType(field) == 'checkChips'
+}
+
 function isBottomSelectField(field: UTSJSONObject) : boolean {
 	const fieldType = getFieldType(field)
 	return fieldType == 'bottomSelect' || fieldType == 'select'
@@ -561,6 +597,8 @@ function getDefaultValue(field: UTSJSONObject) : any {
 	}
 	if (fieldType == 'switch') return false
 	if (fieldType == 'upload') return [] as string[]
+	if (fieldType == 'monthChips') return [] as number[]
+	if (fieldType == 'checkChips') return [] as string[]
 	if (fieldType == 'number') return ''
 	return ''
 }
@@ -593,6 +631,66 @@ function getBooleanFieldValue(field: UTSJSONObject) : boolean {
 	const value = getFieldValue(field)
 	if (value == null) return false
 	return value as boolean
+}
+
+// monthChips：1-12 月 chip 网格（每行 6 个）
+const monthChipValues: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+function normalizeMonthNumber(value: any | null) : number {
+	if (value == null) return 0
+	const text = '' + value
+	if (text == '') return 0
+	const parsed = parseInt(text)
+	if (isNaN(parsed)) return 0
+	return parsed
+}
+
+// 选中判断统一走字符串键：JSON 直读的数字是 Double 装箱、模板字面量是 Int 装箱，
+// Android 端集合查找走平台层 equals（Double(1.0) != Int(1)），字符串键规避该陷阱
+function getMonthChipsSelectedKeys(field: UTSJSONObject) : string[] {
+	const value = getFieldValue(field)
+	if (value == null) return [] as string[]
+	if (!Array.isArray(value)) return [] as string[]
+	const list = value as any[]
+	const result: string[] = []
+	for (let index = 0; index < list.length; index++) {
+		const monthNumber = normalizeMonthNumber(list[index])
+		if (monthNumber < 1 || monthNumber > 12) continue
+		const monthKey = monthNumber.toString()
+		if (result.indexOf(monthKey) < 0) {
+			result.push(monthKey)
+		}
+	}
+	return result
+}
+
+function isMonthChipSelected(field: UTSJSONObject, month: number) : boolean {
+	return getMonthChipsSelectedKeys(field).indexOf(month.toString()) >= 0
+}
+
+// checkChips：字段配置 options: [{value,label}]，值为选中 value 的 string[]
+// 渲染与交互在独立组件 lili-check-chips 内，这里只做取配置/取值/回写的桥接
+function getCheckChipOptions(field: UTSJSONObject) : UTSJSONObject[] {
+	return getArrayField(field, 'options')
+}
+
+// 存储值统一转 string 去重后传给组件（选中判断在组件内用 indexOf 字符串比较）
+function getCheckChipsSelectedValues(field: UTSJSONObject) : string[] {
+	const value = getFieldValue(field)
+	if (value == null) return [] as string[]
+	if (!Array.isArray(value)) return [] as string[]
+	const list = value as any[]
+	const result: string[] = []
+	for (let index = 0; index < list.length; index++) {
+		const item = list[index]
+		if (item == null) continue
+		const text = '' + item
+		if (text == '') continue
+		if (result.indexOf(text) < 0) {
+			result.push(text)
+		}
+	}
+	return result
 }
 
 function getUploadValue(field: UTSJSONObject) : string[] {
@@ -1032,6 +1130,49 @@ function handleSwitchChange(field: UTSJSONObject, event: any) {
 	clearFieldError(key)
 	refreshDirtyState()
 	emitFieldChange(field, value)
+}
+
+function handleMonthChipToggle(field: UTSJSONObject, month: number) {
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	const selectedKeys = getMonthChipsSelectedKeys(field)
+	const monthKey = month.toString()
+	const currentlySelected = selectedKeys.indexOf(monthKey) >= 0
+	// 用 1..12 循环字面量重建同源整数数组（天然升序去重），避免跨来源数字混入集合
+	const nextValue: number[] = []
+	for (let m = 1; m <= 12; m++) {
+		const candidateKey = m.toString()
+		if (candidateKey == monthKey) {
+			if (!currentlySelected) {
+				nextValue.push(m)
+			}
+			continue
+		}
+		if (selectedKeys.indexOf(candidateKey) >= 0) {
+			nextValue.push(m)
+		}
+	}
+	setFieldValueByKey(key, nextValue)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, nextValue)
+}
+
+// lili-check-chips 是纯受控组件：收到完整新数组后拷贝回写表单值，走统一脏状态链路
+function handleCheckChipsChange(field: UTSJSONObject, value: any) {
+	if (isReadonly(field)) return
+	const key = getFieldKey(field)
+	if (key == '') return
+	const listValue = value as string[]
+	const nextValue: string[] = []
+	for (let index = 0; index < listValue.length; index++) {
+		nextValue.push(listValue[index])
+	}
+	setFieldValueByKey(key, nextValue)
+	clearFieldError(key)
+	refreshDirtyState()
+	emitFieldChange(field, nextValue)
 }
 
 function handleBottomSelectChange(field: UTSJSONObject, payload: any) {
@@ -1612,6 +1753,43 @@ defineExpose({
 .uf-input-action-icon {
 	width: 26px;
 	height: 26px;
+}
+
+.uf-month-chips {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.uf-month-chip-cell {
+	width: 16.66%;
+	padding: 3px;
+}
+
+.uf-month-chip {
+	height: 34px;
+	border-radius: 17px;
+	align-items: center;
+	justify-content: center;
+	background-color: #F8FAFC;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.uf-month-chip-active {
+	background-color: #2563EB;
+	border-color: #2563EB;
+}
+
+.uf-month-chip-text {
+	font-size: 13px;
+	color: #374151;
+	line-height: 18px;
+}
+
+.uf-month-chip-text-active {
+	color: #FFFFFF;
+	font-weight: 600;
 }
 
 .uf-plain-value {

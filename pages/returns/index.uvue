@@ -121,6 +121,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 import { getReturnFilterOptions, getReturnList, getReturnStatistics, ReturnFilterDefinition, ReturnFilterOptionsResponse, ReturnItem, ReturnListQuery, ReturnListResponse, ReturnStatistics } from '@/pkg/api/modules/returns.uts'
 
 type DatePresetOption = {
@@ -370,7 +371,7 @@ function returnToListItem(item: ReturnItem): UTSJSONObject {
 		returnNumber: item.return_number,
 		title: stringValue(item.return_number, '退货 #' + item.id.toString()),
 		subtitle: '时间：' + timeText,
-		amountText: '-' + item.gross_amount + ' zł',
+		amountText: '-' + formatMoney(item.gross_amount),
 		shopText: shopText,
 		originalOrderText: stringValue(item.original_order_number, '-'),
 		cashierText: cashierText,
@@ -485,8 +486,8 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'dateRange', label: '范围', value: datePresetLabel() } as UTSJSONObject,
 		{ key: 'total', label: '退货笔数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'grossAmount', label: '退货金额', value: statistics.value.gross_amount + ' zł' } as UTSJSONObject,
-		{ key: 'taxAmount', label: '退货税额', value: statistics.value.tax_amount + ' zł' } as UTSJSONObject,
+		{ key: 'grossAmount', label: '退货金额', value: formatMoney(statistics.value.gross_amount) } as UTSJSONObject,
+		{ key: 'taxAmount', label: '退货税额', value: formatMoney(statistics.value.tax_amount) } as UTSJSONObject,
 		{ key: 'restored', label: '已回补库存', value: statistics.value.restored_count.toString() } as UTSJSONObject,
 		{ key: 'pending', label: '待回补', value: statistics.value.pending_count.toString() } as UTSJSONObject,
 	]

@@ -298,6 +298,7 @@ import { computed, ref, nextTick, onUnmounted } from 'vue'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteCategory, getCategoryTrend, getCategoryWorkbench, moveCategory, CategoryTreeNode } from '@/pkg/api/modules/category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoneyNumber } from '@/pkg/util/format.uts'
 import { categoryTreeStore } from '@/store/categoryTree'
 
 const categoryListRefreshStorageKey = 'refresh:pages:category:index'
@@ -666,7 +667,7 @@ async function loadTrend(id: number): Promise<void> {
 				prev7 += values[index]
 			}
 		}
-		sales7Text.value = last7.toFixed(2) + ' zł'
+		sales7Text.value = formatMoneyNumber(last7)
 		if (prev7 > 0) {
 			const rate = (last7 - prev7) / prev7 * 100
 			if (rate > 0) {

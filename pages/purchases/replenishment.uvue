@@ -1,0 +1,799 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="补货建议"
+			:showBack="true"
+			:interceptBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			@back="handleNavBack"
+		></lili-universal-filter>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<!-- 店铺选择（多店时显示，仅第一级） -->
+				<view v-if="shops.length > 1 && activeSupplierIndex < 0" class="shop-chips">
+					<view
+						v-for="shop in shops"
+						:key="'shop-' + shop.id.toString()"
+						:class="shop.id == selectedShopId ? 'shop-chip shop-chip-active' : 'shop-chip'"
+						@click="selectShop(shop.id)"
+					>
+						<text :class="shop.id == selectedShopId ? 'shop-chip-text shop-chip-text-active' : 'shop-chip-text'">{{ shop.name }}</text>
+					</view>
+				</view>
+
+				<view v-if="pageError != '' && !isLoading" class="error-card">
+					<text class="error-title">加载失败</text>
+					<text class="error-desc">{{ pageError }}</text>
+					<view class="retry-btn" @click="loadSuggestions"><text class="retry-btn-text">重新加载</text></view>
+				</view>
+
+				<!-- 第一级：供应商列表 -->
+				<view v-else-if="activeSupplierIndex < 0">
+					<text class="hint-text">参考缺口 = {{ targetDays.toString() }} 天销量 − 现货 − 在途；点击供应商进入盘点清单</text>
+					<lili-UniversalList
+						:items="supplierListItems"
+						keyField="id"
+						titleField="title"
+						subtitleField="subtitle"
+						tagField="tags"
+						:tagColorMap="tagColorMap"
+						:showImage="false"
+						:loading="isLoading"
+						loadingText="正在计算补货建议"
+						:keepContentOnLoading="true"
+						inlineLoadingText="补货建议刷新中..."
+						emptyText="没有需要补货的商品"
+						emptyIcon="◎"
+						:showChevron="true"
+						:longPressToSelect="false"
+						summaryTitle="补货概览"
+						:summaryItems="summaryItems"
+						@item-click="handleSupplierClick"
+					/>
+				</view>
+
+				<!-- 第二级：单个供应商的建议盘点清单 -->
+				<view v-else>
+					<view class="back-row">
+						<view class="back-link" @click="backToSupplierList">
+							<text class="back-link-text">‹ 返回供应商列表</text>
+						</view>
+						<text class="back-supplier">{{ activeGroupName }}</text>
+					</view>
+					<text class="hint-text">系统按 {{ targetDays.toString() }} 天销量给出参考建议；点击商品行填数量并勾选（留空确认即按建议量），点“参考建议/已填”角标可修改</text>
+					<view v-if="!activeGroupCanCreate" class="warn-card">
+						<text class="warn-card-text">这些商品未设置供应商，请先在商品档案中补齐后再生成采购单</text>
+					</view>
+					<lili-UniversalList
+						:items="detailListItems"
+						keyField="id"
+						titleField="title"
+						subtitleField="subtitle"
+						tagField="tags"
+						:tagColorMap="tagColorMap"
+						:showImage="false"
+						:fields="detailFieldConfig"
+						:loading="isLoading"
+						loadingText="正在计算补货建议"
+						:keepContentOnLoading="true"
+						inlineLoadingText="补货建议刷新中..."
+						emptyText="该供应商暂无建议商品"
+						emptyIcon="◎"
+						:showChevron="false"
+						:selectionMode="activeGroupCanCreate"
+						:selectedItems="selectedProductIds"
+						:longPressToSelect="false"
+						:showSelectAll="true"
+						:batchActions="batchToolbarActions"
+						:batchInfoText="batchInfoText"
+						:batchActionText="createButtonText"
+						@selection-change="handleSelectionChange"
+						@batch-action="handleBatchToolbarAction"
+						@field-click="handleFieldClick"
+						@item-click="handleDetailItemClick"
+					/>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+
+		<view v-if="isOperating" class="operate-mask">
+			<view class="operate-card">
+				<text class="operate-text">生成中...</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref } from 'vue'
+import { getReplenishmentSuggestions, createReplenishmentDraft } from '@/pkg/api/modules/purchases.uts'
+import { getShopList, ShopListQuery } from '@/pkg/api/modules/shops.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+type ReplShop = {
+	id: number
+	name: string
+}
+
+type ReplItem = {
+	product_id: number
+	name: string
+	barcode: string
+	available: number
+	in_transit: number
+	velocity: string
+	suggested: number
+	out_of_stock: boolean
+	checked: boolean
+	qtyText: string
+}
+
+type ReplGroup = {
+	supplier_id: number
+	supplier_name: string
+	can_create: boolean
+	items: ReplItem[]
+}
+
+const isLoading = ref(false)
+const isOperating = ref(false)
+const pageError = ref('')
+const shops = ref<ReplShop[]>([] as ReplShop[])
+const selectedShopId = ref(0)
+const groups = ref<ReplGroup[]>([] as ReplGroup[])
+const targetDays = ref(14)
+// -1 = 供应商列表视图；>=0 = 对应下标供应商的盘点清单视图
+const activeSupplierIndex = ref(-1)
+// 第二级列表的受控选中集（product_id 字符串），始终由 checked 状态派生后整体赋值
+const selectedProductIds = ref<string[]>([] as string[])
+
+const tagColorMap = ref<UTSJSONObject>({
+	未设置供应商: 'warning',
+	已售罄: 'danger',
+	低库存: 'warning',
+} as UTSJSONObject)
+
+const detailFieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'suggestedText', label: '参考建议:' } as UTSJSONObject,
+	{ key: 'filledText', label: '已填:', hideWhenEmpty: true } as UTSJSONObject,
+])
+
+// 单动作且 key 为 more 时组件直接触发 batch-action，不再弹二级菜单
+const batchToolbarActions = ref<UTSJSONObject[]>([
+	{ key: 'more', text: '生成采购单' } as UTSJSONObject,
+])
+
+function stringValue(value: any | null, fallback: string = ''): string {
+	if (value == null) return fallback
+	const text = '' + value
+	return text == '' ? fallback : text
+}
+
+function intValue(value: any | null, fallback: number = 0): number {
+	if (value == null) return fallback
+	const parsed = parseInt('' + value)
+	return isNaN(parsed) ? fallback : parsed
+}
+
+function boolFlag(value: any | null): boolean {
+	const text = stringValue(value).toLowerCase()
+	return text == 'true' || text == '1'
+}
+
+function objectArrayValue(value: any | null): UTSJSONObject[] {
+	if (value == null) return [] as UTSJSONObject[]
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) return [] as UTSJSONObject[]
+	try {
+		const parsed = JSON.parseArray<UTSJSONObject>(text)
+		return parsed == null ? ([] as UTSJSONObject[]) : parsed
+	} catch (_error) {
+		return [] as UTSJSONObject[]
+	}
+}
+
+function parseErrorMessage(error: any): string {
+	if (error == null) return '加载失败'
+	const text = '' + error
+	if (text == '' || text == '[object Object]') return '加载失败'
+	return text.startsWith('Error: ') ? text.substring(7) : text
+}
+
+function refreshGroups(): void {
+	groups.value = groups.value.slice(0)
+}
+
+function findItemByProductId(group: ReplGroup, productId: string): ReplItem | null {
+	for (let index = 0; index < group.items.length; index += 1) {
+		if (group.items[index].product_id.toString() == productId) return group.items[index]
+	}
+	return null
+}
+
+function stringListContains(list: string[], value: string): boolean {
+	for (let index = 0; index < list.length; index += 1) {
+		if (list[index] == value) return true
+	}
+	return false
+}
+
+// 仅统计已勾选且数量>0 的行（件数合计）
+function groupTotal(group: ReplGroup): number {
+	let total = 0
+	for (let index = 0; index < group.items.length; index += 1) {
+		const item = group.items[index]
+		if (item.checked) {
+			const qty = intValue(item.qtyText)
+			total += qty > 0 ? qty : 0
+		}
+	}
+	return total
+}
+
+// 仅统计已勾选且数量>0 的行（行数）
+function groupSelectedCount(group: ReplGroup): number {
+	let count = 0
+	for (let index = 0; index < group.items.length; index += 1) {
+		const item = group.items[index]
+		if (item.checked && intValue(item.qtyText) > 0) {
+			count += 1
+		}
+	}
+	return count
+}
+
+// 参考缺口合计（系统建议量之和，用于第一级副文案）
+function groupSuggestedTotal(group: ReplGroup): number {
+	let total = 0
+	for (let index = 0; index < group.items.length; index += 1) {
+		total += group.items[index].suggested
+	}
+	return total
+}
+
+// 由 checked 状态整体重建受控选中集（整数组赋值保证子组件 watch 必然触发，可用于回退勾选）
+function syncSelectedIds(): void {
+	const ids: string[] = []
+	if (activeSupplierIndex.value >= 0 && activeSupplierIndex.value < groups.value.length) {
+		const group = groups.value[activeSupplierIndex.value]
+		for (let index = 0; index < group.items.length; index += 1) {
+			if (group.items[index].checked) ids.push(group.items[index].product_id.toString())
+		}
+	}
+	selectedProductIds.value = ids
+}
+
+// 数量输入弹窗：留空确认按建议量，填 0 视为取消该行，取消/非法输入回退勾选状态
+function promptQuantity(item: ReplItem): void {
+	const suggestedText = item.suggested.toString()
+	uni.showModal({
+		title: item.name,
+		editable: true,
+		content: item.qtyText,
+		placeholderText: '建议 ' + suggestedText + ' 件，留空按建议',
+		confirmText: '确定',
+		cancelText: '取消',
+		success: (res) => {
+			if (!res.confirm) {
+				// 取消：不改数据，仅把子组件勾选状态回退到 checked 现状
+				syncSelectedIds()
+				return
+			}
+			let inputText = res.content == null ? '' : ('' + res.content).trim()
+			if (inputText == '') inputText = suggestedText
+			const qty = parseInt(inputText)
+			if (isNaN(qty) || qty < 0) {
+				uni.showToast({ title: '数量必须是不小于 0 的整数', icon: 'none', duration: 3000 })
+				syncSelectedIds()
+				return
+			}
+			if (qty == 0) {
+				item.checked = false
+				item.qtyText = ''
+			} else {
+				item.checked = true
+				item.qtyText = qty.toString()
+			}
+			refreshGroups()
+			syncSelectedIds()
+		},
+	})
+}
+
+// 第二级多选变化：单行新勾选弹数量输入；全选等批量勾选按建议量直接填充；取消勾选清空数量
+function handleSelectionChange(ids: string[]): void {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return
+	const group = groups.value[activeSupplierIndex.value]
+	const before: string[] = []
+	for (let index = 0; index < group.items.length; index += 1) {
+		if (group.items[index].checked) before.push(group.items[index].product_id.toString())
+	}
+	const added: string[] = []
+	for (let index = 0; index < ids.length; index += 1) {
+		if (!stringListContains(before, ids[index])) added.push(ids[index])
+	}
+	const removed: string[] = []
+	for (let index = 0; index < before.length; index += 1) {
+		if (!stringListContains(ids, before[index])) removed.push(before[index])
+	}
+	for (let index = 0; index < removed.length; index += 1) {
+		const item = findItemByProductId(group, removed[index])
+		if (item != null) {
+			item.checked = false
+			item.qtyText = ''
+		}
+	}
+	if (added.length == 1 && removed.length == 0) {
+		const item = findItemByProductId(group, added[0])
+		if (item != null) {
+			if (item.qtyText != '') {
+				item.checked = true
+			} else {
+				// 勾选状态先保持子组件已打的钩，待弹窗确认/取消后统一同步
+				promptQuantity(item)
+				return
+			}
+		}
+	} else if (added.length > 0) {
+		for (let index = 0; index < added.length; index += 1) {
+			const item = findItemByProductId(group, added[index])
+			if (item != null) {
+				item.checked = true
+				if (item.qtyText == '' && item.suggested > 0) item.qtyText = item.suggested.toString()
+			}
+		}
+	}
+	refreshGroups()
+	syncSelectedIds()
+}
+
+async function loadSuggestions(): Promise<void> {
+	if (isLoading.value || selectedShopId.value <= 0) return
+	isLoading.value = true
+	pageError.value = ''
+	try {
+		const data = await getReplenishmentSuggestions(selectedShopId.value)
+		targetDays.value = intValue(data['target_days'], 14)
+		const rawGroups = objectArrayValue(data['groups'])
+		const parsed: ReplGroup[] = []
+		for (let gIdx = 0; gIdx < rawGroups.length; gIdx += 1) {
+			const rawGroup = rawGroups[gIdx]
+			const rawItems = objectArrayValue(rawGroup['items'])
+			const items: ReplItem[] = []
+			for (let iIdx = 0; iIdx < rawItems.length; iIdx += 1) {
+				const rawItem = rawItems[iIdx]
+				const suggested = intValue(rawItem['suggested_quantity'])
+				items.push({
+					product_id: intValue(rawItem['product_id']),
+					name: stringValue(rawItem['name'], '未命名商品'),
+					barcode: stringValue(rawItem['barcode']),
+					available: intValue(rawItem['available']),
+					in_transit: intValue(rawItem['in_transit']),
+					velocity: stringValue(rawItem['daily_velocity'], '0.00'),
+					suggested: suggested,
+					out_of_stock: boolFlag(rawItem['out_of_stock']),
+					checked: false,
+					qtyText: '',
+				} as ReplItem)
+			}
+			parsed.push({
+				supplier_id: intValue(rawGroup['supplier_id']),
+				supplier_name: stringValue(rawGroup['supplier_name'], '未指定供应商'),
+				can_create: boolFlag(rawGroup['can_create']),
+				items: items,
+			} as ReplGroup)
+		}
+		groups.value = parsed
+		// 数据重建后下标可能失效，越界时退回供应商列表
+		if (activeSupplierIndex.value >= parsed.length) {
+			activeSupplierIndex.value = -1
+		}
+		syncSelectedIds()
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+function selectShop(shopId: number): void {
+	if (selectedShopId.value == shopId) return
+	selectedShopId.value = shopId
+	loadSuggestions()
+}
+
+function openSupplier(groupIndex: number): void {
+	if (groupIndex < 0 || groupIndex >= groups.value.length) return
+	activeSupplierIndex.value = groupIndex
+	syncSelectedIds()
+}
+
+function backToSupplierList(): void {
+	activeSupplierIndex.value = -1
+	syncSelectedIds()
+}
+
+async function executeCreateDraft(groupIndex: number): Promise<void> {
+	const group = groups.value[groupIndex]
+	const items: UTSJSONObject[] = []
+	for (let index = 0; index < group.items.length; index += 1) {
+		const item = group.items[index]
+		const qty = intValue(item.qtyText)
+		if (item.checked && qty > 0) {
+			items.push({ product_id: item.product_id, quantity: qty } as UTSJSONObject)
+		}
+	}
+	if (items.length == 0) {
+		showErrorToast('请勾选商品并填写数量')
+		return
+	}
+	isOperating.value = true
+	try {
+		const result = await createReplenishmentDraft(selectedShopId.value, group.supplier_id, items)
+		uni.showToast({
+			title: stringValue(result['message'], '采购单草稿已生成'),
+			icon: 'none',
+			duration: 3000,
+		})
+		// 先回到第一级再重算，避免重建后的分组下标错位
+		activeSupplierIndex.value = -1
+		syncSelectedIds()
+		// 重新计算：已生成草稿的需求会被在途量覆盖，自动从建议中消失（防重复下单）
+		await loadSuggestions()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error))
+	} finally {
+		isOperating.value = false
+	}
+}
+
+function confirmCreateDraft(groupIndex: number): void {
+	if (groupIndex < 0 || groupIndex >= groups.value.length) return
+	const group = groups.value[groupIndex]
+	if (!group.can_create) return
+	const count = groupSelectedCount(group)
+	const total = groupTotal(group)
+	if (count == 0 || total == 0) {
+		showErrorToast('请勾选商品并填写数量')
+		return
+	}
+	uni.showModal({
+		title: '生成采购单草稿',
+		content: '将为「' + group.supplier_name + '」生成含 ' + count.toString() + ' 项 · ' + total.toString() + ' 件商品的草稿，收货完成前不会影响库存，确定吗？',
+		success: (res) => {
+			if (res.confirm) {
+				executeCreateDraft(groupIndex)
+			}
+		},
+	})
+}
+
+function handleBatchToolbarAction(_payload: UTSJSONObject): void {
+	confirmCreateDraft(activeSupplierIndex.value)
+}
+
+// 点“参考建议/已填”角标：修改该行数量
+function handleFieldClick(payload: UTSJSONObject): void {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return
+	const group = groups.value[activeSupplierIndex.value]
+	if (!group.can_create) return
+	const rawItem = payload['item']
+	if (rawItem == null) return
+	const productId = stringValue((rawItem as UTSJSONObject)['id'])
+	if (productId == '') return
+	const item = findItemByProductId(group, productId)
+	if (item != null) promptQuantity(item)
+}
+
+function handleSupplierClick(payload: UTSJSONObject): void {
+	const idx = intValue(payload['id'], -1)
+	openSupplier(idx)
+}
+
+// can_create=false 分组未启用多选，行点击仅提示原因
+function handleDetailItemClick(_payload: UTSJSONObject): void {
+	uni.showToast({ title: '未设置供应商，无法生成采购单', icon: 'none', duration: 3000 })
+}
+
+// 返回优先级：第二级盘点清单 → 离开页面
+function handleInternalBack(): boolean {
+	if (activeSupplierIndex.value >= 0) {
+		backToSupplierList()
+		return true
+	}
+	return false
+}
+
+function handleNavBack(): void {
+	if (handleInternalBack()) {
+		return
+	}
+	uni.navigateBack({
+		delta: 1,
+		fail: (_) => {
+			uni.reLaunch({ url: '/pages/tabbar/settings' })
+		},
+	})
+}
+
+async function loadShops(): Promise<void> {
+	try {
+		const response = await getShopList({ search: null, page: 1, page_size: 50 } as ShopListQuery)
+		const list: ReplShop[] = []
+		for (let index = 0; index < response.results.length; index += 1) {
+			const shop = response.results[index]
+			list.push({ id: shop.id, name: shop.name } as ReplShop)
+		}
+		shops.value = list
+		if (list.length > 0 && selectedShopId.value <= 0) {
+			selectedShopId.value = list[0].id
+		}
+	} catch (error) {
+		pageError.value = parseErrorMessage(error)
+	}
+}
+
+async function initPage(): Promise<void> {
+	await loadShops()
+	await loadSuggestions()
+}
+
+const supplierListItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	for (let gIdx = 0; gIdx < groups.value.length; gIdx += 1) {
+		const group = groups.value[gIdx]
+		const tags: string[] = []
+		if (!group.can_create) tags.push('未设置供应商')
+		result.push({
+			id: gIdx.toString(),
+			title: group.supplier_name,
+			subtitle: group.items.length.toString() + ' 个建议商品 · 参考缺口 ' + groupSuggestedTotal(group).toString() + ' 件',
+			tags: tags,
+		} as UTSJSONObject)
+	}
+	return result
+})
+
+const detailListItems = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return result
+	const group = groups.value[activeSupplierIndex.value]
+	for (let index = 0; index < group.items.length; index += 1) {
+		const item = group.items[index]
+		const tags: string[] = []
+		tags.push(item.out_of_stock ? '已售罄' : '低库存')
+		const qty = intValue(item.qtyText)
+		if (item.checked && qty > 0) tags.push('×' + qty.toString())
+		let subtitle = '现货 ' + item.available.toString()
+		if (item.in_transit > 0) {
+			subtitle = subtitle + ' · 在途 ' + item.in_transit.toString()
+		}
+		subtitle = subtitle + ' · 日销 ' + item.velocity
+		result.push({
+			id: item.product_id.toString(),
+			title: item.name,
+			subtitle: subtitle,
+			tags: tags,
+			suggestedText: item.suggested.toString() + ' 件',
+			filledText: item.checked && qty > 0 ? qty.toString() + ' 件' : '',
+		} as UTSJSONObject)
+	}
+	return result
+})
+
+const summaryItems = computed((): UTSJSONObject[] => {
+	if (groups.value.length == 0) return [] as UTSJSONObject[]
+	let productCount = 0
+	let suggestedTotal = 0
+	for (let index = 0; index < groups.value.length; index += 1) {
+		productCount += groups.value[index].items.length
+		suggestedTotal += groupSuggestedTotal(groups.value[index])
+	}
+	return [
+		{ key: 'suppliers', label: '供应商', value: groups.value.length.toString() + ' 家' } as UTSJSONObject,
+		{ key: 'products', label: '建议商品', value: productCount.toString() + ' 个' } as UTSJSONObject,
+		{ key: 'gap', label: '参考缺口合计', value: suggestedTotal.toString() + ' 件' } as UTSJSONObject,
+	]
+})
+
+const activeGroupCanCreate = computed((): boolean => {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return false
+	return groups.value[activeSupplierIndex.value].can_create
+})
+
+const activeGroupName = computed((): string => {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return ''
+	return groups.value[activeSupplierIndex.value].supplier_name
+})
+
+const batchInfoText = computed((): string => {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return ''
+	return '已填 ' + groupSelectedCount(groups.value[activeSupplierIndex.value]).toString() + ' 项'
+})
+
+const createButtonText = computed((): string => {
+	if (activeSupplierIndex.value < 0 || activeSupplierIndex.value >= groups.value.length) return '生成采购单'
+	const group = groups.value[activeSupplierIndex.value]
+	return '生成采购单（' + groupSelectedCount(group).toString() + ' 项 · ' + groupTotal(group).toString() + ' 件）'
+})
+
+onLoad(() => {
+	initPage()
+})
+
+onBackPress((_options: OnBackPressOptions): boolean | null => {
+	return handleInternalBack()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+}
+
+.page-content {
+	padding-top: 6px;
+	padding-right: 6px;
+	padding-bottom: 96px;
+	padding-left: 6px;
+}
+
+.shop-chips {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-bottom: 4px;
+}
+
+.shop-chip {
+	padding: 6px 14px;
+	margin-right: 8px;
+	margin-bottom: 8px;
+	background-color: #FFFFFF;
+	border-radius: 999px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.shop-chip-active {
+	background-color: #0F172A;
+	border-color: #0F172A;
+}
+
+.shop-chip-text {
+	font-size: 13px;
+	color: #334155;
+}
+
+.shop-chip-text-active {
+	color: #FFFFFF;
+}
+
+.error-card {
+	background-color: #FFFFFF;
+	border-radius: 8px;
+	padding: 18px;
+	margin-bottom: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FECACA;
+	align-items: center;
+}
+
+.error-title {
+	font-size: 18px;
+	line-height: 24px;
+	color: #B42318;
+	font-weight: bold;
+}
+
+.error-desc {
+	font-size: 14px;
+	line-height: 20px;
+	color: #7F1D1D;
+	margin-top: 8px;
+	text-align: center;
+}
+
+.retry-btn {
+	margin-top: 14px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #0F172A;
+	padding-left: 18px;
+	padding-right: 18px;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-btn-text {
+	font-size: 14px;
+	color: #FFFFFF;
+}
+
+.hint-text {
+	margin-bottom: 8px;
+	padding-left: 4px;
+	padding-right: 4px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.back-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+	padding-left: 4px;
+	padding-right: 4px;
+}
+
+.back-link {
+	padding: 6px 8px 6px 0;
+}
+
+.back-link-text {
+	font-size: 13px;
+	color: #0F766E;
+	font-weight: bold;
+}
+
+.back-supplier {
+	flex: 1;
+	margin-left: 8px;
+	font-size: 15px;
+	color: #0F172A;
+	font-weight: bold;
+	text-align: right;
+}
+
+.warn-card {
+	background-color: #FFF7ED;
+	border-radius: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FED7AA;
+	padding: 10px 12px;
+	margin-bottom: 6px;
+}
+
+.warn-card-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #B45309;
+}
+
+.operate-mask {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(15, 23, 42, 0.25);
+	align-items: center;
+	justify-content: center;
+}
+
+.operate-card {
+	padding: 14px 28px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+}
+
+.operate-text {
+	font-size: 13px;
+	color: #0F172A;
+}
+</style>

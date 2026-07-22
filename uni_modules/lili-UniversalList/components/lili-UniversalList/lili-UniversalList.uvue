@@ -171,7 +171,7 @@
 				<scroll-view scroll-x="true" class="lul-batch-actions-scroll">
 					<view class="lul-batch-actions">
 						<view v-if="props.batchActions.length > 0" class="lul-batch-action" @click="openBatchActionMenu">
-							<text class="lul-batch-action-text">操作</text>
+							<text class="lul-batch-action-text">{{ props.batchActionText }}</text>
 						</view>
 						<view class="lul-batch-action lul-batch-action-light" @click="exitSelectionMode">
 							<text class="lul-batch-action-text lul-batch-action-text-light">取消</text>
@@ -221,6 +221,7 @@
 
 <script setup lang="uts">
 import { getMediaFileShare, MediaShareResponse } from '@/pkg/api/modules/media.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type Props = {
 	items?: UTSJSONObject[]
@@ -248,6 +249,8 @@ type Props = {
 	showSelectAll?: boolean
 	batchActions?: UTSJSONObject[]
 	batchInfoText?: string
+	// 底部批量栏主按钮文案（默认“操作”，可由页面覆写为业务动词）
+	batchActionText?: string
 	loading?: boolean
 	loadingText?: string
 	keepContentOnLoading?: boolean
@@ -309,6 +312,7 @@ const props = withDefaults(defineProps<Props>(), {
 	showSelectAll: true,
 	batchActions: () : UTSJSONObject[] => [],
 	batchInfoText: '',
+	batchActionText: '操作',
 	loading: false,
 	loadingText: '加载中...',
 	keepContentOnLoading: false,
@@ -566,7 +570,7 @@ function displayField(item: UTSJSONObject, field: UTSJSONObject) : string {
 	const type = fieldType(field)
 	if (type == 'price') {
 		if (raw == '') return ''
-		return raw + ' zł'
+		return formatMoney(raw)
 	}
 	if (type == 'status') {
 		return raw

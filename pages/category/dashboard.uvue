@@ -69,11 +69,9 @@
 										v-for="member in groupMembers(item)"
 										:key="'member-' + memberKey(member)"
 										:insight="member"
-										:showSnooze="true"
 										@view="goInsightAction(member)"
 										@handle="markInsight(member, 'handle')"
 										@dismiss="confirmDismissInsight(member)"
-										@snooze="confirmSnoozeInsight(member)"
 									></lili-insight-card>
 									<text v-if="groupOverflowText(item) != ''" class="group-overflow-text">{{ groupOverflowText(item) }}</text>
 								</view>
@@ -82,11 +80,9 @@
 							<lili-insight-card
 								v-else
 								:insight="item"
-								:showSnooze="true"
 								@view="goInsightAction(item)"
 								@handle="markInsight(item, 'handle')"
 								@dismiss="confirmDismissInsight(item)"
-								@snooze="confirmSnoozeInsight(item)"
 							></lili-insight-card>
 						</view>
 						<view v-if="insightItems.length > 3" class="expand-row" @click="toggleInsightsExpanded">
@@ -114,8 +110,9 @@
 
 <script setup lang="uts">
 import { ref } from 'vue'
-import { getCategoryInsightsGrouped, snoozeCategoryInsights, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
+import { getCategoryInsightsGrouped, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 const isLoading = ref(false)
 const isOperating = ref(false)
@@ -256,7 +253,7 @@ function groupTitle(item: UTSJSONObject): string {
 }
 
 function groupMeta(item: UTSJSONObject): string {
-	let text = '合计影响约 ' + stringValue(item['impact_amount'], '0') + ' zł'
+	let text = '合计影响约 ' + formatMoney(stringValue(item['impact_amount'], '0'))
 	const duration = intValue(item['max_duration_days'])
 	if (duration > 1) {
 		text = text + ' · 最长持续 ' + duration.toString() + ' 天'
@@ -269,7 +266,7 @@ function groupSampleLines(item: UTSJSONObject): string[] {
 	const samples = objectArrayValue(item['sample'])
 	for (let i = 0; i < samples.length; i += 1) {
 		const sample = samples[i]
-		lines.push('· ' + stringValue(sample['title']) + '（' + stringValue(sample['impact_amount'], '0') + ' zł）')
+		lines.push('· ' + stringValue(sample['title']) + '（' + formatMoney(stringValue(sample['impact_amount'], '0')) + '）')
 	}
 	return lines
 }
@@ -416,12 +413,8 @@ async function executeMarkInsight(item: UTSJSONObject, action: string): Promise<
 	}
 	try {
 		isOperating.value = true
-		const response = await updateCategoryInsightStatus([id], action)
+		await updateCategoryInsightStatus([id], action)
 		await loadInsights()
-		// 忽略学习：同一问题被忽略第 2 次时服务端自动静默 30 天，告知用户
-		if (action == 'dismiss' && intValue(response['auto_muted_count']) > 0) {
-			uni.showToast({ title: '已连续忽略，该问题静默 30 天', icon: 'none' })
-		}
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error))
 	} finally {
@@ -440,35 +433,6 @@ function confirmDismissInsight(item: UTSJSONObject): void {
 		success: (res) => {
 			if (res.confirm) {
 				executeMarkInsight(item, 'dismiss')
-			}
-		},
-	})
-}
-
-async function executeSnoozeInsight(item: UTSJSONObject): Promise<void> {
-	const id = insightId(item)
-	if (id <= 0) {
-		return
-	}
-	try {
-		isOperating.value = true
-		await snoozeCategoryInsights([id], 30)
-		await loadInsights()
-		uni.showToast({ title: '已静默 30 天', icon: 'none' })
-	} catch (error) {
-		showErrorToast(parseErrorMessage(error))
-	} finally {
-		isOperating.value = false
-	}
-}
-
-function confirmSnoozeInsight(item: UTSJSONObject): void {
-	uni.showModal({
-		title: '30 天不提醒',
-		content: '该分类的此类问题在 30 天内不再生成洞察，确定吗？',
-		success: (res) => {
-			if (res.confirm) {
-				executeSnoozeInsight(item)
 			}
 		},
 	})

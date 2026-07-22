@@ -106,6 +106,7 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 import { ProductSalesQuery, ProductSalesResponse, ProductSalesSummary, ReportPeriod, ReportRankItem, getProductSalesReport } from '@/pkg/api/modules/reports.uts'
 
 type PeriodOption = {
@@ -193,8 +194,7 @@ function firstStringField(obj: UTSJSONObject, keys: string[]): string {
 }
 
 function moneyText(value: string): string {
-	if (value == '') return '0.00 zł'
-	return value + ' zł'
+	return formatMoney(value)
 }
 
 function codeText(value: string): string {

@@ -309,6 +309,7 @@ import { computed } from 'vue'
 import { DashboardReport, ReportAlert, ReportHourlyItem, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportPrevious, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
 import { getCategoryDailyBrief, getCategoryHealthScores, CategoryHealthScoreItem } from '@/pkg/api/modules/category'
 import { resolveReportStartPeriod, setReportLastPeriod } from '@/pkg/util/settings.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type PeriodOption = {
 	key: ReportPeriod
@@ -382,10 +383,7 @@ function amountNumber(value: string): number {
 }
 
 function moneyText(value: string): string {
-	if (value == '') {
-		return '0.00 zł'
-	}
-	return value + ' zł'
+	return formatMoney(value)
 }
 
 function rankMaxAmount(items: ReportRankItem[]): number {
@@ -502,7 +500,7 @@ function rankWidth(value: string, maxValue: number): number {
 function rankSubtitle(item: ReportRankItem): string {
 	let text = item.quantity + ' 件 / ' + item.order_count.toString() + ' 单 / 占比 ' + item.share + '%'
 	if (item.gross_profit != '') {
-		text = text + ' / 毛利 ' + item.gross_profit + ' zł'
+		text = text + ' / 毛利 ' + formatMoney(item.gross_profit)
 	}
 	if (item.subtitle != '') {
 		text = item.subtitle + ' · ' + text
@@ -630,7 +628,7 @@ async function loadCategoryHealth() {
 }
 
 function healthRowMeta(item: CategoryHealthScoreItem): string {
-	let text = '日销 ' + (item.sales_amount == '' ? '0.00' : item.sales_amount) + ' zł'
+	let text = '日销 ' + formatMoney(item.sales_amount)
 	if (item.stock_warning_count > 0) {
 		text = text + ' · 预警 ' + item.stock_warning_count.toString()
 	}

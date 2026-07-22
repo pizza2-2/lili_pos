@@ -15,7 +15,7 @@
 							<text class="summary-label">数量</text>
 						</view>
 						<view class="summary-item">
-							<text class="summary-value">{{ totalAmountText }} zł</text>
+							<text class="summary-value">{{ moneyText(totalAmountText) }}</text>
 							<text class="summary-label">{{ totalAmountLabel }}</text>
 						</view>
 					</view>
@@ -87,7 +87,7 @@
 						<input class="row-name" :value="row.name" placeholder="商品名称" @input="handleRowNameInput(index, $event)" />
 						<input class="row-price" type="digit" :value="row.price" placeholder="0.00" @input="handleRowPriceInput(index, $event)" />
 						<input class="row-qty" type="number" :value="row.quantity" placeholder="1" @input="handleRowQuantityInput(index, $event)" />
-						<text class="row-total">{{ rowTotalText(row) }} zł</text>
+						<text class="row-total">{{ moneyText(rowTotalText(row)) }}</text>
 						<view class="row-remove" @click="removeRow(index)">
 							<text class="row-remove-text">删</text>
 						</view>
@@ -166,6 +166,12 @@ import { quickProcurement, QuickProcurementItem } from '@/pkg/api/modules/purcha
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { createAsyncGuard } from '@/uni_modules/lili-async-guard'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 
 type QuickDraftRow = {
 	key: string
@@ -669,7 +675,7 @@ const aiPromptText = computed((): string => {
 const previewText = computed((): string => {
 	const parsed = parsedDraft(draftText.value)
 	if (stringValue(parsed['valid']) != 'true') return ''
-	return stringValue(parsed['name']) + ' / ' + priceModeText.value + ' ' + stringValue(parsed['price']) + ' zł / x ' + stringValue(parsed['quantity'])
+	return stringValue(parsed['name']) + ' / ' + priceModeText.value + ' ' + formatMoney(stringValue(parsed['price'])) + ' / x ' + stringValue(parsed['quantity'])
 })
 
 const hasAIResultText = computed((): boolean => {

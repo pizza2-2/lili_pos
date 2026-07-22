@@ -161,6 +161,7 @@ import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteTransaction, getTransactionFilterOptions, getTransactionList, getTransactionStatistics, TransactionFilterDefinition, TransactionFilterOption, TransactionFilterOptionsResponse, TransactionItem, TransactionListQuery, TransactionListResponse, TransactionMediaFile, TransactionSummary, TransactionStatisticsResponse } from '@/pkg/api/modules/transactions.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type SummarySelectedFilter = {
 	param: string
@@ -564,7 +565,7 @@ function transactionToListItem(item: TransactionItem): UTSJSONObject {
 		rawSupplierId: item.supplier.toString(),
 		title: title,
 		subtitle: '日期：' + formatDateText(item.transaction_date),
-		amountText: item.amount + ' zł',
+		amountText: formatMoney(item.amount),
 		supplierText: supplierText,
 		transactionTypeText: typeText,
 		filesText: filesText,
@@ -772,11 +773,11 @@ const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'date-range', label: '日期', value: dateRangeText.value } as UTSJSONObject,
 		{ key: 'total-count', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'purchase-amount', label: '采购金额', value: purchaseAmountText.value + ' zł' } as UTSJSONObject,
-		{ key: 'debt-amount', label: '欠单金额', value: debtAmountText.value + ' zł' } as UTSJSONObject,
-		{ key: 'payment-amount', label: '还款金额', value: paymentAmountText.value + ' zł' } as UTSJSONObject,
-		{ key: 'total-paid', label: '总付款', value: totalPaidText.value + ' zł' } as UTSJSONObject,
-		{ key: 'actual-debt', label: '实际欠款', value: actualDebtText.value + ' zł' } as UTSJSONObject,
+		{ key: 'purchase-amount', label: '采购金额', value: formatMoney(purchaseAmountText.value) } as UTSJSONObject,
+		{ key: 'debt-amount', label: '欠单金额', value: formatMoney(debtAmountText.value) } as UTSJSONObject,
+		{ key: 'payment-amount', label: '还款金额', value: formatMoney(paymentAmountText.value) } as UTSJSONObject,
+		{ key: 'total-paid', label: '总付款', value: formatMoney(totalPaidText.value) } as UTSJSONObject,
+		{ key: 'actual-debt', label: '实际欠款', value: formatMoney(actualDebtText.value) } as UTSJSONObject,
 	]
 })
 

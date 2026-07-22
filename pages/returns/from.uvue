@@ -49,7 +49,7 @@
 					</view>
 					<view class="amount-line">
 						<text class="amount-label">退货金额</text>
-						<text class="amount-value">-{{ grossAmountText }} zł</text>
+						<text class="amount-value">-{{ moneyText(grossAmountText) }}</text>
 					</view>
 					<view class="action-row">
 						<view class="action-btn action-btn-primary" @click="openOriginalOrder">
@@ -102,6 +102,12 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getReturnDetail, ReturnItem } from '@/pkg/api/modules/returns.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 
 const returnId = ref('')
 const returnDetail = ref<ReturnItem | null>(null)

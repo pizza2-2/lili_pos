@@ -42,7 +42,7 @@
 					</view>
 					<view class="amount-line">
 						<text class="amount-label">订单金额</text>
-						<text class="amount-value">{{ totalAmountText }} zł</text>
+						<text class="amount-value">{{ moneyText(totalAmountText) }}</text>
 					</view>
 					<view class="action-row">
 						<view class="action-btn action-btn-primary" @click="copyOrderNumber">
@@ -157,6 +157,12 @@
 <script setup lang="uts">
 import { computed } from 'vue'
 import { getOrderDetail, OrderItem, OrderLine, OrderReturnBrief, retryOrderDeduction } from '@/pkg/api/modules/orders.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 
 const orderId = ref('')
 const orderDetail = ref<OrderItem | null>(null)
@@ -483,7 +489,7 @@ const itemListItems = computed((): UTSJSONObject[] => {
 				title: title,
 				subtitle: '条码 ' + stringValue(line.barcode, '-'),
 				barcode: line.barcode,
-				amountText: (line.amount == '' ? '-' : line.amount + ' zł'),
+				amountText: (line.amount == '' ? '-' : formatMoney(line.amount)),
 				unitPriceText: stringValue(line.unit_price, '-'),
 				quantityText: 'x ' + quantityText(line.quantity),
 				tags: [stringValue(line.match_type_display, line.match_type)] as string[],
@@ -504,7 +510,7 @@ const itemListItems = computed((): UTSJSONObject[] => {
 			title: name != '' ? name : (barcode != '' ? '商品 ' + barcode : '商品行 ' + (index + 1).toString()),
 			subtitle: '条码 ' + stringValue(barcode, '-'),
 			barcode: barcode,
-			amountText: amount == '-' ? '-' : amount + ' zł',
+			amountText: amount == '-' ? '-' : formatMoney(amount),
 			unitPriceText: stringValue(row['price'], stringValue(row['unit_price'], '-')),
 			quantityText: 'x ' + stringValue(row['quantity'], '0'),
 			tags: [] as string[],
@@ -524,7 +530,7 @@ const returnListItems = computed((): UTSJSONObject[] => {
 			rawId: item.id.toString(),
 			title: item.return_number,
 			subtitle: '时间：' + formatDateTime(item.return_time),
-			amountText: '-' + item.gross_amount + ' zł',
+			amountText: '-' + formatMoney(item.gross_amount),
 			itemsText: item.items_count.toString() + ' 件',
 			inventoryText: item.inventory_restored ? '已回补' : '未回补',
 			reasonText: stringValue(item.reason, '-'),

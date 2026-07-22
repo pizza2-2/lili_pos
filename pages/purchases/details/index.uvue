@@ -193,6 +193,7 @@ import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_b
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { batchAutoClassifyProductCategory, batchUpdateProductCategory, ProductBatchActionResponse } from '@/pkg/api/modules/products.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 import { checkPurchaseProduct, deletePurchaseDetail, getPurchaseDetailList, getPurchaseDetail, getPurchaseDetailFilterOptions, PurchaseDetailFilterDefinition, PurchaseDetailFilterOptionsResponse, PurchaseDetailItem, PurchaseDetailListResponse, PurchaseItem, receivePurchaseDetail } from '@/pkg/api/modules/purchases.uts'
 // #ifdef APP-ANDROID
 import { scanCode, type GeneralCallbackResult, type ScanCodeOption, type ScanCodeSuccessCallbackResult } from '@/uni_modules/lime-scan'
@@ -632,12 +633,12 @@ function detailToListItem(item: PurchaseDetailItem): UTSJSONObject {
 		previewCover: item.product_preview_images.length > 0 ? item.product_preview_images[0] : item.product_image,
 		previewImages: item.product_preview_images,
 		mediaIds: item.product_media_ids,
-		amountText: stringValue(item.amount, '0.00') + ' zł',
+		amountText: formatMoney(stringValue(item.amount, '0.00')),
 		skuText: stringValue(item.product_sku, '-'),
 		quantityText: item.received_quantity.toString() + '/' + item.quantity.toString() + '，剩余 ' + item.remaining_quantity.toString(),
 		progressText: stringValue(item.receive_progress, '0') + '%',
 		notesText: stringValue(item.notes, '-'),
-		tags: [statusText, '单价 ' + stringValue(item.unit_price, '0.00') + ' zł'] as string[],
+		tags: [statusText, '单价 ' + formatMoney(stringValue(item.unit_price, '0.00'))] as string[],
 	} as UTSJSONObject
 }
 
@@ -1070,7 +1071,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '明细数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'amount', label: '本页金额', value: pageTotalAmount.value + ' zł' } as UTSJSONObject,
+		{ key: 'amount', label: '本页金额', value: formatMoney(pageTotalAmount.value) } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

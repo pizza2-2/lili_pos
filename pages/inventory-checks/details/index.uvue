@@ -1069,6 +1069,7 @@ async function findProductByBarcode(barcode: string): Promise<ProductItem | null
 		page: 1,
 		page_size: 20,
 		ordering: '-updated_at',
+		sales_window: '',
 		filters: [] as ProductSelectedFilter[],
 	})
 	for (let index = 0; index < response.results.length; index += 1) {

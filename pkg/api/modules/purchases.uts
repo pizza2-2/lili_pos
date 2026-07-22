@@ -1133,3 +1133,21 @@ export async function getPurchaseOptionList(path: string, search: string | null,
 	}
 	return result
 }
+
+// ── 补货建议（决策层：产出物是 DRAFT 采购单） ──────────────────
+
+export async function getReplenishmentSuggestions(shopId: number): Promise<UTSJSONObject> {
+	const query = { shop_id: shopId } as UTSJSONObject
+	const raw = await request('/api/purchases/purchases/replenishment-suggestions/', 'GET', query, true)
+	return rawDataObject(raw)
+}
+
+export async function createReplenishmentDraft(shopId: number, supplierId: number, items: UTSJSONObject[]): Promise<UTSJSONObject> {
+	const body = {
+		shop_id: shopId,
+		supplier_id: supplierId,
+		items: items,
+	} as UTSJSONObject
+	const raw = await request('/api/purchases/purchases/replenishment-draft/', 'POST', body, true)
+	return rawDataObject(raw)
+}

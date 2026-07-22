@@ -66,6 +66,29 @@ const translating = ref(false)
 const savingVisible = ref(false)
 const savingText = ref('处理中...')
 
+// 洞察类型全集：表单正向展示「启用的洞察」（默认全开），提交时换算为后端的关闭列表
+const ALL_INSIGHT_TYPE_VALUES = [
+	'sales_drop', 'declining', 'under_utilized', 'growth_leader',
+	'negative_margin', 'margin_drop', 'high_margin', 'stock_abnormal',
+	'overstock', 'price_anomaly', 'data_quality', 'return_spike',
+] as string[]
+
+function allInsightTypes(): string[] {
+	return ALL_INSIGHT_TYPE_VALUES.slice(0)
+}
+
+// 在类型全集内取补集：启用列表 ↔ 关闭列表 双向换算共用
+function invertInsightSelection(selected: string[]): string[] {
+	const result: string[] = []
+	for (let index = 0; index < ALL_INSIGHT_TYPE_VALUES.length; index += 1) {
+		const value = ALL_INSIGHT_TYPE_VALUES[index]
+		if (selected.indexOf(value) < 0) {
+			result.push(value)
+		}
+	}
+	return result
+}
+
 const initialData = ref<UTSJSONObject>({
 	name: '',
 	name_en: '',
@@ -84,6 +107,8 @@ const initialData = ref<UTSJSONObject>({
 	pos_sale_enabled: true,
 	default_min_stock_level: '0',
 	default_reorder_point: '0',
+	off_season_months: [] as number[],
+	enabled_insight_types: allInsightTypes(),
 	sort_order: '0',
 	is_active: true,
 } as UTSJSONObject)
@@ -105,6 +130,8 @@ const currentFormData = ref<UTSJSONObject>({
 	pos_sale_enabled: true,
 	default_min_stock_level: '0',
 	default_reorder_point: '0',
+	off_season_months: [] as number[],
+	enabled_insight_types: allInsightTypes(),
 	sort_order: '0',
 	is_active: true,
 } as UTSJSONObject)
@@ -155,6 +182,54 @@ function intValue(value: any | null, fallback: number = 0): number {
 		return fallback
 	}
 	return parsed
+}
+
+// 归一化淡季月份数组：后端可能返回 1.0 形式的 Double，统一转字符串键去重后
+// 用 1..12 循环字面量重建同源整数数组（升序），规避数字装箱相等性陷阱
+function monthArrayValue(value: any | null): number[] {
+	const pickedKeys: string[] = []
+	if (value != null && Array.isArray(value)) {
+		const list = value as any[]
+		for (let index = 0; index < list.length; index += 1) {
+			const parsed = intValue(list[index], 0)
+			if (parsed < 1 || parsed > 12) {
+				continue
+			}
+			const monthKey = parsed.toString()
+			if (pickedKeys.indexOf(monthKey) < 0) {
+				pickedKeys.push(monthKey)
+			}
+		}
+	}
+	const result: number[] = []
+	for (let month = 1; month <= 12; month += 1) {
+		if (pickedKeys.indexOf(month.toString()) >= 0) {
+			result.push(month)
+		}
+	}
+	return result
+}
+
+// 归一化关闭洞察类型数组：后端返回 string 数组，防御式转字符串、去空、去重
+function stringArrayValue(value: any | null): string[] {
+	const result: string[] = []
+	if (value != null && Array.isArray(value)) {
+		const list = value as any[]
+		for (let index = 0; index < list.length; index += 1) {
+			const item = list[index]
+			if (item == null) {
+				continue
+			}
+			const text = ('' + item).trim()
+			if (text == '') {
+				continue
+			}
+			if (result.indexOf(text) < 0) {
+				result.push(text)
+			}
+		}
+	}
+	return result
 }
 
 function parseErrorMessage(error: any, fallback: string): string {
@@ -588,6 +663,9 @@ function buildInitialDataFromDetail(item: CategoryItem, parentText: string): UTS
 		pos_sale_enabled: item.pos_sale_enabled,
 		default_min_stock_level: item.default_min_stock_level.toString(),
 		default_reorder_point: item.default_reorder_point.toString(),
+		off_season_months: monthArrayValue(raw['off_season_months']),
+		// 后端存关闭列表，表单正向展示启用列表（补集换算）
+		enabled_insight_types: invertInsightSelection(stringArrayValue(raw['disabled_insight_types'])),
 		sort_order: item.sort_order.toString(),
 		is_active: item.is_active,
 	} as UTSJSONObject
@@ -634,6 +712,9 @@ function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationDa
 	const posSaleEnabled = booleanValue(formDataObject['pos_sale_enabled'], true)
 	const defaultMinStockLevel = intValue(formDataObject['default_min_stock_level'], 0)
 	const defaultReorderPoint = intValue(formDataObject['default_reorder_point'], 0)
+	const offSeasonMonths = monthArrayValue(formDataObject['off_season_months'])
+	// 表单是启用列表，提交前换算回后端的关闭列表
+	const disabledInsightTypes = invertInsightSelection(stringArrayValue(formDataObject['enabled_insight_types']))
 	const sortOrder = intValue(formDataObject['sort_order'], 0)
 	const isActive = booleanValue(formDataObject['is_active'], true)
 	return {
@@ -653,6 +734,8 @@ function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationDa
 		pos_sale_enabled: posSaleEnabled,
 		default_min_stock_level: defaultMinStockLevel,
 		default_reorder_point: defaultReorderPoint,
+		off_season_months: offSeasonMonths,
+		disabled_insight_types: disabledInsightTypes,
 		sort_order: sortOrder,
 		is_active: isActive,
 	} as UTSJSONObject
@@ -1102,6 +1185,40 @@ const formSections = ref<UTSJSONObject[]>([
 		] as UTSJSONObject[],
 	} as UTSJSONObject,
 	{
+		key: 'insight',
+		title: '洞察设置',
+		description: '',
+		defaultOpen: false,
+		fields: [
+			{
+				key: 'enabled_insight_types',
+				label: '启用的洞察',
+				type: 'checkChips',
+				description: '默认全部开启；取消勾选的类型该分类不再生成报告。淡季月份只影响无销售类，这里可整类关闭',
+				options: [
+					{ value: 'sales_drop', label: '销售骤降' } as UTSJSONObject,
+					{ value: 'declining', label: '持续下滑' } as UTSJSONObject,
+					{ value: 'under_utilized', label: '持续无销售' } as UTSJSONObject,
+					{ value: 'growth_leader', label: '增长领先' } as UTSJSONObject,
+					{ value: 'negative_margin', label: '负毛利' } as UTSJSONObject,
+					{ value: 'margin_drop', label: '毛利率下降' } as UTSJSONObject,
+					{ value: 'high_margin', label: '高毛利机会' } as UTSJSONObject,
+					{ value: 'stock_abnormal', label: '库存异常' } as UTSJSONObject,
+					{ value: 'overstock', label: '库存积压' } as UTSJSONObject,
+					{ value: 'price_anomaly', label: '进价上涨' } as UTSJSONObject,
+					{ value: 'data_quality', label: '数据质量异常' } as UTSJSONObject,
+					{ value: 'return_spike', label: '退货异常' } as UTSJSONObject,
+				] as UTSJSONObject[],
+			} as UTSJSONObject,
+			{
+				key: 'off_season_months',
+				label: '淡季月份',
+				type: 'monthChips',
+				description: '淡季月份内不生成该分类的无销售洞察（季节性商品防误报）',
+			} as UTSJSONObject,
+		] as UTSJSONObject[],
+	} as UTSJSONObject,
+	{
 		key: 'status',
 		title: '状态设置',
 		description: '',
@@ -1171,6 +1288,8 @@ onLoad((event: OnLoadOptions) => {
 			pos_sale_enabled: true,
 			default_min_stock_level: '0',
 			default_reorder_point: '0',
+			off_season_months: [] as number[],
+			enabled_insight_types: allInsightTypes(),
 			sort_order: '0',
 			is_active: true,
 		} as UTSJSONObject)

@@ -126,6 +126,7 @@ import { getListPageSize } from '@/pkg/util/settings.uts'
 import { takeLatestResponseMessage } from '@/pkg/api/index.uts'
 import { deleteExpense, ExpenseFilterDefinition, ExpenseFilterOptionsResponse, ExpenseItem, ExpenseListResponse, ExpenseMediaFile, getExpenseFilterOptions, getExpenseList } from '@/pkg/api/modules/expenses.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 type ExpenseSelectedFilter = {
 	param: string
@@ -355,7 +356,7 @@ function expenseToListItem(item: ExpenseItem): UTSJSONObject {
 		rawId: item.id.toString(),
 		title: typeText,
 		subtitle: '日期：' + getDisplayText(item.expenditure_date, '-'),
-		amountText: getDisplayText(item.amount, '0.00') + ' zł',
+		amountText: formatMoney(getDisplayText(item.amount, '0.00')),
 		typeText: typeText,
 		supplierText: supplierText,
 		invoiceText: invoiceText,
@@ -483,7 +484,7 @@ const emptyText = computed((): string => {
 const summaryItems = computed((): UTSJSONObject[] => {
 	return [
 		{ key: 'total', label: '记录数', value: totalCount.value.toString() } as UTSJSONObject,
-		{ key: 'pageAmount', label: '本页合计', value: pageTotalAmount.value + ' zł' } as UTSJSONObject,
+		{ key: 'pageAmount', label: '本页合计', value: formatMoney(pageTotalAmount.value) } as UTSJSONObject,
 		{ key: 'page', label: '页码', value: currentPage.value.toString() + '/' + totalPages.value.toString() } as UTSJSONObject,
 	]
 })

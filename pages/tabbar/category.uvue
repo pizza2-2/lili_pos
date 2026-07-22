@@ -141,6 +141,7 @@
 import { ref } from 'vue'
 import { getCategoryDailyBrief, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
 import { showErrorToast } from '@/pkg/util/toast.uts'
+import { formatMoney } from '@/pkg/util/format.uts'
 
 const WORKBENCH_TAB_INDEX = 1
 const RELOAD_MIN_INTERVAL_MS = 60000
@@ -331,8 +332,8 @@ function applyBrief(brief: UTSJSONObject): void {
 	}
 
 	const totals = objectValue(brief['totals'])
-	salesText.value = stringValue(totals['sales_amount'], '0') + ' zł'
-	profitText.value = stringValue(totals['gross_profit'], '0') + ' zł'
+	salesText.value = formatMoney(stringValue(totals['sales_amount'], '0'))
+	profitText.value = formatMoney(stringValue(totals['gross_profit'], '0'))
 	quantityText.value = stringValue(totals['sales_quantity'], '0')
 	warningText.value = stringValue(totals['stock_warning_count'], '0')
 
@@ -346,14 +347,14 @@ function applyBrief(brief: UTSJSONObject): void {
 
 	// 退货冲减提示：让店主知道销售额是净流量口径
 	const returnsAmount = floatValue(totals['returns_amount'])
-	returnsText.value = returnsAmount > 0 ? '当日退货 ' + stringValue(totals['returns_amount']) + ' zł（已从销售额扣减）' : ''
+	returnsText.value = returnsAmount > 0 ? '当日退货 ' + formatMoney(stringValue(totals['returns_amount'])) + '（已从销售额扣减）' : ''
 
 	// 未归类销售：归到分类但缺商品档案 + 完全无法归类的黑洞，合并提示
 	const unmatched = floatValue(totals['unmatched_sales_amount'])
-	let unmatchedLine = unmatched > 0 ? '未归类销售额 ' + stringValue(totals['unmatched_sales_amount']) + ' zł（条码/分类映射待治理）' : ''
+	let unmatchedLine = unmatched > 0 ? '未归类销售额 ' + formatMoney(stringValue(totals['unmatched_sales_amount'])) + '（条码/分类映射待治理）' : ''
 	const unclassified = floatValue(brief['unclassified_sales_amount'])
 	if (unclassified > 0) {
-		const blackholeLine = '完全未归类 ' + stringValue(brief['unclassified_sales_amount']) + ' zł'
+		const blackholeLine = '完全未归类 ' + formatMoney(stringValue(brief['unclassified_sales_amount']))
 		unmatchedLine = unmatchedLine == '' ? blackholeLine + '（条码/分类映射待治理）' : unmatchedLine + '；' + blackholeLine
 	}
 	unmatchedText.value = unmatchedLine
@@ -364,11 +365,11 @@ function applyBrief(brief: UTSJSONObject): void {
 	// 今日实时块（旧服务端响应无 today 字段时隐藏整卡，避免显示误导性的 0）
 	const today = objectValue(brief['today'])
 	todayAvailable.value = stringValue(today['sales_amount']) != ''
-	todaySalesText.value = stringValue(today['sales_amount'], '0.00') + ' zł'
+	todaySalesText.value = formatMoney(stringValue(today['sales_amount'], '0.00'))
 	let todayMeta = '已同步 ' + intValue(today['order_count']).toString() + ' 单'
 	const todayReturns = floatValue(today['returns_amount'])
 	if (todayReturns > 0) {
-		todayMeta = todayMeta + ' · 退货 ' + stringValue(today['returns_amount']) + ' zł'
+		todayMeta = todayMeta + ' · 退货 ' + formatMoney(stringValue(today['returns_amount']))
 	}
 	todayMetaText.value = todayMeta
 	todayClosedText.value = booleanFlag(today['is_closed_day']) ? '今日为闭店日' : ''

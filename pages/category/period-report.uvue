@@ -44,8 +44,8 @@
 							</view>
 						</view>
 						<view class="metric-grid">
-							<lili-metric-card label="总销售" :value="summaryText('sales_amount') + ' zł'"></lili-metric-card>
-							<lili-metric-card label="总毛利" :value="summaryText('gross_profit') + ' zł'"></lili-metric-card>
+							<lili-metric-card label="总销售" :value="moneyText(summaryText('sales_amount'))"></lili-metric-card>
+							<lili-metric-card label="总毛利" :value="moneyText(summaryText('gross_profit'))"></lili-metric-card>
 							<lili-metric-card label="毛利率" :value="percentText(summaryText('gross_margin_rate', ''))"></lili-metric-card>
 							<lili-metric-card label="有数据分类" :value="summaryText('category_count', '0')"></lili-metric-card>
 						</view>
@@ -79,7 +79,7 @@
 								<text class="report-meta">{{ reportMetaText(item) }}</text>
 							</view>
 							<view class="report-side">
-								<text class="report-amount">{{ stringField(item, 'sales_amount', '0.00') }} zł</text>
+								<text class="report-amount">{{ moneyText(stringField(item, 'sales_amount', '0.00')) }}</text>
 								<text :class="growthClass(item)">{{ growthText(item) }}</text>
 							</view>
 						</view>
@@ -98,6 +98,12 @@
 <script setup lang="uts">
 import { computed, ref } from 'vue'
 import { getCategoryPeriodReport } from '@/pkg/api/modules/category'
+import { formatMoney } from '@/pkg/util/format.uts'
+// 模板不能直接调用 import 的函数（UTS 编译为 invoke 报错），经本页函数中转
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
 
 const isLoading = ref(false)
 const hasLoadedOnce = ref(false)
