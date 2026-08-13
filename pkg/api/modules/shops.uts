@@ -4,6 +4,8 @@ export type ShopListQuery = {
 	search: string | null
 	page: number
 	page_size: number
+	// 管理页传 true：列表带 include_inactive=1，可看到停业店铺；其他场景省略（默认只回启用店）
+	include_inactive?: boolean
 }
 
 export type ShopItem = {
@@ -12,6 +14,7 @@ export type ShopItem = {
 	address: string
 	company: number
 	company_name: string
+	is_active: boolean
 	media_records_count: number
 	media_files: ShopMediaFile[]
 	created_at: string
@@ -80,6 +83,8 @@ export type ShopMediaListResponse = {
 export type ShopMutationData = {
 	name: string
 	address: string | null
+	// null = 不提交该字段（创建时走服务端默认启用；编辑时保持原值）
+	is_active: boolean | null
 }
 
 export type ShopMediaMutationData = {
@@ -101,6 +106,10 @@ function buildListQuery(data: ShopListQuery): UTSJSONObject {
 
 	if (data.search != null && data.search != '') {
 		query['search'] = data.search
+	}
+	// 门店管理页需要看到停业店铺；后端 list 默认只回启用店
+	if (data.include_inactive == true) {
+		query['include_inactive'] = 1
 	}
 
 	return query
@@ -198,12 +207,15 @@ function normalizeServerUrl(url: string): string {
 }
 
 function buildShopItem(rawObject: UTSJSONObject): ShopItem {
+	// 旧服务端响应无 is_active 字段时按启用处理，避免全部误标为停业
+	const rawIsActive = rawObject['is_active']
 	return {
 		id: intValue(rawObject['id']),
 		name: stringValue(rawObject['name']),
 		address: stringValue(rawObject['address']),
 		company: intValue(rawObject['company']),
 		company_name: stringValue(rawObject['company_name']),
+		is_active: rawIsActive == null ? true : boolValue(rawIsActive),
 		media_records_count: intValue(rawObject['media_records_count']),
 		media_files: buildShopMediaFiles(rawObject['media_files']),
 		created_at: stringValue(rawObject['created_at']),
@@ -212,10 +224,14 @@ function buildShopItem(rawObject: UTSJSONObject): ShopItem {
 }
 
 function buildShopMutationBody(data: ShopMutationData): UTSJSONObject {
-	return {
+	const body = {
 		name: data.name,
 		address: data.address == null ? null : data.address,
 	} as UTSJSONObject
+	if (data.is_active != null) {
+		body['is_active'] = data.is_active
+	}
+	return body
 }
 
 function buildShopMediaMutationBody(data: ShopMediaMutationData): UTSJSONObject {

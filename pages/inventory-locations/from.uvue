@@ -23,7 +23,7 @@ const formMode = ref('create')
 const itemId = ref('')
 const leaveSignal = ref(0)
 const submitting = ref(false)
-const initialData = ref<UTSJSONObject>({ name: '', code: '', location_type: 'WAREHOUSE', location_type_text: '仓库', address: '', is_active: 'true', is_active_text: '启用' } as UTSJSONObject)
+const initialData = ref<UTSJSONObject>({ name: '', location_type: 'WAREHOUSE', location_type_text: '仓库', address: '', is_active: 'true', is_active_text: '启用' } as UTSJSONObject)
 
 const typeOptions = ref<SelectOption[]>([
 	{ value: 'SHOP', text: '店铺' } as SelectOption,
@@ -71,7 +71,6 @@ const formSections = ref<UTSJSONObject[]>([
 		defaultOpen: true,
 		fields: [
 			{ key: 'name', label: '位置名称', type: 'input', required: true, placeholder: '请输入库存位置名称' } as UTSJSONObject,
-			{ key: 'code', label: '位置编码', type: 'input', required: true, placeholder: '请输入位置编码' } as UTSJSONObject,
 			{ key: 'location_type', textKey: 'location_type_text', label: '位置类型', type: 'bottomSelect', title: '选择位置类型', placeholder: '请选择位置类型', showAddAction: false, showEditAction: false, fetchData: fetchTypeOptions } as UTSJSONObject,
 			{ key: 'address', label: '地址', type: 'textarea', placeholder: '请输入地址' } as UTSJSONObject,
 			{ key: 'is_active', textKey: 'is_active_text', label: '启用状态', type: 'bottomSelect', title: '选择启用状态', placeholder: '请选择启用状态', showAddAction: false, showEditAction: false, fetchData: fetchActiveOptions } as UTSJSONObject,
@@ -91,7 +90,6 @@ function buildPayload(data: UTSJSONObject): InventoryMutationData {
 	return {
 		payload: {
 			name: getStringField(data, 'name'),
-			code: getStringField(data, 'code'),
 			location_type: getStringField(data, 'location_type', 'WAREHOUSE'),
 			address: getStringField(data, 'address'),
 			is_active: getStringField(data, 'is_active', 'true') == 'true',
@@ -117,7 +115,6 @@ async function loadDetail(idText: string) {
 		const activeValue = getStringField(detail, 'is_active') == 'true' ? 'true' : 'false'
 		initialData.value = {
 			name: getStringField(detail, 'name'),
-			code: getStringField(detail, 'code'),
 			location_type: typeValue,
 			location_type_text: typeText,
 			address: getStringField(detail, 'address'),
@@ -133,8 +130,8 @@ async function persistForm(payload: UTSJSONObject) {
 	if (submitting.value) return
 	const rawData = payload['formData']
 	const data = rawData == null ? ({} as UTSJSONObject) : (rawData as UTSJSONObject)
-	if (getStringField(data, 'name') == '' || getStringField(data, 'code') == '') {
-		uni.showToast({ title: '请填写位置名称和位置编码', icon: 'none', duration: 3500 })
+	if (getStringField(data, 'name') == '') {
+		uni.showToast({ title: '请填写位置名称', icon: 'none', duration: 3500 })
 		return
 	}
 	const actionText = formMode.value == 'edit' ? '保存库存位置' : '创建库存位置'

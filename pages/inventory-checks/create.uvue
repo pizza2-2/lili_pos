@@ -238,6 +238,21 @@ const submitting = ref(false)
 const initialData = ref<UTSJSONObject>(initialFormData())
 const liveFormData = ref<UTSJSONObject>(initialFormData())
 
+// 分类页/洞察卡「盘点」入口：携带 category_id/category_name 预填盘点分类，用户只需再选盘点位置
+onLoad((event: OnLoadOptions) => {
+	const categoryIdValue = event['category_id']
+	const categoryId = intValue(categoryIdValue)
+	if (categoryId <= 0) {
+		return
+	}
+	const categoryNameValue = event['category_name']
+	const categoryName = categoryNameValue == null ? '' : decodeURIComponent('' + categoryNameValue)
+	const preset = initialFormData()
+	preset['category'] = categoryId.toString()
+	preset['category_text'] = categoryName == '' ? '分类 #' + categoryId.toString() : categoryName
+	initialData.value = preset
+})
+
 async function fetchLocationOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request('/api/inventory/locations/', 'GET', buildOptionQuery(params), true)
 	const sourceRows = extractRows(raw)

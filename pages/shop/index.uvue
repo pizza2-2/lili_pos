@@ -49,13 +49,15 @@
 					summaryTitle="商店统计"
 					:summaryItems="summaryItems"
 					:summaryCollapsedByDefault="true"
-					:showFloatingAdd="false"
+					:showFloatingAdd="canManage"
+					floatingAddText="新建"
 					@item-click="handleItemClick"
 					@subtitle-click="handleSubtitleClick"
 					@meta-click="handleMetaClick"
 					@field-click="handleFieldClick"
 					@menu="handleMenu"
 					@page-change="handlePageChange"
+					@floating-add="handleCreate"
 				/>
 			</view>
 		<!-- #ifdef APP -->
@@ -68,6 +70,7 @@
 import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
 import { getShopList, ShopItem, ShopListResponse } from '@/pkg/api/modules/shops'
+import { getProfile } from '@/pkg/api/modules/login'
 
 const shopListRefreshStorageKey = 'refresh:pages:shop:index'
 const keyword = ref('')
@@ -78,16 +81,25 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const pageSize = ref(getListPageSize())
+// 有 shop_manage 权限才展示新建/编辑入口（仿 mine.uvue 的 getProfile 门控模式）
+const canManage = ref(false)
 
 const fieldConfig = ref<UTSJSONObject[]>([
+	{ key: 'status_text', label: '状态' } as UTSJSONObject,
 	{ key: 'address', label: '地址' } as UTSJSONObject,
 	{ key: 'media_records_count', label: '媒体数量' } as UTSJSONObject,
 ])
 
-const menuActions = ref<UTSJSONObject[]>([
-	{ key: 'media', text: '资料' } as UTSJSONObject,
-	{ key: 'api-keys', text: 'POS密钥' } as UTSJSONObject,
-])
+const menuActions = computed((): UTSJSONObject[] => {
+	const actions: UTSJSONObject[] = [
+		{ key: 'media', text: '资料' } as UTSJSONObject,
+		{ key: 'api-keys', text: 'POS密钥' } as UTSJSONObject,
+	]
+	if (canManage.value) {
+		actions.push({ key: 'edit', text: '编辑' } as UTSJSONObject)
+	}
+	return actions
+})
 
 function stringValue(value: any | null, fallback: string = ''): string {
 	if (value == null) {
@@ -134,10 +146,12 @@ async function loadShops(): Promise<void> {
 	errorMessage.value = ''
 
 	try {
+		// 管理页带 include_inactive=1，停业店铺也要能看到并可重新启用
 		const response = await getShopList({
 			search: keyword.value == '' ? null : keyword.value,
 			page: currentPage.value,
 			page_size: pageSize.value,
+			include_inactive: true,
 		})
 		applyShopResponse(response)
 	} catch (error) {
@@ -173,6 +187,7 @@ function shopToListItem(item: ShopItem): UTSJSONObject {
 		addressText: '地址：' + getDisplayText(item.address),
 		company_name: item.company_name,
 		companyText: '公司：' + getDisplayText(item.company_name),
+		status_text: item.is_active ? '营业中' : '已停业',
 		media_records_count: item.media_records_count.toString(),
 		updated_at: formatDateText(item.updated_at),
 		rawId: item.id.toString(),
@@ -319,6 +334,27 @@ function handleMenu(payload: UTSJSONObject): void {
 		uni.navigateTo({ url: '/pages/shop/api-keys?id=' + shopId + '&name=' + encodeURIComponent(shopNameValue) })
 		return
 	}
+	if (actionKey == 'edit') {
+		if (shopId == '') {
+			return
+		}
+		uni.navigateTo({ url: '/pages/shop/shop-from?id=' + shopId })
+		return
+	}
+}
+
+function handleCreate(): void {
+	uni.navigateTo({ url: '/pages/shop/shop-from' })
+}
+
+// 拉取当前用户权限决定是否展示新建/编辑入口；失败静默（入口隐藏，不影响列表）
+async function loadManagePermission(): Promise<void> {
+	try {
+		const profile = await getProfile()
+		canManage.value = profile.permissions.includes('shop_manage')
+	} catch (error) {
+		canManage.value = false
+	}
 }
 
 const listItems = computed((): UTSJSONObject[] => {
@@ -356,6 +392,7 @@ const emptyText = computed((): string => {
 
 onLoad(() => {
 	loadShops()
+	loadManagePermission()
 })
 
 onShow(() => {

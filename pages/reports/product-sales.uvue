@@ -108,6 +108,7 @@ import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
 import { formatMoney } from '@/pkg/util/format.uts'
 import { ProductSalesQuery, ProductSalesResponse, ProductSalesSummary, ReportPeriod, ReportRankItem, getProductSalesReport } from '@/pkg/api/modules/reports.uts'
+import { shopState } from '@/store/shop.uts'
 
 type PeriodOption = {
 	key: ReportPeriod
@@ -370,7 +371,8 @@ async function loadRows() {
 			page: currentPage.value,
 			page_size: pageSize.value,
 		} as ProductSalesQuery
-		applyResponse(await getProductSalesReport(query))
+		// 跟随全局店铺口径（0 = 全部门店，不传 shop_id）
+		applyResponse(await getProductSalesReport(query, shopState.selectedShopId))
 	} catch (error) {
 		errorMessage.value = parseErrorMessage(error)
 	} finally {

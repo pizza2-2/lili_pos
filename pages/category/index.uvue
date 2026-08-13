@@ -1199,6 +1199,16 @@ function goToReport(): void {
 	})
 }
 
+// 盘点入口：跳新建盘点单页并预填该分类（完整路径名），用户只需再选盘点位置
+function goToStocktake(id: number): void {
+	uni.navigateTo({
+		url: '/pages/inventory-checks/create?category_id=' + id.toString() + '&category_name=' + encodeURIComponent(categoryTreeStore.pathTextOf(id)),
+		fail: (_) => {
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
 async function executeDelete(id: number, isCurrent: boolean): Promise<void> {
 	try {
 		isOperating.value = true
@@ -1248,6 +1258,8 @@ function confirmDelete(id: number, name: string, isCurrent: boolean): void {
 
 function openActionSheetFor(id: number, name: string, level: number, isCurrent: boolean): void {
 	const canAddChild = level < categoryTreeStore.maxLevel
+	// 最末级（叶子）分类才有盘点：盘点单按分类圈定商品，中间层级无直挂商品
+	const canStocktake = categoryTreeStore.isLeaf(id)
 	const itemList: string[] = [] as string[]
 	itemList.push('编辑分类')
 	if (canAddChild) {
@@ -1255,6 +1267,9 @@ function openActionSheetFor(id: number, name: string, level: number, isCurrent: 
 	}
 	itemList.push('移动分类')
 	itemList.push('管理商品')
+	if (canStocktake) {
+		itemList.push('盘点')
+	}
 	itemList.push('删除分类')
 
 	uni.showActionSheet({
@@ -1280,6 +1295,12 @@ function openActionSheetFor(id: number, name: string, level: number, isCurrent: 
 			if (tapIndex == cursor + 1) {
 				openProductsManagementFor(id, name)
 				return
+			}
+			if (canStocktake) {
+				if (tapIndex == cursor + 2) {
+					goToStocktake(id)
+					return
+				}
 			}
 			confirmDelete(id, name, isCurrent)
 		},

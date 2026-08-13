@@ -52,7 +52,8 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { authState, clearAuthState } from '@/store/auth'
+import { authState, clearAuthState, hasPerm, setAuthPermissions } from '@/store/auth'
+import { applyProfileShops } from '@/store/shop'
 import { getProfile, logout, ProfileResponse } from '@/pkg/api/modules/login'
 import checkUpdate from '@/uni_modules/uni-upgrade-center-app/utils/check-update'
 
@@ -81,7 +82,8 @@ const isLogin = computed((): boolean => {
 })
 
 const isManager = computed((): boolean => {
-	return permissions.value.includes('manage_users')
+	// 读全局权限集：冷启动先用持久化的上次权限渲染，profile 刷新后自动覆盖
+	return hasPerm('manage_users')
 })
 
 const displayName = computed((): string => {
@@ -152,6 +154,9 @@ async function loadProfile() {
 		companyName.value = profile.company_name == '' ? '-' : profile.company_name
 		permissions.value = profile.permissions
 		profileLoaded.value = true
+		// 同步喂给全局 store：权限门控与店铺列表跨页共享
+		setAuthPermissions(profile.permissions)
+		applyProfileShops(profile)
 	} catch (error) {
 		// 静默失败：页面仍可用本地缓存的名字展示
 	}

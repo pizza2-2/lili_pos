@@ -35,21 +35,39 @@ function toObjectArray(raw: any | null): UTSJSONObject[] {
 
 // ── 成员管理 ────────────────────────────────────────────────────
 
+// 解析成员数据里的可访问店铺限制 restricted_shop_ids
+// 空数组 = 未限制（全公司可见）；旧服务端缺字段时兜底空数组
+export function parseRestrictedShopIds(item: UTSJSONObject): number[] {
+	const raw = item['restricted_shop_ids']
+	if (raw == null) {
+		return [] as number[]
+	}
+	const text = JSON.stringify(raw)
+	if (text == null || !text.startsWith('[')) {
+		return [] as number[]
+	}
+	const parsed = JSON.parseArray<number>(text!)
+	return parsed == null ? ([] as number[]) : parsed!
+}
+
 export async function getStaffList(): Promise<UTSJSONObject[]> {
 	const raw = await request('/api/accounts/staff/', 'GET', {} as UTSJSONObject, false)
 	return toObjectArray(raw)
 }
 
+// 详情响应含 restricted_shop_ids（编辑回显用 parseRestrictedShopIds 解析）
 export async function getStaffDetail(id: number): Promise<UTSJSONObject> {
 	const raw = await request('/api/accounts/staff/' + id.toString() + '/', 'GET', {} as UTSJSONObject, false)
 	return toObject(raw, '成员详情解析失败')
 }
 
+// body 可选 shop_ids: number[]（可访问店铺，整体替换：空数组=清空限制；不传=不动）
 export async function createStaff(body: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request('/api/accounts/staff/create/', 'POST', body, true)
 	return toObject(raw, '成员创建响应解析失败')
 }
 
+// body 可选 shop_ids: number[]（可访问店铺，整体替换：空数组=清空限制；不传=不动）
 export async function updateStaff(id: number, body: UTSJSONObject): Promise<UTSJSONObject> {
 	const raw = await request('/api/accounts/staff/' + id.toString() + '/', 'PATCH', body, true)
 	return toObject(raw, '成员更新响应解析失败')

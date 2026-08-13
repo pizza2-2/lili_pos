@@ -1,0 +1,73 @@
+import { request } from '../index.uts'
+
+const aiBasePath = '/api/ai/'
+
+function parseObjectOrNull(raw: any | null): UTSJSONObject | null {
+	if (raw == null) {
+		return null
+	}
+	const text = JSON.stringify(raw)
+	if (text == null || text == '' || !text.startsWith('{')) {
+		return null
+	}
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		return parsed == null ? null : (parsed as UTSJSONObject)
+	} catch (error) {
+		return null
+	}
+}
+
+// 当前简报：服务端 data 为 null 表示"今天没有可展示的简报"
+// （未启用 / 未生成 / 失败 / 过期），此时前端不渲染简报卡（AI 静默缺席）
+export async function getAiBrief(dateIso: string = ''): Promise<UTSJSONObject | null> {
+	const query = {} as UTSJSONObject
+	if (dateIso != '') {
+		query['date'] = dateIso
+	}
+	const raw = await request(aiBasePath + 'brief/', 'GET', query, false)
+	return parseObjectOrNull(raw)
+}
+
+// 标记已读（曝光即已读场景静默调用，失败不打扰用户）
+export async function markAiBriefRead(dateIso: string = ''): Promise<UTSJSONObject | null> {
+	const body = {} as UTSJSONObject
+	if (dateIso != '') {
+		body['date'] = dateIso
+	}
+	const raw = await request(aiBasePath + 'brief/read/', 'POST', body, false)
+	return parseObjectOrNull(raw)
+}
+
+// 手动重新生成（同步等待，可能数十秒；每公司每天限 3 次，超限服务端报错）
+export async function regenerateAiBrief(dateIso: string = ''): Promise<UTSJSONObject | null> {
+	const body = {} as UTSJSONObject
+	if (dateIso != '') {
+		body['date'] = dateIso
+	}
+	const raw = await request(aiBasePath + 'brief/regenerate/', 'POST', body, true)
+	return parseObjectOrNull(raw)
+}
+
+// AI 简报配置（开关 + 经营背景；Key 平台统一，接口无 Key 字段）
+export async function getAiConfig(): Promise<UTSJSONObject> {
+	const raw = await request(aiBasePath + 'config/', 'GET', {} as UTSJSONObject, false)
+	const parsed = parseObjectOrNull(raw)
+	if (parsed == null) {
+		throw new Error('AI 配置响应解析失败')
+	}
+	return parsed
+}
+
+export async function updateAiConfig(enabled: boolean, businessContext: string): Promise<UTSJSONObject> {
+	const body = {
+		enabled: enabled,
+		business_context: businessContext,
+	} as UTSJSONObject
+	const raw = await request(aiBasePath + 'config/', 'PUT', body, false)
+	const parsed = parseObjectOrNull(raw)
+	if (parsed == null) {
+		throw new Error('AI 配置响应解析失败')
+	}
+	return parsed
+}

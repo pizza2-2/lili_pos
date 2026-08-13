@@ -32,15 +32,23 @@
 						<view class="card-head">
 							<view class="card-title-wrap">
 								<text class="card-label">问题清单</text>
-								<text class="card-title">共 {{ insightSourceCount.toString() }} 个问题 · 归并为 {{ insightItems.length.toString() }} 行</text>
+								<text class="card-title">{{ listSummaryText() }}</text>
 							</view>
 							<view class="mini-action" @click="loadInsights">
 								<text class="mini-action-text">{{ insightsLoading ? '加载中' : '刷新' }}</text>
 							</view>
 						</view>
+						<!-- 洞察分类 tab：一次拉全后本地按类型过滤，切换即时生效 -->
+						<scroll-view class="tab-chip-scroll" :direction="'horizontal'" :show-scrollbar="false">
+							<view class="tab-chip-row">
+								<view v-for="tab in insightTabs" :key="'tab-' + tab.key" :class="tabChipClass(tab.key)" @click="switchTab(tab.key)">
+									<text :class="tabChipTextClass(tab.key)">{{ tabChipLabel(tab) }}</text>
+								</view>
+							</view>
+						</scroll-view>
 						<text v-if="insightsError != ''" class="error-text">{{ insightsError }}</text>
-						<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
-							<text class="empty-text">暂无待处理问题，运营状态良好</text>
+						<view v-if="filteredInsightRows().length == 0 && !insightsLoading" class="empty-state">
+							<text class="empty-text">{{ emptyStateText() }}</text>
 						</view>
 						<view v-for="(item, idx) in visibleInsights()" :key="'insight-' + idx.toString()">
 							<!-- 聚合卡：默认收拢样例，展开后逐条渲染成员明细（可单独查看/处置） -->
@@ -71,7 +79,6 @@
 										:insight="member"
 										@view="goInsightAction(member)"
 										@handle="markInsight(member, 'handle')"
-										@dismiss="confirmDismissInsight(member)"
 									></lili-insight-card>
 									<text v-if="groupOverflowText(item) != ''" class="group-overflow-text">{{ groupOverflowText(item) }}</text>
 								</view>
@@ -82,11 +89,10 @@
 								:insight="item"
 								@view="goInsightAction(item)"
 								@handle="markInsight(item, 'handle')"
-								@dismiss="confirmDismissInsight(item)"
 							></lili-insight-card>
 						</view>
-						<view v-if="insightItems.length > 3" class="expand-row" @click="toggleInsightsExpanded">
-							<text class="expand-text">{{ insightsExpanded ? '收起' : '查看全部 ' + insightItems.length.toString() + ' 行' }}</text>
+						<view v-if="filteredInsightRows().length > 3" class="expand-row" @click="toggleInsightsExpanded">
+							<text class="expand-text">{{ insightsExpanded ? '收起' : '查看全部 ' + filteredInsightRows().length.toString() + ' 行' }}</text>
 						</view>
 					</view>
 
@@ -114,6 +120,12 @@ import { getCategoryInsightsGrouped, updateCategoryInsightStatus } from '@/pkg/a
 import { showErrorToast } from '@/pkg/util/toast.uts'
 import { formatMoney } from '@/pkg/util/format.uts'
 
+type InsightTab = {
+	key: string
+	label: string
+	types: string[]
+}
+
 const isLoading = ref(false)
 const isOperating = ref(false)
 const hasLoadedOnce = ref(false)
@@ -123,7 +135,18 @@ const insightsLoading = ref(false)
 const insightsError = ref('')
 const insightItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const insightsExpanded = ref(false)
-const insightSourceCount = ref(0)
+
+// 洞察分类 tab：按经营维度归组后端 12 种洞察类型；「全部」= 全部问题（机会类单独查看）
+const OPPORTUNITY_TYPE_KEYS: string[] = ['growth_leader', 'high_margin'] as string[]
+const insightTabs: InsightTab[] = [
+	{ key: 'all', label: '全部', types: [] as string[] } as InsightTab,
+	{ key: 'sales', label: '销售', types: ['sales_drop', 'declining', 'under_utilized', 'return_spike'] as string[] } as InsightTab,
+	{ key: 'profit', label: '毛利', types: ['margin_drop', 'negative_margin', 'price_anomaly'] as string[] } as InsightTab,
+	{ key: 'stock', label: '库存', types: ['stock_abnormal', 'overstock'] as string[] } as InsightTab,
+	{ key: 'data', label: '数据', types: ['data_quality'] as string[] } as InsightTab,
+	{ key: 'opportunity', label: '机会', types: OPPORTUNITY_TYPE_KEYS } as InsightTab,
+]
+const activeTabKey = ref('all')
 
 // ── 解析辅助 ────────────────────────────────────────────────────
 
@@ -349,13 +372,94 @@ function severityDotClass(item: UTSJSONObject): string {
 	return 'severity-dot severity-dot-low'
 }
 
+// ── 分类 tab ────────────────────────────────────────────────────
+
+function tabMatchesType(tabKey: string, insightType: string): boolean {
+	if (tabKey == 'all') {
+		// 「全部」只含问题，机会类在「机会」tab 单独查看
+		return !OPPORTUNITY_TYPE_KEYS.includes(insightType)
+	}
+	for (let index = 0; index < insightTabs.length; index += 1) {
+		const tab = insightTabs[index]
+		if (tab.key == tabKey) {
+			return tab.types.includes(insightType)
+		}
+	}
+	return true
+}
+
+// 当前 tab 下的行（聚合卡/单条混合），本地过滤零请求
+function filteredInsightRows(): UTSJSONObject[] {
+	const rows: UTSJSONObject[] = []
+	for (let index = 0; index < insightItems.value.length; index += 1) {
+		const item = insightItems.value[index]
+		if (tabMatchesType(activeTabKey.value, stringValue(item['insight_type']))) {
+			rows.push(item)
+		}
+	}
+	return rows
+}
+
+// tab 徽标数：口径为源问题数（聚合卡按成员数计，单条计 1）
+function tabSourceCount(tabKey: string): number {
+	let total = 0
+	for (let index = 0; index < insightItems.value.length; index += 1) {
+		const item = insightItems.value[index]
+		if (!tabMatchesType(tabKey, stringValue(item['insight_type']))) {
+			continue
+		}
+		total += isGroup(item) ? intValue(item['count'], 1) : 1
+	}
+	return total
+}
+
+function tabChipLabel(tab: InsightTab): string {
+	const count = tabSourceCount(tab.key)
+	if (count > 0) {
+		return tab.label + ' ' + count.toString()
+	}
+	return tab.label
+}
+
+function tabChipClass(key: string): string {
+	return activeTabKey.value == key ? 'tab-chip tab-chip-active' : 'tab-chip'
+}
+
+function tabChipTextClass(key: string): string {
+	return activeTabKey.value == key ? 'tab-chip-text tab-chip-text-active' : 'tab-chip-text'
+}
+
+function switchTab(key: string): void {
+	if (activeTabKey.value == key) {
+		return
+	}
+	activeTabKey.value = key
+	insightsExpanded.value = false
+}
+
+function listSummaryText(): string {
+	const noun = activeTabKey.value == 'opportunity' ? '个机会' : '个问题'
+	return '共 ' + tabSourceCount(activeTabKey.value).toString() + ' ' + noun + ' · 归并为 ' + filteredInsightRows().length.toString() + ' 行'
+}
+
+function emptyStateText(): string {
+	if (activeTabKey.value == 'opportunity') {
+		return '暂无机会洞察'
+	}
+	if (activeTabKey.value == 'all') {
+		return '暂无待处理问题，运营状态良好'
+	}
+	return '该维度暂无待处理问题'
+}
+
 function visibleInsights(): UTSJSONObject[] {
-	if (insightsExpanded.value || insightItems.value.length <= 3) {
-		return insightItems.value
+	const rows = filteredInsightRows()
+	if (insightsExpanded.value || rows.length <= 3) {
+		return rows
 	}
 	const result: UTSJSONObject[] = []
 	for (let index = 0; index < 3; index += 1) {
-		result.push(insightItems.value[index])
+		result.push(rows[index])
 	}
 	return result
 }
@@ -394,10 +498,9 @@ async function loadInsights(): Promise<void> {
 	insightsLoading.value = true
 	insightsError.value = ''
 	try {
-		// 分组清单：同父分类同类型问题合并为聚合卡，按影响金额排序
-		const response = await getCategoryInsightsGrouped('problem', '', 100)
+		// 分组清单：kind=all 一次拉全（问题+机会），各 tab 本地按类型过滤
+		const response = await getCategoryInsightsGrouped('all', '', 200)
 		insightItems.value = objectArrayValue(response['items'])
-		insightSourceCount.value = intValue(response['source_count'], insightItems.value.length)
 		autoMarkListRead(insightItems.value)
 	} catch (error) {
 		insightsError.value = parseErrorMessage(error)
@@ -424,18 +527,6 @@ async function executeMarkInsight(item: UTSJSONObject, action: string): Promise<
 
 function markInsight(item: UTSJSONObject, action: string): void {
 	executeMarkInsight(item, action)
-}
-
-function confirmDismissInsight(item: UTSJSONObject): void {
-	uni.showModal({
-		title: '忽略洞察',
-		content: '忽略后此条洞察不再出现在列表中，确定吗？',
-		success: (res) => {
-			if (res.confirm) {
-				executeMarkInsight(item, 'dismiss')
-			}
-		},
-	})
 }
 
 async function executeHandleGroup(item: UTSJSONObject): Promise<void> {
@@ -685,6 +776,44 @@ onShow(() => {
 	font-size: 12px;
 	line-height: 16px;
 	color: #334155;
+	font-weight: bold;
+}
+
+.tab-chip-scroll {
+	margin-top: 10px;
+	width: 100%;
+	/* 横向 scroll-view 必须自身 row 布局，否则内容容器被压到视口宽、无法滚动 */
+	flex-direction: row;
+}
+
+.tab-chip-row {
+	flex-direction: row;
+}
+
+.tab-chip {
+	/* 禁止压缩：chip 保持内容宽，总宽超出视口才能横滑 */
+	flex-shrink: 0;
+	padding-left: 12px;
+	padding-right: 12px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-right: 8px;
+}
+
+.tab-chip-active {
+	background-color: #0F766E;
+}
+
+.tab-chip-text {
+	font-size: 12px;
+	line-height: 16px;
+	color: #475569;
+}
+
+.tab-chip-text-active {
+	color: #FFFFFF;
 	font-weight: bold;
 }
 

@@ -83,6 +83,19 @@
 					</view>
 				</view>
 
+				<view class="card">
+					<text class="card-title">可访问店铺（已选 {{ selectedShopIds.length.toString() }} 家）</text>
+					<text class="shop-hint">不勾选 = 可访问全部门店；勾选后该成员的报表、订单、库存等只显示所选门店数据</text>
+					<lili-check-chips
+						v-if="shopOptions.length > 0"
+						:options="shopOptions"
+						:values="selectedShopIds"
+						:showSelectAll="false"
+						@change="onShopIdsChange"
+					/>
+					<text v-else class="shop-hint">暂无可选店铺</text>
+				</view>
+
 				<view class="save-btn" @click="handleSave">
 					<text class="save-btn-text">{{ isEdit ? '保存修改' : '创建成员' }}</text>
 				</view>
@@ -100,10 +113,12 @@ import {
 	getPermissionCatalog,
 	getStaffDetail,
 	grantPermissions,
+	parseRestrictedShopIds,
 	resetStaffPassword,
 	revokePermissions,
 	updateStaff,
 } from '@/pkg/api/modules/accounts'
+import { shopState, loadShops } from '@/store/shop.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const refreshStorageKey = 'refresh:pages:staff:index'
@@ -125,6 +140,8 @@ const permissionGroups = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const catalogError = ref('')
 const checkedCodes = ref<string[]>([] as string[])
 const originalCodes = ref<string[]>([] as string[])
+// 可访问店铺勾选（string 键防装箱相等性陷阱）；空 = 未限制全公司可见
+const selectedShopIds = ref<string[]>([] as string[])
 
 const isEdit = computed((): boolean => staffId.value > 0)
 const pageTitle = computed((): string => isEdit.value ? '编辑成员' : '新增成员')
@@ -238,6 +255,43 @@ function toggleGroup(group: UTSJSONObject) {
 	checkedCodes.value = next
 }
 
+// ── 可访问店铺 ──────────────────────────────────────────────────
+
+// 选项 = 全局店铺列表（老板不受限，即全公司启用店）；
+// 已勾选但不在列表里的 id（停业店）保留为「店铺 #id」chip，避免保存时静默丢失
+const shopOptions = computed((): UTSJSONObject[] => {
+	const result: UTSJSONObject[] = []
+	const knownKeys: string[] = []
+	for (let index = 0; index < shopState.shops.length; index += 1) {
+		const shop = shopState.shops[index]
+		const key = shop.id.toString()
+		knownKeys.push(key)
+		result.push({ value: key, label: shop.name } as UTSJSONObject)
+	}
+	for (let index = 0; index < selectedShopIds.value.length; index += 1) {
+		const key = selectedShopIds.value[index]
+		if (knownKeys.indexOf(key) < 0) {
+			result.push({ value: key, label: '店铺 #' + key } as UTSJSONObject)
+		}
+	}
+	return result
+})
+
+// lili-check-chips 纯受控：change 事件回传完整新数组，拷贝回本地状态
+function onShopIdsChange(next: any | null) {
+	selectedShopIds.value = toStringArray(next)
+}
+
+// 勾选集转数字数组（提交用）
+function buildShopIdsPayload(): number[] {
+	const result: number[] = []
+	for (let index = 0; index < selectedShopIds.value.length; index += 1) {
+		const parsed = parseInt(selectedShopIds.value[index])
+		if (!isNaN(parsed) && parsed > 0) result.push(parsed)
+	}
+	return result
+}
+
 // ── 数据加载 ────────────────────────────────────────────────────
 
 async function loadCatalog() {
@@ -264,6 +318,13 @@ async function loadDetail() {
 		const codes = toStringArray(detail['permissions'])
 		checkedCodes.value = codes
 		originalCodes.value = codes
+		// 可访问店铺回显（旧服务端缺字段兜底空数组）
+		const restrictedIds = parseRestrictedShopIds(detail)
+		const shopKeys: string[] = []
+		for (let index = 0; index < restrictedIds.length; index += 1) {
+			shopKeys.push(restrictedIds[index].toString())
+		}
+		selectedShopIds.value = shopKeys
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error, '成员详情加载失败'))
 	}
@@ -312,12 +373,18 @@ async function persistCreate() {
 	body['username'] = username.value.trim()
 	body['password'] = password.value
 	body['permissions'] = checkedCodes.value
+	// 新建态：勾了才带 shop_ids（不传 = 不限制）
+	if (selectedShopIds.value.length > 0) {
+		body['shop_ids'] = buildShopIdsPayload()
+	}
 	await createStaff(body)
 }
 
 async function persistUpdate() {
 	const body = buildProfileBody()
 	body['is_active'] = isActive.value
+	// 编辑态始终带 shop_ids（整体替换语义：空数组 = 清空限制恢复全公司可见）
+	body['shop_ids'] = buildShopIdsPayload()
 	await updateStaff(staffId.value, body)
 	// 权限差量：新勾选的授权、取消勾选的撤销
 	const toGrant = diffCodes(checkedCodes.value, originalCodes.value)
@@ -375,6 +442,8 @@ onLoad((query: OnLoadOptions) => {
 	}
 	loadCatalog()
 	if (staffId.value > 0) loadDetail()
+	// 店铺列表为空时补拉一次（内部吞错，失败时选项区显示「暂无可选店铺」）
+	if (shopState.shops.length == 0) loadShops()
 })
 </script>
 
@@ -391,6 +460,7 @@ onLoad((query: OnLoadOptions) => {
 .mini-btn { margin-left: 8px; height: 36px; border-radius: 8px; background-color: #0F172A; padding-left: 14px; padding-right: 14px; align-items: center; justify-content: center; }
 .mini-btn-text { font-size: 13px; color: #FFFFFF; }
 .perm-head { flex-direction: row; justify-content: space-between; align-items: center; }
+.shop-hint { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 6px; margin-bottom: 8px; }
 .perm-error { font-size: 13px; line-height: 18px; color: #B42318; margin-top: 6px; }
 .perm-group { margin-top: 12px; }
 .perm-group-head { flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 8px; }

@@ -88,7 +88,6 @@ export type SupplierGlobalStatisticsResponse = {
 }
 
 export type SupplierMutationData = {
-	code: string | null
 	name: string
 	address: string | null
 	phone: string | null
@@ -472,9 +471,6 @@ function buildSupplierMutationBody(data: SupplierMutationData): UTSJSONObject {
 	const body = {
 		name: data.name,
 	} as UTSJSONObject
-	if (data.code != null) {
-		body['code'] = data.code
-	}
 	if (data.address != null) {
 		body['address'] = data.address
 	}

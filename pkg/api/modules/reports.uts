@@ -122,6 +122,66 @@ export type ProductSalesResponse = {
 	page_size: number
 }
 
+// ── 多店对比 ────────────────────────────────────────────────────
+// 无 report_finance_view 权限时后端整体删除毛利/库存价值等字段，
+// 解析后对应字符串字段为空串，前端按"空则隐藏该区块"处理
+
+export type ShopComparePeriod = {
+	key: string
+	date_from: string
+	date_to: string
+}
+
+export type ShopComparePrevious = {
+	date_from: string
+	date_to: string
+	sales_amount: string
+	order_count: number
+	net_sales_amount: string
+	gross_profit: string
+}
+
+export type ShopCompareRow = {
+	shop_id: number
+	shop_name: string
+	sales_amount: string
+	order_count: number
+	average_order_value: string
+	return_amount: string
+	return_count: number
+	net_sales_amount: string
+	share: string
+	gross_profit: string
+	gross_margin: string
+	cost_missing_amount: string
+	inventory_value: string
+	low_stock_count: number
+	out_of_stock_count: number
+	previous: ShopComparePrevious
+}
+
+export type ShopCompareTotals = {
+	shop_count: number
+	sales_amount: string
+	order_count: number
+	average_order_value: string
+	return_amount: string
+	return_count: number
+	net_sales_amount: string
+	gross_profit: string
+	gross_margin: string
+	cost_missing_amount: string
+	inventory_value: string
+	previous: ShopComparePrevious
+}
+
+export type ShopsComparisonReport = {
+	period: ShopComparePeriod
+	previous_period: ShopComparePeriod
+	shops: ShopCompareRow[]
+	totals: ShopCompareTotals
+}
+
 function intValue(value: any | null): number {
 	if (value == null) return 0
 	const parsed = parseInt('' + value)
@@ -362,12 +422,119 @@ export function buildProductSalesResponse(raw: any): ProductSalesResponse {
 	} as ProductSalesResponse
 }
 
-export async function getDashboardReport(period: ReportPeriod): Promise<DashboardReport> {
-	const raw = await request('/api/reports/dashboard/', 'GET', { period: period } as UTSJSONObject, true)
+// ── 多店对比解析 ────────────────────────────────────────────────
+
+// request() 已解包 data，这里兜底兼容外层信封原样返回的情况
+function shopsComparisonDataObject(raw: any): UTSJSONObject {
+	const rawText = JSON.stringify(raw)
+	const rawObject = rawText == null || rawText == '' ? null : JSON.parseObject<UTSJSONObject>(rawText)
+	if (rawObject == null) throw new Error('多店对比响应解析失败')
+	if (rawObject!['shops'] != null || rawObject!['totals'] != null) return rawObject!
+	const dataValue = rawObject!['data']
+	if (dataValue != null) {
+		const dataObject = objectValue(dataValue)
+		if (dataObject['shops'] != null || dataObject['totals'] != null) return dataObject
+	}
+	return rawObject!
+}
+
+function buildShopComparePeriod(raw: UTSJSONObject): ShopComparePeriod {
+	return {
+		key: stringValue(raw['key']),
+		date_from: stringValue(raw['date_from']),
+		date_to: stringValue(raw['date_to']),
+	} as ShopComparePeriod
+}
+
+function buildShopComparePrevious(raw: UTSJSONObject): ShopComparePrevious {
+	return {
+		date_from: stringValue(raw['date_from']),
+		date_to: stringValue(raw['date_to']),
+		sales_amount: stringValue(raw['sales_amount']),
+		order_count: intValue(raw['order_count']),
+		net_sales_amount: stringValue(raw['net_sales_amount']),
+		gross_profit: stringValue(raw['gross_profit']),
+	} as ShopComparePrevious
+}
+
+function buildShopCompareRows(value: any | null): ShopCompareRow[] {
+	const rows = arrayValue(value)
+	const result: ShopCompareRow[] = []
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]
+		result.push({
+			shop_id: intValue(row['shop_id']),
+			shop_name: stringValue(row['shop_name']),
+			sales_amount: stringValue(row['sales_amount']),
+			order_count: intValue(row['order_count']),
+			average_order_value: stringValue(row['average_order_value']),
+			return_amount: stringValue(row['return_amount']),
+			return_count: intValue(row['return_count']),
+			net_sales_amount: stringValue(row['net_sales_amount']),
+			share: stringValue(row['share']),
+			gross_profit: stringValue(row['gross_profit']),
+			gross_margin: stringValue(row['gross_margin']),
+			cost_missing_amount: stringValue(row['cost_missing_amount']),
+			inventory_value: stringValue(row['inventory_value']),
+			low_stock_count: intValue(row['low_stock_count']),
+			out_of_stock_count: intValue(row['out_of_stock_count']),
+			previous: buildShopComparePrevious(objectValue(row['previous'])),
+		} as ShopCompareRow)
+	}
+	return result
+}
+
+function buildShopCompareTotals(raw: UTSJSONObject): ShopCompareTotals {
+	return {
+		shop_count: intValue(raw['shop_count']),
+		sales_amount: stringValue(raw['sales_amount']),
+		order_count: intValue(raw['order_count']),
+		average_order_value: stringValue(raw['average_order_value']),
+		return_amount: stringValue(raw['return_amount']),
+		return_count: intValue(raw['return_count']),
+		net_sales_amount: stringValue(raw['net_sales_amount']),
+		gross_profit: stringValue(raw['gross_profit']),
+		gross_margin: stringValue(raw['gross_margin']),
+		cost_missing_amount: stringValue(raw['cost_missing_amount']),
+		inventory_value: stringValue(raw['inventory_value']),
+		previous: buildShopComparePrevious(objectValue(raw['previous'])),
+	} as ShopCompareTotals
+}
+
+export function buildShopsComparisonReport(raw: any): ShopsComparisonReport {
+	const rawObject = shopsComparisonDataObject(raw)
+	return {
+		period: buildShopComparePeriod(objectValue(rawObject['period'])),
+		previous_period: buildShopComparePeriod(objectValue(rawObject['previous_period'])),
+		shops: buildShopCompareRows(rawObject['shops']),
+		totals: buildShopCompareTotals(objectValue(rawObject['totals'])),
+	} as ShopsComparisonReport
+}
+
+export async function getDashboardReport(period: ReportPeriod, shopId: number = 0): Promise<DashboardReport> {
+	const params = { period: period } as UTSJSONObject
+	if (shopId > 0) {
+		params['shop_id'] = shopId
+	}
+	const raw = await request('/api/reports/dashboard/', 'GET', params, true)
 	return buildDashboardReport(raw)
 }
 
-export async function getProductSalesReport(query: ProductSalesQuery): Promise<ProductSalesResponse> {
-	const raw = await request('/api/reports/product-sales/', 'GET', buildProductSalesQuery(query), true)
+export async function getProductSalesReport(query: ProductSalesQuery, shopId: number = 0): Promise<ProductSalesResponse> {
+	const params = buildProductSalesQuery(query)
+	if (shopId > 0) {
+		params['shop_id'] = shopId
+	}
+	const raw = await request('/api/reports/product-sales/', 'GET', params, true)
 	return buildProductSalesResponse(raw)
+}
+
+// ordering 可选：-sales_amount(默认)/-gross_profit/-order_count/-average_order_value
+export async function getShopsComparison(period: string, ordering: string): Promise<ShopsComparisonReport> {
+	const params = { period: period } as UTSJSONObject
+	if (ordering != '') {
+		params['ordering'] = ordering
+	}
+	const raw = await request('/api/reports/shops/comparison/', 'GET', params, true)
+	return buildShopsComparisonReport(raw)
 }

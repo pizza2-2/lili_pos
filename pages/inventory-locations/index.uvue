@@ -2,7 +2,7 @@
 	<view class="page">
 		<lili-universal-filter
 			title="库存位置"
-			searchPlaceholder="库位名称、编码、地址"
+			searchPlaceholder="库位名称、地址"
 			:searchValue="keyword"
 			:filterVisible="filterVisible"
 			:showBack="true"
@@ -264,7 +264,7 @@ function locationItem(item: UTSJSONObject): UTSJSONObject {
 		id: stringField(item, 'id'),
 		rawId: stringField(item, 'id'),
 		name: stringField(item, 'name', '未命名库位'),
-		subtitle: '编码：' + stringField(item, 'code', '-'),
+		subtitle: '地址：' + stringField(item, 'address', '-'),
 		meta: stringField(item, 'shop_name', '-'),
 		typeText: typeText,
 		location_type: rawType,
@@ -290,7 +290,7 @@ function handleCreate() {
 function handleSubtitleClick(payload: UTSJSONObject) {
 	const item = payload['item']
 	if (item == null) return
-	copyText(stringField(item as UTSJSONObject, 'subtitle'), '编码已复制', '暂无编码')
+	copyText(stringField(item as UTSJSONObject, 'subtitle'), '内容已复制', '暂无内容')
 }
 
 function handleFieldClick(payload: UTSJSONObject) {

@@ -1,0 +1,110 @@
+import { getProfile, ProfileResponse, ProfileShop } from '@/pkg/api/modules/login.uts'
+import { setAuthPermissions } from '@/store/auth.uts'
+
+// 全局店铺口径：0 = 全部门店；选中值跨页面共享并持久化
+// 报表页/工作台/商品销售/分类分析统一读写此 store，保证各页口径一致
+
+export type ShopOption = {
+	id: number
+	name: string
+}
+
+export type ShopState = {
+	shops: ShopOption[]
+	selectedShopId: number
+}
+
+const SHOP_STORAGE_KEY = 'global:selected-shop'
+// 旧版分类分析页私有 key，首次启动迁移后删除
+const LEGACY_SHOP_STORAGE_KEY = 'category:selected-shop'
+
+function storageString(key: string): string {
+	try {
+		const raw: any | null = uni.getStorageSync(key)
+		if (raw == null) {
+			return ''
+		}
+		return '' + raw
+	} catch (error) {
+		return ''
+	}
+}
+
+// 启动时同步恢复持久化的选中店铺；global key 不存在时迁移旧 key
+function restoreSelectedShopSync(): number {
+	let saved = storageString(SHOP_STORAGE_KEY)
+	if (saved == '') {
+		const legacy = storageString(LEGACY_SHOP_STORAGE_KEY)
+		if (legacy != '') {
+			saved = legacy
+			try {
+				uni.setStorageSync(SHOP_STORAGE_KEY, legacy)
+				uni.removeStorageSync(LEGACY_SHOP_STORAGE_KEY)
+			} catch (error) {
+			}
+		}
+	}
+	if (saved == '') {
+		return 0
+	}
+	const parsed = parseInt(saved)
+	if (isNaN(parsed) || parsed < 0) {
+		return 0
+	}
+	return parsed
+}
+
+export const shopState = reactive({
+	shops: [] as ShopOption[],
+	selectedShopId: restoreSelectedShopSync(),
+} as ShopState)
+
+// 切换选中店铺并持久化
+export function setSelectedShop(id: number): void {
+	shopState.selectedShopId = id
+	try {
+		uni.setStorageSync(SHOP_STORAGE_KEY, id.toString())
+	} catch (error) {
+	}
+}
+
+// 用用户信息里的 shops 字段刷新店铺列表；
+// 旧服务端无该字段时保持空列表（切换器自然隐藏），并校验持久化选中项仍有效
+export function applyProfileShops(profile: ProfileResponse): void {
+	const next: ShopOption[] = []
+	const rawShops: ProfileShop[] | null = profile.shops
+	if (rawShops != null) {
+		for (let index = 0; index < rawShops.length; index += 1) {
+			const shop = rawShops[index]
+			if (shop.id > 0 && shop.name != '') {
+				next.push({ id: shop.id, name: shop.name } as ShopOption)
+			}
+		}
+	}
+	shopState.shops = next
+	// 持久化的店铺已不存在（被删/换公司/被禁用）时回退到全部门店
+	if (shopState.selectedShopId > 0) {
+		let found = false
+		for (let index = 0; index < next.length; index += 1) {
+			if (next[index].id == shopState.selectedShopId) {
+				found = true
+				break
+			}
+		}
+		if (!found) {
+			setSelectedShop(0)
+		}
+	}
+}
+
+// 拉取当前用户信息填充店铺列表；失败静默（不阻塞页面，切换器隐藏）
+export async function loadShops(): Promise<void> {
+	try {
+		const profile = await getProfile()
+		applyProfileShops(profile)
+		// 顺带刷新全局权限码集合（App 启动即调用，覆盖冷启动时的本地缓存）
+		setAuthPermissions(profile.permissions)
+	} catch (error) {
+		// 静默失败：保持现有列表，等下次登录/启动再刷新
+	}
+}

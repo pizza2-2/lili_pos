@@ -198,7 +198,6 @@
 								:showView="insightJumpLabel(item) != ''"
 								@view="goInsightProducts(item)"
 								@handle="markInsight(item, 'handle')"
-								@dismiss="markInsight(item, 'dismiss')"
 							></lili-insight-card>
 							<view v-if="insightItems.length == 0 && !insightsLoading" class="empty-state">
 								<text class="empty-text">该分类暂无待处理洞察</text>
@@ -249,6 +248,7 @@
 import { computed, ref } from 'vue'
 import { getCategoryAnalytics, getCategoryInsights, updateCategoryInsightStatus, CategoryInsightsQuery } from '@/pkg/api/modules/category'
 import { getShopList, ShopListQuery } from '@/pkg/api/modules/shops'
+import { shopState, setSelectedShop } from '@/store/shop.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 import { formatMoney } from '@/pkg/util/format.uts'
 
@@ -282,8 +282,7 @@ const insightItems = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 
 const periodOptions = ref<number[]>([7, 30, 90] as number[])
 
-// 店铺口径切换：0 = 全部门店（公司汇总行）；选择跨页面持久化
-const SHOP_FILTER_STORAGE_KEY = 'category:selected-shop'
+// 店铺口径切换：0 = 全部门店（公司汇总行）；选中值读写全局 store（跨页面共享 + 持久化）
 const shopFilterId = ref(0)
 const shopOptions = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const tabOptions = ref<TabOption[]>([
@@ -727,20 +726,15 @@ function selectShop(id: number): void {
 		return
 	}
 	shopFilterId.value = id
-	try {
-		uni.setStorageSync(SHOP_FILTER_STORAGE_KEY, id.toString())
-	} catch (error) {
-	}
+	// 写回全局 store：报表页/工作台等其它页面跟随同一口径
+	setSelectedShop(id)
 	loadAll()
 }
 
 function restoreShopFilter(): void {
-	try {
-		const savedId = intValue(uni.getStorageSync(SHOP_FILTER_STORAGE_KEY))
-		if (savedId > 0) {
-			shopFilterId.value = savedId
-		}
-	} catch (error) {
+	// 初始值取全局 store（App 启动时已从持久化恢复）
+	if (shopState.selectedShopId > 0) {
+		shopFilterId.value = shopState.selectedShopId
 	}
 }
 
@@ -1003,9 +997,13 @@ onLoad((event: OnLoadOptions) => {
 .shop-chip-scroll {
 	margin-top: 2px;
 	width: 100%;
+	/* 横向 scroll-view 必须自身 row 布局，否则内容容器被压到视口宽、无法滚动（同问题清单 tab） */
+	flex-direction: row;
 }
 
 .chip {
+	/* 禁止压缩：chip 保持内容宽，总宽超出视口才能横滑 */
+	flex-shrink: 0;
 	padding-left: 14px;
 	padding-right: 14px;
 	padding-top: 6px;

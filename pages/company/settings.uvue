@@ -89,7 +89,7 @@
 							</view>
 						</view>
 					</view>
-					<text class="card-hint">收银端商品名称（同步与小票）的取值来源；所选来源为空时自动回退到分类英文名、Kasa 分类英文名。保存后收银端会在下次同步时自动刷新全部名称。</text>
+					<text class="card-hint">收银端商品名称（同步与小票）的取值来源；所选来源为空时自动回退到分类英文名、Kasa 分类英文名。保存后收银端会在下次同步时自动刷新全部名称。该配置为公司级设置，全部门店统一生效。</text>
 				</view>
 
 				<view class="card">
@@ -98,7 +98,22 @@
 						<text class="field-label">无销售天数</text>
 						<input class="field-input" type="number" :value="insightNoSalesDays" placeholder="1-90" @input="onInsightDaysInput" />
 					</view>
-					<text class="card-hint">分类连续无销售达到该天数后，才生成「无销售 / 持续无销售」洞察报告；设为 1 表示当天无销售即报。保存后从下一次洞察生成起生效。</text>
+					<text class="card-hint">分类连续无销售达到该天数后，才生成「无销售 / 持续无销售」洞察报告；设为 1 表示当天无销售即报。保存后从下一次洞察生成起生效。洞察设置为公司级配置，全部门店统一生效。</text>
+
+					<!-- 灵敏度阈值：规格（文案/区间/默认值）由后端下发，前端只做单位换算 -->
+					<text v-if="insightThresholdSpecs.length > 0" class="threshold-section-title">灵敏度阈值</text>
+					<view v-for="(item, tIdx) in insightThresholdSpecs" :key="'threshold-' + thresholdKey(item)" class="threshold-block">
+						<view class="field-row">
+							<text class="field-label">{{ thresholdLabel(item) }}</text>
+							<input class="field-input" type="digit" :value="thresholdInput(item)" :placeholder="thresholdRangeText(item)" @input="onThresholdInput(tIdx, $event as UniInputEvent)" />
+							<text class="threshold-unit">{{ thresholdUnit(item) }}</text>
+						</view>
+						<view class="threshold-desc-row">
+							<text class="threshold-desc">{{ thresholdDesc(item) }}</text>
+							<text class="threshold-reset" @click="resetThreshold(tIdx)">默认 {{ thresholdDefaultDisplay(item) }}{{ thresholdUnit(item) }}</text>
+						</view>
+					</view>
+					<text v-if="insightThresholdSpecs.length > 0" class="card-hint">点「默认」可恢复该项默认值；留空同样按默认处理。保存后从下一次洞察生成起生效。</text>
 				</view>
 
 				<view class="card">
@@ -126,7 +141,26 @@
 							<text class="holiday-chip-text">{{ item }} ✕</text>
 						</view>
 					</view>
-					<text class="card-hint">闭店日（周日禁售、法定假日）销售归零属正常：系统不会产生销售类误报，也不把闭店日计入连续无销售天数和对比基线。点假日标签可移除。</text>
+					<text class="card-hint">闭店日（周日禁售、法定假日）销售归零属正常：系统不会产生销售类误报，也不把闭店日计入连续无销售天数和对比基线。点假日标签可移除。营业日历为公司级设置，全部门店统一生效。</text>
+				</view>
+
+				<view v-if="aiCardAvailable" class="card">
+					<text class="card-title">AI 经营简报</text>
+					<view class="field-row">
+						<text class="field-label">启用简报</text>
+						<switch :checked="aiEnabled" @change="onAiToggle" />
+					</view>
+					<view class="ai-context-block">
+						<text class="field-label">经营背景</text>
+						<textarea
+							class="ai-context-input"
+							:value="aiBusinessContext"
+							placeholder="用一两句话介绍你的店，AI 会据此调整建议。例如：店在学校旁边，9 月开学季文具销量翻倍；周日照常营业。"
+							:maxlength="2000"
+							@input="onAiContextInput"
+						></textarea>
+					</view>
+					<text class="card-hint">开启后每天早上自动生成一份 AI 经营简报，显示在工作台顶部；AI 服务由平台统一提供，无需配置 Key。</text>
 				</view>
 
 				<view class="save-btn" @click="handleSave">
@@ -141,6 +175,7 @@
 
 <script setup lang="uts">
 import { getCompanySettings, updateCompanySettings } from '@/pkg/api/modules/accounts'
+import { getAiConfig, updateAiConfig } from '@/pkg/api/modules/ai'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const loadError = ref('')
@@ -162,11 +197,18 @@ const translationBackends = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const posNameSource = ref('category')
 const posNameSources = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 const insightNoSalesDays = ref('1')
+// 灵敏度阈值：后端下发规格数组（key/label/description/kind/min/max/default/value），
+// 加载时在每项上挂 input 字段（展示单位）作为编辑值
+const insightThresholdSpecs = ref<UTSJSONObject[]>([] as UTSJSONObject[])
 // 营业日历：闭店星期用字符串键（'0'=周一 … '6'=周日），规避 UTS 数字装箱的集合查找陷阱
 const weekdayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const closedWeekdays = ref<string[]>([] as string[])
 const holidayDates = ref<string[]>([] as string[])
 const holidayInput = ref('')
+// AI 简报配置：加载失败（如无 ai_config_manage 权限）时整卡隐藏
+const aiCardAvailable = ref(false)
+const aiEnabled = ref(false)
+const aiBusinessContext = ref('')
 
 function stringField(obj: UTSJSONObject, key: string, fallback: string = ''): string {
 	const value = obj[key]
@@ -214,6 +256,127 @@ function selectBackend(value: string) { translationBackend.value = value }
 function selectPosNameSource(value: string) { posNameSource.value = value }
 function onInsightDaysInput(event: UniInputEvent) { insightNoSalesDays.value = event.detail.value }
 function onHolidayInput(event: UniInputEvent) { holidayInput.value = event.detail.value }
+function onAiToggle(event: UniSwitchChangeEvent) { aiEnabled.value = event.detail.value }
+function onAiContextInput(event: any) {
+	const inputEvent = event as UniInputEvent
+	aiBusinessContext.value = inputEvent.detail.value
+}
+
+// AI 简报配置独立加载：无权限/接口失败时整卡隐藏，不影响其余设置
+function loadAiConfig(): void {
+	getAiConfig().then((data: UTSJSONObject) => {
+		aiEnabled.value = stringField(data, 'enabled') == 'true'
+		aiBusinessContext.value = stringField(data, 'business_context')
+		aiCardAvailable.value = true
+	}).catch((_err) => {
+		aiCardAvailable.value = false
+	})
+}
+
+// ── 灵敏度阈值 ──────────────────────────────────────────────────
+
+function thresholdKey(item: UTSJSONObject): string { return stringField(item, 'key') }
+function thresholdLabel(item: UTSJSONObject): string { return stringField(item, 'label') }
+function thresholdDesc(item: UTSJSONObject): string { return stringField(item, 'description') }
+function thresholdKind(item: UTSJSONObject): string { return stringField(item, 'kind') }
+function thresholdInput(item: UTSJSONObject): string { return stringField(item, 'input') }
+
+function thresholdUnit(item: UTSJSONObject): string {
+	const kind = thresholdKind(item)
+	if (kind == 'ratio') return '%'
+	if (kind == 'days') return '天'
+	return 'zł'
+}
+
+// 存储层比例是小数（0.50），展示层按百分比；天数/金额原样。最多留 2 位小数并去尾零
+function toDisplayValue(kind: string, raw: string): string {
+	const parsed = parseFloat(raw)
+	if (isNaN(parsed)) return raw
+	let value = parsed
+	if (kind == 'ratio') {
+		value = parsed * 100
+	}
+	let text = value.toFixed(2)
+	while (text.endsWith('0')) {
+		text = text.substring(0, text.length - 1)
+	}
+	if (text.endsWith('.')) {
+		text = text.substring(0, text.length - 1)
+	}
+	return text
+}
+
+function thresholdDefaultDisplay(item: UTSJSONObject): string {
+	return toDisplayValue(thresholdKind(item), stringField(item, 'default'))
+}
+
+function thresholdRangeText(item: UTSJSONObject): string {
+	const kind = thresholdKind(item)
+	return toDisplayValue(kind, stringField(item, 'min')) + '-' + toDisplayValue(kind, stringField(item, 'max'))
+}
+
+function applyThresholdSpecs(raw: any | null): void {
+	const specs = toObjectArray(raw)
+	for (let i = 0; i < specs.length; i += 1) {
+		const spec = specs[i]
+		spec['input'] = toDisplayValue(stringField(spec, 'kind'), stringField(spec, 'value'))
+	}
+	insightThresholdSpecs.value = specs
+}
+
+function onThresholdInput(index: number, event: UniInputEvent): void {
+	const list = insightThresholdSpecs.value
+	if (index < 0 || index >= list.length) return
+	// 输入框自身显示用户键入内容，这里只记录值，不整组替换（避免每次键入全列表重渲染）
+	list[index]['input'] = event.detail.value
+}
+
+function resetThreshold(index: number): void {
+	const list = insightThresholdSpecs.value
+	if (index < 0 || index >= list.length) return
+	list[index]['input'] = thresholdDefaultDisplay(list[index])
+	// UTSJSONObject 深层变更不触发渲染，整组替换让输入框回显默认值
+	insightThresholdSpecs.value = list.slice(0)
+}
+
+// 校验并把展示单位换回存储单位；出错返回 null 并弹提示
+function buildThresholdOverrides(): UTSJSONObject | null {
+	const overrides = {} as UTSJSONObject
+	for (let i = 0; i < insightThresholdSpecs.value.length; i += 1) {
+		const spec = insightThresholdSpecs.value[i]
+		const kind = thresholdKind(spec)
+		const label = thresholdLabel(spec)
+		const inputText = thresholdInput(spec).trim()
+		if (inputText == '') {
+			continue // 留空 = 该项恢复默认
+		}
+		const parsed = parseFloat(inputText)
+		if (isNaN(parsed)) {
+			uni.showToast({ title: '「' + label + '」需填写数字', icon: 'none', duration: 3500 })
+			return null
+		}
+		if (kind == 'days' && parsed != Math.round(parsed)) {
+			uni.showToast({ title: '「' + label + '」需为整数天数', icon: 'none', duration: 3500 })
+			return null
+		}
+		let stored = parsed
+		if (kind == 'ratio') {
+			stored = parsed / 100
+		}
+		const minValue = parseFloat(stringField(spec, 'min'))
+		const maxValue = parseFloat(stringField(spec, 'max'))
+		if ((!isNaN(minValue) && stored < minValue) || (!isNaN(maxValue) && stored > maxValue)) {
+			uni.showToast({
+				title: '「' + label + '」需在 ' + thresholdRangeText(spec) + thresholdUnit(spec) + ' 之间',
+				icon: 'none',
+				duration: 3500,
+			})
+			return null
+		}
+		overrides[thresholdKey(spec)] = kind == 'days' ? Math.round(stored).toString() : stored.toString()
+	}
+	return overrides
+}
 
 function isClosedWeekday(index: number): boolean {
 	return closedWeekdays.value.includes(index.toString())
@@ -333,6 +496,7 @@ async function loadSettings() {
 		insightNoSalesDays.value = isNaN(rawInsightDays) ? '1' : rawInsightDays.toString()
 		closedWeekdays.value = toStringList(data['closed_weekdays'])
 		holidayDates.value = toStringList(data['holiday_dates'])
+		applyThresholdSpecs(data['insight_threshold_specs'])
 	} catch (error) {
 		loadError.value = parseErrorMessage(error, '公司设置加载失败')
 	}
@@ -347,6 +511,11 @@ async function executeSave() {
 	const insightDays = parseInt(insightNoSalesDays.value.trim())
 	if (isNaN(insightDays) || insightDays < 1 || insightDays > 90) {
 		uni.showToast({ title: '无销售天数需为 1-90 的整数', icon: 'none', duration: 3500 })
+		return
+	}
+	// 灵敏度阈值：整体替换提交，与默认一致的项服务端自动丢弃（下滑线须高于骤降线由服务端校验）
+	const thresholdOverrides = buildThresholdOverrides()
+	if (thresholdOverrides == null) {
 		return
 	}
 	submitting.value = true
@@ -373,6 +542,7 @@ async function executeSave() {
 		}
 		body['closed_weekdays'] = weekdayNumbers
 		body['holiday_dates'] = holidayDates.value
+		body['insight_thresholds'] = thresholdOverrides
 		// 凭据字段：留空表示保持不变，只有输入了新值才提交
 		if (ministryToken.value.trim() != '') {
 			body['ministry_of_finance_token'] = ministryToken.value.trim()
@@ -383,8 +553,18 @@ async function executeSave() {
 		const data = await updateCompanySettings(body)
 		hasMinistryToken.value = stringField(data, 'has_ministry_of_finance_token') == 'true'
 		hasTranslationKey.value = stringField(data, 'has_translation_api_key') == 'true'
+		// 用服务端归一化后的规格回填输入框（如 0.7 → 70%）
+		applyThresholdSpecs(data['insight_threshold_specs'])
 		ministryToken.value = ''
 		translationApiKey.value = ''
+		// AI 简报配置随保存按钮一并提交；失败单独提示，不影响公司设置保存结果
+		if (aiCardAvailable.value) {
+			try {
+				await updateAiConfig(aiEnabled.value, aiBusinessContext.value.trim())
+			} catch (aiError) {
+				showErrorToast(parseErrorMessage(aiError, 'AI 简报配置保存失败'))
+			}
+		}
 		uni.showToast({ title: '公司设置已保存', icon: 'success' })
 	} catch (error) {
 		showErrorToast(parseErrorMessage(error, '公司设置保存失败'))
@@ -398,7 +578,10 @@ function handleSave() {
 	executeSave()
 }
 
-onLoad(() => { loadSettings() })
+onLoad(() => {
+	loadSettings()
+	loadAiConfig()
+})
 </script>
 
 <style>
@@ -413,6 +596,12 @@ onLoad(() => { loadSettings() })
 .field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
 .field-static { flex: 1; font-size: 14px; line-height: 20px; color: #0F172A; }
 .backend-options { flex: 1; flex-direction: row; flex-wrap: wrap; }
+.threshold-section-title { font-size: 14px; line-height: 20px; color: #0F172A; font-weight: bold; margin-top: 14px; }
+.threshold-block { border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: #F1F5F9; padding-bottom: 8px; }
+.threshold-unit { width: 26px; margin-left: 6px; font-size: 13px; line-height: 18px; color: #64748B; }
+.threshold-desc-row { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 4px; }
+.threshold-desc { flex: 1; font-size: 11px; line-height: 16px; color: #94A3B8; padding-right: 8px; }
+.threshold-reset { font-size: 12px; line-height: 17px; color: #0284C7; }
 .weekday-options { margin-top: 8px; }
 .holiday-add-btn { margin-left: 8px; padding-left: 14px; padding-right: 14px; padding-top: 9px; padding-bottom: 9px; background-color: #0F172A; border-radius: 8px; }
 .holiday-add-text { font-size: 13px; color: #FFFFFF; }
@@ -428,6 +617,8 @@ onLoad(() => { loadSettings() })
 .error-desc { font-size: 14px; line-height: 20px; color: #7F1D1D; margin-top: 8px; text-align: center; }
 .retry-btn { margin-top: 14px; height: 40px; border-radius: 8px; background-color: #0F172A; padding-left: 18px; padding-right: 18px; align-items: center; justify-content: center; }
 .retry-btn-text { font-size: 14px; color: #FFFFFF; }
+.ai-context-block { margin-top: 10px; }
+.ai-context-input { margin-top: 8px; width: 100%; height: 88px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding: 10px; font-size: 13px; line-height: 19px; }
 .save-btn { margin-top: 6px; height: 46px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
 .save-btn-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
 </style>

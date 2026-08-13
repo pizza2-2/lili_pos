@@ -92,7 +92,6 @@ function invertInsightSelection(selected: string[]): string[] {
 const initialData = ref<UTSJSONObject>({
 	name: '',
 	name_en: '',
-	code: '',
 	parent_id: '',
 	parent_text: '',
 	description: '',
@@ -115,7 +114,6 @@ const initialData = ref<UTSJSONObject>({
 const currentFormData = ref<UTSJSONObject>({
 	name: '',
 	name_en: '',
-	code: '',
 	parent_id: '',
 	parent_text: '',
 	description: '',
@@ -298,7 +296,7 @@ async function fetchTaxRateOptions(params: UTSJSONObject): Promise<UTSJSONObject
 }
 
 function formulaOptionText(item: ProductPricingFormulaItem): string {
-	return item.code == '' ? item.name : item.name + ' / ' + item.code
+	return item.name
 }
 
 function printTemplateOptionText(item: PrintTemplateItem): string {
@@ -648,7 +646,6 @@ function buildInitialDataFromDetail(item: CategoryItem, parentText: string): UTS
 	return {
 		name: item.name,
 		name_en: rawNameEn == null ? '' : (rawNameEn as string),
-		code: item.code,
 		parent_id: item.parent_id > 0 ? item.parent_id.toString() : '',
 		parent_text: parentText,
 		description: rawDescription == null ? '' : (rawDescription as string),
@@ -706,7 +703,6 @@ function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationDa
 	const normalizedPrintTemplateId = normalizeNullableId(formDataObject['default_print_template_id'])
 	const name = stringValue(formDataObject['name'])
 	const nameEn = stringValue(formDataObject['name_en'])
-	const code = stringValue(formDataObject['code'])
 	const description = stringValue(formDataObject['description'])
 	const taxRate = stringValue(formDataObject['tax_rate'], '0.23')
 	const posSaleEnabled = booleanValue(formDataObject['pos_sale_enabled'], true)
@@ -720,7 +716,6 @@ function buildMutationPayload(formDataObject: UTSJSONObject): CategoryMutationDa
 	return {
 		name: name,
 		name_en: nameEn == '' ? null : nameEn,
-		code: code == '' ? null : code,
 		parent: normalizedParentId,
 		parent_id: normalizedParentId,
 		description: description == '' ? null : description,
@@ -1054,12 +1049,6 @@ const formSections = ref<UTSJSONObject[]>([
 				rightActionIcon: '/static/icon/search.svg',
 			} as UTSJSONObject,
 			{
-				key: 'code',
-				label: '分类编码',
-				type: 'input',
-				placeholder: '留空则自动生成',
-			} as UTSJSONObject,
-			{
 				key: 'parent_text',
 				label: '当前父分类',
 				type: 'input',
@@ -1141,7 +1130,7 @@ const formSections = ref<UTSJSONObject[]>([
 				textKey: 'default_pricing_formula_text',
 				title: '选择价格公式',
 				placeholder: '可不设置，商品创建后可单独覆盖',
-				searchPlaceholder: '请输入公式名称或编码',
+				searchPlaceholder: '请输入公式名称',
 				emptyText: '暂无价格公式',
 				showAddAction: true,
 				showEditAction: true,
@@ -1273,7 +1262,6 @@ onLoad((event: OnLoadOptions) => {
 		setInitialData({
 			name: '',
 			name_en: '',
-			code: '',
 			parent_id: parentIdText,
 			parent_text: parentNameText == '' ? parentIdText : parentNameText,
 			description: '',
@@ -1305,7 +1293,6 @@ onLoad((event: OnLoadOptions) => {
 	setInitialData({
 		name: '',
 		name_en: '',
-		code: '',
 		parent_id: '',
 		parent_text: '根分类（无父分类）',
 		description: '',

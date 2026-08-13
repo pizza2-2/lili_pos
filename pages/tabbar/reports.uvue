@@ -21,6 +21,16 @@
 				</view>
 			</view>
 
+			<!-- 多店：店铺口径切换 + 多店对比入口（单店时整行隐藏） -->
+			<view v-if="hasMultipleShops" class="shop-strip">
+				<view class="shop-strip-switcher">
+					<lili-shop-switcher @change="handleShopChange"></lili-shop-switcher>
+				</view>
+				<view class="compare-entry" @click="openShopComparison">
+					<text class="compare-entry-text">多店对比</text>
+				</view>
+			</view>
+
 			<view v-if="errorMessage != '' && !isLoading" class="notice-card">
 				<text class="notice-title">加载失败</text>
 				<text class="notice-desc">{{ errorMessage }}</text>
@@ -308,6 +318,7 @@
 import { computed } from 'vue'
 import { DashboardReport, ReportAlert, ReportHourlyItem, ReportInventory, ReportOverview, ReportPaymentMethod, ReportPeriod, ReportPrevious, ReportTrendItem, ReportRankItem, getDashboardReport } from '@/pkg/api/modules/reports.uts'
 import { getCategoryDailyBrief, getCategoryHealthScores, CategoryHealthScoreItem } from '@/pkg/api/modules/category'
+import { shopState } from '@/store/shop.uts'
 import { resolveReportStartPeriod, setReportLastPeriod } from '@/pkg/util/settings.uts'
 import { formatMoney } from '@/pkg/util/format.uts'
 
@@ -404,6 +415,11 @@ const currentPeriodLabel = computed(() : string => {
 		}
 	}
 	return '今日'
+})
+
+// 多店口径：店铺列表来自全局 store（登录/启动时填充）
+const hasMultipleShops = computed(() : boolean => {
+	return shopState.shops.length > 1
 })
 
 const maxTrendAmount = computed(() : number => {
@@ -668,7 +684,7 @@ async function loadReport() {
 	isLoading.value = true
 	errorMessage.value = ''
 	try {
-		const data = await getDashboardReport(selectedPeriod.value)
+		const data = await getDashboardReport(selectedPeriod.value, shopState.selectedShopId)
 		applyReport(data)
 	} catch (error) {
 		errorMessage.value = parseErrorMessage(error)
@@ -684,6 +700,15 @@ function changePeriod(period: ReportPeriod) {
 	selectedPeriod.value = period
 	setReportLastPeriod(period)
 	loadReport()
+}
+
+// 切换店铺口径后重载报表（明细页自行读全局口径，无需传参）
+function handleShopChange(_id: number) {
+	loadReport()
+}
+
+function openShopComparison() {
+	uni.navigateTo({ url: '/pages/reports/shop-comparison' })
 }
 
 function openProductSalesDetail() {
@@ -869,6 +894,40 @@ onShow(() => {
 .period-text-active {
 	font-weight: 700;
 	color: #111827;
+}
+
+.shop-strip {
+	margin-top: 8px;
+	flex-direction: row;
+	align-items: center;
+}
+
+.shop-strip-switcher {
+	flex: 1;
+}
+
+.compare-entry {
+	height: 30px;
+	margin-left: 8px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #EEF2FF;
+	transition-property: transform, background-color;
+	transition-duration: 180ms;
+}
+
+.compare-entry:active {
+	transform: scale(0.96);
+	background-color: #DBEAFE;
+}
+
+.compare-entry-text {
+	font-size: 11px;
+	font-weight: 700;
+	color: #1D4ED8;
 }
 
 .notice-card,

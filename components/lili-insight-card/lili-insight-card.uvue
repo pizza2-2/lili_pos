@@ -4,6 +4,9 @@
 			<view :class="dotClass"></view>
 			<text class="ic-title">{{ titleText }}</text>
 			<text v-if="impactText != ''" class="ic-impact">{{ impactText }}</text>
+			<view class="ic-menu" @click="openActionMenu">
+				<text class="ic-menu-text">⋯</text>
+			</view>
 		</view>
 		<text class="ic-meta">{{ metaText }}</text>
 		<text v-if="breakdownText != ''" class="ic-breakdown">{{ breakdownText }}</text>
@@ -22,17 +25,6 @@
 			<text v-if="whyText != ''" class="ic-why-text">{{ whyText }}</text>
 		</view>
 		<text v-if="suggestionText != ''" class="ic-suggestion">{{ suggestionText }}</text>
-		<view class="ic-actions">
-			<view v-if="showView" class="ic-btn ic-btn-primary" @click="emitView">
-				<text class="ic-btn-primary-text">{{ viewLabel }}</text>
-			</view>
-			<view class="ic-btn" @click="emitHandle">
-				<text class="ic-btn-text">已处理</text>
-			</view>
-			<view class="ic-btn" @click="emitDismiss">
-				<text class="ic-btn-text">忽略</text>
-			</view>
-		</view>
 	</view>
 </template>
 
@@ -59,7 +51,7 @@ const props = defineProps({
 	},
 })
 
-const emit = defineEmits(['view', 'handle', 'dismiss'])
+const emit = defineEmits(['view', 'handle'])
 
 const whyOpen = ref(false)
 
@@ -293,16 +285,81 @@ function toggleWhy(): void {
 	whyOpen.value = !whyOpen.value
 }
 
-function emitView(): void {
-	emit('view')
+function insightCategoryId(): number {
+	const category = obj(props.insight['category'])
+	return num(category['id'], 0)
 }
 
-function emitHandle(): void {
-	emit('handle')
+function insightCategoryName(): string {
+	const category = obj(props.insight['category'])
+	return str(category['full_name'], str(category['name']))
 }
 
-function emitDismiss(): void {
-	emit('dismiss')
+function goEditCategory(): void {
+	const id = insightCategoryId()
+	if (id <= 0) {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/category/from?id=' + id.toFixed(0) + '&mode=edit',
+		fail: (_) => {
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+// 快速盘点：跳新建盘点单页并预填该分类，用户只需再选盘点位置
+function goQuickStocktake(): void {
+	const id = insightCategoryId()
+	if (id <= 0) {
+		return
+	}
+	uni.navigateTo({
+		url: '/pages/inventory-checks/create?category_id=' + id.toFixed(0) + '&category_name=' + encodeURIComponent(insightCategoryName()),
+		fail: (_) => {
+			uni.showToast({ title: '页面层级过深，请先返回', icon: 'none', duration: 3000 })
+		},
+	})
+}
+
+// 统一操作菜单（⋯）：查看商品/已处理仍回抛事件由父页处理，编辑分类与快速盘点组件内直跳
+function openActionMenu(): void {
+	const itemList: string[] = [] as string[]
+	if (props.showView) {
+		itemList.push(viewLabel.value)
+	}
+	itemList.push('已处理')
+	const hasCategory = insightCategoryId() > 0
+	if (hasCategory) {
+		itemList.push('编辑分类')
+		itemList.push('快速盘点')
+	}
+	uni.showActionSheet({
+		itemList: itemList,
+		success: (res) => {
+			let cursor = 0
+			if (props.showView) {
+				if (res.tapIndex == 0) {
+					emit('view')
+					return
+				}
+				cursor = 1
+			}
+			if (res.tapIndex == cursor) {
+				emit('handle')
+				return
+			}
+			if (hasCategory) {
+				if (res.tapIndex == cursor + 1) {
+					goEditCategory()
+					return
+				}
+				if (res.tapIndex == cursor + 2) {
+					goQuickStocktake()
+				}
+			}
+		},
+	})
 }
 </script>
 
@@ -421,31 +478,18 @@ function emitDismiss(): void {
 	color: #475569;
 }
 
-.ic-actions {
-	margin-top: 10px;
-	flex-direction: row;
-	flex-wrap: wrap;
+.ic-menu {
+	margin-left: 8px;
+	padding-left: 8px;
+	padding-right: 8px;
+	padding-top: 2px;
+	padding-bottom: 2px;
 }
 
-.ic-btn {
-	padding: 6px 14px;
-	margin-right: 8px;
-	margin-bottom: 6px;
-	background-color: #F1F5F9;
-	border-radius: 8px;
-}
-
-.ic-btn-text {
-	font-size: 12px;
-	color: #334155;
-}
-
-.ic-btn-primary {
-	background-color: #0F172A;
-}
-
-.ic-btn-primary-text {
-	font-size: 12px;
-	color: #FFFFFF;
+.ic-menu-text {
+	font-size: 17px;
+	line-height: 21px;
+	color: rgba(60, 60, 67, 0.4);
+	font-weight: bold;
 }
 </style>

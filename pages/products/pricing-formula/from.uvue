@@ -31,10 +31,6 @@
 							<input class="input" :value="name" placeholder="请输入公式名称" @input="handleNameInput" />
 						</view>
 						<view class="field">
-							<text class="field-label">公式编码</text>
-							<input class="input" :value="code" placeholder="请输入公式编码" @input="handleCodeInput" />
-						</view>
-						<view class="field">
 							<text class="field-label">说明</text>
 							<textarea class="textarea" :value="description" placeholder="请输入说明" @input="handleDescriptionInput"></textarea>
 						</view>
@@ -195,7 +191,6 @@ const rawExpression = ref('')
 const parseFailed = ref(false)
 
 const name = ref('')
-const code = ref('')
 const description = ref('')
 const isActive = ref(true)
 const baseVariable = ref('VALUE')
@@ -624,7 +619,6 @@ function parseExpressionToBuilder(expression: string): ParsedFormula {
 
 function applyFormula(item: ProductPricingFormulaItem) {
 	name.value = item.name
-	code.value = item.code
 	description.value = item.description
 	isActive.value = item.is_active
 	rawExpression.value = item.expression
@@ -667,10 +661,6 @@ async function loadFormula() {
 
 function handleNameInput(event: any) {
 	name.value = readEventValue(event)
-}
-
-function handleCodeInput(event: any) {
-	code.value = readEventValue(event)
 }
 
 function handleDescriptionInput(event: any) {
@@ -797,13 +787,8 @@ function goBackToList() {
 async function handleSave() {
 	if (submitting.value) return
 	const nameText = name.value.trim()
-	const codeText = code.value.trim()
 	if (nameText == '') {
 		uni.showToast({ title: '公式名称不能为空', icon: 'none', duration: 3500 })
-		return
-	}
-	if (codeText == '') {
-		uni.showToast({ title: '公式编码不能为空', icon: 'none', duration: 3500 })
 		return
 	}
 	const expression = resolveSaveExpression()
@@ -816,7 +801,6 @@ async function handleSave() {
 	try {
 		const payload = {
 			name: nameText,
-			code: codeText,
 			expression: expression,
 			description: description.value.trim(),
 			is_active: isActive.value,

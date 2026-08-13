@@ -18,6 +18,12 @@ export type LoginResponse = {
 	expires_in: number
 }
 
+// 用户可见店铺（仅启用店铺；旧服务端响应无此字段）
+export type ProfileShop = {
+	id: number
+	name: string
+}
+
 // 当前用户信息接口返回的 data 结构
 export type ProfileResponse = {
 	id: number
@@ -35,6 +41,8 @@ export type ProfileResponse = {
 	cashier_id: number | null
 	shop_ids: number[]
 	permissions: string[]
+	// 可选：旧服务端缺失时为 null，调用方需判空
+	shops?: ProfileShop[]
 }
 
 // 登录接口外层返回格式示例：

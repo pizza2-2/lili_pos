@@ -1,0 +1,667 @@
+<template>
+	<view class="page">
+		<lili-universal-filter
+			title="多店对比"
+			:showBack="true"
+			:showSearch="false"
+			:showFilter="false"
+			:showHome="true"
+			homePath="/pages/tabbar/reports"
+			backgroundColor="#F6F7FB"
+		/>
+
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="control-strip">
+					<view class="period-tabs">
+						<view
+							v-for="item in periodOptions"
+							:key="item.key"
+							:class="selectedPeriod == item.key ? 'period-tab period-tab-active' : 'period-tab'"
+							@click="selectPeriod(item.key)"
+						>
+							<text :class="selectedPeriod == item.key ? 'period-text period-text-active' : 'period-text'">{{ item.label }}</text>
+						</view>
+					</view>
+					<view class="refresh-action" @click="loadReport">
+						<text class="refresh-action-text">刷新</text>
+					</view>
+				</view>
+
+				<!-- 排序 chips：毛利仅在返回数据带毛利字段时显示 -->
+				<scroll-view scroll-x="true" class="sort-scroll">
+					<view class="sort-row">
+						<view
+							v-for="item in sortOptions"
+							:key="item.key"
+							:class="selectedOrdering == item.key ? 'sort-chip sort-chip-active' : 'sort-chip'"
+							@click="selectOrdering(item.key)"
+						>
+							<text :class="selectedOrdering == item.key ? 'sort-chip-text sort-chip-text-active' : 'sort-chip-text'">{{ item.label }}</text>
+						</view>
+					</view>
+				</scroll-view>
+
+				<view v-if="errorMessage != '' && !isLoading" class="state-card state-card-error">
+					<text class="state-title">多店对比加载失败</text>
+					<text class="state-desc">{{ errorMessage }}</text>
+					<button class="state-btn" @click="loadReport">
+						<text class="state-btn-text">重新加载</text>
+					</button>
+				</view>
+
+				<view v-else-if="isLoading && !hasLoadedOnce" class="state-card">
+					<text class="state-title">加载中</text>
+					<text class="state-desc">正在汇总各门店销售数据...</text>
+				</view>
+
+				<view v-else>
+					<!-- 合计卡 -->
+					<view class="total-card">
+						<text class="total-label">{{ currentPeriodLabel }}总销售额 · {{ totals.shop_count.toString() }} 家门店</text>
+						<text class="total-value">{{ moneyText(totals.sales_amount) }}</text>
+						<text v-if="totalsDeltaText != ''" :class="totalsDeltaClass">{{ totalsDeltaText }}</text>
+						<text v-if="periodRangeText != ''" class="total-period">{{ periodRangeText }}</text>
+						<view class="metric-grid">
+							<lili-metric-card label="订单数" :value="totals.order_count.toString()"></lili-metric-card>
+							<lili-metric-card label="客单价" :value="moneyText(totals.average_order_value)"></lili-metric-card>
+							<lili-metric-card label="净销售额" :value="moneyText(totals.net_sales_amount)"></lili-metric-card>
+						</view>
+						<view v-if="hasFinance" class="metric-grid">
+							<lili-metric-card label="毛利" :value="moneyText(totals.gross_profit)"></lili-metric-card>
+							<lili-metric-card label="毛利率" :value="percentValueText(totals.gross_margin)"></lili-metric-card>
+							<lili-metric-card label="库存价值" :value="moneyText(totals.inventory_value)"></lili-metric-card>
+						</view>
+					</view>
+
+					<!-- 店铺卡片列表 -->
+					<view v-if="rows.length == 0" class="state-card">
+						<text class="state-title">暂无门店数据</text>
+						<text class="state-desc">{{ currentPeriodLabel }}没有门店销售记录</text>
+					</view>
+					<view
+						v-for="row in rows"
+						:key="'shop-' + row.shop_id.toString()"
+						class="shop-card"
+						@click="drillDownShop(row)"
+					>
+						<view class="shop-head">
+							<text class="shop-name">{{ row.shop_name }}</text>
+							<text class="shop-chevron">›</text>
+						</view>
+						<view class="shop-sales-line">
+							<text class="shop-sales">{{ moneyText(row.sales_amount) }}</text>
+							<text v-if="rowDeltaText(row) != ''" :class="rowDeltaClass(row)">{{ rowDeltaText(row) }}</text>
+						</view>
+						<lili-ratio-bar label="销售份额" :ratio="shareRatio(row)" :valueLabel="shareLabel(row)"></lili-ratio-bar>
+						<view class="metric-grid">
+							<lili-metric-card label="订单数" :value="row.order_count.toString()"></lili-metric-card>
+							<lili-metric-card label="客单价" :value="moneyText(row.average_order_value)"></lili-metric-card>
+							<lili-metric-card label="退货额" :value="moneyText(row.return_amount)"></lili-metric-card>
+							<lili-metric-card label="净销售" :value="moneyText(row.net_sales_amount)"></lili-metric-card>
+						</view>
+						<text v-if="rowProfitText(row) != ''" class="shop-profit">{{ rowProfitText(row) }}</text>
+						<text v-if="rowStockWarnText(row) != ''" class="shop-warn">{{ rowStockWarnText(row) }}</text>
+					</view>
+					<text v-if="rows.length > 0" class="drill-hint">点击门店卡片可切换到该店视角查看报表</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { formatMoney } from '@/pkg/util/format.uts'
+import { ShopComparePrevious, ShopCompareRow, ShopCompareTotals, getShopsComparison } from '@/pkg/api/modules/reports.uts'
+import { setSelectedShop } from '@/store/shop.uts'
+
+type PeriodOption = {
+	key: string
+	label: string
+}
+
+type SortOption = {
+	key: string
+	label: string
+}
+
+const periodOptions = [
+	{ key: 'today', label: '今日' } as PeriodOption,
+	{ key: 'week', label: '本周' } as PeriodOption,
+	{ key: 'month', label: '本月' } as PeriodOption,
+] as PeriodOption[]
+
+function emptyPrevious(): ShopComparePrevious {
+	return {
+		date_from: '',
+		date_to: '',
+		sales_amount: '',
+		order_count: 0,
+		net_sales_amount: '',
+		gross_profit: '',
+	} as ShopComparePrevious
+}
+
+const selectedPeriod = ref('today')
+const selectedOrdering = ref('-sales_amount')
+const isLoading = ref(false)
+const hasLoadedOnce = ref(false)
+const errorMessage = ref('')
+const rows = ref<ShopCompareRow[]>([] as ShopCompareRow[])
+const totals = ref<ShopCompareTotals>({
+	shop_count: 0,
+	sales_amount: '0.00',
+	order_count: 0,
+	average_order_value: '0.00',
+	return_amount: '0.00',
+	return_count: 0,
+	net_sales_amount: '0.00',
+	gross_profit: '',
+	gross_margin: '',
+	cost_missing_amount: '',
+	inventory_value: '',
+	previous: emptyPrevious(),
+} as ShopCompareTotals)
+const periodFrom = ref('')
+const periodTo = ref('')
+
+// ── 展示辅助 ────────────────────────────────────────────────────
+
+function moneyText(value: string): string {
+	return formatMoney(value)
+}
+
+// 百分比字符串（后端已格式化），空串兜底为 '-'
+function percentValueText(value: string): string {
+	if (value == '') {
+		return '-'
+	}
+	return value + '%'
+}
+
+function amountNumber(value: string): number {
+	const parsed = parseFloat(value)
+	if (isNaN(parsed)) {
+		return 0
+	}
+	return parsed
+}
+
+// 环比文本：较上期涨跌百分比 + 箭头；上期无数据（缺字段/为 0）时不显示
+function deltaText(current: string, prev: string): string {
+	const prevNum = amountNumber(prev)
+	if (prev == '' || prevNum <= 0) {
+		return ''
+	}
+	const pct = (amountNumber(current) - prevNum) / prevNum * 100
+	const arrow = pct >= 0 ? '↑' : '↓'
+	return '较上期 ' + arrow + ' ' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%'
+}
+
+function deltaClassOf(current: string, prev: string): string {
+	const prevNum = amountNumber(prev)
+	if (prev == '' || prevNum <= 0) {
+		return 'delta-text'
+	}
+	return amountNumber(current) >= prevNum ? 'delta-text delta-up' : 'delta-text delta-down'
+}
+
+const currentPeriodLabel = computed((): string => {
+	for (let index = 0; index < periodOptions.length; index += 1) {
+		if (periodOptions[index].key == selectedPeriod.value) {
+			return periodOptions[index].label
+		}
+	}
+	return '今日'
+})
+
+// 无 report_finance_view 权限时后端删除毛利相关字段，解析为空串 → 财务区块整体隐藏
+const hasFinance = computed((): boolean => {
+	return totals.value.gross_profit != ''
+})
+
+const sortOptions = computed((): SortOption[] => {
+	const options: SortOption[] = [{ key: '-sales_amount', label: '销售额' } as SortOption]
+	if (hasFinance.value) {
+		options.push({ key: '-gross_profit', label: '毛利' } as SortOption)
+	}
+	options.push({ key: '-order_count', label: '订单数' } as SortOption)
+	options.push({ key: '-average_order_value', label: '客单价' } as SortOption)
+	return options
+})
+
+const periodRangeText = computed((): string => {
+	if (periodFrom.value == '' || periodTo.value == '') {
+		return ''
+	}
+	return periodFrom.value + ' ~ ' + periodTo.value
+})
+
+const totalsDeltaText = computed((): string => {
+	return deltaText(totals.value.sales_amount, totals.value.previous.sales_amount)
+})
+
+const totalsDeltaClass = computed((): string => {
+	return deltaClassOf(totals.value.sales_amount, totals.value.previous.sales_amount)
+})
+
+function rowDeltaText(row: ShopCompareRow): string {
+	return deltaText(row.sales_amount, row.previous.sales_amount)
+}
+
+function rowDeltaClass(row: ShopCompareRow): string {
+	return deltaClassOf(row.sales_amount, row.previous.sales_amount)
+}
+
+// share 为百分数字符串（如 '83.33'），份额条组件吃 0-1 比例
+function shareRatio(row: ShopCompareRow): number {
+	const parsed = parseFloat(row.share)
+	if (isNaN(parsed) || parsed <= 0) {
+		return 0
+	}
+	return parsed / 100
+}
+
+function shareLabel(row: ShopCompareRow): string {
+	if (row.share == '') {
+		return '-'
+	}
+	return row.share + '%'
+}
+
+function rowProfitText(row: ShopCompareRow): string {
+	if (row.gross_profit == '') {
+		return ''
+	}
+	let text = '毛利 ' + formatMoney(row.gross_profit)
+	if (row.gross_margin != '') {
+		text = text + ' · 毛利率 ' + row.gross_margin + '%'
+	}
+	return text
+}
+
+function rowStockWarnText(row: ShopCompareRow): string {
+	const parts: string[] = []
+	if (row.low_stock_count > 0) {
+		parts.push('低库存 ' + row.low_stock_count.toString())
+	}
+	if (row.out_of_stock_count > 0) {
+		parts.push('售罄 ' + row.out_of_stock_count.toString())
+	}
+	if (parts.length == 0) {
+		return ''
+	}
+	return '⚠ ' + parts.join(' · ')
+}
+
+// ── 数据加载 ────────────────────────────────────────────────────
+
+function parseErrorMessage(error: any): string {
+	let message = '多店对比数据加载失败'
+	if (error != null) {
+		const errorText = '' + error
+		if (errorText != '' && errorText != '[object Object]') {
+			message = errorText.startsWith('Error: ') ? errorText.substring(7) : errorText
+		}
+	}
+	// 旧服务端没有该接口（404）时给出友好文案
+	if (message.indexOf('404') >= 0 || message.toLowerCase().indexOf('not found') >= 0) {
+		message = '当前服务端版本暂不支持多店对比，请升级服务端后再试'
+	}
+	return message
+}
+
+async function loadReport(): Promise<void> {
+	if (isLoading.value) {
+		return
+	}
+	isLoading.value = true
+	errorMessage.value = ''
+	try {
+		const data = await getShopsComparison(selectedPeriod.value, selectedOrdering.value)
+		rows.value = data.shops
+		totals.value = data.totals
+		periodFrom.value = data.period.date_from
+		periodTo.value = data.period.date_to
+		hasLoadedOnce.value = true
+		// 权限变化导致毛利字段消失时回退默认排序，避免残留无效排序值
+		if (totals.value.gross_profit == '' && selectedOrdering.value == '-gross_profit') {
+			selectedOrdering.value = '-sales_amount'
+		}
+	} catch (error) {
+		errorMessage.value = parseErrorMessage(error)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+// ── 交互 ────────────────────────────────────────────────────────
+
+function selectPeriod(period: string): void {
+	if (selectedPeriod.value == period) {
+		return
+	}
+	selectedPeriod.value = period
+	loadReport()
+}
+
+function selectOrdering(ordering: string): void {
+	if (selectedOrdering.value == ordering) {
+		return
+	}
+	selectedOrdering.value = ordering
+	loadReport()
+}
+
+// 单店视角下钻：写入全局店铺口径后回报表 tab（报表 onShow 会按新口径重载）
+function drillDownShop(row: ShopCompareRow): void {
+	if (row.shop_id <= 0) {
+		return
+	}
+	setSelectedShop(row.shop_id)
+	uni.switchTab({ url: '/pages/tabbar/reports' })
+}
+
+onLoad(() => {
+	loadReport()
+})
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-scroll {
+	flex: 1;
+	background-color: #F6F7FB;
+}
+
+.page-content {
+	padding-top: 6px;
+	padding-right: 10px;
+	padding-bottom: 22px;
+	padding-left: 10px;
+}
+
+.control-strip {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.period-tabs {
+	flex: 1;
+	flex-direction: row;
+	padding: 2px;
+	border-radius: 8px;
+	background-color: #E5E7EB;
+}
+
+.period-tab {
+	flex: 1;
+	height: 28px;
+	border-radius: 6px;
+	align-items: center;
+	justify-content: center;
+	transition-property: background-color, transform;
+	transition-duration: 180ms;
+}
+
+.period-tab-active {
+	background-color: #FFFFFF;
+	transform: scale(1.02);
+}
+
+.period-text {
+	font-size: 11px;
+	color: #64748B;
+}
+
+.period-text-active {
+	font-weight: 700;
+	color: #111827;
+}
+
+.refresh-action {
+	height: 32px;
+	margin-left: 6px;
+	padding-left: 12px;
+	padding-right: 12px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	background-color: #111827;
+	transition-property: transform, background-color;
+	transition-duration: 180ms;
+}
+
+.refresh-action:active {
+	transform: scale(0.96);
+	background-color: #334155;
+}
+
+.refresh-action-text {
+	font-size: 11px;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+
+.sort-scroll {
+	height: 32px;
+	margin-bottom: 4px;
+	/* 横向 scroll-view 必须自身 row 布局，否则内容容器被压到视口宽、无法滚动 */
+	flex-direction: row;
+}
+
+.sort-row {
+	flex-direction: row;
+	align-items: center;
+	height: 32px;
+}
+
+.sort-chip {
+	height: 26px;
+	margin-right: 6px;
+	padding-left: 9px;
+	padding-right: 9px;
+	border-radius: 8px;
+	align-items: center;
+	justify-content: center;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+	background-color: #FFFFFF;
+	transition-property: transform, border-color, background-color;
+	transition-duration: 180ms;
+	flex-shrink: 0;
+}
+
+.sort-chip-active {
+	border-color: #2563EB;
+	background-color: #EFF6FF;
+	transform: scale(1.02);
+}
+
+.sort-chip-text {
+	font-size: 11px;
+	color: #475569;
+}
+
+.sort-chip-text-active {
+	font-weight: 700;
+	color: #1D4ED8;
+}
+
+.state-card {
+	margin-top: 6px;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	padding: 18px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.state-card-error {
+	border-color: #FECACA;
+}
+
+.state-title {
+	font-size: 16px;
+	line-height: 22px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.state-desc {
+	font-size: 14px;
+	line-height: 21px;
+	color: #64748B;
+	margin-top: 8px;
+}
+
+.state-btn {
+	height: 40px;
+	margin-top: 14px;
+	background-color: #111827;
+	border-radius: 10px;
+	border-width: 0px;
+}
+
+.state-btn-text {
+	font-size: 14px;
+	line-height: 20px;
+	color: #FFFFFF;
+	font-weight: bold;
+}
+
+.total-card {
+	margin-top: 4px;
+	padding: 15px;
+	border-radius: 10px;
+	background-color: #111827;
+}
+
+.total-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #CBD5E1;
+}
+
+.total-value {
+	margin-top: 8px;
+	font-size: 26px;
+	line-height: 32px;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+
+.total-period {
+	margin-top: 4px;
+	font-size: 11px;
+	line-height: 15px;
+	color: #94A3B8;
+}
+
+.shop-card {
+	margin-top: 10px;
+	padding: 13px;
+	border-radius: 10px;
+	background-color: #FFFFFF;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #E5E7EB;
+	transition-property: transform, border-color;
+	transition-duration: 180ms;
+}
+
+.shop-card:active {
+	transform: scale(0.985);
+	border-color: #CBD5E1;
+}
+
+.shop-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.shop-name {
+	flex: 1;
+	padding-right: 8px;
+	font-size: 15px;
+	line-height: 21px;
+	font-weight: 700;
+	color: #111827;
+}
+
+.shop-chevron {
+	font-size: 18px;
+	line-height: 24px;
+	color: #94A3B8;
+}
+
+.shop-sales-line {
+	margin-top: 6px;
+	flex-direction: row;
+	align-items: flex-end;
+}
+
+.shop-sales {
+	font-size: 21px;
+	line-height: 27px;
+	font-weight: 700;
+	color: #0F172A;
+}
+
+.delta-text {
+	margin-left: 8px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #94A3B8;
+}
+
+.delta-up {
+	color: #16A34A;
+}
+
+.delta-down {
+	color: #DC2626;
+}
+
+.metric-grid {
+	margin-top: 8px;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.shop-profit {
+	margin-top: 6px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #0F766E;
+	font-weight: bold;
+}
+
+.shop-warn {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 17px;
+	color: #D97706;
+}
+
+.drill-hint {
+	margin-top: 10px;
+	font-size: 11px;
+	line-height: 15px;
+	color: #94A3B8;
+	text-align: center;
+}
+</style>

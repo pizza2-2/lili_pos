@@ -250,7 +250,7 @@ import { computed } from 'vue'
 import { getListPageSize } from '@/pkg/util/settings.uts'
 import liliBottomSelect from '@/uni_modules/lili_bottom-select/components/lili_bottom-select/lili_bottom-select.uvue'
 import { request, takeLatestResponseMessage } from '@/pkg/api/index.uts'
-import { checkInventoryCheckItem, createInventoryCheckItem, createInventoryStockForProduct, getInventoryCheckDetail, getInventoryCheckItems, getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
+import { checkInventoryCheckItem, createInventoryCheckItem, createInventoryStockForProduct, getInventoryCheckDetail, getInventoryCheckItems, getInventoryStockDetail, getInventoryStocks, InventoryListQuery, InventoryListResponse } from '@/pkg/api/modules/inventory'
 import { createProduct, getProductList, updateProduct, ProductItem, ProductMutationData, ProductSelectedFilter } from '@/pkg/api/modules/products'
 import { batchUploadMediaFiles, MediaBatchUploadItem } from '@/pkg/api/modules/media.uts'
 import { getCategoryDescendants } from '@/pkg/api/modules/category'
@@ -814,13 +814,35 @@ async function findExistingCheckItemByStock(stockId: string): Promise<UTSJSONObj
 	return response.results[0]
 }
 
+// 明细行缺 product 字段（旧服务端响应）时，用库存详情兜底解析真实商品 id；
+// 库存 id 决不能冒充商品 id，否则「编辑商品」会拿错 id 打开商品编辑页
+async function resolveDraftProductFromStock(stockId: string): Promise<void> {
+	if (stockId == '') return
+	try {
+		const detail = await getInventoryStockDetail(stockId)
+		let productId = stringValue(detail['product'])
+		if (productId == '') {
+			const nested = parseObject(detail['data'])
+			if (nested != null) productId = stringValue(nested!['product'])
+		}
+		// 异步返回时弹窗可能已切到其他行，仅在仍是同一库存时应用
+		if (productId != '' && draftStockValue.value == stockId) {
+			draftProductValue.value = productId
+		}
+	} catch (error) {
+	}
+}
+
 function fillDraftFromExistingItem(item: UTSJSONObject, showHint: boolean, fillActualFromExisting: boolean = false) {
 	const images = productImageListFromItem(item)
 	const stockId = stringValue(item['stock'])
 	const existingQuantity = stringValue(item['system_quantity'], '0')
 	editingItemId.value = stringValue(item['id'])
-	draftProductValue.value = stringValue(item['product'], stockId)
+	draftProductValue.value = stringValue(item['product'])
 	draftStockValue.value = stockId
+	if (draftProductValue.value == '') {
+		resolveDraftProductFromStock(stockId)
+	}
 	draftProductText.value = stringValue(item['product_name'], '库存 #' + stockId)
 	draftProductImage.value = images.length > 0 ? images[0] : ''
 	draftProductSubtitle.value = '现有 ' + existingQuantity + ' / 已在盘点明细中'

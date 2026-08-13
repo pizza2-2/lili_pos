@@ -2,7 +2,7 @@
 	<view class="page">
 		<lili-universal-filter
 			title="价格计算公式"
-			searchPlaceholder="输入公式名称、编码、表达式"
+			searchPlaceholder="输入公式名称、表达式"
 			:searchValue="keyword"
 			:showBack="true"
 			:showSearch="true"
@@ -160,7 +160,7 @@ function formulaToListItem(item: ProductPricingFormulaItem): UTSJSONObject {
 		id: item.id.toString(),
 		rawId: item.id.toString(),
 		name: item.name,
-		codeText: '编码：' + stringValue(item.code, '-'),
+		codeText: '表达式：' + stringValue(item.expression, '-'),
 		statusText: item.is_active ? '启用' : '停用',
 		expression: stringValue(item.expression, '-'),
 		descriptionText: stringValue(item.description, '-'),

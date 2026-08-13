@@ -1,6 +1,7 @@
 <script lang="uts">
 	import { isAgreePrivacyState } from '@/store/global'
 	import { authState, getAuthStateByStorageSync } from '@/store/auth'
+	import { loadShops } from '@/store/shop'	//全局店铺口径
 	import { routerPermission,removeRouterPermission } from '@/pkg/router/permission'	//路由拦截
 	import { initLogger, logError, stringifyError, setLogUploadEnabledProvider } from '@/pkg/util/logger.uts'	//远程日志
 	import { isAutoCheckUpdateEnabled, isLogUploadEnabled } from '@/pkg/util/settings.uts'	//应用设置
@@ -25,6 +26,10 @@
 			// #endif
 			getAuthStateByStorageSync() //同步从本地存储中获取authState的值
 			routerPermission()			//添加路由拦截权限
+			// 已登录时静默拉取店铺列表（内部吞错，失败不影响启动）
+			if (authState.token != '') {
+				loadShops()
+			}
 			// 远程日志：缓冲上报到 Django，身份取当前登录用户；上报开关跟随应用设置
 			setLogUploadEnabledProvider((): boolean => isLogUploadEnabled())
 			initLogger((): string => {

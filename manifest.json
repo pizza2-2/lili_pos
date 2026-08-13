@@ -2,8 +2,8 @@
 	"name": "LILI_POS",
 	"appid": "__UNI__1CE1B14",
 	"description": "uniapp-x快速开发框架，使用uniCloud版本",
-	"versionName": "1.0.5",
-	"versionCode": "105",
+	"versionName": "1.0.8",
+	"versionCode": "108",
 	"uni-app-x": {},
 	"quickapp": {},
 	"mp-weixin": {

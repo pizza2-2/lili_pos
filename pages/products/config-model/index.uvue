@@ -262,6 +262,7 @@ async function handleDiscountSelect(discountItem: UTSJSONObject) {
 		min_quantity: getStringField(discountItem, 'min_quantity'),
 		original_price: baseSalesPrice,
 		final_price: finalPrice,
+		shop_name: getStringField(discountItem, 'shop_name'),
 	} as UTSJSONObject
 
 	try {
@@ -402,6 +403,8 @@ function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 			name: discountName(item),
 			subtitle: getStringField(item, 'discount_display', '-'),
 			meta: getStringField(item, 'status', '-'),
+			// shop 为 null（shop_name 为空）表示全局折扣，对全部店铺生效
+			shop_scope: getStringField(item, 'shop_name', '全部店铺'),
 			min_quantity: getStringField(item, 'min_quantity', '-'),
 			priority: getStringField(item, 'priority', '-'),
 			updated: formatDateText(getStringField(item, 'updated_at')),
@@ -412,7 +415,7 @@ function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 			id: getStringField(item, 'id'),
 			rawId: getStringField(item, 'id'),
 			name: getStringField(item, 'value', '未命名属性值'),
-			subtitle: '编码：' + getStringField(item, 'code', '-'),
+			subtitle: '英文值：' + getStringField(item, 'value_en', '-'),
 			meta: getStringField(item, 'attribute_type_name', '-'),
 			value_en: getStringField(item, 'value_en', '-'),
 			color_hex: getStringField(item, 'color_hex', '-'),
@@ -446,7 +449,7 @@ function itemToListItem(item: UTSJSONObject): UTSJSONObject {
 		id: getStringField(item, 'id'),
 		rawId: getStringField(item, 'id'),
 		name: getStringField(item, 'name', '未命名属性类型'),
-		subtitle: '编码：' + getStringField(item, 'code', '-'),
+		subtitle: '英文名称：' + getStringField(item, 'name_en', '-'),
 		meta: '值数量：' + getStringField(item, 'values_count', '0'),
 		name_en: getStringField(item, 'name_en', '-'),
 		display_order: getStringField(item, 'display_order', '0'),
@@ -657,6 +660,7 @@ const emptyText = computed((): string => {
 const fieldConfig = computed((): UTSJSONObject[] => {
 	if (resource.value == 'discount') {
 		return [
+			{ key: 'shop_scope', label: '适用店铺' } as UTSJSONObject,
 			{ key: 'min_quantity', label: '最低数量' } as UTSJSONObject,
 			{ key: 'priority', label: '优先级' } as UTSJSONObject,
 			{ key: 'updated', label: '更新' } as UTSJSONObject,

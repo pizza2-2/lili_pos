@@ -53,7 +53,7 @@
 
 <script setup lang="uts">
 import { computed } from 'vue'
-import { getStaffList } from '@/pkg/api/modules/accounts'
+import { getStaffList, parseRestrictedShopIds } from '@/pkg/api/modules/accounts'
 
 const refreshStorageKey = 'refresh:pages:staff:index'
 const keyword = ref('')
@@ -132,6 +132,11 @@ function staffItem(item: UTSJSONObject): UTSJSONObject {
 	tags.push(stringField(item, 'is_active') == 'true' ? '启用' : '停用')
 	if (codes.includes('manage_users')) {
 		tags.push('管理员')
+	}
+	// 有可访问店铺限制时的轻量标注（旧服务端缺字段时不显示）
+	const restrictedCount = parseRestrictedShopIds(item).length
+	if (restrictedCount > 0) {
+		tags.push('限 ' + restrictedCount.toString() + ' 店')
 	}
 	return {
 		id: stringField(item, 'id'),

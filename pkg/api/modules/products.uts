@@ -184,7 +184,6 @@ export type ProductPricingFormulaListResponse = {
 
 export type ProductPricingFormulaMutationData = {
 	name: string
-	code: string
 	expression: string
 	description: string
 	is_active: boolean
@@ -629,7 +628,6 @@ function buildPricingFormulaListResponse(raw: any, query: ProductPricingFormulaL
 function buildPricingFormulaMutationBody(data: ProductPricingFormulaMutationData): UTSJSONObject {
 	return {
 		name: data.name,
-		code: data.code,
 		expression: data.expression,
 		description: data.description,
 		is_active: data.is_active,

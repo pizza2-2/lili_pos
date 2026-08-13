@@ -39,6 +39,7 @@ import {
 	productDiscountsPath,
 	updateProductConfig,
 } from '@/pkg/api/modules/products.uts'
+import { shopState, loadShops } from '@/store/shop.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 
 const resource = ref('discount')
@@ -121,6 +122,8 @@ function defaultInitialData(): UTSJSONObject {
 	if (resource.value == 'discount') {
 		return {
 			name: '',
+			// '0' = 全部店铺（提交时转 shop=null）
+			shop: '0',
 			discount_type: 'PERCENTAGE',
 			discount_percentage: '10',
 			discount_amount: '0',
@@ -139,7 +142,6 @@ function defaultInitialData(): UTSJSONObject {
 			attribute_type_name: parentAttributeTypeName.value,
 			value: '',
 			value_en: '',
-			code: '',
 			color_hex: '',
 			display_order: '0',
 		} as UTSJSONObject
@@ -164,7 +166,6 @@ function defaultInitialData(): UTSJSONObject {
 	return {
 		name: '',
 		name_en: '',
-		code: '',
 		display_order: '0',
 		description: '',
 	} as UTSJSONObject
@@ -174,6 +175,16 @@ function normalizeDetail(data: UTSJSONObject): UTSJSONObject {
 	const result = defaultInitialData()
 	if (resource.value == 'discount') {
 		result['name'] = getStringField(data, 'name')
+		// shop 为 null 表示全部店铺；数字可能以 5.0 形式返回，parseInt 归一后作为选项值
+		const shopIdText = getStringField(data, 'shop')
+		let shopValue = '0'
+		if (shopIdText != '') {
+			const parsedShopId = parseInt(shopIdText)
+			if (!isNaN(parsedShopId) && parsedShopId > 0) {
+				shopValue = parsedShopId.toString()
+			}
+		}
+		result['shop'] = shopValue
 		result['discount_type'] = getStringField(data, 'discount_type', 'PERCENTAGE')
 		result['discount_percentage'] = getStringField(data, 'discount_percentage', '10')
 		result['discount_amount'] = getStringField(data, 'discount_amount', '0')
@@ -191,7 +202,6 @@ function normalizeDetail(data: UTSJSONObject): UTSJSONObject {
 		result['attribute_type_name'] = getStringField(data, 'attribute_type_name')
 		result['value'] = getStringField(data, 'value')
 		result['value_en'] = getStringField(data, 'value_en')
-		result['code'] = getStringField(data, 'code')
 		result['color_hex'] = getStringField(data, 'color_hex')
 		result['display_order'] = getStringField(data, 'display_order', '0')
 		return result
@@ -213,7 +223,6 @@ function normalizeDetail(data: UTSJSONObject): UTSJSONObject {
 	}
 	result['name'] = getStringField(data, 'name')
 	result['name_en'] = getStringField(data, 'name_en')
-	result['code'] = getStringField(data, 'code')
 	result['display_order'] = getStringField(data, 'display_order', '0')
 	result['description'] = getStringField(data, 'description')
 	return result
@@ -232,7 +241,7 @@ async function loadDetail(idText: string) {
 function buildAttributeTypeOption(item: UTSJSONObject): UTSJSONObject {
 	return {
 		value: getStringField(item, 'id'),
-		text: getStringField(item, 'name') + ' (' + getStringField(item, 'code') + ')',
+		text: getStringField(item, 'name'),
 	} as UTSJSONObject
 }
 
@@ -261,6 +270,41 @@ async function fetchDiscountTypeOptions(params: UTSJSONObject): Promise<UTSJSONO
 	} as UTSJSONObject
 }
 
+// 适用店铺选项：首项「全部店铺」（提交 shop=null），其余来自全局店铺状态
+async function fetchShopOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
+	// 全局店铺列表为空时先拉一次（正常在登录/启动时已加载）
+	if (shopState.shops.length == 0) {
+		await loadShops()
+	}
+	const options: UTSJSONObject[] = []
+	options.push({ value: '0', text: '全部店铺' } as UTSJSONObject)
+	for (let index = 0; index < shopState.shops.length; index += 1) {
+		const shop = shopState.shops[index]
+		options.push({ value: shop.id.toString(), text: shop.name } as UTSJSONObject)
+	}
+	const id = getStringField(params, 'id')
+	const keyword = getStringField(params, 'keyword')
+	const result: UTSJSONObject[] = []
+	for (let index = 0; index < options.length; index += 1) {
+		const option = options[index]
+		if (id != '' && getStringField(option, 'value') != id) {
+			continue
+		}
+		if (keyword != '' && !getStringField(option, 'text').includes(keyword)) {
+			continue
+		}
+		result.push(option)
+	}
+	// 按 id 回显但列表中没有（如折扣绑定的店铺已停业）时给出兜底文案，避免显示成未选择
+	if (id != '' && result.length == 0) {
+		result.push({ value: id, text: '店铺 #' + id } as UTSJSONObject)
+	}
+	return {
+		data: result,
+		total: result.length,
+	} as UTSJSONObject
+}
+
 async function fetchDiscountStatusOptions(params: UTSJSONObject): Promise<UTSJSONObject> {
 	return {
 		data: [
@@ -275,8 +319,16 @@ async function fetchDiscountStatusOptions(params: UTSJSONObject): Promise<UTSJSO
 
 function buildPayload(formData: UTSJSONObject): UTSJSONObject {
 	if (resource.value == 'discount') {
+		// 选项值 '0' = 全部店铺 → shop 提交 null（后端按全局折扣处理）
+		const shopText = getStringField(formData, 'shop', '0')
+		let shopId: number | null = null
+		const parsedShopId = parseInt(shopText)
+		if (!isNaN(parsedShopId) && parsedShopId > 0) {
+			shopId = parsedShopId
+		}
 		return {
 			name: getStringField(formData, 'name'),
+			shop: shopId,
 			discount_type: getStringField(formData, 'discount_type', 'PERCENTAGE'),
 			discount_percentage: getStringField(formData, 'discount_percentage', '0'),
 			discount_amount: getStringField(formData, 'discount_amount', '0'),
@@ -294,7 +346,6 @@ function buildPayload(formData: UTSJSONObject): UTSJSONObject {
 			attribute_type: getStringField(formData, 'attribute_type'),
 			value: getStringField(formData, 'value'),
 			value_en: getStringField(formData, 'value_en'),
-			code: getStringField(formData, 'code'),
 			color_hex: getStringField(formData, 'color_hex'),
 			display_order: parseInt(getStringField(formData, 'display_order', '0')),
 		} as UTSJSONObject
@@ -319,7 +370,6 @@ function buildPayload(formData: UTSJSONObject): UTSJSONObject {
 	return {
 		name: getStringField(formData, 'name'),
 		name_en: getStringField(formData, 'name_en'),
-		code: getStringField(formData, 'code'),
 		display_order: parseInt(getStringField(formData, 'display_order', '0')),
 		description: getStringField(formData, 'description'),
 	} as UTSJSONObject
@@ -403,6 +453,7 @@ const formSections = computed((): UTSJSONObject[] => {
 				defaultOpen: true,
 				fields: [
 					{ key: 'name', label: '折扣名称', type: 'input', required: true, placeholder: '请输入折扣名称' } as UTSJSONObject,
+					{ key: 'shop', label: '适用店铺', type: 'bottomSelect', title: '选择适用店铺', placeholder: '默认全部店铺', showAddAction: false, showEditAction: false, fetchData: fetchShopOptions } as UTSJSONObject,
 					{ key: 'discount_type', label: '折扣类型', type: 'bottomSelect', title: '选择折扣类型', textKey: 'discount_type_text', showAddAction: false, showEditAction: false, fetchData: fetchDiscountTypeOptions } as UTSJSONObject,
 					{ key: 'discount_percentage', label: '折扣百分比', type: 'number', placeholder: '例如 10' } as UTSJSONObject,
 					{ key: 'discount_amount', label: '折扣金额', type: 'number', placeholder: '例如 5.00' } as UTSJSONObject,
@@ -433,7 +484,6 @@ const formSections = computed((): UTSJSONObject[] => {
 				{ key: 'attribute_type', label: '属性类型', type: 'bottomSelect', title: '选择属性类型', required: true, textKey: 'attribute_type_name', showAddAction: true, showEditAction: true, addPath: '/pages/products/config-model/from?resource=attribute-type', editPath: '/pages/products/config-model/from?resource=attribute-type', fetchData: fetchAttributeTypeOptions } as UTSJSONObject,
 				{ key: 'value', label: '属性值', type: 'input', required: true, placeholder: '例如 红色、XL' } as UTSJSONObject,
 				{ key: 'value_en', label: '英文值', type: 'input' } as UTSJSONObject,
-				{ key: 'code', label: '编码', type: 'input', required: true } as UTSJSONObject,
 				{ key: 'color_hex', label: '颜色代码', type: 'input', placeholder: '例如 #FF0000' } as UTSJSONObject,
 				{ key: 'display_order', label: '排序', type: 'number' } as UTSJSONObject,
 			] as UTSJSONObject[],
@@ -473,7 +523,6 @@ const formSections = computed((): UTSJSONObject[] => {
 		fields: [
 			{ key: 'name', label: '属性名称', type: 'input', required: true, placeholder: '例如 颜色、尺寸' } as UTSJSONObject,
 			{ key: 'name_en', label: '英文名称', type: 'input' } as UTSJSONObject,
-			{ key: 'code', label: '属性编码', type: 'input', required: true } as UTSJSONObject,
 			{ key: 'display_order', label: '排序', type: 'number' } as UTSJSONObject,
 			{ key: 'description', label: '描述', type: 'textarea' } as UTSJSONObject,
 		] as UTSJSONObject[],

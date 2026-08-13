@@ -44,7 +44,8 @@
 
 <script setup>
 	import { accountLogin, getProfile, ProfileResponse } from '@/pkg/api/modules/login'
-	import { clearAuthState, setAuthToken, setAuthUserInfo } from '@/store/auth'
+	import { clearAuthState, setAuthToken, setAuthUserInfo, setAuthPermissions } from '@/store/auth'
+	import { applyProfileShops } from '@/store/shop'
 	import { getDevLoginUsername, getDevLoginPassword } from '@/pkg/util/devCredentials.uts'
 
 	// 开发环境自动填入测试账号（方便测试）；发行包为空，由用户手动输入
@@ -95,6 +96,10 @@
 				name: buildDisplayName(profile),
 				avatar: ''
 			})
+			// 登录成功后同步全局店铺列表（复用本次 profile，避免重复请求）
+			applyProfileShops(profile)
+			// 同步全局权限码集合（持久化，供菜单门控使用）
+			setAuthPermissions(profile.permissions)
 			uni.switchTab({
 				url: '/pages/tabbar/settings'
 			})

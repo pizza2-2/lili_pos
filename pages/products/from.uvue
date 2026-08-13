@@ -40,8 +40,7 @@
 							v-if="discountCards.length == 0 && !discountCardsLoading"
 							class="discount-empty-card"
 						>
-							<text class="discount-empty-title">暂无折扣规则</text>
-							<text class="discount-empty-desc">可以为当前商品添加一个或多个折扣规则</text>
+							<text class="discount-empty-desc">暂无折扣规则，可为当前商品添加折扣</text>
 						</view>
 
 						<view
@@ -50,32 +49,16 @@
 							class="discount-card"
 						>
 							<view class="discount-card-head">
-								<view class="discount-card-title-wrap">
-									<text class="discount-card-title">{{ discountCardName(discount) }}</text>
-									<text class="discount-card-rule">{{ discountRuleText(discount) }}</text>
-								</view>
+								<text class="discount-card-title">{{ discountCardName(discount) }}</text>
 								<view class="discount-delete-btn" @tap.stop="confirmRemoveDiscount(discount)">
 									<text class="discount-delete-text">删除</text>
 								</view>
 							</view>
-							<view class="discount-card-grid">
-								<view class="discount-card-cell">
-									<text class="discount-card-label">折后价</text>
-									<text class="discount-card-value discount-card-price">{{ discountFinalPriceText(discount) }}</text>
-								</view>
-								<view class="discount-card-cell">
-									<text class="discount-card-label">类型</text>
-									<text class="discount-card-value">{{ discountTypeText(discount) }}</text>
-								</view>
-								<view class="discount-card-cell">
-									<text class="discount-card-label">最低数量</text>
-									<text class="discount-card-value">{{ getStringField(discount, 'min_quantity', '1') }}</text>
-								</view>
-								<view class="discount-card-cell">
-									<text class="discount-card-label">优先级</text>
-									<text class="discount-card-value">{{ getStringField(discount, 'priority', '-') }}</text>
-								</view>
+							<view class="discount-card-meta-row">
+								<text class="discount-card-price">折后 {{ discountFinalPriceText(discount) }}</text>
+								<text class="discount-card-meta">{{ discountCardMetaText(discount) }}</text>
 							</view>
+							<text class="discount-card-shop">适用店铺：{{ discountShopScopeText(discount) }}</text>
 						</view>
 
 						<view v-if="discountCardsLoading" class="discount-loading-card">
@@ -1293,11 +1276,26 @@ function discountRuleText(discount: UTSJSONObject): string {
 	return '未设置规则'
 }
 
-function discountTypeText(discount: UTSJSONObject): string {
-	const discountType = getStringField(discount, 'discount_type')
-	if (discountType == 'PERCENTAGE') return '百分比'
-	if (discountType == 'FIXED_AMOUNT' || discountType == 'FIXED') return '固定金额'
-	return discountType == '' ? '-' : discountType
+function discountCardMetaText(discount: UTSJSONObject): string {
+	const parts: string[] = []
+	const ruleText = discountRuleText(discount)
+	if (ruleText != '') {
+		parts.push(ruleText)
+	}
+	const minQuantity = getStringField(discount, 'min_quantity', '1')
+	if (minQuantity != '' && minQuantity != '1') {
+		parts.push('满' + minQuantity + '件')
+	}
+	const priority = getStringField(discount, 'priority')
+	if (priority != '' && priority != '-') {
+		parts.push('优先级' + priority)
+	}
+	return parts.join(' · ')
+}
+
+function discountShopScopeText(discount: UTSJSONObject): string {
+	const shopName = getStringField(discount, 'shop_name')
+	return shopName == '' ? '全部店铺' : shopName
 }
 
 function discountFinalPriceText(discount: UTSJSONObject): string {
@@ -1323,6 +1321,7 @@ function upsertDiscountCardFromSelection(selected: UTSJSONObject): void {
 		min_quantity: getStringField(selected, 'min_quantity', '1'),
 		priority: '-',
 		final_price: getStringField(selected, 'final_price'),
+		shop_name: getStringField(selected, 'shop_name'),
 	} as UTSJSONObject
 	const nextCards: UTSJSONObject[] = []
 	let replaced = false
@@ -1453,13 +1452,9 @@ function applySelectedDiscount() {
 	})
 }
 
-function openDiscountSelector() {
+function navigateToDiscountSelector() {
 	const safeProductId = '' + productId.value
 	if (safeProductId == '') {
-		uni.showToast({
-			title: '请先保存商品后再选择折扣',
-			icon: 'none', duration: 3500,
-		})
 		return
 	}
 	let baseSalesPrice = getStringField(initialData.value, 'base_sales_price', '0.00')
@@ -1469,14 +1464,6 @@ function openDiscountSelector() {
 	uni.navigateTo({
 		url: '/pages/products/config-model/index?resource=discount&mode=select&product_id=' + safeProductId + '&base_sales_price=' + encodeURIComponent(baseSalesPrice),
 	})
-}
-
-function handleInputAdd(payload: UTSJSONObject) {
-	const keyValue = getStringField(payload, 'key')
-	if (keyValue == 'discount_rule') {
-		openDiscountSelector()
-		return
-	}
 }
 
 function goBackToList(markLeaving: boolean = true): void {
@@ -1587,7 +1574,7 @@ async function uploadPendingProductImages(formDataObject: UTSJSONObject, content
 	}
 }
 
-async function persistForm(payload: UTSJSONObject): Promise<void> {
+async function persistForm(payload: UTSJSONObject, openDiscountAfterSave: boolean = false): Promise<void> {
 	if (submitting.value) {
 		return
 	}
@@ -1646,11 +1633,21 @@ async function persistForm(payload: UTSJSONObject): Promise<void> {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
 		}
-		uni.showToast({
-			title: successMessage,
-			icon: 'success',
-		})
-		goBackToList(false)
+		if (openDiscountAfterSave) {
+			// 保存后留在本页：重拉详情让表单进入编辑态（图片换成远程地址、拿到生成的编码），再跳折扣选择
+			await loadProductDetailData(productId.value)
+			uni.showToast({
+				title: successMessage,
+				icon: 'success',
+			})
+			navigateToDiscountSelector()
+		} else {
+			uni.showToast({
+				title: successMessage,
+				icon: 'success',
+			})
+			goBackToList(false)
+		}
 	} catch (error) {
 		if (!pageTaskGuard.canApply(taskToken)) {
 			return
@@ -1671,6 +1668,41 @@ async function handleSubmit(payload: UTSJSONObject) {
 
 async function handleSaveRequest(payload: UTSJSONObject) {
 	await persistForm(payload)
+}
+
+async function saveNewProductThenPickDiscount(): Promise<void> {
+	const formDataValue = productFormRef.value?.$callMethod('getFormData')
+	const payload = {
+		formData: formDataValue == null ? ({} as UTSJSONObject) : formDataValue,
+		uploadContentTypeModel: 'product',
+	} as UTSJSONObject
+	await persistForm(payload, true)
+}
+
+function openDiscountSelector() {
+	if (productId.value != '') {
+		navigateToDiscountSelector()
+		return
+	}
+	uni.showModal({
+		title: '保存商品',
+		content: '选择折扣前需要先保存商品，是否立即保存？',
+		confirmText: '是',
+		cancelText: '否',
+		success: (res) => {
+			if (res.confirm) {
+				saveNewProductThenPickDiscount()
+			}
+		},
+	})
+}
+
+function handleInputAdd(payload: UTSJSONObject) {
+	const keyValue = getStringField(payload, 'key')
+	if (keyValue == 'discount_rule') {
+		openDiscountSelector()
+		return
+	}
 }
 
 function handleCancel(payload: UTSJSONObject) {
@@ -2440,8 +2472,8 @@ onShow(() => {
 }
 
 .discount-card-section {
-	padding-top: 8px;
-	padding-bottom: 8px;
+	padding-top: 4px;
+	padding-bottom: 4px;
 }
 
 .discount-empty-card,
@@ -2451,20 +2483,12 @@ onShow(() => {
 	border-style: solid;
 	border-color: #E2E8F0;
 	background-color: #F8FAFC;
-	padding: 12px;
-	margin-bottom: 10px;
-}
-
-.discount-empty-title {
-	font-size: 14px;
-	line-height: 18px;
-	color: #0F172A;
-	font-weight: bold;
+	padding: 8px 10px;
+	margin-bottom: 8px;
 }
 
 .discount-empty-desc,
 .discount-loading-text {
-	margin-top: 4px;
 	font-size: 12px;
 	line-height: 16px;
 	color: #64748B;
@@ -2476,44 +2500,34 @@ onShow(() => {
 	border-style: solid;
 	border-color: #CBD5E1;
 	background-color: #FFFFFF;
-	padding: 12px;
-	margin-bottom: 10px;
+	padding: 8px 10px;
+	margin-bottom: 8px;
 }
 
 .discount-card-head {
 	flex-direction: row;
-	align-items: flex-start;
+	align-items: center;
 	justify-content: space-between;
 }
 
-.discount-card-title-wrap {
-	flex: 1;
-	padding-right: 10px;
-}
-
 .discount-card-title {
-	font-size: 15px;
-	line-height: 20px;
+	flex: 1;
+	padding-right: 8px;
+	font-size: 14px;
+	line-height: 18px;
 	color: #0F172A;
 	font-weight: bold;
 }
 
-.discount-card-rule {
-	margin-top: 3px;
-	font-size: 12px;
-	line-height: 16px;
-	color: #475569;
-}
-
 .discount-delete-btn {
-	height: 28px;
+	height: 24px;
 	border-radius: 6px;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #FCA5A5;
 	background-color: #FEF2F2;
-	padding-left: 10px;
-	padding-right: 10px;
+	padding-left: 8px;
+	padding-right: 8px;
 	align-items: center;
 	justify-content: center;
 }
@@ -2524,39 +2538,36 @@ onShow(() => {
 	color: #B91C1C;
 }
 
-.discount-card-grid {
+.discount-card-meta-row {
 	flex-direction: row;
-	flex-wrap: wrap;
-	margin-top: 10px;
+	align-items: center;
+	margin-top: 4px;
 }
 
-.discount-card-cell {
-	width: 50%;
-	padding-top: 6px;
-	padding-bottom: 6px;
+.discount-card-price {
+	margin-right: 8px;
+	font-size: 14px;
+	line-height: 18px;
+	color: #0F766E;
+	font-weight: bold;
 }
 
-.discount-card-label {
+.discount-card-meta {
+	flex: 1;
+	font-size: 12px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.discount-card-shop {
+	margin-top: 3px;
 	font-size: 11px;
 	line-height: 14px;
 	color: #94A3B8;
 }
 
-.discount-card-value {
-	margin-top: 2px;
-	font-size: 13px;
-	line-height: 17px;
-	color: #334155;
-}
-
-.discount-card-price {
-	color: #0F766E;
-	font-size: 15px;
-	font-weight: bold;
-}
-
 .discount-active-price {
-	margin-bottom: 10px;
+	margin-bottom: 6px;
 	font-size: 13px;
 	line-height: 18px;
 	color: #0F766E;
@@ -2565,7 +2576,7 @@ onShow(() => {
 .discount-action-btn {
 	align-items: center;
 	justify-content: center;
-	height: 38px;
+	height: 32px;
 	border-radius: 8px;
 	background-color: #0F172A;
 	padding-left: 12px;

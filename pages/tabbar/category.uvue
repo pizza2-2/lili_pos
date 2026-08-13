@@ -43,6 +43,58 @@
 						</view>
 					</view>
 
+					<!-- AI 经营简报：AI 静默缺席原则——未启用/未生成/失败/过期时整卡不渲染 -->
+					<view v-if="aiBriefVisible" class="card">
+						<view class="card-head">
+							<view class="card-title-wrap">
+								<text class="card-label">AI 经营简报</text>
+								<text class="card-title">{{ aiBriefDateText }}</text>
+							</view>
+							<view class="ai-badge">
+								<text class="ai-badge-text">AI</text>
+							</view>
+						</view>
+						<text class="ai-summary">{{ aiSummary }}</text>
+						<view v-if="aiPriorities.length > 0" class="ai-priority-list">
+							<text class="ai-section-label">今天优先做</text>
+							<view
+								v-for="(item, aiIndex) in aiPriorities"
+								:key="'ai-priority-' + aiIndex.toString()"
+								class="ai-priority-row"
+								@click="goAiPriority(item)"
+							>
+								<text class="ai-priority-index">{{ (aiIndex + 1).toString() }}</text>
+								<view class="ai-priority-body">
+									<text class="ai-priority-title">{{ aiItemTitle(item) }}</text>
+									<text v-if="aiItemReason(item) != ''" class="ai-priority-reason">{{ aiItemReason(item) }}</text>
+								</view>
+								<text v-if="aiItemLinkable(item)" class="ai-priority-arrow">›</text>
+							</view>
+						</view>
+						<view
+							v-for="(note, aiNoteIndex) in aiCalendarNotes"
+							:key="'ai-note-' + aiNoteIndex.toString()"
+							class="ai-note-row"
+						>
+							<text class="ai-note-text">📅 {{ note }}</text>
+						</view>
+						<!-- 完整分析报告：摘要之外的正文，默认收起 -->
+						<view v-if="aiReportSections.length > 0" class="expand-row" @click="toggleAiReport">
+							<text class="expand-text">{{ aiReportExpanded ? '收起完整报告 ▲' : '查看完整报告 ▼' }}</text>
+						</view>
+						<view v-if="aiReportExpanded">
+							<view
+								v-for="(section, aiSecIndex) in aiReportSections"
+								:key="'ai-section-' + aiSecIndex.toString()"
+								class="ai-report-section"
+							>
+								<text class="ai-report-title">{{ aiSectionTitle(section) }}</text>
+								<text class="ai-report-body">{{ aiSectionBody(section) }}</text>
+							</view>
+						</view>
+						<text class="ai-disclaimer">AI 生成，仅供参考</text>
+					</view>
+
 					<!-- 昨日日报 -->
 					<view class="card">
 						<view class="card-head">
@@ -101,7 +153,6 @@
 							:compact="true"
 							@view="goInsightAction(item)"
 							@handle="markInsightHandled(item)"
-							@dismiss="confirmDismissInsight(item)"
 						></lili-insight-card>
 						<view class="expand-row" @click="goDashboard">
 							<text class="expand-text">查看全部问题 ›</text>
@@ -140,6 +191,8 @@
 <script setup lang="uts">
 import { ref } from 'vue'
 import { getCategoryDailyBrief, updateCategoryInsightStatus } from '@/pkg/api/modules/category'
+import { getAiBrief, markAiBriefRead } from '@/pkg/api/modules/ai'
+import { shopState } from '@/store/shop.uts'
 import { showErrorToast } from '@/pkg/util/toast.uts'
 import { formatMoney } from '@/pkg/util/format.uts'
 
@@ -151,6 +204,8 @@ const isOperating = ref(false)
 const hasLoadedOnce = ref(false)
 const pageError = ref('')
 let lastLoadedAt = 0
+// 上次加载时的店铺口径：全局店铺切换后 onShow 需绕过频控立即刷新
+let lastLoadedShopId = -1
 
 const briefDateText = ref('-')
 const lagText = ref('')
@@ -175,6 +230,15 @@ const problemOpenCount = ref(0)
 const resolvedTodayCount = ref(0)
 const featuredUnreadCount = ref(0)
 const topInsights = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+
+// AI 经营简报（独立加载，静默缺席不影响工作台主流程）
+const aiBriefVisible = ref(false)
+const aiBriefDateText = ref('')
+const aiSummary = ref('')
+const aiPriorities = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const aiCalendarNotes = ref<string[]>([] as string[])
+const aiReportSections = ref<UTSJSONObject[]>([] as UTSJSONObject[])
+const aiReportExpanded = ref(false)
 
 // ── 解析辅助 ────────────────────────────────────────────────────
 
@@ -265,6 +329,132 @@ function parseErrorMessage(error: any): string {
 		}
 	}
 	return message
+}
+
+function stringArrayValue(value: any | null): string[] {
+	const result: string[] = []
+	if (value == null) {
+		return result
+	}
+	const text = JSON.stringify(value)
+	if (text == null || text == '' || !text.startsWith('[')) {
+		return result
+	}
+	try {
+		const parsed = JSON.parseArray<any>(text)
+		if (parsed == null) {
+			return result
+		}
+		for (let index = 0; index < parsed.length; index += 1) {
+			const item = parsed[index]
+			if (item == null) {
+				continue
+			}
+			const itemText = '' + item
+			if (itemText != '') {
+				result.push(itemText)
+			}
+		}
+	} catch (error) {
+	}
+	return result
+}
+
+// ── AI 简报辅助 ─────────────────────────────────────────────────
+
+function aiItemTitle(item: UTSJSONObject): string {
+	return stringValue(item['title'], '未命名行动项')
+}
+
+function aiItemReason(item: UTSJSONObject): string {
+	return stringValue(item['reason'])
+}
+
+function aiItemLinkable(item: UTSJSONObject): boolean {
+	const linkType = stringValue(item['link_type'])
+	return linkType == 'insight' || linkType == 'replenishment' || linkType == 'category'
+}
+
+function aiSectionTitle(section: UTSJSONObject): string {
+	return stringValue(section['title'])
+}
+
+function aiSectionBody(section: UTSJSONObject): string {
+	return stringValue(section['body'])
+}
+
+function toggleAiReport(): void {
+	aiReportExpanded.value = !aiReportExpanded.value
+}
+
+// 把服务端 report 分节整理成有序的 {title, body} 列表；空节不展示
+function buildAiReportSections(report: UTSJSONObject): UTSJSONObject[] {
+	const sections: UTSJSONObject[] = []
+	const textKeys = ['sales_analysis', 'profit_analysis', 'inventory_analysis']
+	const textTitles = ['销售分析', '利润分析', '库存分析']
+	for (let index = 0; index < textKeys.length; index += 1) {
+		const body = stringValue(report[textKeys[index]])
+		if (body != '') {
+			const section = {} as UTSJSONObject
+			section['title'] = textTitles[index]
+			section['body'] = body
+			sections.push(section)
+		}
+	}
+	const risks = stringArrayValue(report['risk_alerts'])
+	if (risks.length > 0) {
+		const lines: string[] = []
+		for (let index = 0; index < risks.length; index += 1) {
+			lines.push('⚠ ' + risks[index])
+		}
+		const section = {} as UTSJSONObject
+		section['title'] = '风险提示'
+		section['body'] = lines.join('\n')
+		sections.push(section)
+	}
+	const chances = stringArrayValue(report['opportunities'])
+	if (chances.length > 0) {
+		const lines: string[] = []
+		for (let index = 0; index < chances.length; index += 1) {
+			lines.push('💡 ' + chances[index])
+		}
+		const section = {} as UTSJSONObject
+		section['title'] = '机会'
+		section['body'] = lines.join('\n')
+		sections.push(section)
+	}
+	const outlook = stringValue(report['outlook'])
+	if (outlook != '') {
+		const section = {} as UTSJSONObject
+		section['title'] = '后市关注'
+		section['body'] = outlook
+		sections.push(section)
+	}
+	return sections
+}
+
+// AI 简报独立加载：无简报/接口失败都静默缺席（不渲染卡片、不报错打扰）
+function loadAiBrief(): void {
+	getAiBrief().then((brief: UTSJSONObject | null) => {
+		if (brief == null) {
+			aiBriefVisible.value = false
+			return
+		}
+		aiSummary.value = stringValue(brief['summary'])
+		const briefDate = stringValue(brief['brief_date'])
+		aiBriefDateText.value = briefDate == '' ? '' : briefDate + ' 数据'
+		aiPriorities.value = objectArrayValue(brief['priorities'])
+		aiCalendarNotes.value = stringArrayValue(brief['calendar_notes'])
+		aiReportSections.value = buildAiReportSections(objectValue(brief['report']))
+		aiReportExpanded.value = false
+		aiBriefVisible.value = aiSummary.value != ''
+		// 曝光即已读：静默标记，失败下次打开再补
+		if (aiBriefVisible.value && !booleanFlag(brief['is_read'])) {
+			markAiBriefRead(briefDate).catch((_err) => {})
+		}
+	}).catch((_err) => {
+		aiBriefVisible.value = false
+	})
 }
 
 // ── 洞察行辅助 ──────────────────────────────────────────────────
@@ -408,12 +598,16 @@ async function loadBrief(): Promise<void> {
 	}
 	isLoading.value = true
 	pageError.value = ''
+	loadAiBrief() // AI 简报并行加载，不阻塞主日报
+	// 请求发起时固定口径，避免加载期间切店导致记录错位
+	const shopId = shopState.selectedShopId
 	try {
-		const brief = await getCategoryDailyBrief(0)
+		const brief = await getCategoryDailyBrief(shopId)
 		applyBrief(brief)
 		syncTabBadge()
 		hasLoadedOnce.value = true
 		lastLoadedAt = Date.now()
+		lastLoadedShopId = shopId
 	} catch (error) {
 		pageError.value = parseErrorMessage(error)
 	} finally {
@@ -444,18 +638,6 @@ async function executeMarkInsight(id: number, action: string): Promise<void> {
 
 function markInsightHandled(item: UTSJSONObject): void {
 	executeMarkInsight(insightId(item), 'handle')
-}
-
-function confirmDismissInsight(item: UTSJSONObject): void {
-	uni.showModal({
-		title: '忽略洞察',
-		content: '忽略后此条洞察不再出现在待办中，确定吗？',
-		success: (res) => {
-			if (res.confirm) {
-				executeMarkInsight(insightId(item), 'dismiss')
-			}
-		},
-	})
 }
 
 // ── 导航 ────────────────────────────────────────────────────────
@@ -525,10 +707,31 @@ function goInsightAction(item: UTSJSONObject): void {
 	})
 }
 
+// AI 简报行动项跳转：insight → 问题清单；replenishment → 补货建议；category → 分类分析
+function goAiPriority(item: UTSJSONObject): void {
+	const linkType = stringValue(item['link_type'])
+	if (linkType == 'replenishment') {
+		uni.navigateTo({ url: '/pages/purchases/replenishment' })
+		return
+	}
+	if (linkType == 'category') {
+		const id = intValue(item['link_id'])
+		if (id > 0) {
+			uni.navigateTo({ url: '/pages/category/analytics?id=' + id.toString() })
+			return
+		}
+	}
+	if (linkType == 'insight') {
+		goDashboard()
+	}
+}
+
 // ── 生命周期 ────────────────────────────────────────────────────
 
 onShow(() => {
-	if (!hasLoadedOnce.value || Date.now() - lastLoadedAt > RELOAD_MIN_INTERVAL_MS) {
+	// 全局店铺口径变化时绕过 60s 频控立即刷新，否则按频控节流
+	const shopChanged = lastLoadedShopId != shopState.selectedShopId
+	if (!hasLoadedOnce.value || shopChanged || Date.now() - lastLoadedAt > RELOAD_MIN_INTERVAL_MS) {
 		loadBrief()
 	}
 })
@@ -797,5 +1000,127 @@ onShow(() => {
 .operate-text {
 	font-size: 13px;
 	color: #0F172A;
+}
+
+/* ── AI 经营简报卡 ── */
+
+.ai-badge {
+	padding: 3px 8px;
+	background-color: #EEF2FF;
+	border-radius: 6px;
+}
+
+.ai-badge-text {
+	font-size: 11px;
+	color: #4F46E5;
+	font-weight: bold;
+}
+
+.ai-summary {
+	margin-top: 10px;
+	font-size: 14px;
+	line-height: 22px;
+	color: #0F172A;
+}
+
+.ai-priority-list {
+	margin-top: 12px;
+}
+
+.ai-section-label {
+	font-size: 12px;
+	line-height: 16px;
+	color: #94A3B8;
+}
+
+.ai-priority-row {
+	margin-top: 8px;
+	padding: 10px;
+	flex-direction: row;
+	align-items: center;
+	background-color: #F8FAFC;
+	border-radius: 10px;
+}
+
+.ai-priority-index {
+	width: 20px;
+	height: 20px;
+	font-size: 12px;
+	line-height: 20px;
+	color: #4F46E5;
+	background-color: #EEF2FF;
+	border-radius: 10px;
+	text-align: center;
+	font-weight: bold;
+}
+
+.ai-priority-body {
+	flex: 1;
+	margin-left: 10px;
+}
+
+.ai-priority-title {
+	font-size: 13px;
+	line-height: 19px;
+	color: #0F172A;
+	font-weight: bold;
+}
+
+.ai-priority-reason {
+	margin-top: 2px;
+	font-size: 11px;
+	line-height: 16px;
+	color: #64748B;
+}
+
+.ai-priority-arrow {
+	margin-left: 6px;
+	font-size: 16px;
+	color: #94A3B8;
+}
+
+.ai-note-row {
+	margin-top: 8px;
+	padding: 8px 10px;
+	background-color: #FFFBEB;
+	border-radius: 8px;
+}
+
+.ai-note-text {
+	font-size: 12px;
+	line-height: 17px;
+	color: #92400E;
+}
+
+.ai-report-section {
+	margin-top: 10px;
+	padding: 10px;
+	background-color: #FAFAFA;
+	border-radius: 10px;
+	border-left-width: 3px;
+	border-left-style: solid;
+	border-left-color: #C7D2FE;
+}
+
+.ai-report-title {
+	font-size: 12px;
+	line-height: 17px;
+	color: #4F46E5;
+	font-weight: bold;
+}
+
+.ai-report-body {
+	margin-top: 4px;
+	font-size: 13px;
+	line-height: 20px;
+	color: #334155;
+}
+
+.ai-disclaimer {
+	margin-top: 10px;
+	font-size: 10px;
+	line-height: 14px;
+	color: #CBD5E1;
+	text-align: center;
 }
 </style>

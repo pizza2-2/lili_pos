@@ -1,0 +1,90 @@
+<template>
+	<!-- 全局店铺切换器：仅一家店时整个组件不渲染（单店场景无口径可切） -->
+	<scroll-view v-if="shopOptions.length > 1" class="switcher-scroll" :direction="'horizontal'" :show-scrollbar="false">
+		<view class="switcher-row">
+			<view :class="chipClass(0)" @click="handleSelect(0)">
+				<text :class="chipTextClass(0)">全部门店</text>
+			</view>
+			<view
+				v-for="shop in shopOptions"
+				:key="'shop-' + shop.id.toString()"
+				:class="chipClass(shop.id)"
+				@click="handleSelect(shop.id)"
+			>
+				<text :class="chipTextClass(shop.id)">{{ shop.name }}</text>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { shopState, setSelectedShop, ShopOption } from '@/store/shop.uts'
+
+const emit = defineEmits(['change'])
+
+// 直接读写全局 store：列表由登录/启动时 loadShops() 填充
+const shopOptions = computed((): ShopOption[] => {
+	return shopState.shops
+})
+
+const selectedId = computed((): number => {
+	return shopState.selectedShopId
+})
+
+function chipClass(id: number): string {
+	return selectedId.value == id ? 'switcher-chip switcher-chip-active' : 'switcher-chip'
+}
+
+function chipTextClass(id: number): string {
+	return selectedId.value == id ? 'switcher-chip-text switcher-chip-text-active' : 'switcher-chip-text'
+}
+
+function handleSelect(id: number): void {
+	if (selectedId.value == id) {
+		return
+	}
+	setSelectedShop(id)
+	// 页面自行决定刷新方式
+	emit('change', id)
+}
+</script>
+
+<style>
+.switcher-scroll {
+	width: 100%;
+	/* 横向 scroll-view 必须自身 row 布局，否则内容容器被压到视口宽、无法滚动 */
+	flex-direction: row;
+}
+
+.switcher-row {
+	flex-direction: row;
+}
+
+.switcher-chip {
+	/* 禁止压缩：chip 保持内容宽，总宽超出视口才能横滑 */
+	flex-shrink: 0;
+	padding-left: 14px;
+	padding-right: 14px;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-radius: 999px;
+	background-color: #F1F5F9;
+	margin-right: 8px;
+}
+
+.switcher-chip-active {
+	background-color: #0F766E;
+}
+
+.switcher-chip-text {
+	font-size: 13px;
+	line-height: 18px;
+	color: #475569;
+}
+
+.switcher-chip-text-active {
+	color: #FFFFFF;
+	font-weight: bold;
+}
+</style>

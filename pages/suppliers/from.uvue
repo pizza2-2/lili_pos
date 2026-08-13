@@ -61,7 +61,6 @@ const savingVisible = ref(false)
 const savingText = ref('处理中...')
 const pageTaskGuard = createAsyncGuard()
 const initialData = ref<UTSJSONObject>({
-	code: '',
 	name: '',
 	contact: '',
 	phone: '',
@@ -123,7 +122,6 @@ function buildInitialDataFromSupplier(item: SupplierItem) : UTSJSONObject {
 		}
 	}
 	return {
-		code: item.code,
 		name: item.name,
 		contact: item.contact,
 		phone: item.phone,
@@ -199,12 +197,6 @@ const formSections = ref<UTSJSONObject[]>([
 				type: 'input',
 				required: true,
 				placeholder: '请输入供应商名称',
-			} as UTSJSONObject,
-			{
-				key: 'code',
-				label: '供应商编码',
-				type: 'input',
-				placeholder: '请输入编码',
 			} as UTSJSONObject,
 			{
 				key: 'contact',
@@ -323,14 +315,12 @@ function stringifyPayload(payload: UTSJSONObject) : string {
 
 function buildSupplierMutationPayload(formDataObject: UTSJSONObject) : SupplierMutationData {
 	const name = getStringField(formDataObject, 'name')
-	const codeValue = getStringField(formDataObject, 'code')
 	const contactValue = getStringField(formDataObject, 'contact')
 	const phoneValue = getStringField(formDataObject, 'phone')
 	const addressValue = getStringField(formDataObject, 'address')
 	const descriptionValue = getStringField(formDataObject, 'description')
 	const activeText = getStringField(formDataObject, 'is_active', 'true')
 	return {
-		code: codeValue == '' ? null : codeValue,
 		name: name,
 		address: addressValue == '' ? null : addressValue,
 		phone: phoneValue == '' ? null : phoneValue,

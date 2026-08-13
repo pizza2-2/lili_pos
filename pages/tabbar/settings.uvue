@@ -8,7 +8,7 @@
 			</view>
 
 			<view class="content">
-				<view v-for="group in groups" :key="group.label" class="group">
+				<view v-for="group in visibleGroups" :key="group.label" class="group">
 					<text class="group-label">{{ group.label }}（{{ getGroupCount(group) }}）</text>
 
 					<view
@@ -39,6 +39,9 @@
 </template>
 
 <script setup lang="uts">
+import { computed } from 'vue'
+import { getAuthPermissions, hasPerm } from '@/store/auth'
+
 type MenuItem = {
 	label: string
 	icon: string
@@ -46,6 +49,8 @@ type MenuItem = {
 	path: string | null
 	action: string
 	disabled: boolean
+	// 可选权限码：配置后需拥有该权限才显示；未配置则常显
+	perm?: string
 }
 
 type MenuGroup = {
@@ -58,19 +63,19 @@ const groups = ref<MenuGroup[]>([
 	{
 		label: '每日经营',
 		items: [
-			{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false },
-			{ label: '退货记录', icon: '', iconPath: '/static/menu-icons/returns.svg', path: '/pages/returns/index', action: 'navigateTo', disabled: false },
-			{ label: '操作日志', icon: '', iconPath: '/static/menu-icons/logs.svg', path: '/pages/audit-logs/index', action: 'navigateTo', disabled: false },
+			{ label: '订单管理', icon: '', iconPath: '/static/menu-icons/orders.svg', path: '/pages/orders/index', action: 'navigateTo', disabled: false, perm: 'pos_order_view' },
+			{ label: '退货记录', icon: '', iconPath: '/static/menu-icons/returns.svg', path: '/pages/returns/index', action: 'navigateTo', disabled: false, perm: 'pos_order_view' },
+			{ label: '操作日志', icon: '', iconPath: '/static/menu-icons/logs.svg', path: '/pages/audit-logs/index', action: 'navigateTo', disabled: false, perm: 'pos_audit_view' },
 		],
 	},
 	{
 		label: '采购与补货',
 		items: [
 			// 补货建议入口暂时下线（2026-07-21 用户决定：交互方案再想想）；页面/后端/组件改动全部保留，恢复时取消本行注释即可
-			// { label: '补货建议', icon: '', iconPath: '/static/menu-icons/replenishment.svg', path: '/pages/purchases/replenishment', action: 'navigateTo', disabled: false },
-			{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false },
-			{ label: '采购汇总', icon: '', iconPath: '/static/menu-icons/procurement-summary.svg', path: '/pages/suppliers_procure/index', action: 'navigateTo', disabled: false },
-			{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false },
+			// { label: '补货建议', icon: '', iconPath: '/static/menu-icons/replenishment.svg', path: '/pages/purchases/replenishment', action: 'navigateTo', disabled: false, perm: 'purchase_view' },
+			{ label: '采购单', icon: '', iconPath: '/static/menu-icons/purchases.svg', path: '/pages/purchases/index', action: 'navigateTo', disabled: false, perm: 'purchase_view' },
+			{ label: '采购汇总', icon: '', iconPath: '/static/menu-icons/procurement-summary.svg', path: '/pages/suppliers_procure/index', action: 'navigateTo', disabled: false, perm: 'purchase_view' },
+			{ label: '供应商', icon: '', iconPath: '/static/menu-icons/suppliers.svg', path: '/pages/suppliers/index', action: 'navigateTo', disabled: false, perm: 'supplier_view' },
 			{ label: 'KSeF发票', icon: '', iconPath: '/static/menu-icons/ksef-invoice.svg', path: '/pages/ksef/index', action: 'navigateTo', disabled: false },
 		],
 	},
@@ -78,22 +83,22 @@ const groups = ref<MenuGroup[]>([
 		label: '商品与分类',
 		items: [
 			// 分析类入口在「工作台」和「报表」tab；功能菜单只放结构管理入口
-			{ label: '商品管理', icon: '', iconPath: '/static/menu-icons/products.svg', path: '/pages/tabbar/products', action: 'navigateTo', disabled: false },
-			{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false },
-			{ label: '治理工具', icon: '', iconPath: '/static/menu-icons/governance.svg', path: '/pages/category/tools', action: 'navigateTo', disabled: false },
-			{ label: '收银分类', icon: '', iconPath: '/static/menu-icons/cash-category.svg', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false },
-			{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false },
-			{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false },
-			{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false },
+			{ label: '商品管理', icon: '', iconPath: '/static/menu-icons/products.svg', path: '/pages/tabbar/products', action: 'navigateTo', disabled: false, perm: 'product_view' },
+			{ label: '分类', icon: '', iconPath: '/static/menu-icons/category.svg', path: '/pages/category/index', action: 'navigateTo', disabled: false, perm: 'category_view' },
+			{ label: '治理工具', icon: '', iconPath: '/static/menu-icons/governance.svg', path: '/pages/category/tools', action: 'navigateTo', disabled: false, perm: 'category_view' },
+			{ label: '收银分类', icon: '', iconPath: '/static/menu-icons/cash-category.svg', path: '/pages/kasa_category/index', action: 'navigateTo', disabled: false, perm: 'kasa_category_view' },
+			{ label: '商品属性', icon: '', iconPath: '/static/menu-icons/attributes.svg', path: '/pages/products/config-model/index?resource=attribute-type', action: 'navigateTo', disabled: false, perm: 'product_attribute_view' },
+			{ label: '商品折扣', icon: '', iconPath: '/static/menu-icons/discount.svg', path: '/pages/products/config-model/index?resource=discount', action: 'navigateTo', disabled: false, perm: 'discount_view' },
+			{ label: '条形码序列', icon: '', iconPath: '/static/menu-icons/barcode.svg', path: '/pages/products/config-model/index?resource=barcode-sequence', action: 'navigateTo', disabled: false, perm: 'barcode_sequence_view' },
 		],
 	},
 	{
 		label: '库存与盘点',
 		items: [
-			{ label: '库存管理', icon: '', iconPath: '/static/menu-icons/inventory.svg', path: '/pages/inventory-management/index', action: 'navigateTo', disabled: false },
-			{ label: '盘点单', icon: '', iconPath: '/static/menu-icons/inventory-check.svg', path: '/pages/inventory-checks/index', action: 'navigateTo', disabled: false },
-			{ label: '调拨单', icon: '', iconPath: '/static/menu-icons/inventory-transfer.svg', path: '/pages/inventory-transfers/index', action: 'navigateTo', disabled: false },
-			{ label: '库存位置', icon: '', iconPath: '/static/menu-icons/inventory-location.svg', path: '/pages/inventory-locations/index', action: 'navigateTo', disabled: false },
+			{ label: '库存管理', icon: '', iconPath: '/static/menu-icons/inventory.svg', path: '/pages/inventory-management/index', action: 'navigateTo', disabled: false, perm: 'inventory_view' },
+			{ label: '盘点单', icon: '', iconPath: '/static/menu-icons/inventory-check.svg', path: '/pages/inventory-checks/index', action: 'navigateTo', disabled: false, perm: 'inventory_view' },
+			{ label: '调拨单', icon: '', iconPath: '/static/menu-icons/inventory-transfer.svg', path: '/pages/inventory-transfers/index', action: 'navigateTo', disabled: false, perm: 'inventory_view' },
+			{ label: '库存位置', icon: '', iconPath: '/static/menu-icons/inventory-location.svg', path: '/pages/inventory-locations/index', action: 'navigateTo', disabled: false, perm: 'inventory_view' },
 		],
 	},
 	{
@@ -101,14 +106,14 @@ const groups = ref<MenuGroup[]>([
 		items: [
 			{ label: '支出管理', icon: '', iconPath: '/static/menu-icons/expenses.svg', path: '/pages/expenses/index', action: 'navigateTo', disabled: false },
 			{ label: '支出类型', icon: '', iconPath: '/static/menu-icons/expense-type.svg', path: '/pages/products/config-model/index?resource=expenditure-type', action: 'navigateTo', disabled: false },
-			{ label: '价格计算公式', icon: '', iconPath: '/static/menu-icons/pricing-formula.svg', path: '/pages/products/pricing-formula/index', action: 'navigateTo', disabled: false },
+			{ label: '价格计算公式', icon: '', iconPath: '/static/menu-icons/pricing-formula.svg', path: '/pages/products/pricing-formula/index', action: 'navigateTo', disabled: false, perm: 'pricing_formula_view' },
 		],
 	},
 	{
 		label: '店铺与设备',
 		items: [
-			{ label: '商店', icon: '', iconPath: '/static/menu-icons/shop.svg', path: '/pages/shop/index', action: 'navigateTo', disabled: false },
-			{ label: '标签模板', icon: '', iconPath: '/static/menu-icons/label-tag.svg', path: '/pages/label-templates/index', action: 'navigateTo', disabled: false },
+			{ label: '商店', icon: '', iconPath: '/static/menu-icons/shop.svg', path: '/pages/shop/index', action: 'navigateTo', disabled: false, perm: 'shop_view' },
+			{ label: '标签模板', icon: '', iconPath: '/static/menu-icons/label-tag.svg', path: '/pages/label-templates/index', action: 'navigateTo', disabled: false, perm: 'print_template_view' },
 			// #ifdef APP-ANDROID
 			{ label: '打印机设置', icon: '', iconPath: '/static/menu-icons/printer.svg', path: '/pages/printer-settings/index', action: 'navigateTo', disabled: false },
 			{ label: '扫码测试', icon: '', iconPath: '/static/menu-icons/scan.svg', path: '/pages/test/scan', action: 'navigateTo', disabled: false },
@@ -119,6 +124,32 @@ const groups = ref<MenuGroup[]>([
 		],
 	},
 ])
+
+// 按权限码过滤后的菜单：仅体验优化，后端接口才是安全边界
+// fail-open：权限集为空（未加载/旧版缓存）时不过滤全部显示，避免把老板的菜单搞成白板
+const visibleGroups = computed((): MenuGroup[] => {
+	if (getAuthPermissions().length == 0) {
+		return groups.value
+	}
+	const result: MenuGroup[] = []
+	for (let groupIndex = 0; groupIndex < groups.value.length; groupIndex += 1) {
+		const group = groups.value[groupIndex]
+		const visibleItems: MenuItem[] = []
+		for (let itemIndex = 0; itemIndex < group.items.length; itemIndex += 1) {
+			const item = group.items[itemIndex]
+			const perm: string | null = item.perm
+			// 未配置权限码的菜单项常显
+			if (perm == null || perm == '' || hasPerm(perm)) {
+				visibleItems.push(item)
+			}
+		}
+		// 整组条目都被过滤时连组标题一起隐藏
+		if (visibleItems.length > 0) {
+			result.push({ label: group.label, items: visibleItems } as MenuGroup)
+		}
+	}
+	return result
+})
 
 function handleTap(item: MenuItem) {
 	if (item.disabled) {

@@ -2,6 +2,8 @@
 export type AuthState = {
 	token:string;
 	userInfo:UserInfoState | null;
+	// 当前用户权限码集合；可选：旧版本地缓存无此字段，解析后为 null 需兜底空数组
+	permissions?:string[];
 }
 
 export type UserInfoState = {
@@ -23,6 +25,7 @@ export const authState = reactive({
 		avatar:"",
 		//其它字段
 	},
+	permissions: [] as string[],
 } as AuthState)
 
 // 本地存储(转为字符串存储)
@@ -34,6 +37,7 @@ function authLocalStorage(){
 export const clearAuthState = () => {
 	authState.token = ''
 	authState.userInfo = null
+	authState.permissions = [] as string[]
 	//移除本地存储
 	uni.removeStorageSync('authStateKey')
 }
@@ -105,10 +109,32 @@ export const setAuthUserInfo = (value: UserInfoState) => {
 	authLocalStorage()	//存储到本地
 }
 
+// 读取当前权限码集合（旧版缓存缺字段时兜底空数组）
+export function getAuthPermissions(): string[] {
+	const perms: string[] | null = authState.permissions
+	return perms == null ? ([] as string[]) : perms
+}
+
+// 是否拥有指定权限码
+export function hasPerm(code: string): boolean {
+	return getAuthPermissions().includes(code)
+}
+
+// 设置权限码集合并持久化；冷启动先用上次的权限集渲染，profile 刷新后覆盖
+export const setAuthPermissions = (codes: string[]) => {
+	// 防御：调用方传入运行时 null（服务端异常字段）时兜底空数组
+	const next: string[] | null = codes
+	authState.permissions = next == null ? ([] as string[]) : next
+	authLocalStorage()	//存储到本地
+}
+
 // 设置所有数据本地存储
 export function setAuthState (value: AuthState){
 	authState.token = value.token
 	authState.userInfo = value.userInfo
+	// 旧版本地缓存无 permissions 字段，兜底空数组
+	const perms: string[] | null = value.permissions
+	authState.permissions = perms == null ? ([] as string[]) : perms
 	authLocalStorage()	//存储到本地
 }
 

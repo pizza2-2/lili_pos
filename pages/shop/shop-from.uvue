@@ -1,0 +1,183 @@
+<template>
+	<view class="page">
+		<lili-universal-filter :title="pageTitle" :showBack="true" :showSearch="false" :showHome="true" homePath="/pages/shop/index" backgroundColor="#EEF2F7" />
+		<!-- #ifdef APP -->
+		<scroll-view style="flex:1" class="page-scroll">
+		<!-- #endif -->
+			<view class="page-content">
+				<view class="card">
+					<text class="card-title">店铺信息</text>
+					<view class="field-row">
+						<text class="field-label">店铺名称 *</text>
+						<input class="field-input" :value="shopName" placeholder="请输入店铺名称" @input="onNameInput" />
+					</view>
+					<view class="field-row">
+						<text class="field-label">地址</text>
+						<input class="field-input" :value="address" placeholder="街道地址，选填" @input="onAddressInput" />
+					</view>
+				</view>
+
+				<view v-if="isEdit" class="card">
+					<text class="card-title">营业状态</text>
+					<view class="field-row">
+						<text class="field-label">启用店铺</text>
+						<switch :checked="isActive" @change="onActiveChange" />
+					</view>
+					<text class="card-hint">停业后该店在切换器与多店对比中隐藏，历史数据与收银机不受影响；重新启用即可恢复展示。</text>
+				</view>
+
+				<view class="save-btn" @click="handleSave">
+					<text class="save-btn-text">{{ isEdit ? '保存修改' : '创建店铺' }}</text>
+				</view>
+			</view>
+		<!-- #ifdef APP -->
+		</scroll-view>
+		<!-- #endif -->
+	</view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { createShop, getShopDetail, ShopMutationData, updateShop } from '@/pkg/api/modules/shops'
+import { loadShops } from '@/store/shop.uts'
+import { showErrorToast } from '@/pkg/util/toast.uts'
+
+const refreshStorageKey = 'refresh:pages:shop:index'
+
+const shopId = ref('')
+const submitting = ref(false)
+
+const shopName = ref('')
+const address = ref('')
+const isActive = ref(true)
+
+const isEdit = computed((): boolean => shopId.value != '')
+const pageTitle = computed((): string => isEdit.value ? '编辑店铺' : '新建店铺')
+
+function parseErrorMessage(error: any, fallback: string): string {
+	if (error == null) return fallback
+	const text = JSON.stringify(error)
+	if (text == null || text == '' || text == '{}') return fallback
+	try {
+		const parsed = JSON.parseObject<UTSJSONObject>(text)
+		if (parsed != null) {
+			const messageValue = parsed['message']
+			if (messageValue != null) {
+				const message = '' + messageValue
+				if (message != '') return message
+			}
+		}
+	} catch (parseError) {
+		return fallback
+	}
+	return fallback
+}
+
+// ── 输入处理 ────────────────────────────────────────────────────
+
+function onNameInput(event: UniInputEvent) { shopName.value = event.detail.value }
+function onAddressInput(event: UniInputEvent) { address.value = event.detail.value }
+
+function onActiveChange(event: UniSwitchChangeEvent) {
+	const next = event.detail.value
+	if (next) {
+		isActive.value = true
+		return
+	}
+	// 先跟随开关落到停业态，取消时再翻回（保证 checked 绑定值有变化、开关能回弹）
+	isActive.value = false
+	uni.showModal({
+		title: '确认停业',
+		content: '停业后该店在切换器与多店对比中隐藏，历史数据与收银机不受影响。确定停业该店铺吗？',
+		success: (res) => {
+			if (!res.confirm) {
+				isActive.value = true
+			}
+		},
+	})
+}
+
+// ── 数据加载 ────────────────────────────────────────────────────
+
+async function loadDetail() {
+	if (shopId.value == '') return
+	try {
+		const detail = await getShopDetail(shopId.value)
+		shopName.value = detail.name
+		address.value = detail.address
+		isActive.value = detail.is_active
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, '店铺详情加载失败'))
+	}
+}
+
+// ── 保存 ────────────────────────────────────────────────────────
+
+function markRefreshNeeded() { uni.setStorageSync(refreshStorageKey, '1') }
+
+function goBack() {
+	uni.navigateBack({ delta: 1, fail: () => { uni.navigateTo({ url: '/pages/shop/index' }) } })
+}
+
+async function executeSave() {
+	if (submitting.value) return
+	if (shopName.value.trim() == '') {
+		uni.showToast({ title: '店铺名称不能为空', icon: 'none', duration: 3500 })
+		return
+	}
+	submitting.value = true
+	const actionText = isEdit.value ? '保存店铺' : '创建店铺'
+	uni.showLoading({ title: actionText + '中...', mask: true })
+	try {
+		const body = {
+			name: shopName.value.trim(),
+			address: address.value.trim(),
+			// 创建时不传 is_active，走服务端默认启用
+			is_active: isEdit.value ? isActive.value : null,
+		} as ShopMutationData
+		if (isEdit.value) {
+			await updateShop(shopId.value, body)
+		} else {
+			await createShop(body)
+		}
+		markRefreshNeeded()
+		// 刷新全局店铺切换器数据（新增/改名/停业都会影响切换器选项）
+		await loadShops()
+		uni.showToast({ title: actionText + '成功', icon: 'success' })
+		goBack()
+	} catch (error) {
+		showErrorToast(parseErrorMessage(error, actionText + '失败'))
+	} finally {
+		uni.hideLoading()
+		submitting.value = false
+	}
+}
+
+function handleSave() {
+	executeSave()
+}
+
+onLoad((query: OnLoadOptions) => {
+	const idValue = query['id']
+	if (idValue != null && idValue != '') {
+		shopId.value = '' + idValue
+	}
+	if (shopId.value != '') {
+		loadDetail()
+	}
+})
+</script>
+
+<style>
+.page { flex: 1; background-color: #EEF2F7; }
+.page-scroll { flex: 1; background-color: #EEF2F7; }
+.page-content { padding: 10px; padding-bottom: 40px; }
+.card { background-color: #FFFFFF; border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 15px; line-height: 21px; color: #0F172A; font-weight: bold; margin-bottom: 6px; }
+.card-hint { font-size: 12px; line-height: 17px; color: #64748B; margin-top: 8px; }
+.field-row { flex-direction: row; align-items: center; margin-top: 10px; }
+.field-label { width: 84px; font-size: 14px; line-height: 20px; color: #475569; }
+.field-input { flex: 1; height: 40px; border-radius: 8px; background-color: #F8FAFC; border-width: 1px; border-style: solid; border-color: #E2E8F0; padding-left: 10px; padding-right: 10px; font-size: 14px; }
+.save-btn { margin-top: 6px; height: 46px; border-radius: 10px; background-color: #0F172A; align-items: center; justify-content: center; }
+.save-btn-text { font-size: 15px; color: #FFFFFF; font-weight: bold; }
+</style>
